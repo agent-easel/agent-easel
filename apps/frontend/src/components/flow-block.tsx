@@ -11,6 +11,7 @@ const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   wait: "text-muted-foreground",
   continuation: "text-brand-cyan",
   condition: "text-muted-foreground",
+  subflow: "text-muted-foreground",
 };
 
 /** An exit's name as rows show it; a Wait's or Continuation's single output has none, so it shows
@@ -85,8 +86,29 @@ export function blockIdentity({
   };
 }
 
+export function IdentityRows({
+  rows,
+  header,
+  title,
+}: {
+  rows: { readonly header: number; readonly title: number };
+  header: ReactNode;
+  title: ReactNode;
+}) {
+  return (
+    <>
+      <span className="flex flex-col" style={{ height: rows.header }}>
+        {header}
+      </span>
+      <span className="flex flex-col" style={{ height: rows.title }}>
+        {title}
+      </span>
+    </>
+  );
+}
+
 /** The content of the Flow input block's header and title rows on either canvas. */
-export function flowInputIdentity(trailing: ReactNode) {
+export function flowInputIdentity(trailing: ReactNode, subtitle = "Run prompt") {
   return {
     header: (
       <span className="flex flex-1 items-center gap-1.5 pt-1.5 pr-2 pl-3">
@@ -101,7 +123,7 @@ export function flowInputIdentity(trailing: ReactNode) {
     title: (
       <span className="flex flex-1 flex-col gap-1 px-3 pt-0.5">
         <span className="truncate text-sm font-semibold text-foreground">Flow input</span>
-        <span className="truncate text-2xs tracking-label text-muted-foreground">Run prompt</span>
+        <span className="truncate text-2xs tracking-label text-muted-foreground">{subtitle}</span>
       </span>
     ),
   };

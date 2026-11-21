@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: worker_title_dispatch
+-- Newest applied migration: subflow_block
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -515,10 +515,12 @@ CREATE TABLE "flow_revision_blocks" (
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
   block_id TEXT NOT NULL,
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition')),
+  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition', 'subflow')),
   name TEXT NOT NULL,
   -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),
+  -- The Flow a Subflow places; unresolved by design like agent_id, null while the draft has none.
+  flow_id TEXT CHECK (kind = 'subflow' OR flow_id IS NULL),
   -- The prompt a Continuation sends once per Run; empty only in a draft.
   prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),
   -- The instruction an Agent block's later visits receive, stored trimmed; empty when unset.
@@ -536,6 +538,9 @@ CREATE TABLE "flow_revision_blocks" (
   PRIMARY KEY (flow_revision_id, block_id),
   UNIQUE (flow_revision_id, ordinal)
 );
+
+CREATE INDEX flow_revision_blocks_by_flow ON flow_revision_blocks(flow_id) WHERE flow_id IS NOT NULL
+;
 
 CREATE TRIGGER immutable_flow_revision_block_delete BEFORE DELETE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 

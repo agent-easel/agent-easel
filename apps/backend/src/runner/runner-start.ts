@@ -450,6 +450,18 @@ export function openRunnerStart(
         );
       if (!savedFlow.ok) return savedFlow;
       const flow = savedFlow.value;
+      if (flow.graph.blocks.some((block) => block.kind === "subflow"))
+        return failure(
+          "validation",
+          "Starting a Flow that places a Subflow is not available yet. No Run was created.",
+          [
+            {
+              code: "subflow_start_unavailable",
+              path: "flowId",
+              message: "Start a Flow without Subflow blocks.",
+            },
+          ],
+        );
       if (!flow.readiness.ready)
         return failure("validation", "Fix Flow readiness before starting.", flow.readiness.issues);
       const agents = yield* readyAgents(flow, target.project.id, snapshot);

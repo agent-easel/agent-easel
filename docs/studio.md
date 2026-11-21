@@ -116,21 +116,25 @@ records why a per-project variant is an independent copy rather than an override
   default must be changed before commit.
 - **Flow Duplicate** copies the source's latest saved revision (name, graph, positions and workspace) into a new Flow at
   revision 1, named `<name> copy` unless a name is given. `POST /api/flows/:id/duplicate/preview` with an optional
-  `projectId` answers a plan and writes nothing: the source revision, the resolved target, the default name and each distinct
-  Agent the Flow places, in block order, with its revision, owning Project, `choice` (`keep` or `copy`) and whether that choice is
-  `changeable`. A global Agent defaults to keep and may be copied into the target; a Project Agent the target may not place is
-  always copied; an Agent of the target Project itself is always kept. `POST /api/flows/:id/duplicate` commits the plan in one
-  transaction with the plan's `projectId` (required; Change owner appends no revision, so an omitted target could otherwise
-  follow a later owner change), `expectedRevision` and every planned Agent's choice: each copied Agent is created once, under its own name,
-  from its latest saved revision in the target, and every block placing it is retargeted to the copy. A block whose Agent is
-  unset, missing or removed is copied unchanged and stays missing. A source revision, Agent revision or Agent owner that changed
-  since the preview, or a different set of Agents, is refused as `stale_duplicate_plan`; changing a fixed choice is refused as
-  `duplicate_choice_not_allowed`. The answer holds the new Flow and its copies by source Agent. The source Flow and its Agents
-  never change, so duplicating out of an unavailable Project into another Project or Global rescues a Flow and its Agents.
-- **Placement rule.** Any Flow may place a global Agent, and a Project Flow may also place Agents of its own Project, never
-  another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
-  naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
-  other client go through the same check.
+  `projectId` answers a plan and writes nothing: the source revision, the resolved target, the default name, each distinct
+  placed Flow the target may not place (in traversal order, always copied into the target as `<name> copy`, including
+  cyclic placements without looping), and each distinct Agent placed directly or through copied Flows, with its revision,
+  owning Project, `choice` (`keep` or `copy`) and whether that choice is `changeable`. A global Agent defaults to keep and
+  may be copied into the target; a Project Agent the target may not place is always copied; an Agent of the target Project
+  itself is always kept; global and target-owned placed Flows stay kept. `POST /api/flows/:id/duplicate` commits the plan
+  in one transaction with the plan's `projectId` (required; Change owner appends no revision, so an omitted target could
+  otherwise follow a later owner change), `expectedRevision`, every planned Agent's choice and `flows` (the planned copied
+  Flows with their revisions and owners): each copied Agent and Flow is created once from its latest saved revision in the
+  target, and every block placing it is retargeted to the copy. A block whose Agent or Flow is unset, missing or removed is
+  copied unchanged and stays missing. A source revision, Agent or planned Flow revision or owner that changed since the
+  preview, or a different set of Agents or Flows, is refused as `stale_duplicate_plan`; changing a fixed choice is refused
+  as `duplicate_choice_not_allowed`. The answer holds the new Flow, its Agent `copies` and its `flowCopies` by source Flow.
+  The source Flow and its placed definitions never change, so duplicating out of an unavailable Project into another Project
+  or Global rescues a Flow and its dependencies.
+- **Placement rule.** Any Flow may place a global Agent or global Flow, and a Project Flow may also place Agents and Flows
+  of its own Project, never another Project's. A create or save whose graph breaks the rule is refused with an
+  `agent_scope_mismatch` or `flow_scope_mismatch` issue per block, naming the block and definition, and stores nothing;
+  readiness reports the same issue, which blocks Start. Factory MCP and every other client go through the same check.
 - **Change owner.** `PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner` take `{expectedProjectId, projectId}`: the
   owning Project the client last saw and the new one, each a Factory Project id or `null` for global. The move appends no
   revision and changes nothing else: no other definition is edited, copied or made global, and Runs keep what they captured.
@@ -141,8 +145,8 @@ records why a per-project variant is an independent copy rather than an override
   `project_<availability>` at `projectId`, checked in the committing transaction), and when the placement rule would no longer
   hold for the latest revision of a current Flow (conflict, one `owner_change_blocked` issue at `projectId` per blocking
   definition, naming it and its id):
-  - a Flow moves only if the new owner may place every Agent it places, so a global Flow can move to any Project, while a
-    Project Flow can move to global or another Project only if it places none of its own Project's Agents;
+  - a Flow moves only if the new owner may place every Agent and Flow it places, and every current Flow that places it may
+    still place it under the new owner;
   - an Agent moves to global always; it moves to a Project only if no current Flow outside that Project places it, so a
     move from one Project to another is blocked by the old Project's Flows that place it.
 
@@ -357,9 +361,9 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 The editor's toolbar holds the owner badge (Global or the owning Project), the Flow name as an inline field, the save status
 (**Saved**, **Unsaved changes**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the
-search filters steps and Agents by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps** and each owner's name (**Global**,
+search filters steps, Agents and Flows by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps**, **Flows** (placeable Flows under the placement rule, with any Flow that would form a cycle disabled with its reason and Flows without a reachable ending tagged **No reachable ending**), and each owner's name (**Global**,
 the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**.
 An Agent without a model is listed last in its group, disabled, with a **Needs a model** tag. With no Agent to place, the library's group is
 headed **Agents** whatever the Flow's owner and shows **No Agents yet** with a **New Agent** link; when Agents exist but none has a model, the group keeps its
@@ -434,6 +438,8 @@ Flow-local name and **Wait for** a number and a unit (**minutes**, **hours** or 
 a duration. It has one input and one output (**after the wait**) whose **Output** row holds its target select. A Wait has no Agent, prompt, execution settings, reports or worker, and the Flow input cannot connect to
 it.
 
+**Subflow.** A [Subflow](../GLOSSARY.md#subflow) places another saved Flow by its `flowId` (`kind: "subflow"`). Its exits are the referenced Flow's Finish endings by ending ID, so renaming an ending keeps every wire while removing an ending leaves a repairable broken wire (`subflow_exit_missing`); it has no Flow-local exits, hidden exits, Revisit instruction or workspace override (the top-level Run workspace applies). On the canvas, an expandable Subflow renders as a [`SubflowGroup`](design-system.md#which-component-for-which-pattern): a read-only in-place preview of the referenced Flow showing its inner Flow input (**Incoming message**) wired to its targets, its inner blocks and Finish, drawn-only ending routes to the outer right border, interactive outer left and right ports and a **Collapse** control in its header. Collapsing turns it into a compact block card with **Expand** and **Open Flow**; cyclic, over-budget, missing or unset Subflows auto-collapse with an error badge. Selecting a Subflow opens its settings panel with **Name**, the **Flow** picker (placeable Flows with cycle candidates disabled), **Open Flow**, read-only disclosures (**Workspace**, **Revision**, **Blocks inside**), **Exits** with target selects and ending expectations, **Broken wires** (one-click **Remove** repair) and **Issues inside** (linking directly to each affected nested Flow). The **Flow input** may connect to Subflows as well as Agent blocks, and Subflow exits may connect to any block or parent Finish ending. Removing a Flow is still allowed when another Flow places it: referencing parent Flows report `subflow_flow_missing` and keep their repairable wires.
+
 **Condition.** A Condition routes each arrival by its arrival number at that block: an ordered list of rules
 **From arrival *N* onward → *output***, each with its own stably identified, named output, followed by the fixed, mandatory
 **Otherwise** output, which cannot be renamed, removed or reordered. The first rule the arrival number reaches selects its
@@ -499,10 +505,10 @@ elsewhere) undoes the last structural edit until Save: a removed block together 
 wire; edits made since are kept, and a text field keeps its own undo.
 
 Readiness is live: an unsaved draft is checked through the backend shortly after each change, with no Check readiness button, and again after a newer saved
-revision, keeping the local draft against one, a change to an Agent the draft places or a change of the Flow's owner. A check result applies only to the
-content, baseline revision, owner and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent
-revisions Studio does not show yet, is discarded, and edits never wait for a check. A clean draft shows the readiness Studio received with its saved revision
-and the Agents shown. The summary at the canvas's top-left is a **Ready** badge, or **Not ready** with **N issues** and a chevron that opens one row per issue.
+revision, keeping the local draft against one, a change to an Agent or Flow in its transitive closure or a change of the Flow's owner. A check result applies only to the
+content, baseline revision, owner, placed Agent revisions and transitive Flow/Agent closure it was requested for: an answer arriving after any of them changed, or resolved against
+definitions Studio does not show yet, is discarded, and edits never wait for a check. A clean draft shows the readiness Studio received with its saved revision
+and the definitions shown. For compositions with Subflows, readiness validates transitively across the whole reachable Flow closure: missing referenced Flows (`subflow_flow_missing`) and cycles (`subflow_cycle`) are reported first, and composition budgets (2,000 expanded blocks, 10,000 expanded connections, 64 MiB canonical capture bytes) are checked only for complete finite acyclic graphs and carry structured contributor evidence. Findings are bounded per code with cursor pagination (`GET /api/flows/:id/findings` / `POST /api/flows/:id/validate/findings`) and **Load more** in the readiness panel; nested findings name their placement path and offer **Open Flow**. Starting a Run or exporting JSON for a Flow that places a Subflow is explicitly refused (`subflow_start_unavailable` / `subflow_export_unavailable`) until Subflow execution and portable export land. The summary at the canvas's top-left is a **Ready** badge, or **Not ready** with **N issues** and a chevron that opens one row per issue.
 Each row selects its block and opens its settings at the affected field; a Condition rule issue also scrolls to that rule and focuses its name or arrival
 number, and a Finish ending issue selects the Finish block and focuses that ending's name. The issue text is the one the Flows list and the composer show. A block with an issue, the Flow input and the Finish block included, shows an Error outline and a short tag
 (**No duration**, **Not connected**, **Needs a model** and so on); a selected one keeps the outline with the selection ring outside it, and the affected
@@ -866,7 +872,7 @@ no exit fields. A Wait block adds `duration`: `{amount, unit}` with any finite n
 `messageRequired` is true. A Condition adds `rules`, an ordered array of `{id, name, fromArrival}`, and
 `otherwise: {id: "otherwise"}`. A rule `name` is stored trimmed and may be blank in a draft; `fromArrival` is a whole number from 1 to
 9,007,199,254,740,991, the largest integer JSON numbers and the stored definition hold exactly, or `null` while the draft has none. Its
-outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, and an Agent block's
+outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. A `subflow` block carries `flowId` (a saved Flow ID or `null` in an unfinished draft) and no Agent, Wait, Continuation or Condition fields; its exits are the referenced Flow's Finish endings by ending ID, and `flowInput.targetBlockIds` admits both Agent blocks and Subflows. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, a Subflow's exit is resolved against its referenced Flow's Finish endings by readiness, and an Agent block's
 exit is resolved against its Agent by readiness, not by the save. No block execution settings or prompt overrides are accepted.
 
 #### Flow input block

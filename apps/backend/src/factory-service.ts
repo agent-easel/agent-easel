@@ -244,6 +244,7 @@ export const makeFactoryService = (
       duplicateFlow: definitions.duplicateFlow,
       listFlows: definitions.listFlows,
       getFlow: definitions.getFlow,
+      listFlowFindings: definitions.listFlowFindings,
       getAgentCapabilities: definitions.getAgentCapabilities,
       listAgents: definitions.listAgents,
       getAgent: definitions.getAgent,

@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ComponentProps,
@@ -11,12 +13,15 @@ import {
   FINISH_BLOCK_ID,
   type AgentDefinition,
   type FlowBlock,
+  type FlowDraft,
   type FlowGraph,
+  type FlowReadiness,
   type ValidationIssue,
 } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
   addWire,
+  canvasGraph,
   FINISH_SELECTION,
   type CanvasBlockSelection,
   canConnect,
@@ -29,8 +34,13 @@ import {
 } from "../flow-graph.ts";
 import { AUTHORING_DIMENSIONS, type WireSource } from "@t3-factory/flow-layout";
 import {
+  blockedSubflowReasons,
+  computeSubflowPreviews,
+  type SubflowCollapseReason,
+} from "../subflow-preview.ts";
+import { SubflowCollapsedFooter } from "./subflow-group.tsx";
+import {
   CanvasSurface,
-  IdentityRows,
   type CanvasBlockContent,
   type CanvasFinishContent,
   type CanvasFlowInputContent,
@@ -42,7 +52,7 @@ import {
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-import { blockIdentity, conditionRoutes, exitDisplayName } from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, exitDisplayName, IdentityRows } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 import { issueTag, outputKey, type ReadinessMarks } from "./flow-readiness.tsx";
 
@@ -405,45 +415,71 @@ function blockFrameClass({
   );
 }
 
-/** An editable block: dragged by its identity rows, with a connection handle on each usable exit. */
-function authoringBlock({
-  graph,
-  recipients,
-  block,
-  agents,
-  marks,
-  selected,
-  dragging,
-  connectTarget,
-  connectingExitId,
-  fromFlowInput,
-  onSelect,
-  drag,
-  connectFrom,
-}: {
+function subflowCollapsedFooter(
+  block: CanvasBlock,
+  flows: ReadonlyMap<string, FlowDraft>,
+  collapseReason: SubflowCollapseReason | undefined,
+  onExpandSubflow: () => void,
+) {
+  if (block.kind !== "subflow") return undefined;
+  const childFlow = block.flowId ? flows.get(block.flowId) : undefined;
+  return (
+    <SubflowCollapsedFooter
+      block={block}
+      childFlow={childFlow}
+      reason={collapseReason}
+      onExpand={collapseReason === undefined && childFlow ? onExpandSubflow : undefined}
+    />
+  );
+}
+
+function authoringExitPort(
+  exit: CanvasBlock["exits"][number],
+  name: string,
+  connectingExitId: string | null,
+  unconnected: boolean,
+  connectFrom: (exit: CanvasBlock["exits"][number]) => DragHandlers,
+): CanvasPort {
+  if (exit.unavailable) return unavailablePort;
+  return connectionHandle(
+    exitPortLabel(exit, name),
+    connectingExitId === exit.id,
+    connectFrom(exit),
+    unconnected,
+  );
+}
+
+type AuthoringBlockArgs = {
   graph: FlowGraph;
   recipients: ReturnType<typeof exitRecipients>;
   block: CanvasBlock;
   agents: readonly AgentDefinition[];
+  flows: ReadonlyMap<string, FlowDraft>;
   marks: ReadinessMarks;
   selected: boolean;
-  /** Lifted above the other blocks while it follows the pointer. */
   dragging: boolean;
-  /** A connection being drawn would connect to this block. */
   connectTarget: boolean;
-  /** The exit a connection is being drawn from, when it belongs to this block. */
   connectingExitId: string | null;
-  /** A wire is being drawn from the Flow input, which reaches only Agent blocks. */
   fromFlowInput: boolean;
+  collapseReason: SubflowCollapseReason | undefined;
+  onExpandSubflow: () => void;
   onSelect: () => void;
   drag: DragHandlers;
   connectFrom: (exit: CanvasBlock["exits"][number]) => DragHandlers;
-}): CanvasBlockContent {
+};
+
+/** An editable block: dragged by its identity rows, with a connection handle on each usable exit. */
+function authoringBlock(args: AuthoringBlockArgs): CanvasBlockContent {
+  const { block, selected, fromFlowInput, marks } = args;
   const name = block.name || "Unnamed block";
   const issue = marks.blocks.get(block.id)?.[0]?.issue;
   const { tags, describedBy } = blockTags(block, issue);
   const unconnected = (exitId: string) => marks.unconnectedOutputs.has(outputKey(block.id, exitId));
-  const reference = blockReference(block, { graph, agents }).card;
+  const reference = blockReference(block, {
+    graph: args.graph,
+    agents: args.agents,
+    flows: args.flows,
+  }).card;
   const route = conditionRoutes(block);
   const identity = blockIdentity({
     kind: block.kind,
@@ -458,14 +494,15 @@ function authoringBlock({
       </>
     ),
   });
+  const flowInputTarget = block.kind === "agent" || block.kind === "subflow";
   return {
     className: blockFrameClass({
       kind: block.kind,
       selected,
       issue: issue !== undefined,
-      dimmed: fromFlowInput && block.kind !== "agent",
-      dragging,
-      connectTarget,
+      dimmed: fromFlowInput && !flowInputTarget,
+      dragging: args.dragging,
+      connectTarget: args.connectTarget,
     }),
     press: {
       covers: "identity",
@@ -475,8 +512,8 @@ function authoringBlock({
           aria-label={`${BLOCK_KINDS[block.kind].name} ${name}`}
           aria-describedby={describedBy}
           aria-pressed={selected}
-          {...drag}
-          onClick={onSelect}
+          {...args.drag}
+          onClick={args.onSelect}
         >
           {rows}
         </DragButton>
@@ -488,21 +525,21 @@ function authoringBlock({
       <AuthoringExit
         exit={exit}
         route={route(exit.id)}
-        recipients={recipients(block.id, exit.id).join(", ")}
+        recipients={args.recipients(block.id, exit.id).join(", ")}
         unconnected={unconnected(exit.id)}
       />
     ),
     exitPort: (exit) =>
-      exit.unavailable
-        ? unavailablePort
-        : connectionHandle(
-            exitPortLabel(exit, name),
-            connectingExitId === exit.id,
-            connectFrom(exit),
-            unconnected(exit.id),
-          ),
-    incomingPort: incomingPort(fromFlowInput && block.kind === "agent"),
+      authoringExitPort(exit, name, args.connectingExitId, unconnected(exit.id), args.connectFrom),
+    incomingPort: incomingPort(fromFlowInput && flowInputTarget),
     footers: [],
+    subflowBadge: tags,
+    subflowFooter: subflowCollapsedFooter(
+      block,
+      args.flows,
+      args.collapseReason,
+      args.onExpandSubflow,
+    ),
   };
 }
 
@@ -611,6 +648,8 @@ type FlowCanvasProps = {
   ref: RefObject<HTMLElement | null>;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  flows: readonly FlowDraft[];
+  readiness: FlowReadiness | null;
   /** Where readiness issues mark the Flow input, Blocks and Condition outputs. */
   marks: ReadinessMarks;
   selected: CanvasBlockSelection | null;
@@ -656,11 +695,17 @@ function useAuthoringGestures({
 function authoringContent({
   graph,
   agents,
+  flowMap,
+  blocked,
   marks,
   selected,
   onSelect,
+  onExpandSubflow,
   gestures: { move, connect },
 }: Pick<FlowCanvasProps, "graph" | "agents" | "marks" | "selected" | "onSelect"> & {
+  flowMap: ReadonlyMap<string, FlowDraft>;
+  blocked: ReadonlyMap<string, SubflowCollapseReason>;
+  onExpandSubflow: (blockId: string) => void;
   gestures: ReturnType<typeof useAuthoringGestures>;
 }) {
   const fromFlowInput = connect.connect?.source.kind === "flow-input";
@@ -690,9 +735,12 @@ function authoringContent({
         recipients,
         block,
         agents,
+        flows: flowMap,
         marks,
         selected: selected === block.id,
         fromFlowInput,
+        collapseReason: blocked.get(block.id),
+        onExpandSubflow: () => onExpandSubflow(block.id),
         ...blockGesture(move.drag, connect.connect, block.id),
         onSelect: () => onSelect(block.id),
         drag: move.handlers({ kind: "block", blockId: block.id }),
@@ -702,35 +750,97 @@ function authoringContent({
   };
 }
 
-/** The editable Flow graph on the canvas surface: moving, connecting and selecting. */
-export function FlowCanvas({
-  ref,
+const EMPTY_BLOCKED_SUBFLOWS: ReadonlyMap<string, SubflowCollapseReason> = new Map();
+
+function useSubflowPreviews({
+  flowId,
   graph,
   agents,
-  marks,
-  selected,
-  selectedWire,
-  reveal,
-  flowId,
-  savedGraph,
-  busy,
-  placementRef,
-  onSelect,
-  onSelectWire,
-  onDeleteWire,
-  onEdit,
-  onChange,
-  onArranging,
-}: FlowCanvasProps) {
-  const gestures = useAuthoringGestures({ ref, graph, placementRef, onEdit, onChange });
-  const content = authoringContent({ graph, agents, marks, selected, onSelect, gestures });
+  flows,
+  readiness,
+}: Pick<FlowCanvasProps, "flowId" | "graph" | "agents" | "flows" | "readiness">) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const flowMap = useMemo(() => new Map(flows.map((flow) => [flow.id, flow])), [flows]);
+  const hasSubflows = useMemo(
+    () => graph.blocks.some((block) => block.kind === "subflow"),
+    [graph.blocks],
+  );
+  const blocked = useMemo(
+    () => (hasSubflows ? blockedSubflowReasons(graph, readiness, flowMap) : EMPTY_BLOCKED_SUBFLOWS),
+    [hasSubflows, graph, readiness, flowMap],
+  );
+  const subflowPreviews = useMemo(
+    () =>
+      hasSubflows
+        ? computeSubflowPreviews({
+            rootFlowId: flowId,
+            graph: canvasGraph(graph, agents, flowMap),
+            flows: flowMap,
+            agents,
+            dimensions: AUTHORING_DIMENSIONS,
+            collapsed,
+            blocked,
+          })
+        : undefined,
+    [hasSubflows, flowId, graph, agents, flowMap, collapsed, blocked],
+  );
+  const toggleCollapse = useCallback((blockId: string, collapse: boolean) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (collapse) next.add(blockId);
+      else next.delete(blockId);
+      return next;
+    });
+  }, []);
+  const expandSubflow = useCallback(
+    (blockId: string) => toggleCollapse(blockId, false),
+    [toggleCollapse],
+  );
+  const collapseSubflow = useCallback(
+    (blockId: string) => toggleCollapse(blockId, true),
+    [toggleCollapse],
+  );
+  return { flowMap, blocked, subflowPreviews, expandSubflow, collapseSubflow };
+}
+
+/** The editable Flow graph on the canvas surface: moving, connecting and selecting. */
+export function FlowCanvas({ ref, placementRef, ...rest }: FlowCanvasProps) {
+  const { flowMap, blocked, subflowPreviews, expandSubflow, collapseSubflow } = useSubflowPreviews({
+    flowId: rest.flowId,
+    graph: rest.graph,
+    agents: rest.agents,
+    flows: rest.flows,
+    readiness: rest.readiness,
+  });
+  const gestures = useAuthoringGestures({
+    ref,
+    placementRef,
+    graph: rest.graph,
+    onEdit: rest.onEdit,
+    onChange: rest.onChange,
+  });
+  const content = authoringContent({
+    graph: rest.graph,
+    agents: rest.agents,
+    flowMap,
+    blocked,
+    marks: rest.marks,
+    selected: rest.selected,
+    onSelect: rest.onSelect,
+    onExpandSubflow: expandSubflow,
+    gestures,
+  });
   return (
     <CanvasSurface
       ref={ref}
       label="Flow canvas"
-      scope={savedGraph ? flowId : null}
-      graph={graph}
-      agents={agents}
+      scope={rest.savedGraph ? rest.flowId : null}
+      graph={rest.graph}
+      agents={rest.agents}
+      flows={flowMap}
+      previewAgents={rest.agents}
+      subflowPreviews={subflowPreviews}
+      onCollapseSubflow={collapseSubflow}
       dimensions={AUTHORING_DIMENSIONS}
       reservedFooters={0}
       flowInput={content.flowInput}
@@ -739,16 +849,21 @@ export function FlowCanvas({
       wires={{
         kind: "curved",
         label: "Directed connections",
-        selected: selectedWire,
-        onSelect: onSelectWire,
-        onDelete: onDeleteWire,
+        selected: rest.selectedWire,
+        onSelect: rest.onSelectWire,
+        onDelete: rest.onDeleteWire,
       }}
       covered={{ top: READINESS_HEIGHT }}
-      reveal={reveal}
-      arrangement={{ busy, saved: savedGraph, commit: onChange, onArranging }}
+      reveal={rest.reveal}
+      arrangement={{
+        busy: rest.busy,
+        saved: rest.savedGraph,
+        commit: rest.onChange,
+        onArranging: rest.onArranging,
+      }}
       gesture={gestures.gesture}
       points={gestures.points}
-      onTap={() => onSelect(null)}
+      onTap={() => rest.onSelect(null)}
     />
   );
 }

@@ -37,6 +37,7 @@ type BlockRow = {
   kind: FlowBlock["kind"];
   name: string;
   agent_id: string | null;
+  flow_id: string | null;
   prompt: string | null;
   revisit_instruction: string | null;
   revisit_context: AgentRevisitContext | null;
@@ -119,9 +120,10 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
     (block, ordinal) =>
       Effect.gen(function* () {
         const duration = block.kind === "wait" ? block.duration : null;
-        yield* sql`INSERT INTO flow_revision_blocks (flow_revision_id, block_id, ordinal, kind, name, agent_id, prompt, revisit_instruction, revisit_context, x, y, wait_amount, wait_unit)
+        yield* sql`INSERT INTO flow_revision_blocks (flow_revision_id, block_id, ordinal, kind, name, agent_id, flow_id, prompt, revisit_instruction, revisit_context, x, y, wait_amount, wait_unit)
         VALUES (${revisionId}, ${block.id}, ${ordinal}, ${block.kind}, ${block.name},
           ${block.kind === "agent" ? block.agentId : null},
+          ${block.kind === "subflow" ? block.flowId : null},
           ${block.kind === "continuation" ? block.prompt : null},
           ${block.kind === "agent" ? block.revisitInstruction : null},
           ${block.kind === "agent" ? block.revisitContext : null}, ${block.position.x}, ${block.position.y},
@@ -201,6 +203,7 @@ const toBlock = (
 ): FlowBlock => {
   const base = { id: row.block_id, name: row.name, position: { x: row.x, y: row.y } };
   if (row.kind === "human") return { ...base, kind: "human" };
+  if (row.kind === "subflow") return { ...base, kind: "subflow", flowId: row.flow_id };
   if (row.kind === "condition")
     return {
       ...base,
@@ -425,5 +428,18 @@ export const currentFlowsReferencingAgent = Effect.fnUntraced(function* (
       AND r.revision = (SELECT max(revision) FROM flow_revisions WHERE flow_id = f.id)
     WHERE f.removed_at IS NULL AND EXISTS (SELECT 1 FROM flow_revision_blocks b
       WHERE b.flow_revision_id = r.id AND b.agent_id = ${agentId})
+    ORDER BY r.name, f.id`;
+});
+
+export const currentFlowsPlacingFlow = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  flowId: string,
+) {
+  return yield* sql<{ id: string; name: string; project_id: string | null }>`
+    SELECT f.id, r.name, f.project_id FROM flows f
+    JOIN flow_revisions r ON r.flow_id = f.id
+      AND r.revision = (SELECT max(revision) FROM flow_revisions WHERE flow_id = f.id)
+    WHERE f.removed_at IS NULL AND f.id <> ${flowId} AND EXISTS (SELECT 1 FROM flow_revision_blocks b
+      WHERE b.flow_revision_id = r.id AND b.flow_id = ${flowId})
     ORDER BY r.name, f.id`;
 });

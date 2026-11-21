@@ -1,6 +1,7 @@
 import { buildElkGraph } from "@t3-factory/flow-layout";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
+import type { ExitFlows } from "@t3-factory/domain-validation";
 import ELK from "elkjs/lib/elk-api.js";
 import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import {
@@ -55,7 +56,12 @@ function useFlowLayoutWorker(getDimensions: () => FlowLayoutDimensions) {
   );
 
   const arrange = useCallback(
-    (graph: FlowGraph, agents: LayoutAgents, feedback: "visible" | "silent" = "visible") => {
+    (
+      graph: FlowGraph,
+      agents: LayoutAgents,
+      flows: ExitFlows | undefined,
+      feedback: "visible" | "silent" = "visible",
+    ) => {
       cancel();
       if (feedback === "visible") setError(null);
       setPending(feedback === "visible");
@@ -81,7 +87,7 @@ function useFlowLayoutWorker(getDimensions: () => FlowLayoutDimensions) {
           instance.onerror = (event) => fail(event.message || "Auto-arrange failed. Try again.");
           instance.onmessageerror = () => fail("Could not read the arranged Flow. Try again.");
           void elk
-            .layout(buildElkGraph(canvasGraph(graph, agents), dimensionsRef.current()))
+            .layout(buildElkGraph(canvasGraph(graph, agents, flows), dimensionsRef.current()))
             .then((laidOut) => {
               if (pendingRequest.current?.generation !== id) return;
               const result = parseElkLayout(graph, laidOut);
@@ -114,6 +120,7 @@ type FlowLayoutSessionOptions = {
   readonly scope: string | null;
   readonly graph: FlowGraph;
   readonly agents: LayoutAgents;
+  readonly flows?: ExitFlows | undefined;
   /** The block geometry of the graph's blocks, as the canvas draws them. */
   readonly getDimensions: () => FlowLayoutDimensions;
   /** Omit for local, read-only Run presentation. */
@@ -184,6 +191,7 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
       const result = await compute(
         start.options.graph,
         start.options.agents,
+        start.options.flows,
         restoreOnly ? "silent" : "visible",
       );
       const current = live.current;

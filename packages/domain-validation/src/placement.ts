@@ -22,6 +22,10 @@ export function mayPlaceAgent(flowProject: OwningProject, agentProject: OwningPr
   return agentProject === null || agentProject === flowProject;
 }
 
+export function mayPlaceFlow(parentProject: OwningProject, childProject: OwningProject): boolean {
+  return mayPlaceAgent(parentProject, childProject);
+}
+
 /**
  * The Start rule New Run and Triggers apply: a global Flow starts in any Project, and a Project
  * Flow only in its owning Project.

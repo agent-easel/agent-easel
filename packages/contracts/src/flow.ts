@@ -49,14 +49,6 @@ export interface ConditionRule {
   readonly fromArrival: number | null;
 }
 export type AgentRevisitContext = "keep" | "fresh";
-/**
- * An Agent block exposes its Agent's exits, minus those this Flow hides, plus its Flow-local
- * exits and may carry a Revisit instruction. A Human block has the fixed Approve and Request
- * changes exits. A Wait block has one unnamed output; `duration` is null while the draft has none.
- * A Continuation sends its prompt once per Run into the worker thread of the message that reaches
- * it and has one fixed, unnamed output. A Condition routes each arrival by its arrival number: the
- * first matching rule selects that rule's output, else the fixed last Otherwise output.
- */
 export type FlowBlock = BlockBase &
   (
     | {
@@ -84,6 +76,10 @@ export type FlowBlock = BlockBase &
         /** Always present and always last; it cannot be renamed, removed or reordered. */
         readonly otherwise: { readonly id: typeof CONDITION_OTHERWISE_ID };
       }
+    | {
+        readonly kind: "subflow";
+        readonly flowId: string | null;
+      }
   );
 export interface FlowConnection {
   readonly sourceBlockId: string;
@@ -107,8 +103,6 @@ export interface FlowFinishBlock {
 /** The single, always-present source of a Flow; its targets start a Run in parallel. */
 export interface FlowInputBlock {
   readonly position: { readonly x: number; readonly y: number };
-  /** Agent blocks that each receive the Flow input in their own session at Start. A Wait target
-   * saves but is a readiness gap. */
   readonly targetBlockIds: readonly string[];
 }
 export interface FlowGraph {
@@ -154,9 +148,89 @@ export interface UpdateFlowInput {
   readonly workspace?: FlowWorkspace;
 }
 
+export const SUBFLOW_CAPTURE_BYTES_LIMIT = 67_108_864;
+export const SUBFLOW_EXPANDED_BLOCKS_LIMIT = 2_000;
+export const SUBFLOW_EXPANDED_CONNECTIONS_LIMIT = 10_000;
+export const READINESS_FINDINGS_PER_CODE = 20;
+
+export interface PlacementSegment {
+  readonly flowId: string;
+  readonly blockId: string;
+}
+
+export interface NestedFindingLocation {
+  readonly placements: readonly PlacementSegment[];
+  readonly flowId: string;
+  readonly revision: number;
+  readonly path: string;
+}
+
+export type SubflowBudgetClass = "flow" | "agent";
+
+export interface SubflowBudgetContributor {
+  readonly kind: SubflowBudgetClass;
+  readonly id: string;
+  readonly revision: number;
+  readonly name: string;
+  readonly amount: string;
+  readonly multiplicity: string;
+  readonly path: readonly PlacementSegment[];
+  readonly pathText: string;
+}
+
+export interface SubflowBudgetSubtotals {
+  readonly root: string;
+  readonly direct: string;
+  readonly deeper: string;
+}
+
+export interface SubflowBudgetEvidence {
+  readonly measure: "captureBytes" | "expandedBlocks" | "expandedConnections";
+  readonly total: string;
+  readonly limit: string;
+  readonly unique: { readonly flows: number; readonly agents: number };
+  readonly subtotals: Readonly<Partial<Record<SubflowBudgetClass, SubflowBudgetSubtotals>>>;
+  readonly contributors: readonly {
+    readonly kind: SubflowBudgetClass;
+    readonly ranked: readonly SubflowBudgetContributor[];
+    readonly omitted: number;
+  }[];
+}
+
+export interface ReadinessIssue extends ValidationIssue {
+  readonly nested?: NestedFindingLocation;
+  readonly budget?: SubflowBudgetEvidence;
+}
+
+export interface FlowClosureDefinition {
+  readonly kind: "flow" | "agent";
+  readonly id: string;
+  readonly revision: number;
+  readonly projectId: string | null;
+}
+
+export interface FlowClosure {
+  readonly stamp: string;
+  readonly definitions: readonly FlowClosureDefinition[];
+  readonly missing: readonly { readonly kind: "flow" | "agent"; readonly id: string }[];
+}
+
 export interface FlowReadiness {
   readonly ready: boolean;
-  readonly issues: readonly ValidationIssue[];
+  readonly issues: readonly ReadinessIssue[];
+  readonly closure?: FlowClosure;
+  readonly omitted?: readonly { readonly code: string; readonly count: number }[];
+  readonly cursor?: string;
+}
+
+export interface ListFlowFindingsInput {
+  readonly cursor: string;
+  readonly draft?: UpdateFlowInput;
+}
+
+export interface FlowFindingsPage {
+  readonly issues: readonly ReadinessIssue[];
+  readonly cursor?: string;
 }
 
 /**
@@ -220,11 +294,13 @@ export interface FlowDuplicatePlanAgent {
   readonly changeable: boolean;
 }
 
-/**
- * What Flow Duplicate would create, computed without writing anything: one entry per distinct
- * existing Agent the source's latest revision places, in the order its blocks first place them.
- * A block whose Agent is unset, missing or removed is copied unchanged and not listed.
- */
+export interface FlowDuplicatePlanFlow {
+  readonly flowId: string;
+  readonly name: string;
+  readonly projectId: string | null;
+  readonly revision: number;
+}
+
 export interface FlowDuplicatePlan {
   readonly flowId: string;
   /** The source revision the plan copies; Duplicate names it as `expectedRevision`. */
@@ -233,6 +309,7 @@ export interface FlowDuplicatePlan {
   readonly projectId: string | null;
   /** The new Flow's default name. */
   readonly name: string;
+  readonly flows: readonly FlowDuplicatePlanFlow[];
   readonly agents: readonly FlowDuplicatePlanAgent[];
 }
 
@@ -259,12 +336,13 @@ export interface DuplicateFlowInput {
   readonly expectedRevision: number;
   /** Every planned Agent with its choice; a plan whose Flow or Agents changed since is refused. */
   readonly agents: readonly FlowDuplicateAgentChoice[];
+  readonly flows?: readonly Pick<FlowDuplicatePlanFlow, "flowId" | "revision" | "projectId">[];
 }
 
-/** The new Flow and the Agents created for it, by the source Agent each copies. */
 export interface FlowDuplicate {
   readonly flow: FlowDraft;
   readonly copies: readonly { readonly sourceAgentId: string; readonly agentId: string }[];
+  readonly flowCopies: readonly { readonly sourceFlowId: string; readonly flowId: string }[];
 }
 
 /** The Flow operations the Factory facade implements. */
@@ -282,13 +360,17 @@ export const flowOperations = {
     body: "json",
   }),
   getFlow: operation<never, FlowDraft>()({ method: "GET", path: "/api/flows/:id" }),
+  listFlowFindings: operation<ListFlowFindingsInput, FlowFindingsPage>()({
+    method: "POST",
+    path: "/api/flows/:id/findings",
+    body: "json",
+  }),
   removeFlow: operation()({ method: "DELETE", path: "/api/flows/:id" }),
   updateFlow: operation<UpdateFlowInput, FlowDraft>()({
     method: "PUT",
     path: "/api/flows/:id",
     body: "json",
   }),
-  /** Change owner; refused while any Agent the Flow places could not be placed afterwards. */
   changeFlowOwner: operation<ChangeOwnerInput, FlowDraft>()({
     method: "PUT",
     path: "/api/flows/:id/owner",

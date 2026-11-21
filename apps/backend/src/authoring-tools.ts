@@ -21,6 +21,7 @@ export type AuthoringOperations = Pick<
   | "duplicateAgent"
   | "listFlows"
   | "getFlow"
+  | "listFlowFindings"
   | "createFlow"
   | "updateFlow"
   | "removeFlow"
@@ -152,7 +153,7 @@ const flowFields = {
   graph: {
     type: "object",
     description:
-      'The whole Flow graph; a save replaces the saved one. Positions are optional: if any Block, Flow input or Finish position is omitted, the server auto-arranges the whole graph; fully positioned graphs are kept as given. Agent blocks {id, kind: agent, name, agentId, position, hiddenExitIds, localExits, revisitInstruction, revisitContext} (revisitInstruction is optional plain text up to 120,000 characters, stored trimmed and empty when omitted, that Factory sends on every visit to the block after the first; revisitContext is optional "keep" or "fresh", defaulting to "keep", where "fresh" starts each revisit in a fresh provider session on the worker thread without earlier context; only Agent blocks have them), Human blocks {id, kind: human, name, position}, Wait blocks {id, kind: wait, name, position, duration: {amount: number, unit: minutes | hours | days} or null} (they hold each arrival for 1 minute to 7 days, judged after converting the unit, and leave by exitId "output"), Continuation blocks {id, kind: continuation, name, prompt, position} (they send their prompt once per Run into the worker thread of the message that reaches them; their single output has exitId "output"), Condition blocks {id, kind: condition, name, position, rules: [{id, name, fromArrival}], otherwise: {id: "otherwise"}} (they route each message that reaches them by its arrival number at the block within the Run, starting at 1: the first rule whose fromArrival the number reaches selects the output of that rule, which wires leave by its rule id, else the fixed last Otherwise output, exitId "otherwise"; fromArrival is a whole number of at least 1 or null in a draft; readiness requires distinct non-blank names, thresholds that strictly descend and are at least 2, and no loop through only Conditions and Continuations), connections {sourceBlockId, exitId, targetBlockId, targetEndingId?} (to wire to an ending, set targetBlockId to "finish" and include its targetEndingId; ordinary block wires omit targetEndingId), flowInput {position, targetBlockIds} (ordinary Agent blocks only), and finish {position, endings} (exactly one per Flow, counted toward the 500-block authoring limit; existing Flows with 500 ordinary blocks can keep them). Omitting finish saves no endings and places the Finish block right of every block. Each ending {id, name, description, output: none | optional | required, outputDescription} is a way the Flow can end: any exit or output, Condition Otherwise included, may be wired into a specific ending by its id, several wires may enter one ending, and renaming an ending keeps its wires. Up to 100 endings; names up to 200 characters, stored trimmed; description and outputDescription up to 4,000 characters, empty when unset; outputDescription says what the output should contain when output is not none. An ending with a blank or duplicate name, or with no incoming wire, saves as a draft but is a readiness issue; zero endings is ready; unwired exits stay valid branch ends.',
+      'The whole Flow graph; a save replaces the saved one. Positions are optional: if any Block, Flow input or Finish position is omitted, the server auto-arranges the whole graph; fully positioned graphs are kept as given. Agent blocks {id, kind: agent, name, agentId, position, hiddenExitIds, localExits, revisitInstruction, revisitContext} (revisitInstruction is optional plain text up to 120,000 characters, stored trimmed and empty when omitted, that Factory sends on every visit to the block after the first; revisitContext is optional "keep" or "fresh", defaulting to "keep", where "fresh" starts each revisit in a fresh provider session on the worker thread without earlier context; only Agent blocks have them), Human blocks {id, kind: human, name, position}, Wait blocks {id, kind: wait, name, position, duration: {amount: number, unit: minutes | hours | days} or null} (they hold each arrival for 1 minute to 7 days, judged after converting the unit, and leave by exitId "output"), Continuation blocks {id, kind: continuation, name, prompt, position} (they send their prompt once per Run into the worker thread of the message that reaches them; their single output has exitId "output"), Condition blocks {id, kind: condition, name, position, rules: [{id, name, fromArrival}], otherwise: {id: "otherwise"}} (they route each message that reaches them by its arrival number at the block within the Run, starting at 1: the first rule whose fromArrival the number reaches selects the output of that rule, which wires leave by its rule id, else the fixed last Otherwise output, exitId "otherwise"; fromArrival is a whole number of at least 1 or null in a draft; readiness requires distinct non-blank names, thresholds that strictly descend and are at least 2, and no loop through only Conditions and Continuations), Subflow blocks {id, kind: subflow, name, position, flowId} (they place a saved Flow by id from factory_list_flows, or null in a draft; their exits are that Flow\'s Finish endings, which wires leave by ending id, so renaming an ending keeps its wires and removing one breaks them; a global Flow places only global Flows and a Project Flow also its own Project\'s Flows; readiness also judges every Flow placed transitively), connections {sourceBlockId, exitId, targetBlockId, targetEndingId?} (to wire to an ending, set targetBlockId to "finish" and include its targetEndingId; ordinary block wires omit targetEndingId; a Subflow wire into this Flow\'s Finish names the placed Flow\'s ending as exitId and this Flow\'s ending as targetEndingId), flowInput {position, targetBlockIds} (Agent and Subflow blocks, each receiving the Flow input independently; a Wait target saves but is a readiness issue), and finish {position, endings} (exactly one per Flow, counted toward the 500-block authoring limit; existing Flows with 500 ordinary blocks can keep them). Omitting finish saves no endings and places the Finish block right of every block. Each ending {id, name, description, output: none | optional | required, outputDescription} is a way the Flow can end: any exit or output, Condition Otherwise included, may be wired into a specific ending by its id, several wires may enter one ending, and renaming an ending keeps its wires. Up to 100 endings; names up to 200 characters, stored trimmed; description and outputDescription up to 4,000 characters, empty when unset; outputDescription says what the output should contain when output is not none. An ending with a blank or duplicate name, or with no incoming wire, saves as a draft but is a readiness issue; zero endings is ready; unwired exits stay valid branch ends.',
     properties: {
       blocks: { type: "array", items: { type: "object" } },
       connections: { type: "array", items: { type: "object" } },
@@ -360,13 +361,13 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_change_flow_owner",
     description:
-      "Change owner of a Flow exactly as Studio's Change owner: move it to another Project or make it global. It appends no revision and changes nothing else. Refused when the Flow places Agents its new owner may not place; the issues name them. Ask the user before calling it.",
+      "Change owner of a Flow exactly as Studio's Change owner: move it to another Project or make it global. It appends no revision and changes nothing else. Refused when the Flow places Agents or Flows its new owner may not place, or a Flow placing it could not place it afterwards; the issues name them. Ask the user before calling it.",
     inputSchema: changeOwnerSchema("flowId"),
   },
   {
     name: "factory_preview_flow_duplicate",
     description:
-      "Preview a Flow Duplicate into projectId, writing nothing. The plan lists each distinct Agent the latest revision places with its default choice: keep places the same Agent, copy places a new Agent created in the target. Only Agents with changeable true may switch. Show the plan to the user, then commit it with factory_duplicate_flow.",
+      "Preview a Flow Duplicate into projectId, writing nothing. flows lists the placed Flows the copy also copies because the target may not place them, found transitively; a placed Flow the target may place stays the original. agents lists each distinct Agent the copied Flows place with its default choice: keep places the same Agent, copy places a new Agent created in the target. Only Agents with changeable true may switch. Show the plan to the user, then commit it with factory_duplicate_flow.",
     inputSchema: {
       type: "object",
       properties: { flowId, projectId: duplicateTarget },
@@ -377,7 +378,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_duplicate_flow",
     description:
-      "Commit a previewed Flow Duplicate atomically: a new Flow at revision 1 owned by the plan's projectId, with each copied Agent created once in the target and the copy retargeted to it. The source Flow and its Agents never change. Refused as stale when the Flow or a planned Agent changed since the preview.",
+      "Commit a previewed Flow Duplicate atomically: a new Flow at revision 1 owned by the plan's projectId, with each copied Flow and Agent created once in the target and the copies retargeted to them, including references between copies and back to the source. The source Flows and Agents never change. Refused as stale when the Flow, a planned Flow or a planned Agent changed since the preview.",
     inputSchema: {
       type: "object",
       properties: {
@@ -408,6 +409,20 @@ export const authoringTools: Tool[] = [
             required: ["agentId", "revision", "projectId", "choice"],
           },
         },
+        flows: {
+          type: "array",
+          description:
+            "Every Flow of the plan's flows with flowId, revision and projectId as listed; omit or send [] when the plan lists none.",
+          items: {
+            type: "object",
+            properties: {
+              flowId: { type: "string" },
+              revision: { type: "integer" },
+              projectId: { type: ["string", "null"] },
+            },
+            required: ["flowId", "revision", "projectId"],
+          },
+        },
       },
       required: ["flowId", "projectId", "expectedRevision", "agents"],
       additionalProperties: false,
@@ -416,10 +431,17 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_check_flow",
     description:
-      "Check readiness of a Flow's latest saved revision, the same live graph and saved-Agent check Studio shows. It does not check an unsaved draft or live execution readiness. Fix the listed issue paths before a Run is started.",
+      "Check readiness of a Flow's latest saved revision, the same live graph, saved-Agent and placed-Flow check Studio shows. It does not check an unsaved draft or live execution readiness. For a Flow that places a Subflow, a finding inside a placed Flow carries nested {placements, flowId, revision, path}, budget findings carry exact totals and contributors, closure names the definitions judged, and at most 20 findings per code are listed: pass the reply's cursor to read the rest. Fix the listed issue paths before a Run is started.",
     inputSchema: {
       type: "object",
-      properties: { flowId },
+      properties: {
+        flowId,
+        cursor: {
+          type: "string",
+          description:
+            "The cursor a previous factory_check_flow reply gave, to read the findings it omitted.",
+        },
+      },
       required: ["flowId"],
       additionalProperties: false,
     },
@@ -454,6 +476,8 @@ const agentNotFoundNext = "Find a current Agent id with factory_list_agents.";
 const flowNotFoundNext = "Find a current Flow id with factory_list_flows.";
 const placementNext =
   "A Flow places only global Agents and Agents of its own owning Project. Choose Agents from factory_list_agents with the Flow's projectId, then call the tool again.";
+const flowPlacementNext =
+  "A Flow places only global Flows and Flows of its own owning Project. Choose Flows from factory_list_flows with the Flow's projectId, then call the tool again.";
 
 /**
  * Static recovery steps, keyed by an issue code, which wins, or by the error code; replies never
@@ -468,6 +492,9 @@ const nextSteps: Record<Subject, Partial<Record<string, string>>> = {
   },
   flow: {
     agent_scope_mismatch: placementNext,
+    flow_scope_mismatch: flowPlacementNext,
+    stale_findings_cursor:
+      "Call factory_check_flow without a cursor to read the current readiness and its new cursor.",
     validation: fixIssuesNext,
     conflict:
       "Read the Flow with factory_get_flow, reapply your change and save with its revision.",
@@ -638,7 +665,9 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
   factory_save_flow: ["flow", withId("flowId", (id, input) => factory.updateFlow(id, input))],
   factory_check_flow: [
     "flow",
-    withId("flowId", async (id) => {
+    withId("flowId", async (id, input) => {
+      const { cursor } = toolArguments(input);
+      if (cursor !== undefined) return factory.listFlowFindings(id, { cursor: cursor as string });
       const flow = await factory.getFlow(id);
       return flow.ok ? { ok: true, value: flow.value.readiness } : flow;
     }),

@@ -6,9 +6,11 @@ import {
   type DuplicateFlowInput,
   type EndingOutput,
   type FlowDuplicateAgentChoice,
+  type FlowDuplicatePlanFlow,
   type FlowConnection,
   type FlowGraphInput,
   type FlowWorkspace,
+  type ListFlowFindingsInput,
   type PreviewFlowDuplicateInput,
   type Result,
   type UpdateFlowInput,
@@ -84,16 +86,21 @@ const KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
   ["wait", ["duration"]],
   ["continuation", ["prompt"]],
   ["condition", ["rules", "otherwise"]],
+  ["subflow", ["flowId"]],
 ]);
 
-/** An Agent reference, a Wait duration, a Continuation prompt or a Condition's rules and
- * Otherwise, the fields only one kind has. */
 function checkKindFields(block: Record<string, unknown>, path: string, issue: IssueReporter) {
   if (block.kind === "agent" && block.agentId !== null && !isId(block.agentId))
     issue(
       "invalid_agent_reference",
       `${path}.agentId`,
       "Choose a saved Agent or leave the reference empty.",
+    );
+  if (block.kind === "subflow" && block.flowId !== null && !isId(block.flowId))
+    issue(
+      "invalid_flow_reference",
+      `${path}.flowId`,
+      "Choose a saved Flow or leave the reference empty.",
     );
   if (
     block.kind === "continuation" &&
@@ -163,7 +170,7 @@ function checkBlockFields(
     issue(
       "invalid_block_kind",
       `${path}.kind`,
-      "Use an Agent, Human, Wait, Continuation or Condition block.",
+      "Use an Agent, Human, Wait, Continuation, Condition or Subflow block.",
     );
   if (typeof block.name !== "string" || block.name.length > 200)
     issue("invalid_block_name", `${path}.name`, "Use a block name up to 200 characters.");
@@ -253,11 +260,6 @@ function checkWaitDuration(duration: unknown, path: string, issue: IssueReporter
     );
 }
 
-/**
- * The exit IDs a connection may leave each block by: a Human block's, Wait's or Continuation's fixed
- * exits, a Condition's rule and Otherwise outputs, or `inherited` for an Agent block, whose wires
- * may also name Agent exits that readiness resolves.
- */
 type ConnectableExits = Map<string, ReadonlySet<string> | "inherited">;
 const FIXED_EXIT_IDS: ReadonlyMap<unknown, ReadonlySet<string>> = new Map([
   ["human", new Set(HUMAN_EXITS.map((exit) => exit.id))],
@@ -275,7 +277,11 @@ function checkBlock(
   issue: IssueReporter,
 ) {
   if (!isRecord(block)) {
-    issue("invalid_block", path, "Supply an Agent, Human, Wait, Continuation or Condition block.");
+    issue(
+      "invalid_block",
+      path,
+      "Supply an Agent, Human, Wait, Continuation, Condition or Subflow block.",
+    );
     return;
   }
   checkBlockFields(block, path, blockIds, issue);
@@ -299,6 +305,7 @@ const conditionExitIds = (rules: unknown): ReadonlySet<string> =>
     CONDITION_OTHERWISE_ID,
   ]);
 
+const FLOW_INPUT_TARGET_KINDS: ReadonlySet<unknown> = new Set(["agent", "subflow", "wait"]);
 const GRAPH_FIELDS = ["blocks", "connections", "flowInput", "finish"];
 const FLOW_INPUT_FIELDS = ["position", "targetBlockIds"];
 const FINISH_FIELDS = ["position", "endings"];
@@ -354,8 +361,6 @@ function checkFinish(finish: unknown, issue: IssueReporter): ReadonlySet<string>
   return ids;
 }
 
-/** The Flow input may target only existing Agent or Wait blocks, each at most once; a Wait target
- * is a readiness gap, not a save error. */
 function checkFlowInput(
   flowInput: unknown,
   blockIds: ReadonlySet<string>,
@@ -387,7 +392,7 @@ function checkFlowInput(
       issue(
         "invalid_flow_input_target",
         `${path}.targetBlockIds.${i}`,
-        "Connect the Flow input only to Agent blocks in this Flow, each once.",
+        "Connect the Flow input only to Agent, Subflow or Wait blocks in this Flow, each once.",
       );
     else targets.add(target);
   });
@@ -527,7 +532,7 @@ function checkGraph(graph: unknown, blockLimit: BlockLimit, issue: IssueReporter
   );
   const targetableBlockIds = new Set(
     graph.blocks.flatMap((block) =>
-      isRecord(block) && (block.kind === "agent" || block.kind === "wait") && isId(block.id)
+      isRecord(block) && FLOW_INPUT_TARGET_KINDS.has(block.kind) && isId(block.id)
         ? [block.id]
         : [],
     ),
@@ -631,6 +636,35 @@ export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
   };
 }
 
+const CURSOR_LIMIT = 256;
+
+export function validateListFlowFindings(input: unknown): Result<ListFlowFindingsInput> {
+  const fields = isRecord(input) ? input : {};
+  const { cursor } = fields;
+  if (typeof cursor !== "string" || !cursor || cursor.length > CURSOR_LIMIT)
+    return {
+      ok: false,
+      error: {
+        code: "validation",
+        message: "Send the cursor readiness gave.",
+        issues: [
+          { code: "invalid_cursor", path: "cursor", message: "Send the cursor readiness gave." },
+        ],
+      },
+    };
+  if (fields.draft === undefined) return { ok: true, value: { cursor } };
+  const draft = validateUpdateFlow(fields.draft);
+  if (!draft.ok)
+    return {
+      ok: false,
+      error: {
+        ...draft.error,
+        issues: draft.error.issues.map((issue) => ({ ...issue, path: `draft.${issue.path}` })),
+      },
+    };
+  return { ok: true, value: { cursor, draft: draft.value } };
+}
+
 export function validatePreviewFlowDuplicate(input: unknown): Result<PreviewFlowDuplicateInput> {
   const projectId = parseTargetOwner(input);
   if (!projectId.ok) return projectId;
@@ -668,10 +702,32 @@ function checkDuplicateChoice(
   return { agentId, revision, projectId: projectId.value, choice };
 }
 
-/**
- * A Flow Duplicate commit: the previewed plan's resolved target, its source revision and every
- * planned Agent's choice.
- */
+function checkDuplicateFlow(
+  value: unknown,
+  path: string,
+  issue: IssueReporter,
+): Pick<FlowDuplicatePlanFlow, "flowId" | "revision" | "projectId"> | undefined {
+  const fields = isRecord(value) ? value : {};
+  const { flowId, revision } = fields;
+  const projectId = parseTargetOwner(fields);
+  if (
+    typeof flowId !== "string" ||
+    flowId.length === 0 ||
+    flowId.length > 256 ||
+    !isRevision(revision) ||
+    !projectId.ok ||
+    projectId.value === undefined
+  ) {
+    issue(
+      "invalid_duplicate_flow",
+      path,
+      "Send each planned Flow's flowId, revision and projectId as the plan listed them.",
+    );
+    return undefined;
+  }
+  return { flowId, revision, projectId: projectId.value };
+}
+
 export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput> {
   const fields = isRecord(input) ? input : {};
   const name = fields.name === undefined ? undefined : validateFlowName(fields);
@@ -688,6 +744,13 @@ export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput
   const choices = agents.flatMap(
     (agent, index) => checkDuplicateChoice(agent, `agents.${index}`, issue) ?? [],
   );
+  const flows = fields.flows === undefined ? [] : fields.flows;
+  const copiedFlows = Array.isArray(flows) && flows.length <= 500 ? flows : [];
+  if (copiedFlows !== flows)
+    issue("invalid_duplicate_flows", "flows", "Send the plan's Flows, at most 500.");
+  const flowChoices = copiedFlows.flatMap(
+    (flow, index) => checkDuplicateFlow(flow, `flows.${index}`, issue) ?? [],
+  );
   if (issues.length)
     return { ok: false, error: { code: "validation", message: issues[0]!.message, issues } };
   return {
@@ -697,6 +760,7 @@ export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput
       projectId: projectId.value,
       expectedRevision: fields.expectedRevision as number,
       agents: choices,
+      flows: flowChoices,
     },
   };
 }
