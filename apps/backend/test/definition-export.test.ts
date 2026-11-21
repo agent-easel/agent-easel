@@ -5,6 +5,7 @@ import {
   openFactoryWithApprovedT3,
   sampleAgentInput,
 } from "./support/domain-setup.ts";
+import { savedFlow, subflowBlock } from "./support/subflow.ts";
 import { agentBlock, connection, flowInput } from "./support/scenarios.ts";
 
 it("an exported Agent holds its latest saved revision and a model hint without environment, ids, revisions or timestamps", async (context) => {
@@ -29,7 +30,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 4,
+        formatVersion: 5,
         kind: "agent",
         factoryVersion: "source",
         exportedAt: expect.any(String),
@@ -124,23 +125,27 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 4,
+        formatVersion: 5,
         kind: "flow",
         factoryVersion: "source",
         exportedAt: expect.any(String),
-        flow: {
-          name: "Two passes",
-          graph: {
-            ...graph,
-            finish: saved.graph.finish,
-            blocks: [
-              portable(first, "agent-1"),
-              portable(second, "agent-1"),
-              portable(missing, null),
-            ],
+        rootFlowKey: "flow-1",
+        flows: [
+          {
+            key: "flow-1",
+            name: "Two passes",
+            graph: {
+              ...graph,
+              finish: saved.graph.finish,
+              blocks: [
+                portable(first, "agent-1"),
+                portable(second, "agent-1"),
+                portable(missing, null),
+              ],
+            },
+            workspace: created.workspace,
           },
-          workspace: created.workspace,
-        },
+        ],
         agents: [
           {
             key: "agent-1",
@@ -184,7 +189,60 @@ it("a Flow of an unavailable Project exports with its Agent and no Project", asy
 
   // Assert
   assert(exported.ok);
-  expect(exported.value.document.flow.name).toBe("Release");
+  expect(exported.value.document.flows[0]?.name).toBe("Release");
   expect(exported.value.document.agents.map((entry) => entry.name)).toStrictEqual(["Releaser"]);
   expect(JSON.stringify(exported.value)).not.toContain(first.id);
+});
+
+it("export follows first-placement depth-first order and bundles a shared child once", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const leaf = await savedFlow(factory, { name: "Checks" });
+  const left = await savedFlow(factory, {
+    name: "Review",
+    graph: {
+      blocks: [subflowBlock("checks", "Left checks", leaf.id)],
+      connections: [],
+      flowInput: flowInput(),
+    },
+  });
+  const right = await savedFlow(factory, {
+    name: "Hotfix",
+    graph: {
+      blocks: [subflowBlock("checks", "Right checks", leaf.id)],
+      connections: [],
+      flowInput: flowInput(),
+    },
+  });
+  const root = await savedFlow(factory, {
+    name: "Release",
+    graph: {
+      blocks: [
+        subflowBlock("review", "Review", left.id),
+        subflowBlock("hotfix", "Hotfix", right.id),
+      ],
+      connections: [],
+      flowInput: flowInput("review"),
+    },
+  });
+
+  // Act
+  const exported = assertOk(await factory.exportFlow(root.id));
+
+  // Assert
+  expect(exported.document).toMatchObject({
+    formatVersion: 5,
+    rootFlowKey: "flow-1",
+    flows: [
+      {
+        key: "flow-1",
+        name: "Release",
+        graph: { blocks: [{ flowKey: "flow-2" }, { flowKey: "flow-4" }] },
+      },
+      { key: "flow-2", name: "Review", graph: { blocks: [{ flowKey: "flow-3" }] } },
+      { key: "flow-3", name: "Checks" },
+      { key: "flow-4", name: "Hotfix", graph: { blocks: [{ flowKey: "flow-3" }] } },
+    ],
+    agents: [],
+  });
 });

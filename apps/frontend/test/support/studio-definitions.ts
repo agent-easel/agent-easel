@@ -88,6 +88,7 @@ export function studioFactory(): Operations {
     duplicateFlow: vi.fn<StudioDefinitionsOperations["duplicateFlow"]>(async () => ({
       flow: savedFlow("Release copy", { id: "release-copy" }),
       copies: [],
+      flowCopies: [],
     })),
   };
 }
@@ -101,6 +102,7 @@ export const duplicatePlan = (change: Partial<FlowDuplicatePlan> = {}): FlowDupl
   revision: 2,
   projectId: "ledgerly",
   name: "Release copy",
+  flows: [],
   agents: [
     {
       agentId: "coder",

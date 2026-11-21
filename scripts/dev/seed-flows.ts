@@ -140,11 +140,13 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     ],
   });
   await createExitReadinessScenarios(factory, agents.reviewer, agents.worker);
+  const subflowReview = await createSubflowCompositionFlows(factory, agents);
   return {
     simple,
     review,
     parallel,
     parallelStart,
+    subflowReview,
     worktree,
     continuation,
     ...(await createWaitFlows(factory, agents)),
@@ -442,4 +444,109 @@ async function createExitReadinessScenarios(
       },
     }),
   );
+}
+
+async function createSubflowCompositionFlows(factory: Factory, agents: DemoAgents) {
+  const reviewPanelId = await saveFlow(factory, "Demo · Review panel", {
+    flowInput: flowInput(["security", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock(
+        "security",
+        "Code review",
+        agents.reviewer,
+        { x: 320, y: 40 },
+        [],
+        [blockExit("changes", "Changes requested", "Request changes before shipping.")],
+      ),
+      agentBlock(
+        "accessibility",
+        "Accessibility review",
+        agents.accessibility,
+        { x: 320, y: 320 },
+        [],
+        [blockExit("changes", "Changes requested", "Request accessibility fixes.")],
+      ),
+    ],
+    connections: [
+      {
+        sourceBlockId: "security",
+        exitId: "approved",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "approved",
+      },
+      {
+        sourceBlockId: "accessibility",
+        exitId: "approved",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "approved",
+      },
+      {
+        sourceBlockId: "security",
+        exitId: "changes",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "needs-changes",
+      },
+      {
+        sourceBlockId: "accessibility",
+        exitId: "changes",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "needs-changes",
+      },
+    ],
+    finish: {
+      position: { x: 700, y: 180 },
+      endings: [
+        {
+          id: "approved",
+          name: "Approved",
+          description: "Reviewers approved the change.",
+          output: "optional",
+          outputDescription: "Summary of review checks.",
+        },
+        {
+          id: "needs-changes",
+          name: "Needs changes",
+          description: "Reviewers requested follow-up changes.",
+          output: "required",
+          outputDescription: "List of requested fixes.",
+        },
+      ],
+    },
+  });
+  return saveFlow(factory, "Demo · Release with review", {
+    flowInput: flowInput(["worker"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 }),
+      {
+        id: "review-panel",
+        name: "Review panel",
+        kind: "subflow",
+        flowId: reviewPanelId,
+        position: { x: 680, y: 40 },
+      },
+      agentBlock("notes", "Release notes", agents.releaseNotes, { x: 1620, y: 80 }),
+    ],
+    connections: [
+      connection("worker", "review", "review-panel"),
+      connection("review-panel", "approved", "notes"),
+      {
+        sourceBlockId: "review-panel",
+        exitId: "needs-changes",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "returned",
+      },
+    ],
+    finish: {
+      position: { x: 1620, y: 360 },
+      endings: [
+        {
+          id: "returned",
+          name: "Returned",
+          description: "The release returned for follow-up fixes.",
+          output: "optional",
+          outputDescription: "Review feedback summary.",
+        },
+      ],
+    },
+  });
 }

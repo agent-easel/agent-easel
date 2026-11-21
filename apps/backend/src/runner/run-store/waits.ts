@@ -1,3 +1,4 @@
+import { definitionsAtBlock } from "./run-definitions.ts";
 import type { WaitArrival } from "@t3-factory/contracts";
 import { handoffRecipients, WAIT_OUTPUT, waitDurationMs } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
@@ -165,8 +166,9 @@ export function openRunWaits(database: RunnerDatabase) {
           if (!held || !runRow) return "closed";
           const time = yield* now;
           if (forwardedBy === "timer" && arrival.deadline_at > time) return "not-due";
+          const definitions = yield* definitionsAtBlock(sql, runRow, arrival.block_id);
           const recipients = handoffRecipients(
-            runRow.definitions.flow.graph.connections,
+            definitions.flow.graph.connections,
             arrival.block_id,
             WAIT_OUTPUT.id,
           );
@@ -174,16 +176,20 @@ export function openRunWaits(database: RunnerDatabase) {
           if (arrival.message === null)
             return yield* Effect.fail(Error("A pending Wait arrival has no message"));
           yield* sql`UPDATE wait_arrivals SET state='forwarded',forwarded_by=${forwardedBy},settled_at=${time} WHERE id=${arrivalId} AND state='pending'`;
-          yield* createHandoffs(sql, runRow, {
-            kind: "wait",
-            id: arrivalId,
-            blockId: arrival.block_id,
-            exitId: WAIT_OUTPUT.id,
-            recipients,
-            message: arrival.message,
-            at: time,
-            origin: storedProvenance(arrival),
-          });
+          yield* createHandoffs(
+            sql,
+            { ...runRow, definitions },
+            {
+              kind: "wait",
+              id: arrivalId,
+              blockId: arrival.block_id,
+              exitId: WAIT_OUTPUT.id,
+              recipients,
+              message: arrival.message,
+              at: time,
+              origin: storedProvenance(arrival),
+            },
+          );
           yield* writeBlockState(
             sql,
             { runId, blockId: arrival.block_id },

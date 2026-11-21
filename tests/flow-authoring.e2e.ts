@@ -808,7 +808,7 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
 
   // Assert: the file holds the saved revision; the imported Flow opens with its own new Agent.
   assert.equal(download.suggestedFilename, `${name.toLowerCase().replaceAll(" ", "-")}.flow.json`);
-  assert.equal(exported.flow.name, name);
+  assert.equal(exported.flows[0]?.name, name);
   assert.equal(exported.agents.length, 1);
   await expect(screen.getByLabel("Flow name")).toHaveValue(name);
   await expect(screen.getByRole("article", "Block Tickets")).toBeVisible();

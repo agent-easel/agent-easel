@@ -10,16 +10,20 @@ export const readRunWorkspace = Effect.fnUntraced(function* (
     base_ref: string;
     planned_branch: string;
     creator_block_id: string;
+    creator_placement_path: string | null;
     state: "preparing" | "bound" | "failed";
     worktree_path: string | null;
     branch: string | null;
-  }>`SELECT base_ref,planned_branch,creator_block_id,state,worktree_path,branch FROM run_workspaces WHERE run_id=${runId}`;
+  }>`SELECT base_ref,planned_branch,creator_block_id,creator_placement_path,state,worktree_path,branch FROM run_workspaces WHERE run_id=${runId}`;
   if (!row) return { mode: "checkout" } satisfies RunWorkspace;
   const plan = {
     mode: "worktree" as const,
     baseRef: row.base_ref,
     plannedBranch: row.planned_branch,
     creatorBlockId: row.creator_block_id,
+    ...(row.creator_placement_path
+      ? { creatorPlacementPath: JSON.parse(row.creator_placement_path) as string[] }
+      : {}),
   };
   const workspace: RunWorkspace =
     row.state === "bound"

@@ -18,6 +18,7 @@ export type DeliveryRecord = {
   occurrence_id: string | null;
   wait_arrival_id: string | null;
   condition_arrival_id: string | null;
+  subflow_invocation_id: string | null;
   /** The Block activation whose result the message is, beside `binding_id`; null when unknown. */
   origin_activation_id: string | null;
   source_block_id: string | null;

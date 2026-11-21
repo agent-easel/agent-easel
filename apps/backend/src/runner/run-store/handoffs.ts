@@ -41,7 +41,7 @@ export const workerProvenance = (row: {
     : null;
 
 export type OutgoingHandoffs = {
-  readonly kind: "report" | "human" | "wait" | "condition" | "pass";
+  readonly kind: "report" | "human" | "wait" | "condition" | "pass" | "subflow";
   readonly id: string;
   readonly blockId: string;
   readonly exitId: string | null;
@@ -67,6 +67,22 @@ export function resultProvenance(sql: SqlClient.SqlClient, activationId: string)
   );
 }
 
+function originatingSubflow(sql: SqlClient.SqlClient, source: OutgoingHandoffs) {
+  if (source.kind === "subflow") return Effect.succeed(source.id);
+  const arrivals = {
+    wait: "wait_arrivals",
+    condition: "condition_arrivals",
+    pass: "continuation_visits",
+  } as const;
+  if (source.kind === "report" || source.kind === "human") return Effect.succeed(null);
+  return Effect.map(
+    sql<{ subflow_invocation_id: string | null }>`
+    SELECT i.subflow_invocation_id FROM ${sql(arrivals[source.kind])} a
+    JOIN operation_intents i ON i.id=a.incoming_intent_id WHERE a.id=${source.id}`,
+    ([row]) => row?.subflow_invocation_id ?? null,
+  );
+}
+
 export function createHandoffs(
   sql: SqlClient.SqlClient,
   runRow: Pick<
@@ -83,11 +99,13 @@ export function createHandoffs(
 ) {
   return Effect.gen(function* () {
     const ref = (kind: OutgoingHandoffs["kind"]) => (source.kind === kind ? source.id : null);
+    const subflowResult = yield* originatingSubflow(sql, source);
+    const finishBlockId = runRow.definitions.invocation?.finishBlockId ?? FINISH_BLOCK_ID;
     const endings = source.exitId
       ? handoffEndings(runRow.definitions.flow.graph.connections, source.blockId, source.exitId)
       : [];
     if (endings.length)
-      yield* sql`INSERT INTO run_blocks(run_id,block_id,name) VALUES(${runRow.id},${FINISH_BLOCK_ID},'Finish') ON CONFLICT DO NOTHING`;
+      yield* sql`INSERT INTO run_blocks(run_id,block_id,name) VALUES(${runRow.id},${finishBlockId},'Finish') ON CONFLICT DO NOTHING`;
     const recipients = [
       ...source.recipients.map((blockId) => ({
         blockId,
@@ -95,7 +113,7 @@ export function createHandoffs(
         target: { blockId },
       })),
       ...endings.map((endingId) => ({
-        blockId: FINISH_BLOCK_ID,
+        blockId: finishBlockId,
         causeSuffix: `ending:${endingId}`,
         target: { blockId: FINISH_BLOCK_ID, endingId },
       })),
@@ -105,8 +123,8 @@ export function createHandoffs(
         cause = `${source.kind}:${source.id}/${causeSuffix}`;
       const payload = JSON.stringify({ message: source.message });
       const inserted =
-        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,binding_id,origin_activation_id)
-          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), ...target })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${ref("condition")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
+        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,binding_id,origin_activation_id,subflow_invocation_id)
+          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), ...target })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${ref("condition")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null},${subflowResult}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
       if (inserted.length)
         yield* appendTimelineEvent(sql, {
           kind: source.kind === "report" ? "handoff-held" : "handoff-created",

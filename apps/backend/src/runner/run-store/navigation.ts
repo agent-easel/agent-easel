@@ -68,7 +68,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             report_status: "working" | "finished" | null;
             engine_status: string | null;
             worker_finished: 0 | 1;
-          }>`SELECT b.run_id,b.block_id,b.state,b.freshness,b.report_status,b.engine_status,b.worker_finished FROM run_blocks b JOIN runs r ON r.id=b.run_id JOIN flow_revision_blocks f ON f.flow_revision_id=r.flow_revision_id AND f.block_id=b.block_id WHERE r.archived_at IS NULL ORDER BY b.rowid`;
+          }>`SELECT b.run_id,b.block_id,b.state,b.freshness,b.report_status,b.engine_status,b.worker_finished FROM run_blocks b JOIN runs r ON r.id=b.run_id WHERE r.archived_at IS NULL AND (b.invocation_id IS NOT NULL AND b.template_block_id IS NOT NULL OR EXISTS(SELECT 1 FROM flow_revision_blocks f WHERE f.flow_revision_id=r.flow_revision_id AND f.block_id=b.block_id)) ORDER BY b.rowid`;
           const working = new Map(
             (yield* currentProgress(sql)).map((row) => [`${row.runId}/${row.blockId}`, row]),
           );
@@ -106,13 +106,15 @@ export function openRunNavigation(database: RunnerDatabase) {
             id: string;
             run_id: string;
             block_id: string | null;
+            invocation_id: string | null;
             kind: RunAttention["kind"];
             occurrence_id: string | null;
             native_request_id: string | null;
             pending_request_count: number | null;
             block_name: string | null;
           }>`SELECT a.id,a.run_id,a.block_id,a.kind,a.occurrence_id,a.native_request_id,
-          CASE WHEN a.kind='native-request' THEN b.pending_request_count END AS pending_request_count,b.name AS block_name
+          CASE WHEN a.kind='native-request' THEN b.pending_request_count END AS pending_request_count,b.name AS block_name,
+          CASE WHEN a.kind='subflow-stop-unresolved' THEN a.execution_id ELSE b.invocation_id END AS invocation_id
           FROM run_attention a LEFT JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
           WHERE a.settled_at IS NULL ORDER BY a.appeared_at,a.id`;
           const mattersByRun = new Map<
@@ -125,6 +127,7 @@ export function openRunNavigation(database: RunnerDatabase) {
               id: matter.id,
               kind: matter.kind,
               presentation: attentionPresentation(matter.kind),
+              ...(matter.invocation_id ? { invocationId: matter.invocation_id } : {}),
               blockId: matter.block_id,
               occurrenceId: matter.occurrence_id,
               nativeRequestId: matter.native_request_id,

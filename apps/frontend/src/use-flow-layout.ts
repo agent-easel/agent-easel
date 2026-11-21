@@ -1,6 +1,7 @@
 import { buildElkGraph } from "@t3-factory/flow-layout";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
+import type { ExitFlows } from "@t3-factory/domain-validation";
 import ELK from "elkjs/lib/elk-api.js";
 import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import {
@@ -9,7 +10,14 @@ import {
   type FlowLayoutDimensions,
   type FlowLayoutResult,
 } from "./flow-layout-elk.ts";
-import { canvasGraph } from "./flow-graph.ts";
+import { canvasGraph, type CanvasGraph } from "./flow-graph.ts";
+import type { CanvasDimensions } from "@t3-factory/flow-layout";
+import { arrangeSubflowComposition, type CanvasFlow } from "./subflow-preview.ts";
+
+type Composition = {
+  readonly flows: ReadonlyMap<string, CanvasFlow>;
+  readonly dimensions: CanvasDimensions;
+};
 
 /** The Agents a layout resolves block exits against, which place each block's exit ports. */
 type LayoutAgents = readonly Pick<AgentDefinition, "id" | "exits">[];
@@ -55,7 +63,13 @@ function useFlowLayoutWorker(getDimensions: () => FlowLayoutDimensions) {
   );
 
   const arrange = useCallback(
-    (graph: FlowGraph, agents: LayoutAgents, feedback: "visible" | "silent" = "visible") => {
+    (
+      graph: FlowGraph,
+      agents: LayoutAgents,
+      flows: ExitFlows | undefined,
+      feedback: "visible" | "silent" = "visible",
+      composition?: Composition,
+    ) => {
       cancel();
       if (feedback === "visible") setError(null);
       setPending(feedback === "visible");
@@ -74,17 +88,35 @@ function useFlowLayoutWorker(getDimensions: () => FlowLayoutDimensions) {
           () => fail("Auto-arrange timed out. Try a smaller Flow."),
           15_000,
         );
+        async function arrangeWith(elk: InstanceType<typeof ELK>) {
+          const layout = async (
+            source: FlowGraph,
+            canvas: CanvasGraph,
+            dimensions: FlowLayoutDimensions,
+          ) => {
+            if (pendingRequest.current?.generation !== id)
+              throw new Error("Auto-arrange was cancelled.");
+            return parseElkLayout(source, await elk.layout(buildElkGraph(canvas, dimensions)));
+          };
+          return composition
+            ? arrangeSubflowComposition(
+                graph,
+                composition.flows,
+                agents,
+                composition.dimensions,
+                layout,
+              )
+            : layout(graph, canvasGraph(graph, agents, flows), dimensionsRef.current());
+        }
         try {
           const instance = new ElkWorker();
           worker.current = instance;
           const elk = new ELK({ workerFactory: () => instance });
           instance.onerror = (event) => fail(event.message || "Auto-arrange failed. Try again.");
           instance.onmessageerror = () => fail("Could not read the arranged Flow. Try again.");
-          void elk
-            .layout(buildElkGraph(canvasGraph(graph, agents), dimensionsRef.current()))
-            .then((laidOut) => {
+          void arrangeWith(elk)
+            .then((result) => {
               if (pendingRequest.current?.generation !== id) return;
-              const result = parseElkLayout(graph, laidOut);
               settle(result);
               setPending(false);
               instance.terminate();
@@ -114,8 +146,10 @@ type FlowLayoutSessionOptions = {
   readonly scope: string | null;
   readonly graph: FlowGraph;
   readonly agents: LayoutAgents;
+  readonly flows?: ExitFlows | undefined;
   /** The block geometry of the graph's blocks, as the canvas draws them. */
   readonly getDimensions: () => FlowLayoutDimensions;
+  readonly composition?: Composition | undefined;
   /** Omit for local, read-only Run presentation. */
   readonly authoring?: AuthoringPolicy | undefined;
 };
@@ -126,6 +160,7 @@ type AcceptedLayout = {
   readonly graphKey: string;
   readonly graph: FlowGraph;
   readonly routes: FlowLayoutResult["routes"];
+  readonly arrangedFlows: FlowLayoutResult["arrangedFlows"];
   /** Saved routes rebuilt without moving a node, rather than an explicit arrangement. */
   readonly restored: boolean;
 };
@@ -184,7 +219,9 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
       const result = await compute(
         start.options.graph,
         start.options.agents,
+        start.options.flows,
         restoreOnly ? "silent" : "visible",
+        start.options.composition,
       );
       const current = live.current;
       if (
@@ -204,6 +241,7 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
         graphKey: JSON.stringify(acceptedGraph),
         graph: acceptedGraph,
         routes: result.routes,
+        arrangedFlows: result.arrangedFlows,
         restored: restoreOnly,
       });
       if (!restoreOnly) current.options.authoring?.change(acceptedGraph);
@@ -224,6 +262,7 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
   const autoArrange = useCallback(() => arrange(), [arrange]);
   return {
     graph: valid?.graph ?? graph,
+    arrangedFlows: valid?.arrangedFlows,
     wireRoutes: valid?.routes ?? null,
     /** The explicitly arranged graph while it is still shown; a new one refits the view. */
     arranged: explicitGraph(valid),

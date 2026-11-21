@@ -12,6 +12,15 @@ export function advanceGeneration(sql: SqlClient.SqlClient, runId: string) {
 /** A Run timeline event by kind; its stored source key (the idempotency key) is derived here. */
 export type TimelineEvent = { readonly runId: string; readonly observedAt: string } & (
   | { readonly kind: "started" }
+  | {
+      readonly kind:
+        | "subflow-ending-accepted"
+        | "subflow-released"
+        | "subflow-nothing-returned"
+        | "subflow-report-ignored";
+      readonly blockId: string;
+      readonly invocationId: string;
+    }
   | { readonly kind: "run-settled"; readonly reason: SettlementReason }
   | { readonly kind: "run-activated"; readonly blockId: string; readonly reportId?: string }
   | { readonly kind: "run-archived" }
@@ -261,7 +270,24 @@ const storedTitleEvent = (event: TitleEvent): StoredEvent => ({
   causeId: null,
 });
 
-function stored(event: Exclude<TimelineEvent, WaitEvent>) {
+function storedInvocationEvent(event: Extract<TimelineEvent, { readonly invocationId: string }>) {
+  return Effect.gen(function* (): Effect.fn.Return<StoredEvent> {
+    const identity = event.kind === "subflow-report-ignored" ? yield* newId : event.invocationId;
+    return {
+      blockId: event.blockId,
+      executionId: null,
+      sourceKey: event.kind + ":" + identity,
+      causeId: event.invocationId,
+    };
+  });
+}
+
+function stored(
+  event: Exclude<
+    TimelineEvent,
+    WaitEvent | Extract<TimelineEvent, { readonly invocationId: string }>
+  >,
+) {
   return Effect.gen(function* (): Effect.fn.Return<StoredEvent> {
     if ("intentId" in event) return yield* storedDeliveryEvent(event);
     if (isTitleEvent(event)) return storedTitleEvent(event);
@@ -354,7 +380,11 @@ function stored(event: Exclude<TimelineEvent, WaitEvent>) {
 export function appendTimelineEvent(sql: SqlClient.SqlClient, event: TimelineEvent) {
   return Effect.gen(function* () {
     const { blockId, executionId, bindingId, engineStatus, sourceKey, causeId } =
-      "arrivalId" in event ? storedWaitEvent(event) : yield* stored(event);
+      "arrivalId" in event
+        ? storedWaitEvent(event)
+        : "invocationId" in event
+          ? yield* storedInvocationEvent(event)
+          : yield* stored(event);
     yield* sql`INSERT INTO run_events(run_id,block_id,execution_id,binding_id,kind,source_key,cause_id,observed_at,engine_status) VALUES(${event.runId},${blockId},${executionId},${bindingId ?? null},${event.kind},${sourceKey},${causeId},${event.observedAt},${engineStatus ?? null}) ${event.kind === "handoff-released" ? sql`ON CONFLICT DO NOTHING` : sql``}`;
   });
 }

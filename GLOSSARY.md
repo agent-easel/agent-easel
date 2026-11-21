@@ -36,14 +36,14 @@ A global Agent's execution settings for Runs in one Project, replacing its own s
 _Avoid_: per-project Agent, Agent overlay.
 
 **Change owner**:
-The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards. A refusal names the blocking definitions; nothing else is edited or copied.
+The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards (for both Agents and Subflows). A refusal names the blocking definitions; nothing else is edited or copied.
 _Avoid_: reassign, transfer, move as the action's name.
 
 **Placement rule**:
-Which Agents a Flow may place: any Flow may place a global Agent, and a Project Flow may also place Agents of its own owning Project. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
+Which Agents and Flows a Flow may place: any Flow may place a global Agent or global Flow, and a Project Flow may also place Agents and Flows of its own owning Project, never another Project's. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
 
 **Flow Duplicate**:
-A new, independent Flow copied from another Flow's latest saved revision into a target (Global or one available Project). Its plan lists each Agent the source places as kept (the copy places the same Agent) or copied (a new Agent in the target); an Agent the target may not place is always copied. The source Flow and its Agents never change, and a Flow Duplicate is never synchronized with its source.
+A new, independent Flow copied from another Flow's latest saved revision into a target (Global or one available Project). Its plan lists each Agent the source places (directly or through copied Subflows) as kept (the copy places the same Agent) or copied (a new Agent in the target), and each placed Project Flow the target cannot place as copied into the target (with cyclic graphs copied once per Flow and rewired to their copies); an Agent the target may not place is always copied, and global or target-owned placed Flows stay kept. The source Flow and its placed definitions never change, and a Flow Duplicate is never synchronized with its source.
 _Avoid_: clone, fork, move (Change owner keeps the identity; Duplicate creates a new one).
 
 **Flow revision**:
@@ -58,8 +58,18 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation, a Condition or a Subflow. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
+
+**Subflow**:
+A Flow block that places another saved Flow by its `flowId` (`kind: "subflow"`). Its exits are the referenced Flow's Finish endings by ending ID, so renaming an ending keeps its wires; it has no Flow-local exits, hidden exits, Revisit instruction or workspace override (the top-level Run workspace applies). It may be a Flow input target. Studio renders a placed Subflow as an expanded read-only preview group that can be collapsed or opened in its own Flow editor; cycles and composition budgets are validated transitively across the Flow closure.
+_Avoid_: nested workflow, macro, inline copy (a Subflow references a saved Flow by ID rather than copying its graph).
+
+**Subflow invocation**:
+One execution of a placed Subflow block in the parent Run and workspace. Each placement queues its arrivals in order within its parent invocation. Each invocation uses the captured Flow revision with its own workers and Block state. Its first Finish ending closes the invocation, and the matching parent exit fires after Factory verifies its workers stopped or finished.
+
+**Nothing returned**:
+When a Subflow invocation completes without reaching any of its Finish endings, so no outgoing exit wire fires on the parent Subflow block.
 
 **Agent**:
 A reusable worker definition consisting of a prompt, optional execution settings, its exits and, for a global Agent, its Project overrides; it is a global Agent or a Project Agent, and ownership adds no execution restriction. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
@@ -101,7 +111,7 @@ _Avoid_: Timer or delay as the block name; manual resume (not a Wait mode).
 One accepted delivery to a Wait within a Run, with its retained message, worker provenance, absolute deadline counted from the delivery's release, and outcome: pending, forwarded (at its deadline, or early by the user with **Continue now**) or cancelled by Archive or manual settlement. Arrivals never join or reset one another.
 
 **Continuation**:
-A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in a Run sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of the Run, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits, Conditions and other Continuations pass the worker on.
+A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in the root Flow or its Subflow invocation sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of that execution, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits, Conditions and other Continuations pass the worker on.
 _Avoid_: continuity, follow-up block, reusing a worker by copying its conversation.
 
 **Condition**:
@@ -161,7 +171,7 @@ The execution canvas keeping its view on the active Blocks (or the error-state B
 _Avoid_: auto-scroll, tracking mode.
 
 **Block id**:
-The identifier Factory mints for an Agent Block or Continuation when a Run starts and states in every launch, visit, Continuation prompt and Request report message to the worker that works the task. Factory MCP tools take it to read the Block and its Run and to update the Block; a report naming it applies to the Block's current activation. It is stable across visits and is not the Flow block's id.
+The identifier Factory mints for an Agent Block or Continuation when its Run or invocation starts and states in every launch, visit, Continuation prompt and Request report message to the worker that works the task. Factory MCP tools take it to read the Block and its Run and to update the Block; a report naming it applies to the Block's current activation. It is stable across visits and is not the Flow block's id.
 _Avoid_: tool ref, caller correlation.
 
 **Factory MCP**:
@@ -231,7 +241,7 @@ shortened. The first valid one while the Run's title provenance is still automat
 makes the provenance generated and is final; it is not Run activity.
 
 **Captured definitions**:
-The Flow revision a Run started with and the Agent revision of every Agent that Flow references, frozen at Start. Every read and later activation of the Run uses them; later saves and removals affect only future Runs.
+The root and placed Flow revisions and the Agent revisions they reference, frozen at Start. Every read and later activation of the Run uses them; later saves and removals affect only future Runs.
 _Avoid_: Run snapshot.
 
 **Run timeline**:
@@ -260,7 +270,7 @@ The data supplied to a particular flow execution: the required prompt text enter
 _Avoid_: Initial input, initial prompt as a separate concept
 
 **Flow input block**:
-The single, always-present Flow block representing the Flow input. It has one unnamed output and no input; the Agent blocks it connects to are the ones that start a Run, independently and in parallel.
+The single, always-present Flow block representing the Flow input. It has one unnamed output and no input; the Agent and Subflow blocks it connects to are the ones that start a Run, independently and in parallel.
 _Avoid_: Start block, entry, entry Agent
 
 **Finish block**:

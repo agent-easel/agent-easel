@@ -27,22 +27,23 @@ export function openRunWorkspace(database: RunnerDatabase) {
         const bound =
           yield* sql`UPDATE run_workspaces SET state='bound',worktree_path=${worktreePath},branch=${branch},bound_at=${time} WHERE run_id=${run.id} AND state='preparing' RETURNING run_id`;
         if (!bound.length) return false;
-        yield* createEntryLaunches(
-          sql,
-          {
-            runId: run.id,
-            definitions: run.definitions,
-            workspace: { ...workspace, state: "bound", worktreePath, branch },
-            project: runTarget(run),
-            contextId: run.context_id,
-            // Reservation records the retry scope T3 offers when each launch is sent.
-            retryScope: null,
-            time,
-          },
-          run.definitions.flow.graph.flowInput.targetBlockIds.filter(
-            (blockId) => blockId !== workspace.creatorBlockId,
-          ),
-        );
+        if (!run.definitions.subflows?.length)
+          yield* createEntryLaunches(
+            sql,
+            {
+              runId: run.id,
+              definitions: run.definitions,
+              workspace: { ...workspace, state: "bound", worktreePath, branch },
+              project: runTarget(run),
+              contextId: run.context_id,
+              // Reservation records the retry scope T3 offers when each launch is sent.
+              retryScope: null,
+              time,
+            },
+            run.definitions.flow.graph.flowInput.targetBlockIds.filter(
+              (blockId) => blockId !== workspace.creatorBlockId,
+            ),
+          );
         yield* advanceGeneration(sql, run.id);
         return true;
       }),

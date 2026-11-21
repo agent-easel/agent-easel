@@ -48,6 +48,13 @@ function dimensionPorts({ block }: CanvasDimensions): BlockPorts {
   };
 }
 
+export type BlockFrame = {
+  readonly width: number;
+  readonly height: number;
+  readonly inputY: number;
+  readonly exitY: (exitId: string) => number | undefined;
+};
+
 export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly prompt?: "none" | "line" | "images";
   readonly flowInputStatus?: boolean;
@@ -55,6 +62,7 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly reservedFooterCount?: number;
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
   readonly finish?: boolean;
+  readonly blockFrame?: ((block: B) => BlockFrame | undefined) | undefined;
 };
 
 export const AUTHORING_DIMENSIONS: CanvasDimensions = {
@@ -104,8 +112,20 @@ export function createNodeGeometry<B extends LayoutBlock>(
   const incoming = incomingIndex(graph);
   const bodyHeight = (block: B) =>
     blockHeightForIncomingFanIn(incoming.wires(block.id).length, ports, baseHeight(block));
-  const blockHeight = (block: B) =>
-    bodyHeight(block) + (facts.footerCount?.(block) ?? 0) * rows.footer;
+  const blockWidth = (block: B) => facts.blockFrame?.(block)?.width ?? rows.width;
+  const blockHeight = (block: B) => {
+    const custom = facts.blockFrame?.(block);
+    if (custom) {
+      const fanIn = incoming.wires(block.id).length;
+      const fanInHeight = custom.inputY + Math.max(0, fanIn - 1) * INCOMING_PORT_SPACING + 12;
+      return Math.max(custom.height, fanInHeight);
+    }
+    return bodyHeight(block) + (facts.footerCount?.(block) ?? 0) * rows.footer;
+  };
+  const blockInputY = (block: B, index: number) =>
+    (facts.blockFrame?.(block)?.inputY ?? ports.inputY) + index * INCOMING_PORT_SPACING;
+  const blockExitY = (block: B, exitId: string, index: number) =>
+    facts.blockFrame?.(block)?.exitY(exitId) ?? ports.firstExitY + index * ports.exitRow;
   const flowInputBox = {
     ...graph.flowInput.position,
     width: input.width,
@@ -133,20 +153,26 @@ export function createNodeGeometry<B extends LayoutBlock>(
       rows.exitPaddingBottom +
       Math.max(1, graph.finish.endings.length) * rows.exitRow,
   };
-  const reservedHeight = (block: B) =>
-    Math.max(
+  const reservedHeight = (block: B) => {
+    if (facts.blockFrame?.(block)) return blockHeight(block);
+    return Math.max(
       blockHeight(block),
       bodyHeight(block) + (facts.reservedFooterCount ?? 0) * rows.footer,
     );
+  };
   return {
     ports,
     incoming,
     flowInputBox,
     finishBox,
     finishEndingY,
+    blockWidth,
     blockHeight,
+    blockInputY,
+    blockExitY,
     reservedHeight,
-    incomingGrowth: (block: B) => bodyHeight(block) - baseHeight(block),
+    incomingGrowth: (block: B) =>
+      facts.blockFrame?.(block) ? 0 : bodyHeight(block) - baseHeight(block),
   };
 }
 
@@ -166,6 +192,7 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
     finish: { firstEndingY: geometry.finishEndingY },
     blockWidth: dimensions.block.width,
     blockHeight: geometry.reservedHeight,
+    ...(facts.blockFrame && { blockFrame: facts.blockFrame }),
     ports: { ...geometry.ports, inputSpacing: INCOMING_PORT_SPACING },
     labels,
     labelSize: (text) => ({ width: text.length * 7 + 24, height: 22 }),

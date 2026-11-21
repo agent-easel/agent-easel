@@ -344,7 +344,7 @@ The Flow's [workspace setting](studio.md#workspace-setting) applies to every Run
 workspace or base override. To start from another base, change the Flow's **Base** (or save a copy of the Flow with it)
 before Start.
 
-- **Creation.** For a worktree Flow, the first Flow-input worker's T3 launch creates one worktree from the resolved base,
+- **Creation.** For a worktree Flow, the first Agent in depth-first Flow-input order launches the worker that creates one worktree from the resolved base,
   on a new branch named `factory/run-<Run number>-<first 8 characters of the Run id>`. The name is fixed and not
   configurable; T3 rejects the launch if that branch already exists. Details are in the [Runner](runner.md#run-workspace).
 - **Sharing.** Every other worker of the Run joins that worktree on its first visit, so parallel Blocks of one Run edit
@@ -684,6 +684,41 @@ On every desktop installation a Snoozed Run is silent: it leaves the Dock badge,
 matters that are pending or appear while it is Snoozed never notify, also after Snooze ends. **Restore** returns it to the badge
 without a notification; Woke notifies for the new matter as usual. See
 [Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
+
+## Subflow evidence
+
+The Execution canvas expands each placed Subflow by default. The group shows its captured
+Flow, including the input received by the selected invocation and that input's connections.
+Empty text is shown explicitly. Collapse and Expand change the local view. **Follow active**
+can frame work inside a group. A nested attention link opens the enclosing groups and selects
+the Block and worker visit recorded for that matter.
+
+A placement shows its queued count separately from the invocation on display. By default it
+shows the oldest unfinished invocation, then the newest finished invocation when the queue
+drains. The Run inspector pages invocation history newest first. Selecting an invocation
+pauses Follow and keeps that invocation open as new work arrives and its recipient statuses change. Condition arrival pages
+use the selected invocation's Condition identity.
+
+The group summary, inspector and compact Timeline show the selected invocation's release state,
+producing worker and visit, and the recipient dispositions. The inspector also shows the output
+and source exit. **Nothing returned** means the invocation
+finished without reaching an ending. It appears in history and in the settled Run overview.
+A real empty output and **Output missing** have separate labels. During stopping the inspector
+shows each worker's Stop request and its acknowledgment. Release waits for verified stopping.
+An unresolved invocation Stop can be retried in the inspector. The ending remains visible
+when its delivery is permanently cancelled.
+
+Nested **Auto-arrange** is local to the view and arranges the captured revisions bottom-up
+with one 15-second deadline for the composition. It keeps the last displayed layout if the
+attempt fails or times out.
+
+The history read is `GET /api/runs/:runId/subflows/:blockId/invocations`. Pages contain 50
+invocations by default and accept a limit of 1–100. The first page fixes the high-water mark.
+A cursor continues the same Run and placement in the same parent invocation. The Condition
+evidence read uses the invocation-specific Condition Block ID for its own cursor window.
+Restarting the backend opens a new window. The exact invocation read at
+`GET /api/runs/:runId/invocations/:invocationId` supplies its ancestor path and default
+descendant placements. **Retry Stop** uses `POST /api/runs/:runId/invocations/:invocationId/retry-stop`.
 
 ## Reports and attention
 

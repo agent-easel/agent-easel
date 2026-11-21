@@ -5,6 +5,9 @@ import type {
   FlowEnding,
   RunImageMimeType,
   RunResult,
+  RunDefinitions,
+  SubflowInvocationPage,
+  SubflowPlacementSummary,
 } from "@t3-factory/contracts";
 
 type RuntimeImage = {
@@ -70,6 +73,9 @@ export type RuntimeReply = {
     readonly result: string | null;
   }[];
   /** The Run's constant-size Condition summaries, not their histories. */
+  readonly definitions?: RunDefinitions;
+  readonly subflows?: readonly SubflowPlacementSummary[];
+  readonly invocations?: SubflowInvocationPage["invocations"];
   readonly conditions?: readonly ConditionSummary[];
   readonly result?: RunResult | null;
   /** One Condition evidence page: its arrivals, window high-water and next cursor. */
@@ -95,6 +101,8 @@ export const SUCCESS_CODES: readonly string[] = [
   "RUN",
   "IMAGE",
   "CONDITION_ARRIVALS",
+  "SUBFLOW_INVOCATIONS",
+  "INVOCATION_CLOSED",
   "TITLE_APPLIED",
 ];
 

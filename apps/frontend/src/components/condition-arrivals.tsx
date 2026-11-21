@@ -20,7 +20,7 @@ import { sectionLabelClass } from "./page.tsx";
 
 /** One window of the Condition's arrivals from the bounded read. The first page opens on its own
  * once an arrival exists; later arrivals wait for an explicit refresh. */
-function useArrivalWindow(runId: string, blockId: string, arrivals: number) {
+function useArrivalWindow(runId: string, blockId: string, open: boolean) {
   const [arrivalWindow, dispatch] = useReducer(arrivalWindowReducer, emptyArrivalWindow);
   const requests = useRef(0);
   const read = useCallback(
@@ -45,8 +45,8 @@ function useArrivalWindow(runId: string, blockId: string, arrivals: number) {
   const unopened =
     arrivalWindow.highWater === null && !arrivalWindow.loading && !arrivalWindow.error;
   useEffect(() => {
-    if (unopened && arrivals > 0) read("first");
-  }, [unopened, arrivals, read]);
+    if (unopened && open) read("first");
+  }, [unopened, open, read]);
   return { arrivalWindow, read };
 }
 
@@ -54,7 +54,8 @@ function useArrivalWindow(runId: string, blockId: string, arrivals: number) {
 function provenance(run: RunDetail, arrival: ConditionArrivalEvidence) {
   const source = arrival.sourceBlockId ? blockName(run, arrival.sourceBlockId) : "unknown block";
   const worker = arrival.origin && deliveryWorker(run, arrival.origin);
-  return `From ${source} · worker ${worker ? blockName(run, worker.blockId) : "unknown"}`;
+  const from = arrival.subflowReturn ? `${source} → ${arrival.subflowReturn.endingName}` : source;
+  return `From ${from} · worker ${worker ? blockName(run, worker.blockId) : "unknown"}`;
 }
 
 const monoClass = "font-mono text-foreground";
@@ -119,6 +120,23 @@ function ArrivalItem({
   );
 }
 
+function UnvisitedCondition({ visible }: { visible: boolean }) {
+  return visible ? (
+    <p className="px-2 text-xs text-muted-foreground">Not visited · no arrival numbered yet.</p>
+  ) : null;
+}
+
+function useConditionWindow(run: RunDetail, blockId: string, liveArrivals: number | undefined) {
+  const runtime = run.blocks.find((block) => block.blockId === blockId);
+  const { arrivalWindow, read } = useArrivalWindow(
+    run.id,
+    blockId,
+    !!liveArrivals || !!runtime?.invocationId,
+  );
+  const arrivals = liveArrivals ?? arrivalWindow.highWater ?? 0;
+  return { arrivalWindow, read, arrivals };
+}
+
 /**
  * A Condition's numbered arrivals in ascending order, read a page at a time within one window.
  * The live summary only counts arrivals; when it shows one after the window, the list offers a
@@ -126,8 +144,7 @@ function ArrivalItem({
  */
 export function ConditionArrivals({ run, blockId }: { run: RunDetail; blockId: string }) {
   const summary = run.conditions.find((item) => item.blockId === blockId);
-  const arrivals = summary?.arrivals ?? 0;
-  const { arrivalWindow, read } = useArrivalWindow(run.id, blockId, arrivals);
+  const { arrivalWindow, read, arrivals } = useConditionWindow(run, blockId, summary?.arrivals);
   const newer = arrivalsAfterWindow(arrivalWindow, arrivals);
   const latest = summary?.latest;
   return (
@@ -156,7 +173,7 @@ export function ConditionArrivals({ run, blockId }: { run: RunDetail; blockId: s
           {clockTime(latest.acceptedAt)}. It is only the most recent route, not all downstream work.
         </p>
       ) : (
-        <p className="px-2 text-xs text-muted-foreground">Not visited · no arrival numbered yet.</p>
+        <UnvisitedCondition visible={arrivals === 0 && !arrivalWindow.loading} />
       )}
       {!!summary?.pending && (
         <p className="px-2 text-xs text-muted-foreground">
