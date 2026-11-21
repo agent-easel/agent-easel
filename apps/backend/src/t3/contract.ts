@@ -26,6 +26,7 @@ export interface T3Support {
    * advertises no uploaded attachments with a request key. */
   readonly attachmentLimit: number | null;
   readonly send: LaunchSupport;
+  readonly freshContextSend: boolean;
   readonly settle: ReportSupport;
   readonly stop: ReportSupport;
   /** Whether public thread reads can retrieve reporting activity, before any harness check. */
@@ -256,10 +257,16 @@ function supportsReportReads(schema: ToolSchema) {
 export function contractSupport(ready: boolean, tools: T3Contract["tools"]): T3Support {
   const schema = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
   const objectReady = (name: string) => ready && schema(name)?.type === "object";
+  const sendSchema = schema("t3_thread_send");
+  const send = sendSupport(objectReady("t3_thread_send"), sendSchema);
   return {
     launch: launchSupport(objectReady("t3_thread_launch"), schema("t3_thread_launch")),
     attachmentLimit: attachmentLimit(ready, tools, schema("t3_thread_launch")),
-    send: sendSupport(objectReady("t3_thread_send"), schema("t3_thread_send")),
+    send,
+    freshContextSend:
+      send.supported &&
+      propertiesOf(sendSchema).freshContext?.type === "boolean" &&
+      !(Array.isArray(sendSchema?.required) && sendSchema.required.includes("freshContext")),
     settle: settleSupport(objectReady("t3_thread_organize"), schema("t3_thread_organize")),
     stop: stopSupport(objectReady("t3_thread_interrupt"), schema("t3_thread_interrupt")),
     reportReads: ready && supportsReportReads(schema("t3_thread_read")),

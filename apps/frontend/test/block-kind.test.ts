@@ -15,6 +15,7 @@ const agentBlock = (id: string, name: string, agentId: string | null): FlowBlock
   hiddenExitIds: [],
   localExits: [],
   revisitInstruction: "",
+  revisitContext: "keep",
 });
 
 const waitBlock = (duration: Extract<FlowBlock, { kind: "wait" }>["duration"]): FlowBlock => ({
@@ -185,6 +186,7 @@ it("only a Wait's and a Continuation's output are a single unnamed output", () =
     hiddenExitIds: [],
     localExits: [{ id: "blocked", name: "blocked", description: "", messageRequired: false }],
     revisitInstruction: "",
+    revisitContext: "keep",
   };
   const approval: FlowBlock = { id: "approval", name: "Approval", position, kind: "human" };
   const exits = [review, approval, waitBlock(null), continuation].flatMap((block) =>

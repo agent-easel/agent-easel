@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: run_results
+-- Newest applied migration: revisit_context
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -523,6 +523,8 @@ CREATE TABLE "flow_revision_blocks" (
   prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),
   -- The instruction an Agent block's later visits receive, stored trimmed; empty when unset.
   revisit_instruction TEXT CHECK ((kind = 'agent') = (revisit_instruction IS NOT NULL)),
+  -- Whether an Agent block's later visits keep or clear provider context ('keep' or 'fresh').
+  revisit_context TEXT CHECK ((kind = 'agent') = (revisit_context IS NOT NULL)) CHECK (revisit_context IS NULL OR revisit_context IN ('keep', 'fresh')),
   x REAL NOT NULL,
   y REAL NOT NULL,
   -- A Wait's duration; both are null while the draft has none. Any finite amount saves:

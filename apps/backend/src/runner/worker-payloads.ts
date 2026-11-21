@@ -107,11 +107,46 @@ export const REVISIT_RULE =
  * incoming message is the whole body, as before Revisit instructions existed. Continuation
  * prompts and Request report never use this, so they never carry the instruction.
  */
-export function agentRevisitMessage(definitions: RunDefinitions, blockId: string, message: string) {
+function agentRevisitMessage(definitions: RunDefinitions, blockId: string, message: string) {
   const block = definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
   if (!block || block.kind !== "agent") throw Error("Revisit target is not an Agent Block");
   if (!block.revisitInstruction) return message;
   return `Revisit instruction for this later visit of your Block. ${REVISIT_RULE} Your Block's previous finished result is available from factory_get_run.\n${block.revisitInstruction}\n\nIncoming message:\n${message.trim() ? message : "(no message)"}`;
+}
+
+export function agentRevisitPayload(
+  definitions: RunDefinitions,
+  blockId: string,
+  target: Pick<T3Target, "environmentId">,
+  threadId: string,
+  key: string,
+  message: string,
+  publicId: string,
+): SendPayload {
+  const block = definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
+  if (!block || block.kind !== "agent") throw Error("Revisit target is not an Agent Block");
+  if (block.revisitContext !== "fresh") {
+    return workerRevisitPayload(
+      target,
+      threadId,
+      key,
+      agentRevisitMessage(definitions, blockId, message),
+      publicId,
+    );
+  }
+  const agent = definitions.agents.find((entry) => entry.id === block.agentId);
+  if (!agent) throw Error("Revisit target Agent is not in the definitions");
+  const revisitBody = block.revisitInstruction
+    ? agentRevisitMessage(definitions, blockId, message)
+    : `Incoming message:\n${message.trim() ? message : "(no message)"}`;
+  return {
+    environmentId: target.environmentId,
+    threadId,
+    mode: "queue",
+    freshContext: true,
+    clientRequestId: key,
+    message: workerTurn(`${agent.prompt}\n\n${revisitBody}`, publicId),
+  };
 }
 
 /**

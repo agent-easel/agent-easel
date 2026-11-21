@@ -198,6 +198,7 @@ export class LiveT3Threads implements T3Threads {
   async sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference> {
     if (
       payload.mode !== "queue" ||
+      (payload.freshContext !== undefined && payload.freshContext !== true) ||
       !payload.clientRequestId ||
       payload.clientRequestId.length > 256
     )

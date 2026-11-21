@@ -62,6 +62,7 @@ export function newBlock(
       hiddenExitIds: [],
       localExits: [],
       revisitInstruction: "",
+      revisitContext: "keep",
     };
   if (kind === "wait") return { ...base, kind, duration: null };
   if (kind === "condition")

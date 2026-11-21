@@ -37,7 +37,9 @@ and restricted OAuth credentials live outside project repositories.
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
   exit names are not kept. Migration `081` gave every Agent block of every stored Flow revision,
   including those Runs captured, an empty Revisit instruction in place; other block kinds have
-  none. Migration `094` made an Agent revision's execution columns nullable together (all present
+  none. Migration `116` added `revisit_context` (`keep` or `fresh`) to `flow_revision_blocks`
+  under the same restored immutability guards, defaulting every existing Agent block to `keep` and
+  leaving other block kinds null. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
   Migration `098` widened the Flow revision block kinds to include Condition, rebuilding the block

@@ -91,7 +91,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 4 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 5 })),
   );
 
   // Assert
@@ -101,7 +101,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 4, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 5, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -523,7 +523,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(3);
+  expect(document.formatVersion).toBe(4);
 
   // Act
   const committed = assertOk(
@@ -613,7 +613,57 @@ it("a full-size version-1 Flow still imports with its ordinary finish block and 
     id: "finish",
     kind: "agent",
     agentId: committed.value.agents[0]!.id,
+    revisitContext: "keep",
   });
+});
+
+it("a version-2 Flow file without revisitContext imports with keep revisitContext", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const file = flowFile({ formatVersion: 2 });
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow-v2",
+    document: file,
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "keep" });
+});
+
+it("a version-4 Flow file preserves fresh revisitContext on import", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const base = flowFile({ formatVersion: 4 });
+  const file = {
+    ...base,
+    flow: {
+      ...base.flow,
+      graph: {
+        ...base.flow.graph,
+        blocks: [
+          { ...base.flow.graph.blocks[0]!, revisitContext: "fresh" as const },
+          base.flow.graph.blocks[1]!,
+        ],
+      },
+    },
+  };
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow-v4-fresh",
+    document: file,
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "fresh" });
 });
 
 it("a full-size version-2 Flow imports with an empty Finish block placed right of its blocks", async (context) => {
@@ -657,7 +707,7 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a full-size Flow with an empty Finish can be exported and reimported as version 3", async (context) => {
+it("a full-size Flow with an empty Finish can be exported and reimported as version 4", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
   const { document } = assertOk(await factory.exportFlow(flow.id));
@@ -665,11 +715,11 @@ it("a full-size Flow with an empty Finish can be exported and reimported as vers
   assert(agentBlock?.kind === "agent" && agentBlock.agentId);
 
   // Act
-  const copied = await factory.commitImport(reviewedCommit("import-v3", undefined, document));
+  const copied = await factory.commitImport(reviewedCommit("import-v4", undefined, document));
 
   // Assert
   assert(copied.ok);
-  expect(document.formatVersion).toBe(3);
+  expect(document.formatVersion).toBe(4);
   const restored = assertOk(await factory.getFlow(copied.value.flowId!));
   const placedAgents = new Map([[agentBlock.agentId, copied.value.agents[0]!.id]]);
   expect(restored.graph).toStrictEqual({
