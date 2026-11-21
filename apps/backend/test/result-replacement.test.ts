@@ -105,9 +105,9 @@ it("after release a different-exit finished report hands off to that exit's Bloc
     "follow-up",
   ]);
   expect([...f.t3.threads.launches.values()].map((launch) => launch.payload.title)).toStrictEqual([
-    "Factory #1 · 1 Entry worker",
-    "Factory #1 · 2 Parallel work",
-    "Factory #1 · 3 Follow-up",
+    "F#1 Entry worker · Improve search",
+    "F#1 Parallel work · Improve search",
+    "F#1 Follow-up · Improve search",
   ]);
   expect(run.value.blocks.find((block) => block.blockId === "parallel-block")?.state).toBe(
     "working",

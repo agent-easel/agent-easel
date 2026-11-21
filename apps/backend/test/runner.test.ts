@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   blockedLaterFlow,
+  collidingEntryFlow,
   divergingLaterAgentsFlow,
   modelLessLaterFlow,
   projectWorkerFlow,
@@ -53,28 +54,44 @@ it("editing an Agent preserves the dispatched Run definitions", async (c) => {
   expect(t3.threads.launches.size).toBe(1);
 });
 
-it("a lost worker launch acknowledgement recovers the same thread and execution after restart", async (c) => {
+it("after lost launch replies and a Run rename, restart binds each colliding worker by its frozen title", async (c) => {
   // Arrange
-  const { h, f, t3, input } = await prepared(c);
+  const { h, f, t3, input } = await prepared(c, collidingEntryFlow);
   t3.threads.loseLaunchReply = true;
   const accepted = await f.startRun(input);
   assert(accepted.ok);
   await f.reconcileRuns();
-  const original = [...t3.threads.launches.values()][0]!.reference;
+  const [first, second] = [...t3.threads.launches.values()];
+  assert(first && second);
+  assert((await f.renameRun(accepted.value.id, { title: "Polish search" })).ok);
   await f.close();
   t3.threads.loseLaunchReply = false;
 
   // Act
   const restored = await h.open({ t3, connectionRetryMs: 60_000 });
+  c.onTestFinished(() => restored.close());
 
   // Assert
   const r = await restored.getRun(accepted.value.id);
   assert(r.ok);
   expect(r.value.runCoordinator).toBeNull();
-  expect(r.value.blocks[0]?.threadId).toBe(original.threadId);
-  expect(r.value.blocks[0]?.executionId).toBe(original.runId);
-  expect(r.value.blocks[0]?.recovery).toBeNull();
-  expect(t3.threads.launches.size).toBe(1);
+  expect(r.value.title).toBe("Polish search");
+  expect([first.payload.title, second.payload.title]).toStrictEqual([
+    "F#1 Entry worker (1) · Improve search",
+    "F#1 Entry worker (2) · Improve search",
+  ]);
+  expect(
+    r.value.blocks.map(({ blockId, threadId, executionId, recovery }) => [
+      blockId,
+      threadId,
+      executionId,
+      recovery,
+    ]),
+  ).toStrictEqual([
+    ["worker", first.reference.threadId, first.reference.runId, null],
+    ["second", second.reference.threadId, second.reference.runId, null],
+  ]);
+  expect(t3.threads.launchCalls).toBe(2);
 });
 
 it("changed grant identity leaves an uncertain worker launch unresolved", async (c) => {

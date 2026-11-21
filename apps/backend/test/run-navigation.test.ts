@@ -135,7 +135,8 @@ it("a Start claiming a generated title creates no Run", async (c) => {
 
 it("a Start request stored before title provenance existed is accepted as legacy and replays to the same Run", async (c) => {
   // Arrange
-  const { f, input } = await prepared(c);
+  const { f, input, t3 } = await prepared(c);
+  const launch = t3.threads.nextLaunch();
   const { titleProvenance: _absent, ...stored } = input;
   const accepted = await f.startRun(stored);
   assert(accepted.ok);
@@ -147,6 +148,7 @@ it("a Start request stored before title provenance existed is accepted as legacy
   assert(replayed.ok);
   expect(replayed.value.id).toBe(accepted.value.id);
   expect(replayed.value.titleProvenance).toBe("legacy");
+  expect((await launch).title).toBe("F#1 Entry worker · Improve search");
 });
 
 it("a started draft keeps its chosen title, its title provenance and creation order after restart", async (c) => {

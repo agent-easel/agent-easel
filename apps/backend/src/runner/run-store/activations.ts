@@ -56,7 +56,6 @@ export function createEntryLaunches(
   sql: SqlClient.SqlClient,
   plan: {
     runId: string;
-    number: number;
     definitions: RunDefinitions;
     workspace: RunWorkspace;
     project: Pick<StoredTarget, "endpoint" | "environmentId" | "projectId" | "workspaceRoot">;
@@ -67,6 +66,10 @@ export function createEntryLaunches(
   blockIds: readonly string[],
 ) {
   return Effect.gen(function* () {
+    const [run] = yield* sql<{
+      number: number | null;
+      title: string;
+    }>`SELECT number,title FROM runs WHERE id=${plan.runId}`;
     const images =
       yield* sql<LaunchImage>`SELECT ordinal,sha256,name,mime_type AS "mimeType",size_bytes AS "sizeBytes" FROM run_images WHERE run_id=${plan.runId} ORDER BY ordinal`;
     for (const blockId of blockIds) {
@@ -83,7 +86,7 @@ export function createEntryLaunches(
         blockId,
         plan.project,
         requestKey,
-        plan.number,
+        run!,
         saved!.public_id,
         strategy,
         images,
@@ -160,13 +163,15 @@ export function openRunActivations(database: RunnerDatabase) {
         const activationId = yield* newId;
         const [block] = yield* sql<{
           public_id: string;
-        }>`SELECT public_id FROM run_blocks WHERE run_id=${current.id} AND block_id=${handoff.block_id}`;
+          number: number | null;
+          title: string;
+        }>`SELECT b.public_id,r.number,r.title FROM run_blocks b JOIN runs r ON r.id=b.run_id WHERE b.run_id=${current.id} AND b.block_id=${handoff.block_id}`;
         const launched = workerLaunchPayload(
           current.definitions,
           handoff.block_id,
           target,
           handoff.request_key,
-          current.number,
+          block!,
           block!.public_id,
           strategy,
         );

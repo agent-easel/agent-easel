@@ -177,7 +177,6 @@ function acceptStartRecords(
       sql,
       {
         runId: plan.runId,
-        number,
         definitions: plan.definitions,
         workspace,
         project,

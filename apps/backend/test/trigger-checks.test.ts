@@ -62,10 +62,11 @@ it("a Run the Trigger started that is neither Settled nor Archived takes its slo
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
 });
 
-it("a started Run's detail returns its origin and names the issue in its title and prompt", async (c) => {
+it("an issue Start keeps the repository prefix in the Run and worker titles", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   const issue = world.readyIssue(12, "Fix the login crash");
+  const launch = world.t3.threads.nextLaunch();
 
   // Act
   await world.f.runTrigger(world.trigger.id);
@@ -84,6 +85,9 @@ it("a started Run's detail returns its origin and names the issue in its title a
     title: "Fix the login crash",
   });
   expect(run.value.title).toBe("factory-maintainer/atlas#12: Fix the login crash");
+  expect((await launch).title).toBe(
+    "F#1 Entry worker · factory-maintainer/atlas#12: Fix the login crash",
+  );
   expect(run.value.input).toContain(
     "Check that nobody else owns it, then claim it; the ready label is your task assignment.",
   );

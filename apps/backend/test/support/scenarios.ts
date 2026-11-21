@@ -181,7 +181,6 @@ export function holdTitleThreadLaunch(t3: ControlledT3) {
   };
   return release;
 }
-/** The title thread's launch T3 recorded; Flow workers are titled `Factory #<n> · …`. */
 const titleThreadEntry = (t3: ControlledT3) =>
   [...t3.threads.launches.values()].find((launch) =>
     launch.payload.title.startsWith("Factory title · "),
@@ -1154,6 +1153,13 @@ export const fanOutFlow: ReadyFlowShape = (world) =>
       followUp(agentId),
     ],
     connections: [connection("worker", "done", "follow-up")],
+  }));
+
+export const collidingEntryFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Colliding entry names", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [entryWorker(agentId), agentBlock("second", "Entry\u2003worker", agentId)],
+    connections: [],
   }));
 
 /** A worktree Flow from the default branch whose input starts Entry worker and Second entry. */

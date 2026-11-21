@@ -55,9 +55,17 @@ reporting protocol.
   one Agent still get separate workers. Captured execution settings are always complete: Start
   rejects a Flow that places an Agent without them through readiness, and decoding a Run's captured definitions fails rather than
   launch or recover a worker from a model-less revision.
-- The saved launch title is `Factory #<number> · <block position> <Block name>`, sliced to
-  200 characters. The number is a durable Run sequence. The position is the 1-based index
-  in the captured block list. Later renames do not change the title recovery searches for.
+- A worker launches with `F#<number> <Block label> · <Run title>`, using the Run's title when
+  its launch is recorded and the Agent Block from its captured Flow. A blank label is omitted,
+  and a numberless historical Run uses `F` as the prefix. Factory collapses whitespace to
+  one line and clips on grapheme boundaries with an ellipsis, within 24 code points for
+  the Block label and 200 for the entire title. Agent Blocks whose labels would be identical
+  receive ordinals in captured Flow order. Factory makes room for the ordinals within the label
+  budget and skips reserved literal or already assigned labels. A shorter label also receives
+  an ordinal if a literal separator in a longer label could make their complete titles equal
+  across Run title changes.
+- The formatted title is saved in the launch payload. Launch recovery searches for that exact
+  title, even if a Run title or the live Flow definition has since changed.
 - Start mints a **Block id** for each Agent Block and Continuation. The first message starts with
   `$factory-block`, then a `Factory Block id: <id>.` line; every later visit and Request
   report message repeats the same id. The worker passes it to `factory_get_block`, then

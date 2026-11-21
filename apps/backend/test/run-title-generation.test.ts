@@ -9,6 +9,7 @@ import {
   controlledTitleModel,
   enableRunTitles,
   enableRunTitlesWithCheapModel,
+  handoffFlow,
   holdTitleThreadLaunch,
   loseTitleThreadLaunchReply,
   reauthorizeDuringTitleDispatch,
@@ -131,7 +132,7 @@ it("a title model T3 no longer offers skips generation with a diagnostic on the 
       },
     },
   });
-  expect((await launched).title).toContain("Factory #1");
+  expect((await launched).title).toBe("F#1 Entry worker · Improve search");
 });
 
 it("a prompt with no meaningful text skips generation without a diagnostic", async (c) => {
@@ -348,10 +349,35 @@ it("the Flow's worker launches while the title thread's launch is still unanswer
 
   // Assert
   assert(started.ok);
-  expect((await workerLaunch).title).toMatch(/^Factory #1 · 1 /);
+  expect((await workerLaunch).title).toBe("F#1 Entry worker · Improve search");
   const run = await fixture.f.getRun(started.value.id);
   assert(run.ok);
   expect(run.value.titleGeneration).toMatchObject({ state: "pending", threadLink: null });
+});
+
+it("a worker at its first handoff launches with the generated title applied after Start", async (c) => {
+  // Arrange
+  const { f, t3, input, world } = await prepared(c, handoffFlow);
+  await enableRunTitles(f);
+  const entry = await workerAtWork(world, input);
+  const launch = await titleGenerationLaunched(world, entry.runId);
+  const applied = await f.runtime.title({
+    arguments: { titleGenerationId: capabilityFromLaunchPrompt(launch), title: "Search ranking" },
+  });
+  assert(applied.code === "TITLE_APPLIED");
+  await resultReported(world, entry);
+
+  // Act
+  assert((await f.reconcileRuns()).ok);
+
+  // Assert
+  expect([...t3.threads.launches.values()].map(({ payload }) => payload.title)).toEqual(
+    expect.arrayContaining([
+      "F#1 Entry worker · Improve search",
+      "F#1 Parallel work · Search ranking",
+      `Factory title · Run #1 · ${entry.runId}`,
+    ]),
+  );
 });
 
 it("a title model T3 withdrew after Start is skipped just before dispatch with a diagnostic and launches no title thread", async (c) => {
@@ -381,7 +407,7 @@ it("a title model T3 withdrew after Start is skipped just before dispatch with a
   });
   expect(
     [...fixture.t3.threads.launches.values()].map((launch) => launch.payload.title),
-  ).toStrictEqual(["Factory #1 · 1 Entry worker"]);
+  ).toStrictEqual(["F#1 Entry worker · Improve search"]);
 });
 
 it("a title thread launch T3 rejects records the generation failed with a diagnostic on the setting and keeps the automatic title", async (c) => {

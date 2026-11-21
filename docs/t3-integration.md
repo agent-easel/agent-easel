@@ -449,7 +449,7 @@ Flow.
 - **Launch.** A top-level thread in the Project checkout (`root` strategy, also for a worktree Run) with the provider
   instance, model and options captured at Start, `interactionMode: "default"` and no `runtimeMode`, like a worker. Its
   title is `Factory title · Run #<n> · <Run id>`, which never matches a worker's
-  `Factory #<n> · <position> <name>`; its request key also names the Run. The request, with its key, is recorded
+  `F#<n> <Block label> · <Run title>`; its request key also names the Run. The request, with its key, is recorded
   when Start accepts the Run. Just before dispatch Factory rechecks eligibility, confirms that the Run's saved
   authorization context is still the live one, marks the request sent and calls `t3_thread_launch` once. After
   [reauthorization](#credentials-and-reauthorization) the launch stays unsent, like any operation intent with a

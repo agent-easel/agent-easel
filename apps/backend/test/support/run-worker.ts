@@ -40,7 +40,7 @@ export function clearStoredExecution(databasePath: string, agentId: string) {
 /** The worker launch T3 received for the named Block. */
 export function blockLaunch(t3: ControlledT3, blockName: string) {
   return [...t3.threads.launches.values()].find((entry) =>
-    entry.payload.title.endsWith(` ${blockName}`),
+    entry.payload.title.replace(/^F(?:#\d+)? /u, "").startsWith(`${blockName} · `),
   );
 }
 

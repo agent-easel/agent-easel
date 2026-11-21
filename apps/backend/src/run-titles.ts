@@ -564,11 +564,6 @@ function titlePrompt(generationId: string, promptText: string) {
   ].join("\n");
 }
 
-/**
- * The title thread's launch: top-level in the Project checkout with the captured model, titled
- * so it can never match a worker's `Factory #<n> · <position> <name>`. T3 shows its title and
- * request key to other clients, so both name the Run; only the prompt carries the capability.
- */
 function titleLaunchPayload(
   generationId: string,
   model: RunTitleModel,

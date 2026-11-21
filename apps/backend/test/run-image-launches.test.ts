@@ -28,8 +28,8 @@ it("every Flow-input worker receives the same original images, uploaded anew for
   // Assert
   const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
-    "Factory #1 · 1 Entry worker",
-    "Factory #1 · 2 Second entry",
+    "F#1 Entry worker · Improve search",
+    "F#1 Second entry · Improve search",
   ]);
   expect(launches.map((launch) => launch.attachments?.map((a) => a.name))).toStrictEqual([
     attachmentNames,
@@ -150,8 +150,8 @@ it("a downstream worker launches with a text-only message and no attachments", a
   // Assert
   const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
-    "Factory #1 · 1 Entry worker",
-    "Factory #1 · 2 Parallel work",
+    "F#1 Entry worker · Improve search",
+    "F#1 Parallel work · Improve search",
   ]);
   expect(launches[1]!.attachments).toBeUndefined();
   expect(launches[1]!.message).not.toContain("Initial prompt images");
