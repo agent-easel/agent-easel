@@ -31,6 +31,29 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/select-ui-journeys.mjs "$BASE_SHA" "$HEAD_SHA"
+      - name: Compute UI build signature
+        id: ui_sig
+        if: steps.select.outputs.run == 'true'
+        run: echo "sig=$(node --input-type=module -e 'import { uiBuildSignature } from "./scripts/ui-build.ts"; console.log(uiBuildSignature(process.cwd()))')" >> "$GITHUB_OUTPUT"
+      - name: Restore UI build cache
+        id: ui_cache
+        if: steps.select.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/frontend/dist
+          key: ui-build-${{ steps.ui_sig.outputs.sig }}
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: steps.select.outputs.run == 'true' && steps.ui_cache.outputs.cache-hit != 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.select.outputs.run == 'true' && steps.ui_cache.outputs.cache-hit != 'true'
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Prepare UI build for shards
+        if: steps.select.outputs.run == 'true' && steps.ui_cache.outputs.cache-hit != 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm e2e:prepare
 
   journeys:
     needs: select

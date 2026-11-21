@@ -3,6 +3,23 @@ import { fileURLToPath } from "node:url";
 import { defaultServerConditions, defineConfig } from "vite-plus";
 
 export default defineConfig({
+  run: {
+    tasks: {
+      typecheck: {
+        command: "true",
+        dependsOn: ["typecheck:src", "typecheck:test"],
+        cache: false,
+      },
+      build: {
+        command: "tsc -p tsconfig.build.json && node ../../scripts/copy-migrations.mjs",
+        dependsOn: [{ task: "build", from: "dependencies" }],
+        cache: {
+          input: [{ auto: true }, "!dist/**"],
+          output: ["dist/**"],
+        },
+      },
+    },
+  },
   // Tests run the shared packages from source, so a result reflects the working tree.
   ssr: { resolve: { conditions: ["factory-source", ...defaultServerConditions] } },
   test: {
@@ -13,6 +30,7 @@ export default defineConfig({
     // SQLite, process ownership and frozen upgrade fixtures use real local resources, so each
     // file runs in its own process with its own temporary home and loopback ports.
     pool: "forks",
+    isolate: false,
     testTimeout: 120_000,
     hookTimeout: 120_000,
     restoreMocks: true,

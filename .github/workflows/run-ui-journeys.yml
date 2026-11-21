@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,11 +31,29 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Compute UI build signature
+        id: ui_sig
+        run: echo "sig=$(node --input-type=module -e 'import { uiBuildSignature } from "./scripts/ui-build.ts"; console.log(uiBuildSignature(process.cwd()))')" >> "$GITHUB_OUTPUT"
+      - name: Restore UI build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/frontend/dist
+          key: ui-build-${{ steps.ui_sig.outputs.sig }}
       - run: pnpm e2e:prepare
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./node_modules/@e2e-dev/web/package.json').dependencies['playwright-core']")" >> "$GITHUB_OUTPUT"
+      - name: Restore Chromium cache
+        id: pw_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
       - name: Install Chromium
+        if: steps.pw_cache.outputs.cache-hit != 'true'
         run: pnpm exec e2e-web install chromium
       - name: Check controlled UI journeys
-        run: pnpm exec e2e run --shard ${{ matrix.shard }}/3 --retries 0 --trace on --output .e2e/ci/journeys
+        run: pnpm exec e2e run --shard ${{ matrix.shard }}/8 --retries 0 --trace retain-on-failure --output .e2e/ci/journeys
       - name: Keep failure evidence
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
