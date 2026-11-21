@@ -5,7 +5,7 @@ import { createDefinitionExport } from "../src/definition-export.ts";
 const exported: DefinitionExport = {
   document: {
     format: "t3-factory/definitions",
-    formatVersion: 5,
+    formatVersion: 6,
     kind: "agent",
     factoryVersion: "source",
     exportedAt: "2026-11-14T10:00:00.000Z",

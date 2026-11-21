@@ -417,21 +417,21 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **23**. A server accepts clients from protocol **23**, and the current
-client requires a protocol **23** server, so only protocol 23 peers interoperate.
+The current protocol is **24**. The server and the Desktop and browser clients require protocol **24**.
 
-Protocol 23 makes the [Finish block](studio.md#finish-block) optional: a Flow or captured Run
-definition may have no `finish`. Protocol 22 clients assume every Flow has one and cannot show such
-a Flow, so the server refuses them at the handshake and they must update; a current client likewise
-refuses a protocol 22 server, which would add an empty Finish block to every save. Their credentials
-and stored data are kept. This is an intentional transport break; migration `120` converts the stored Flows.
+Protocol 24 makes the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
+Protocol 23 clients assume every graph has one, and protocol 23 servers would add it back on save.
+Update both peers. Existing approvals and credentials carry forward.
 
-Protocol 22 adds the [Finish block](studio.md#finish-block) with its endings to Flows and captured
-Run definitions, connections that enter an ending and the Run's `result` in Run detail. Older clients can neither read nor save such
-a Flow, so the server refuses them at the handshake before product screens mount and they must
-update; their credentials and stored data are kept. A current client likewise refuses a protocol 21
-or older server, which rejects or lacks the Finish block, and shows the update gate naming the
-server. This is an intentional transport break; the stored Flows are migrated separately.
+Protocol 23 adds [Subflow authoring](studio.md), captured invocation evidence
+in [Runs](runs.md), and portable definition format v5. A protocol 22 or older approved client
+shows the client update gate before product screens open. A protocol 23 client connecting to
+a protocol 22 or older server shows the server update gate. Update both peers to use the new
+contracts. Existing approvals and credentials carry forward, and the host upgrades its stored
+definitions, Runs, and import receipts on startup.
+
+Protocol 22 added the [Finish block](studio.md#finish-block) with its endings to Flows and
+captured Run definitions, connections that enter an ending, and the Run's `result` in Run detail.
 
 Protocol 21 added the [First-run setup](t3-integration.md#first-run-setup) status read
 (`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the

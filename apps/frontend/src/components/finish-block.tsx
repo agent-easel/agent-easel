@@ -42,17 +42,11 @@ export function finishIdentity(state: FinishBlockState, endings: number, trailin
   };
 }
 
-export function finishRowClass(state: FinishBlockState, ending: FlowEnding) {
+function finishRowClass(state: FinishBlockState, ending: FlowEnding) {
   return cn(state.kind === "reached" && state.endingId === ending.id && "bg-muted");
 }
 
-export function FinishEndingRow({
-  ending,
-  state,
-}: {
-  ending: FlowEnding;
-  state: FinishBlockState;
-}) {
+function FinishEndingRow({ ending, state }: { ending: FlowEnding; state: FinishBlockState }) {
   const name = ending.name || "Unnamed ending";
   const reached = state.kind === "reached" && state.endingId === ending.id;
   const unconnected = state.kind === "authoring" && state.unconnected.has(ending.id);
@@ -81,10 +75,56 @@ export function FinishEndingRow({
   );
 }
 
-export function FinishHint() {
+function FinishHint() {
   return (
     <span className="truncate text-xs font-medium text-muted-foreground">
       Add endings in its settings
     </span>
+  );
+}
+
+export function FinishEndingList({
+  endings,
+  state,
+  rows,
+  ariaLabel,
+  renderPort,
+}: {
+  endings: readonly FlowEnding[];
+  state: FinishBlockState;
+  rows: {
+    readonly divider: number;
+    readonly exitPaddingTop: number;
+    readonly exitPaddingBottom: number;
+    readonly exitRow: number;
+  };
+  ariaLabel?: string;
+  renderPort?: (ending: FlowEnding) => ReactNode;
+}) {
+  return (
+    <>
+      <span className="bg-border" style={{ height: rows.divider }} />
+      <ul
+        aria-label={ariaLabel}
+        style={{ paddingTop: rows.exitPaddingTop, paddingBottom: rows.exitPaddingBottom }}
+      >
+        {endings.length === 0 && (
+          <li className="flex items-center px-3" style={{ height: rows.exitRow }}>
+            <FinishHint />
+          </li>
+        )}
+        {endings.map((ending) => (
+          <li
+            key={ending.id}
+            data-ending-id={ariaLabel ? ending.id : undefined}
+            className={cn("relative flex items-center gap-1.5 px-3", finishRowClass(state, ending))}
+            style={{ height: rows.exitRow }}
+          >
+            <FinishEndingRow ending={ending} state={state} />
+            {renderPort?.(ending)}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

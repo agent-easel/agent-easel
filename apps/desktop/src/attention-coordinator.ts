@@ -231,10 +231,19 @@ function notificationRoute(
   const pending = (
     rows.find((row) => row.id === notification.runId)?.attention.matters ?? []
   ).filter(({ id }) => announced.has(id));
+  return attentionRoute(notification.runId, pending);
+}
+
+function attentionRoute(
+  runId: string,
+  pending: RunNavigationEntry["attention"]["matters"],
+): DesktopRoute {
+  const matter = pending.length === 1 ? pending[0] : undefined;
   return {
     kind: "run",
-    runId: notification.runId,
-    blockId: pending.length === 1 ? pending[0]!.blockId : null,
+    runId,
+    blockId: matter?.blockId ?? null,
+    ...(matter?.invocationId && { attentionId: matter.id }),
   };
 }
 
@@ -244,8 +253,7 @@ function dockRoute(rows: readonly RunNavigationEntry[]): DesktopRoute | null {
   if (waiting.length > 1) return { kind: "needs-you" };
   const [row] = waiting;
   if (!row) return null;
-  const matters = mattersNeedingOwner(row);
-  return { kind: "run", runId: row.id, blockId: matters.length === 1 ? matters[0]!.blockId : null };
+  return attentionRoute(row.id, mattersNeedingOwner(row));
 }
 
 /** A click that waits for its selection's next ready state, as after a relaunch. */

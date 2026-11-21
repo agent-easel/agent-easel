@@ -62,7 +62,16 @@ export const CONDITION_OTHERWISE: BlockExit = {
 
 /** Where a block's exit comes from: its Agent, this Flow only, a Human step, a Wait's output, a
  * Continuation or a Condition's rules and Otherwise. */
-export type ExitSource = "agent" | "local" | "human" | "wait" | "continuation" | "condition";
+export type ExitSource =
+  | "agent"
+  | "local"
+  | "human"
+  | "wait"
+  | "continuation"
+  | "condition"
+  | "ending";
+
+export type ExitFlows = ReadonlyMap<string, { readonly graph: Pick<FlowGraphInput, "finish"> }>;
 export interface EffectiveExit extends BlockExit {
   readonly source: ExitSource;
 }
@@ -85,7 +94,19 @@ export function inheritedExits(
 export function effectiveExits(
   block: FlowBlockInput,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows: ExitFlows = new Map(),
 ): EffectiveExit[] {
+  if (block.kind === "subflow") {
+    const endings =
+      block.flowId === null ? [] : (flows.get(block.flowId)?.graph.finish?.endings ?? []);
+    return endings.map((ending) => ({
+      id: ending.id,
+      name: ending.name,
+      description: ending.description,
+      messageRequired: false,
+      source: "ending" as const,
+    }));
+  }
   if (block.kind === "human") return HUMAN_EXITS.map((exit) => ({ ...exit, source: "human" }));
   if (block.kind === "wait") return [{ ...WAIT_OUTPUT, source: "wait" }];
   if (block.kind === "continuation") return [{ ...CONTINUATION_EXIT, source: "continuation" }];
@@ -117,8 +138,9 @@ export function exitsWithEndings(
   block: FlowBlockInput,
   graph: Pick<FlowGraphInput, "connections" | "finish">,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows: ExitFlows = new Map(),
 ): ExitWithEndings[] {
-  return effectiveExits(block, agents).map((exit) => {
+  return effectiveExits(block, agents, flows).map((exit) => {
     const wired = new Set(
       graph.connections.flatMap((edge) =>
         edge.sourceBlockId === block.id &&

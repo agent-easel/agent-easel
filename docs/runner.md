@@ -305,18 +305,19 @@ Factory trusts T3 to say when a Block's worker thread is finished. One shared ru
 and handoff release, missing report, automatic settlement and Request report all use it. A worker
 thread is finished when all of these hold:
 
-- the `t3_thread_read` of the thread shows no active run and zero pending native requests;
+- the `t3_thread_read` of the thread shows no active run, zero pending native requests, a thread status other than `waiting`, and no awaited `pendingBackgroundTasks`;
 - `t3_thread_wait` for its latest run, with `timeoutMs: 0` and
   `untilDelegatedWorkSettled: true`, answers that thread and run with a terminal status
   (`completed`, `failed`, `cancelled`, `interrupted` or `rolled_back`) and `timedOut: false`.
 
 T3's `resultRun` is informational only: it names the run T3 answered from, which can be an
 earlier run when a notification resumed the thread, so Factory never compares it with the
-waited run. A timed-out wait, an active run, a pending native request, a wait answered for
+waited run. A timed-out wait, an active run, a pending native request, a `waiting` thread status,
+an awaited background task (such as a pull-request watch), a wait answered for
 another thread or run, or a read without a valid pending-request count keeps the thread
 unfinished. Factory keeps no model of descendants, subagents, queues, peers or individual
 executions and verifies no provider or model at final; delegated and background work count
-only through T3's wait answer. Reads across threads are not an atomic cutoff: direct chat
+only through T3's thread read and wait answer. Reads across threads are not an atomic cutoff: direct chat
 can start a new run between Factory's read and its local decision.
 
 ## Observation and attention
@@ -595,6 +596,42 @@ Each committed title change advances the Run title revision. Factory keeps the l
 A background worker serializes attempts per binding, coalesces unsent revisions and resumes pending or interrupted claims on startup. Startup and execution sweeps schedule eligible bindings and proceed independently of remote renames. Each pass takes a finite list of due bindings. Up to four workers per Run and eight workers globally may synchronize at once. A newly bound worker can use an available slot while another worker from the same Run is still synchronizing. A revision keeps its request key across retries. An acknowledgement satisfies the latest revision when it renders the same title. A refusal before delivery preserves the previous baseline certainty. A rejected MCP session clears only that HTTP attempt’s delivery marker before reconnection, including on disk for restart recovery. A different returned title is retryable on first dispatch and closes a revision only on replay of a previously dispatched key. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
 
 Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
+
+## Subflow invocations
+
+Start captures one immutable revision per Flow and Agent across the saved composition. The
+acceptance transaction reruns transitive readiness and budgets and requires the same closure
+as preflight. A replay of an accepted Start resolves its original Run before validation.
+The composition budget applies to Runs containing Subflows. Each invocation and its
+Blocks use the same Run, Task, Project and workspace.
+
+Each placement accepts one invocation per released arrival, with a durable serial queue
+inside its parent invocation. Different placements can execute at the same time. The
+invocation's workers, repeated visits, Conditions, Continuations, Human occurrences and Wait
+arrivals use the invocation's own Block identities. Direct Flow input passes Start text and
+images through entry-only chains. Other arrivals pass their exact text, including empty Human
+approval. An Agent connected to an invoked Flow's input gets that invocation's input in its
+first prompt. Ordinary Handoffs expose their message through the recipient's result or feedback fields.
+In a worktree Run, the first Agent in depth-first saved Flow-input order creates the
+worktree. The remaining starters join after it binds.
+
+The first released delivery accepted at an invocation's Finish records its ending and closes
+dispatch into that invocation and its descendants in the same transaction. Factory searches for
+unconfirmed launches and sends Stop to workers that a fresh read shows unfinished. An
+acknowledgement holds the result and the queue until fresh reads verify completion. Unresolved
+Stop raises one Problem at that invocation. Retry starts a fresh authorized repair attempt.
+Closure leaves the threads Run-owned and requests no T3 thread settlement on behalf of
+the invocation.
+
+Verified closure releases one result through the matching ending ID, retaining the producing
+worker and activation through forwarding Blocks. Output None releases empty text. Blank
+Required output records **Output missing** without raising a Problem. A quiet invocation
+without an ending records **Nothing returned**. Pending Human, Wait, delivery, child invocation
+or integrity work and unresolved Block errors keep the invocation open. Queue advancement commits
+with the outcome. A parent cutoff cancels an owed return and preserves the accepted ending.
+A late report for a closed Block records an informational event while the Run gate is open.
+Archive and a closed Run gate take precedence. A parent Continuation on the same worker
+thread gets the ending name and unchanged output beside its prompt, then reports with its own Block id.
 
 ## Run title generations
 

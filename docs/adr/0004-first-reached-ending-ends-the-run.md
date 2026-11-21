@@ -50,7 +50,7 @@ No Subflow field is stored by the Finish block delivery.
   keeps its own setting. A wire to an intervening Block does not impose the ending's message requirement. Human,
   Wait and Condition outputs can reach a Required ending with blank text, which is recorded as missing.
 - A Finish block nothing placed goes one layout layer gap right of the rightmost Flow input or block, level with the
-  Flow input and within the canvas limits. Migration 120 removed the empty Finish blocks migration 114 had given every
+  Flow input and within the canvas limits. Migration 123 hides the empty Finish blocks migration 114 had given every
   Flow revision, and format 1 and 2 imports arrive without one.
 
 ## Considered Options

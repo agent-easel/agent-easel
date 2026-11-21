@@ -5,6 +5,7 @@ import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
 import { now } from "../../time.ts";
 import type { RunRow, StoredTarget } from "../runner-types.ts";
 import type { RunnerDatabase } from "./database.ts";
+import { cancelInvocationWork } from "./invocation-cutoff.ts";
 import { cancelTitleGeneration } from "./title-generations.ts";
 import { arrivingHandoff, clearSpentArrivalMessages, workerProvenance } from "./handoffs.ts";
 import type { Handoff } from "./records.ts";
@@ -12,7 +13,7 @@ import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
 export const CANCELLED_ON_FINISH = "cancelled-on-Finish";
 
-type RunResultRow = {
+export type EndingEvidenceRow = {
   run_id: string;
   ending_id: string;
   ending_name: string;
@@ -27,7 +28,7 @@ type RunResultRow = {
   accepted_at: string;
 };
 
-const runResult = (row: RunResultRow): RunResult => ({
+export const endingResult = (row: EndingEvidenceRow): RunResult => ({
   endingId: row.ending_id,
   endingName: row.ending_name,
   output: row.output,
@@ -42,8 +43,8 @@ const runResult = (row: RunResultRow): RunResult => ({
 
 export function readRunResult(sql: SqlClient.SqlClient, runId: string) {
   return Effect.map(
-    sql<RunResultRow>`SELECT r.*,t.thread_id AS origin_thread_id FROM run_results r LEFT JOIN run_thread_bindings t ON t.id=r.binding_id WHERE r.run_id=${runId}`,
-    ([row]) => (row ? runResult(row) : null),
+    sql<EndingEvidenceRow>`SELECT r.*,t.thread_id AS origin_thread_id FROM run_results r LEFT JOIN run_thread_bindings t ON t.id=r.binding_id WHERE r.run_id=${runId}`,
+    ([row]) => (row ? endingResult(row) : null),
   );
 }
 
@@ -58,7 +59,7 @@ function messageWriter(sql: SqlClient.SqlClient, handoff: Handoff) {
           (SELECT a.incoming_intent_id FROM wait_arrivals a WHERE a.id=c.wait_arrival_id),
           (SELECT a.incoming_intent_id FROM condition_arrivals a WHERE a.id=c.condition_arrival_id),
           (SELECT v.incoming_intent_id FROM continuation_visits v WHERE v.run_id=${handoff.run_id} AND c.cause LIKE 'pass:' || v.id || '/%'))
-      ) SELECT source_block_id FROM chain WHERE wait_arrival_id IS NULL AND condition_arrival_id IS NULL AND cause NOT LIKE 'pass:%'`;
+      ) SELECT COALESCE((SELECT author_block_id FROM subflow_results WHERE chain.cause LIKE 'subflow:' || invocation_id || '/%'), source_block_id) AS source_block_id FROM chain WHERE wait_arrival_id IS NULL AND condition_arrival_id IS NULL AND cause NOT LIKE 'pass:%'`;
     if (!writer?.source_block_id)
       return yield* Effect.fail(Error("A forwarded message lost its arrival"));
     return writer.source_block_id;
@@ -71,7 +72,8 @@ export function openRunEndings(database: RunnerDatabase) {
   function reachEnding(current: RunRow, handoff: Handoff, generation: number | undefined) {
     return database.mutate(current.id, (sql) =>
       Effect.gen(function* (): Effect.fn.Return<RunResult | undefined, unknown> {
-        const accepted = yield* readRunResult(sql, current.id);
+        const scope = current.definitions.invocation;
+        const accepted = scope ? null : yield* readRunResult(sql, current.id);
         if (accepted?.deliveryId === handoff.id) return accepted;
         const arriving = yield* arrivingHandoff(sql, ownerToken, current.id, handoff, generation);
         if (!arriving) return undefined;
@@ -85,6 +87,24 @@ export function openRunEndings(database: RunnerDatabase) {
         const time = yield* now;
         const output = ending.output === "none" ? null : arriving.message;
         const missing = ending.output === "required" && !arriving.message.trim();
+        if (scope) {
+          const [closed] = yield* sql<{ placement_block_id: string }>`UPDATE subflow_invocations
+            SET state='stopping' WHERE id=${scope.id} AND state='active' RETURNING placement_block_id`;
+          if (!closed) return undefined;
+          yield* sql`INSERT INTO subflow_results(invocation_id,ending_id,ending_name,output,output_missing,source_block_id,exit_id,author_block_id,binding_id,origin_activation_id,intent_id,accepted_at)
+            VALUES(${scope.id},${ending.id},${ending.name},${output},${missing ? 1 : 0},${handoff.source_block_id},${handoff.exit_id},${author},${handoff.binding_id},${handoff.origin_activation_id},${handoff.id},${time})`;
+          yield* sql`UPDATE operation_intents SET state='acknowledged',payload_json=NULL,problem=NULL,reconciled_at=${time} WHERE id=${handoff.id}`;
+          yield* cancelInvocationWork(sql, current.id, scope.id, time);
+          yield* appendTimelineEvent(sql, {
+            kind: "subflow-ending-accepted",
+            runId: current.id,
+            blockId: closed.placement_block_id,
+            invocationId: scope.id,
+            observedAt: time,
+          });
+          yield* advanceGeneration(sql, current.id);
+          return undefined;
+        }
         yield* sql`INSERT INTO run_results(run_id,ending_id,ending_name,output,output_missing,source_block_id,exit_id,author_block_id,binding_id,origin_activation_id,intent_id,accepted_at)
           VALUES(${current.id},${ending.id},${ending.name},${output},${missing ? 1 : 0},${handoff.source_block_id},${handoff.exit_id},${author},${handoff.binding_id},${handoff.origin_activation_id},${handoff.id},${time})`;
         yield* sql`UPDATE runs SET gate_open=0 WHERE id=${current.id}`;
@@ -95,6 +115,7 @@ export function openRunEndings(database: RunnerDatabase) {
           endingId: ending.id,
           observedAt: time,
         });
+        yield* cancelInvocationWork(sql, current.id, null, time);
         const losers = yield* sql<{
           id: string;
         }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${CANCELLED_ON_FINISH},reconciled_at=${time} WHERE run_id=${current.id} AND kind='handoff' AND json_extract(target_json,'$.endingId') IS NOT NULL AND state='pending' RETURNING id`;

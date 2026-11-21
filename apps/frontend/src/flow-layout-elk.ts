@@ -6,6 +6,7 @@ import {
   type FlowLayoutPositions,
 } from "@t3-factory/flow-layout";
 import type { CanvasBlock } from "./flow-graph.ts";
+import type { CanvasFlow } from "./subflow-preview.ts";
 import type { Rect } from "./canvas-culling.ts";
 import { PORT_RIM, pointsBounds, roundedPolyline } from "./flow-geometry.ts";
 
@@ -17,6 +18,7 @@ export type WireRoute = {
 };
 export type FlowLayoutResult = FlowLayoutPositions & {
   readonly routes: ReadonlyMap<string, WireRoute>;
+  readonly arrangedFlows?: ReadonlyMap<string, CanvasFlow> | undefined;
 };
 
 function pathLabel(points: readonly ElkPoint[]) {

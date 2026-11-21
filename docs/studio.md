@@ -116,21 +116,25 @@ records why a per-project variant is an independent copy rather than an override
   default must be changed before commit.
 - **Flow Duplicate** copies the source's latest saved revision (name, graph, positions and workspace) into a new Flow at
   revision 1, named `<name> copy` unless a name is given. `POST /api/flows/:id/duplicate/preview` with an optional
-  `projectId` answers a plan and writes nothing: the source revision, the resolved target, the default name and each distinct
-  Agent the Flow places, in block order, with its revision, owning Project, `choice` (`keep` or `copy`) and whether that choice is
-  `changeable`. A global Agent defaults to keep and may be copied into the target; a Project Agent the target may not place is
-  always copied; an Agent of the target Project itself is always kept. `POST /api/flows/:id/duplicate` commits the plan in one
-  transaction with the plan's `projectId` (required; Change owner appends no revision, so an omitted target could otherwise
-  follow a later owner change), `expectedRevision` and every planned Agent's choice: each copied Agent is created once, under its own name,
-  from its latest saved revision in the target, and every block placing it is retargeted to the copy. A block whose Agent is
-  unset, missing or removed is copied unchanged and stays missing. A source revision, Agent revision or Agent owner that changed
-  since the preview, or a different set of Agents, is refused as `stale_duplicate_plan`; changing a fixed choice is refused as
-  `duplicate_choice_not_allowed`. The answer holds the new Flow and its copies by source Agent. The source Flow and its Agents
-  never change, so duplicating out of an unavailable Project into another Project or Global rescues a Flow and its Agents.
-- **Placement rule.** Any Flow may place a global Agent, and a Project Flow may also place Agents of its own Project, never
-  another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
-  naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
-  other client go through the same check.
+  `projectId` answers a plan and writes nothing: the source revision, the resolved target, the default name, each distinct
+  placed Flow the target may not place (in traversal order, always copied into the target as `<name> copy`, including
+  cyclic placements without looping), and each distinct Agent placed directly or through copied Flows, with its revision,
+  owning Project, `choice` (`keep` or `copy`) and whether that choice is `changeable`. A global Agent defaults to keep and
+  may be copied into the target; a Project Agent the target may not place is always copied; an Agent of the target Project
+  itself is always kept; global and target-owned placed Flows stay kept. `POST /api/flows/:id/duplicate` commits the plan
+  in one transaction with the plan's `projectId` (required; Change owner appends no revision, so an omitted target could
+  otherwise follow a later owner change), `expectedRevision`, every planned Agent's choice and `flows` (the planned copied
+  Flows with their revisions and owners): each copied Agent and Flow is created once from its latest saved revision in the
+  target, and every block placing it is retargeted to the copy. A block whose Agent or Flow is unset, missing or removed is
+  copied unchanged and stays missing. A source revision, Agent or planned Flow revision or owner that changed since the
+  preview, or a different set of Agents or Flows, is refused as `stale_duplicate_plan`; changing a fixed choice is refused
+  as `duplicate_choice_not_allowed`. The answer holds the new Flow, its Agent `copies` and its `flowCopies` by source Flow.
+  The source Flow and its placed definitions never change, so duplicating out of an unavailable Project into another Project
+  or Global rescues a Flow and its dependencies.
+- **Placement rule.** Any Flow may place a global Agent or global Flow, and a Project Flow may also place Agents and Flows
+  of its own Project, never another Project's. A create or save whose graph breaks the rule is refused with an
+  `agent_scope_mismatch` or `flow_scope_mismatch` issue per block, naming the block and definition, and stores nothing;
+  readiness reports the same issue, which blocks Start. Factory MCP and every other client go through the same check.
 - **Change owner.** `PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner` take `{expectedProjectId, projectId}`: the
   owning Project the client last saw and the new one, each a Factory Project id or `null` for global. The move appends no
   revision and changes nothing else: no other definition is edited, copied or made global, and Runs keep what they captured.
@@ -141,8 +145,8 @@ records why a per-project variant is an independent copy rather than an override
   `project_<availability>` at `projectId`, checked in the committing transaction), and when the placement rule would no longer
   hold for the latest revision of a current Flow (conflict, one `owner_change_blocked` issue at `projectId` per blocking
   definition, naming it and its id):
-  - a Flow moves only if the new owner may place every Agent it places, so a global Flow can move to any Project, while a
-    Project Flow can move to global or another Project only if it places none of its own Project's Agents;
+  - a Flow moves only if the new owner may place every Agent and Flow it places, and every current Flow that places it may
+    still place it under the new owner;
   - an Agent moves to global always; it moves to a Project only if no current Flow outside that Project places it, so a
     move from one Project to another is blocked by the old Project's Flows that place it.
 
@@ -357,9 +361,9 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 The editor's toolbar holds the owner badge (Global or the owning Project), the Flow name as an inline field, the save status
 (**Saved**, **Unsaved changes**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the
-search filters steps and Agents by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps** and each owner's name (**Global**,
+search filters steps, Agents and Flows by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps**, **Flows** (placeable Flows under the placement rule, with any Flow that would form a cycle disabled with its reason and Flows without a reachable ending tagged **No reachable ending**), and each owner's name (**Global**,
 the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**.
 An Agent without a model is listed last in its group, disabled, with a **Needs a model** tag. With no Agent to place, the library's group is
 headed **Agents** whatever the Flow's owner and shows **No Agents yet** with a **New Agent** link; when Agents exist but none has a model, the group keeps its
@@ -435,6 +439,8 @@ Flow-local name and **Wait for** a number and a unit (**minutes**, **hours** or 
 a duration. It has one input and one output (**after the wait**) whose **Output** row holds its target select. A Wait has no Agent, prompt, execution settings, reports or worker, and the Flow input cannot connect to
 it.
 
+**Subflow.** A [Subflow](../GLOSSARY.md#subflow) places another saved Flow by its `flowId` (`kind: "subflow"`). Its exits are the referenced Flow's Finish endings by ending ID, so renaming an ending keeps every wire while removing an ending leaves a repairable broken wire (`subflow_exit_missing`); it has no Flow-local exits, hidden exits, Revisit instruction or workspace override (the top-level Run workspace applies). On the canvas, an expandable Subflow renders as a [`SubflowGroup`](design-system.md#which-component-for-which-pattern): a read-only in-place preview of the referenced Flow showing its inner Flow input (**Incoming message**) wired to its targets, its inner blocks and Finish, drawn-only ending routes to the outer right border, interactive outer left and right ports and a **Collapse** control in its header. Collapsing turns it into a compact block card with **Expand** and **Open Flow**; cyclic, over-budget, missing or unset Subflows auto-collapse with an error badge. Selecting a Subflow opens its settings panel with **Name**, the **Flow** picker (placeable Flows with cycle candidates disabled), **Open Flow**, read-only disclosures (**Workspace**, **Revision**, **Blocks inside**), **Exits** with target selects and ending expectations, **Broken wires** (one-click **Remove** repair) and **Issues inside** (linking directly to each affected nested Flow). The **Flow input** may connect to Subflows as well as Agent blocks, and Subflow exits may connect to any block or parent Finish ending. Removing a Flow is still allowed when another Flow places it: referencing parent Flows report `subflow_flow_missing` and keep their repairable wires.
+
 **Condition.** A Condition routes each arrival by its arrival number at that block: an ordered list of rules
 **From arrival *N* onward → *output***, each with its own stably identified, named output, followed by the fixed, mandatory
 **Otherwise** output, which cannot be renamed, removed or reordered. The first rule the arrival number reaches selects its
@@ -501,10 +507,10 @@ already unavailable returns with its unavailable endpoint. Undo keeps later edit
 **Keep my edits** retains undo history, and a text field keeps its own undo.
 
 Readiness is live: an unsaved draft is checked through the backend shortly after each change, with no Check readiness button, and again after a newer saved
-revision, keeping the local draft against one, a change to an Agent the draft places or a change of the Flow's owner. A check result applies only to the
-content, baseline revision, owner and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent
-revisions Studio does not show yet, is discarded, and edits never wait for a check. A clean draft shows the readiness Studio received with its saved revision
-and the Agents shown. The summary at the canvas's top-left is a **Ready** badge, or **Not ready** with **N issues** and a chevron that opens one row per issue.
+revision, keeping the local draft against one, a change to an Agent or Flow in its transitive closure or a change of the Flow's owner. A check result applies only to the
+content, baseline revision, owner, placed Agent revisions and transitive Flow/Agent closure it was requested for: an answer arriving after any of them changed, or resolved against
+definitions Studio does not show yet, is discarded, and edits never wait for a check. A clean draft shows the readiness Studio received with its saved revision
+and the definitions shown. For compositions with Subflows, readiness validates transitively across the whole reachable Flow closure: missing referenced Flows (`subflow_flow_missing`) and cycles (`subflow_cycle`) are reported first, and composition budgets (2,000 expanded blocks, 10,000 expanded connections, 64 MiB canonical capture bytes) are checked only for complete finite acyclic graphs and carry structured contributor evidence. Findings are bounded per code with cursor pagination (`GET /api/flows/:id/findings` / `POST /api/flows/:id/validate/findings`) and **Load more** in the readiness panel; nested findings name their placement path and offer **Open Flow**. Start rechecks readiness for the saved composition when accepting the Run. The summary at the canvas's top-left is a **Ready** badge, or **Not ready** with **N issues** and a chevron that opens one row per issue.
 Each row selects its block and opens its settings at the affected field; a Condition rule issue also scrolls to that rule and focuses its name or arrival
 number, and a Finish ending issue selects the Finish block and focuses that ending's name. The issue text is the one the Flows list and the composer show. A block with an issue, the Flow input and the Finish block included, shows an Error outline and a short tag
 (**No duration**, **Not connected**, **Needs a model** and so on); a selected one keeps the outline with the selection ring outside it, and the affected
@@ -672,18 +678,18 @@ A preview body may leave out `github.repositoryNodeId` to evaluate the repositor
 ## Definition export
 
 **Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export JSON** in the Flow editor's **More Flow actions** menu downloads the
-Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
+Flow’s latest saved revision and its complete composition. Factory reads the latest saved revision of the root, every placed Flow and every placed Agent in one transaction, including definitions referenced from unwired blocks and branches a Run may never visit. Source Project availability does not affect the export. The JSON file is named after the definition (for
 example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
 a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 5, whatever the definition holds:
+Every export writes portable document format version 6, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 5,
+  "formatVersion": 6,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -712,86 +718,39 @@ Every export writes portable document format version 5, whatever the definition 
   or no longer lists the provider it is omitted, and Studio names the affected Agents.
 - The file never contains environment ids, server or definition ids, revisions, definition timestamps or Runs. Exit ids are kept.
 
-A Flow document has `kind: "flow"` and a `flow` beside `agents`:
+A Flow document has `kind: "flow"`, a `rootFlowKey` and a `flows` list beside `agents`. Each Flow entry has a `key`, `name`, `graph` and `workspace`. Flow keys and Agent keys use the same pattern and have separate namespaces. Each definition appears once. The writer gives the root `flow-1` and numbers the rest in depth-first order of first placement in the saved block lists. It assigns `agent-1`, `agent-2`, and subsequent keys in first-placement order across those Flows. A Flow without Subflows exports one Flow entry and keeps the same Agent order as version 4.
+
+A draft Flow without Finish can be exported as follows.
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 5,
+  "formatVersion": 6,
   "kind": "flow",
-  "factoryVersion": "0.42.0",
-  "exportedAt": "2026-11-14T10:00:00.000Z",
-  "flow": {
-    "name": "Reviewed change",
-    "graph": {
-      "blocks": [
-        {
-          "id": "review",
-          "name": "Code review",
-          "kind": "agent",
-          "position": { "x": 240, "y": 0 },
-          "agentKey": "agent-1",
-          "hiddenExitIds": [],
-          "localExits": [],
-          "revisitInstruction": "",
-          "revisitContext": "keep"
-        },
-        {
-          "id": "gate",
-          "name": "Escalate",
-          "kind": "condition",
-          "position": { "x": 480, "y": 0 },
-          "rules": [{ "id": "ask", "name": "Ask a person", "fromArrival": 3 }],
-          "otherwise": { "id": "otherwise" }
-        },
-        { "id": "approve", "name": "Approve", "kind": "human", "position": { "x": 720, "y": 0 } }
-      ],
-      "connections": [
-        { "sourceBlockId": "review", "exitId": "done", "targetBlockId": "gate" },
-        { "sourceBlockId": "gate", "exitId": "ask", "targetBlockId": "approve" },
-        { "sourceBlockId": "gate", "exitId": "otherwise", "targetBlockId": "review" }
-      ],
-      "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] },
-      "finish": { "position": { "x": 960, "y": 0 }, "endings": [] }
-    },
-    "workspace": { "mode": "worktree", "base": { "kind": "default" } }
-  },
-  "agents": [
+  "factoryVersion": "source",
+  "exportedAt": "2026-11-21T10:00:00.000Z",
+  "rootFlowKey": "flow-1",
+  "flows": [
     {
-      "key": "agent-1",
-      "name": "Code reviewer",
-      "prompt": "Review the change.",
-      "model": null,
-      "exits": [{ "id": "done", "name": "done", "description": "", "messageRequired": false }]
+      "key": "flow-1",
+      "name": "Review draft",
+      "graph": {
+        "blocks": [],
+        "connections": [],
+        "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": [] }
+      },
+      "workspace": { "mode": "checkout" }
     }
-  ]
+  ],
+  "agents": []
 }
 ```
 
-- `flow` holds the Flow's name, saved graph and workspace setting: block and exit ids, positions, wires, hidden exits, Flow-local exits,
-  Revisit instructions, Waits, Human steps, Continuations and Conditions with their rule ids, names and thresholds, exactly as saved. An
-  unfinished draft keeps its gaps, such as a Wait without a duration or a rule with `"fromArrival": null`.
-- `graph.finish` is the [Finish block](#finish-block): its `position` and its `endings` (`id`, `name`, `description`, `output`,
-  `outputDescription`) in order. A wire into an ending is a connection with `targetBlockId: "finish"` and the ending's `targetEndingId`.
-  Ending ids are document-local like exit ids and are kept as saved. A Flow without a Finish block has no `finish`.
-- Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
-  carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
-  missing or removed. There is no fallback to local ids or names.
+An Agent block uses `agentKey` and a Subflow block uses `flowKey`. The key names the bundled definition or is `null` when that reference is unset, missing or removed. Flow input can target a Subflow. A Subflow wire's `exitId` is the child ending ID. A wire to the parent Finish also carries the independent `targetEndingId`, which must name an existing parent ending. Renaming a child ending preserves its wires. Deleting it leaves broken wires, even if a new ending shares its name. Drafts with broken child wires, missing references, cycles or no reachable ending remain drafts after import. Readiness identifies where they need repair in the composition.
 
-Export refuses a file another installation could not import. A definition save request is limited to 2 MB and the file to 16 MiB.
-The portable format allows 500 ordinary blocks when Finish is absent or has no endings. A Finish with endings counts toward
-the 500-block limit. An existing Flow at the former block limit remains editable at that size.
+The file and import request each have a 16 MiB UTF-8 limit. A file can bundle up to 500 unique Flows (including the root) and 500 unique Agents. Each prospective definition save can use up to 2,000,000 bytes, measured with new IDs substituted for keys. A Flow can hold 500 ordinary blocks with no Finish or with an empty Finish or 499 with a nonempty Finish, and up to 5,000 connections. For an existing Flow at the former block limit, Studio still allows edits at that size. Export names the limit and affected definitions if it cannot produce a complete file. These limits apply to portability. Start has its own capture and expansion budgets.
 
-**Format versions.** Import reads versions 1, 2, 3, 4 and 5, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
-version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
-endings and the connections entering them; a version-1 or version-2 file holding `finish` or `targetEndingId` is rejected at that field as
-unknown, and a version-3 or version-4 Flow file without `finish` is rejected as missing it. Version 4 adds `revisitContext` on Agent blocks;
-version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Version 5 is version 4 with an optional `finish`: a Flow
-without a Finish block omits it. Files exported before version 3 arrive without a Finish block, and version-3 and version-4 files keep the
-Finish block they carry, with or without endings. A newer version is refused and asks to update Factory. Writing version 5 for every export is an intentional
-compatibility break: an installation that reads only earlier versions refuses every newly exported file and asks to be updated before it can
-import it; it refuses before creating anything. Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt
-fingerprint covers the document under the file's own version, so retrying an earlier-version commit still replays its receipt.
+**Format versions.** Import reads versions 1–6 with strict rules for each version. Flow files from versions 1–4 hold a single `flow` and reject Subflow blocks and version-5 fields. Version 2 added Conditions. Version 3 added Finish and its ending connections. Flows from versions 1–2 arrive without Finish. Version 4 added `revisitContext`. In versions 1–3 it defaults to `"keep"`. Version 5 added bundled Subflows and requires Finish on every Flow. Version 6 makes Finish optional in the bundle. New exports require a Factory that reads version 6. A newer version asks the importer to update Factory before retrying. The file retains its decoded format version for matching existing receipts.
 
 ### Import
 
@@ -799,8 +758,10 @@ fingerprint covers the document under the file's own version, so retrying an ear
 what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows **Import “*file*”**:
 
 - **Global** or **Project**, and an **Owning Project** when Project is chosen. No helper line. An owner that cannot be used disables **Import** and shows its reason beside the action;
-- one warning: imported prompts run with the user's T3 permissions, so read them in Studio before starting a Run;
-- **Creates**: the Flow's name and block count, when the file has a Flow, and one row per Agent with its model select and thinking options. An Agent without a matched model shows **Needs a model** and an attention border on the select, and can still be imported.
+- A warning that imported prompts run with the user's T3 permissions, followed by an inventory of Agent prompts, Continuation prompts and Revisit instructions by Flow and placing block, with character counts.
+- **Flows** lists each definition once, with the root first and marked **Opens after import**. Each row gives the block count and every parent Flow and block that places it. Repeated Flow names are numbered in file order throughout the review.
+- **Workspace** shows the root workspace used by the Run, including for its Subflows, and each child’s workspace when started on its own.
+- **Agents** shows one row per definition with its model select and thinking options. An Agent without a selection shows **Needs a model** and can still be imported.
 
 While the file is read, the dialog shows **Reading the file…**. A file that cannot be imported shows one error card and **Choose another file**.
 
@@ -812,38 +773,24 @@ first listed candidate, and matches nothing while the catalog is unavailable. A 
 options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
 review applies the same option rule.
 
-Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Import** is
-enabled when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
-model). It sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`), a request id
-the dialog generated for this import and an optional [target](#ownership) `projectId` (Global when omitted). The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
-exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names and, for a
-Flow file, the Flow at revision 1 with each `agentKey` replaced by the new Agent's id, all in one transaction. It never reuses or updates an
-existing Agent or Flow and never starts a Run. A block whose `agentKey` is `null` arrives without an Agent, which readiness reports as a
-missing Agent reference. The commit publishes the same live definition change as a create, so every open Studio lists the new
-definitions. On success Studio opens the imported Flow, or the Agent of an Agent file, once its live lists hold it; an unrelated Flow draft with unsaved
-changes still asks **Keep editing** / **Discard changes** first.
+Names, prompts, exits, graphs and workspaces arrive as exported. The review lets the importer choose an owner and models. **Cancel** writes nothing. **Import** remains enabled with missing models or when T3 is disconnected. It sends `POST /api/imports` with the document, a reviewed selection per Agent key (complete settings or `null`), a request id and an optional target `projectId` (Global when omitted).
 
-- If a chosen provider is listed by T3 but has lost Factory reporting support, the whole commit is refused, the affected Agents are named and
-  their rows return to the review for another choice. A provider T3 does not list, including while the catalog is unavailable, never refuses a
-  commit.
-- Every Import in one dialog reuses its request id. When the answer is lost, Import again returns the original result instead of a copy; the
-  same id with different content or another target is refused as a conflict. A replay answers before the target's availability is
-  checked, so a retry still returns the original result after its target Project became unavailable. Choosing a file again starts a new import, so two deliberate imports create two
+Factory validates the document again and applies the ordinary Agent save rules to the selections. It allocates fresh identities for all definitions before writing graphs and saves every copy at revision 1 in a single transaction. All copies have the chosen owner. Project overrides are dropped. The graph uses IDs from those copies, including shared children and back-references to the imported root. Studio opens the new root or the imported Agent once its live lists hold it. An unrelated unsaved Flow draft still asks **Keep editing** or **Discard changes** first.
+
+- If the chosen provider is listed by T3 but has lost Factory reporting support, Factory refuses the commit and names the affected Agents. A provider T3 does not list, including while the catalog is unavailable, never refuses a commit.
+- Every Import in one dialog reuses its request id. Retrying after a lost answer returns the original result, including IDs of definitions removed since. The same id with different content or another owner conflicts. A replay still works after the target Project becomes unavailable. Choosing a file again starts a new import, so two deliberate imports create two
   independent copies. See [import receipts](foundation.md#persistence-model).
 
-Validation runs in order: the `format` marker and `formatVersion` first, then the Agent count, unknown or missing fields at every level, closed
-references (well-formed, unique keys; an Agent file holds exactly one Agent; in a Flow file every `agentKey` is a bundled Agent's key or `null`
-and every bundled Agent is used by a block), then the Agent and Flow validators and each definition's prospective save request against 2 MB.
-The distinct rejections are:
+Factory checks the format and version, then Agent count and Flow count, then unknown or missing fields. It checks well-formed, unique keys in each namespace, verifies that every key resolves, and requires a known root, reachability of every bundled Flow and use of every bundled Agent. Ordinary definition validators run next, followed by the 2,000,000-byte prospective save limit. Rejections distinguish these cases.
 
 - not JSON (the file is not UTF-8 JSON);
 - not a Factory export (no `t3-factory/definitions` marker);
 - unsupported format version N, which asks to update Factory when N is newer;
-- an invalid definition, field-addressed (for example `agents.0.prompt` or `flow.graph.blocks.2.position`) and naming the Agent or block;
-- over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
+- an invalid definition, field-addressed (for example `agents.0.prompt` or `flows.1.graph.blocks.2.position`) and naming the Agent or block;
+- over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents or Flows, or a definition save over 2,000,000 bytes.
 - not received completely (`document_unreadable`): the upload broke off before its body arrived. Only a body over the limit is reported as too large.
 
-Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Choose another file**.
+Rejections write nothing and never repeat prompt text. A rejected review offers **Choose another file**.
 
 ## Validation contract
 
@@ -869,7 +816,7 @@ no exit fields. A Wait block adds `duration`: `{amount, unit}` with any finite n
 `messageRequired` is true. A Condition adds `rules`, an ordered array of `{id, name, fromArrival}`, and
 `otherwise: {id: "otherwise"}`. A rule `name` is stored trimmed and may be blank in a draft; `fromArrival` is a whole number from 1 to
 9,007,199,254,740,991, the largest integer JSON numbers and the stored definition hold exactly, or `null` while the draft has none. Its
-outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, and an Agent block's
+outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. A `subflow` block carries `flowId` (a saved Flow ID or `null` in an unfinished draft) and no Agent, Wait, Continuation or Condition fields; its exits are the referenced Flow's Finish endings by ending ID, and `flowInput.targetBlockIds` admits both Agent blocks and Subflows. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, a Subflow's exit is resolved against its referenced Flow's Finish endings by readiness, and an Agent block's
 exit is resolved against its Agent by readiness, not by the save. No block execution settings or prompt overrides are accepted.
 
 #### Flow input block
@@ -886,8 +833,7 @@ from an ordinary Block target, including a Block whose ID is `finish`. Any exit 
 Continuation outputs and every Condition output with Otherwise, several wires may enter one ending, and a rename keeps the wires
 because they enter by ID. A create or save that omits `finish` saves the Flow without a Finish block, so wires into endings are refused;
 a `finish` without a `position` is placed one layer right of every block, level with the Flow input. A save that adds a Finish block counts it toward the 500-block limit, so a Flow
-already at 500 blocks cannot add one. Upgrading removed every stored
-Finish block without endings, which held no wire. A Flow with no endings is ready. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
+already at 500 blocks cannot add one. Upgrading hides legacy Finish blocks without endings and preserves their stored positions. A top-level Flow can be ready without endings. A Flow placed as a Subflow needs a reachable ending. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
 [Canvas and block configuration](#canvas-and-block-configuration).
 
 ### Validation

@@ -8,16 +8,16 @@ import { failure } from "../result.ts";
 import { threadHref } from "../thread-link.ts";
 import type { BoundWorker, RunStore, SettlementWorkerRecord } from "./run-store/run-store.ts";
 import { runTarget, type RunnerLifecycle, type RunRow } from "./runner-types.ts";
-import { recoverOperation } from "./runner-effects.ts";
+import { recoverOperation, requestThreadStop } from "./runner-effects.ts";
 import { fingerprint } from "../fingerprint.ts";
-import { readWorkerThread, type WorkerThread } from "./worker-thread.ts";
+import { awaitingBackgroundWork, readWorkerThread, type WorkerThread } from "./worker-thread.ts";
 import type { OwnedThreads } from "./owned-thread.ts";
 
 /** How long a worker whose Stop T3 acknowledged may stay unfinished before it is unresolved. */
-const STOP_CONFIRMATION_MS = 30_000;
+export const STOP_CONFIRMATION_MS = 30_000;
 
 /** A fresh, correctly scoped read of a bound worker thread for manual settlement. */
-type SettlementRead =
+export type SettlementRead =
   | {
       readonly finished: true;
       readonly latest: WorkerThread["latest"];
@@ -56,6 +56,7 @@ function blocker(worker: WorkerThread) {
   const { thread } = worker;
   if (thread.activeRunId) return "T3 shows a run in progress.";
   if (thread.pendingRequestCount > 0) return "A native request is waiting in T3.";
+  if (awaitingBackgroundWork(thread)) return "T3 shows this thread waiting on background work.";
   if (thread.recentRuns.some((run) => run.status === "queued"))
     return "T3 holds a queued run for this thread; remove it in T3 or let it run.";
   if (!worker.latest) return "T3 shows no run for this thread yet.";
@@ -190,8 +191,9 @@ export function openRunnerSettle(
           judged === worker.latest
             ? !worker.finished
             : !!judged &&
-              (await t3.readDelegatedSettlement(runTarget(run), threadId, judged.runId)).state !==
-                "settled";
+              (awaitingBackgroundWork(worker.thread) ||
+                (await t3.readDelegatedSettlement(runTarget(run), threadId, judged.runId)).state !==
+                  "settled");
         return { finished: false, latest: judged, stoppable, problem: blocker(worker) };
       }),
       () => Effect.succeed(UNREADABLE),
@@ -256,15 +258,7 @@ export function openRunnerSettle(
         const key = fingerprint(`${run.id}:settle:${attempt}:${worker.thread_id}`);
         const executionId = reads.get(worker.thread_id)?.latest?.runId ?? null;
         if (!(yield* store.claimWorkerStop(run, attempt, worker, { key, executionId }))) continue;
-        const sent = yield* recoverOperation(
-          Effect.as(
-            Effect.tryPromise(() =>
-              t3.stopThread(runTarget(run), { threadId: worker.thread_id, clientRequestId: key }),
-            ),
-            true,
-          ),
-          () => Effect.succeed(false),
-        );
+        const sent = yield* requestThreadStop(t3, runTarget(run), worker.thread_id, key);
         yield* store.recordStopOutcome(
           run,
           attempt,
@@ -456,6 +450,7 @@ export function openRunnerSettle(
     settleIfFinished,
     currentOutcome,
     advanceSettlement,
+    readForSettlement,
     settleWhenDone,
     settleFinishedBlockThreads,
   };

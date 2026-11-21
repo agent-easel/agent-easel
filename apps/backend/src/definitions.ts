@@ -17,13 +17,16 @@ import {
   type AgentCapabilities,
   type AgentCreateOutcome,
   type AgentDefinition,
+  type CommitImportInput,
   type AgentProjectOverride,
   type FactoryOperations,
   type FlowBlock,
   type FlowDraft,
   type FlowDuplicate,
+  type DuplicateFlowInput,
   type FlowDuplicateAgentChoice,
   type FlowDuplicatePlan,
+  type FlowFindingsPage,
   type FlowGraph,
   type FlowGraphInput,
   type FlowValidation,
@@ -32,26 +35,31 @@ import {
   type ProjectCatalog,
   type Result,
   type StudioDefinitions,
+  type UpdateFlowInput,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
+  bindPortableBlocks,
+  compositionReadiness,
   duplicateTreatment,
   executionForProject,
   flowAgentRevisions,
+  findingsPage,
   flowEditSizeRefusal,
-  flowReadiness,
   mayPlaceAgent,
+  mayPlaceFlow,
   parsePortableFile,
   placementIssues,
-  readinessAgent,
+  type CompositionDefinitions,
   type OwningProject,
-  type ReadinessAgent,
+  type ReadinessFlow,
   validateChangeOwner,
   validateCommitImport,
   validateCreateAgent,
   validateCreateFlow,
   validateDuplicateAgent,
   validateDuplicateFlow,
+  validateListFlowFindings,
   validatePreviewFlowDuplicate,
   validateUpdateAgent,
   validateUpdateFlow,
@@ -67,21 +75,18 @@ import { now as currentTime, nowAfter } from "./time.ts";
 import { newId } from "./ids.ts";
 import {
   appendFlowRevision,
+  currentFlowsPlacingFlow,
   currentFlowsReferencingAgent,
   readCurrentFlows,
   type CurrentFlow,
 } from "./flow-revisions.ts";
-import {
-  appendAgentRevision,
-  readCurrentAgents,
-  readFormerExitNames,
-  type AgentRevision,
-} from "./agent-revisions.ts";
+import { readCompositionDefinitions } from "./composition-definitions.ts";
+import { appendAgentRevision, readCurrentAgents } from "./agent-revisions.ts";
 import {
   definitionExport,
   importReview,
   portableAgent,
-  portableFlow,
+  portableComposition,
   unsupportedSelections,
 } from "./portable-definitions.ts";
 import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
@@ -93,10 +98,11 @@ const unplacedFinishPosition = (graph: Pick<FlowGraph, "blocks" | "flowInput">) 
     blockWidth: AUTHORING_DIMENSIONS.block.width,
   });
 
-const toDraft = (flow: CurrentFlow, agents: readonly ReadinessAgent[]): FlowDraft => ({
+const toDraft = (flow: CurrentFlow, definitions: CompositionDefinitions): FlowDraft => ({
   ...flow,
-  readiness: flowReadiness(flow.graph, agents, flow.projectId),
+  readiness: compositionReadiness(flow, definitions).readiness,
 });
+const FINDINGS_PAGE_SIZE = 100;
 const flowNotFound = () => failure("not_found", "This Flow does not exist.");
 /** A refusal about one Project override, its issues addressed under that override. */
 function underOverride(refusal: Result<never>, index: number): Result<never> {
@@ -140,23 +146,55 @@ const staleOwner = (kind: "Agent" | "Flow") =>
     ],
   );
 
-const staleDuplicatePlan = (path: "expectedRevision" | "agents") =>
+const staleDuplicatePlan = (path: "expectedRevision" | "agents" | "flows") =>
   failure(
     "conflict",
     "The Flow or an Agent it places changed after this Duplicate was previewed.",
     [{ code: "stale_duplicate_plan", path, message: "Preview the Duplicate again." }],
   );
 
-/** The distinct saved Agents a Flow places, in the order its blocks first place them. */
-function placedAgents(flow: CurrentFlow, agents: readonly AgentDefinition[]) {
+function placedAgents(flows: readonly CurrentFlow[], agents: readonly AgentDefinition[]) {
   const current = new Map(agents.map((agent) => [agent.id, agent]));
   const placed = new Map<string, AgentDefinition>();
-  for (const block of flow.graph.blocks) {
+  for (const block of flows.flatMap((flow) => flow.graph.blocks)) {
     const agent = block.kind === "agent" && block.agentId !== null && current.get(block.agentId);
     if (agent) placed.set(agent.id, agent);
   }
   return [...placed.values()];
 }
+
+function duplicatePlan(
+  source: CurrentFlow,
+  target: OwningProject,
+  flows: ReadonlyMap<string, CurrentFlow>,
+  agents: readonly AgentDefinition[],
+) {
+  const copied = new Map([[source.id, source]]);
+  const pending = [source];
+  for (let at = 0; at < pending.length; at++)
+    for (const block of pending[at]!.graph.blocks) {
+      if (block.kind !== "subflow" || block.flowId === null || copied.has(block.flowId)) continue;
+      const child = flows.get(block.flowId);
+      if (!child || mayPlaceFlow(target, child.projectId)) continue;
+      copied.set(child.id, child);
+      pending.push(child);
+    }
+  return { flows: pending, agents: placedAgents(pending, agents) };
+}
+
+const sameCopiedFlows = (
+  planned: readonly CurrentFlow[],
+  named: NonNullable<DuplicateFlowInput["flows"]>,
+) =>
+  planned.length === named.length &&
+  planned.every((flow) =>
+    named.some(
+      (entry) =>
+        entry.flowId === flow.id &&
+        entry.revision === flow.revision &&
+        entry.projectId === flow.projectId,
+    ),
+  );
 
 /**
  * The Agents a Flow Duplicate commit copies: refused as stale unless the choices name exactly the
@@ -202,6 +240,18 @@ function agentsToCopy(
   };
 }
 
+function copiedBlock(
+  block: FlowBlock,
+  agentIds: ReadonlyMap<string, string>,
+  flowIds: ReadonlyMap<string, string>,
+): FlowBlock {
+  if (block.kind === "agent" && block.agentId !== null)
+    return { ...block, agentId: agentIds.get(block.agentId) ?? block.agentId };
+  if (block.kind === "subflow" && block.flowId !== null)
+    return { ...block, flowId: flowIds.get(block.flowId) ?? block.flowId };
+  return block;
+}
+
 type DefinitionOperations = Pick<
   EffectOperations<FactoryOperations>,
   | "createFlow"
@@ -213,6 +263,7 @@ type DefinitionOperations = Pick<
   | "duplicateFlow"
   | "listFlows"
   | "getFlow"
+  | "listFlowFindings"
   | "getAgentCapabilities"
   | "listAgents"
   | "getAgent"
@@ -282,15 +333,7 @@ export const makeDefinitions = (
       operation.pipe(Effect.provideService(SqlClient.SqlClient, sql));
     const transaction = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
       provideSql(sql.withTransaction(operation));
-    /** Flow readiness resolves blocks against the current saved Agents, their exits and models. */
-    const readinessAgents = Effect.gen(function* () {
-      const agents = yield* readCurrentAgents(sql);
-      const formerExitNames = yield* readFormerExitNames(sql);
-      return agents.map((agent): ReadinessAgent & Pick<AgentRevision, "revision"> => ({
-        ...readinessAgent(agent, formerExitNames.get(agent.id) ?? new Map()),
-        revision: agent.revision,
-      }));
-    });
+    const readinessDefinitions = readCompositionDefinitions(sql);
     const positionGraph = (input: FlowGraphInput) =>
       Effect.gen(function* () {
         const placed = {
@@ -323,7 +366,8 @@ export const makeDefinitions = (
           (input.finish === undefined || input.finish.position !== undefined)
         )
           return { ok: true as const, value: graph };
-        const resolved = canvasGraph(graph, yield* readinessAgents);
+        const definitions = yield* readinessDefinitions;
+        const resolved = canvasGraph(graph, definitions.agents, definitions.flows);
         return yield* Effect.tryPromise({
           try: async (): Promise<Result<FlowGraph>> => {
             const positions = await arrangeFlow(
@@ -415,16 +459,66 @@ export const makeDefinitions = (
         }
         return undefined;
       });
-    /** Refuses a Flow graph that places an Agent its owning Project may not place. */
     const placementRefusal = (graph: FlowGraphInput, flowProject: OwningProject) =>
       Effect.gen(function* () {
-        const issues = placementIssues(graph, yield* readinessAgents, flowProject);
+        const { agents, flows } = yield* readinessDefinitions;
+        const issues = placementIssues(graph, agents, flows, flowProject);
         if (!issues.length) return undefined;
         return failure(
           "validation",
-          "This Flow places an Agent it may not use. Place a global Agent or an Agent of the Flow's owning Project.",
+          issues[0]!.code === "flow_scope_mismatch"
+            ? "This Flow places a Flow it may not use. Place a global Flow or a Flow of this Flow's owning Project."
+            : "This Flow places an Agent it may not use. Place a global Agent or an Agent of the Flow's owning Project.",
           issues,
         );
+      });
+    const draftRoot = (flow: CurrentFlow, draft: UpdateFlowInput): ReadinessFlow => ({
+      ...flow,
+      name: draft.name,
+      graph: draft.graph,
+      workspace: draft.workspace ?? flow.workspace,
+    });
+    const currentFlowsById = readCurrentFlows(sql).pipe(
+      Effect.map((flows) => new Map(flows.map((flow) => [flow.id, flow]))),
+    );
+    const ownerBlockers = (flow: CurrentFlow, projectId: OwningProject) =>
+      Effect.gen(function* () {
+        const flows = yield* currentFlowsById;
+        const agents = placedAgents([flow], yield* readCurrentAgents(sql)).filter(
+          (agent) => !mayPlaceAgent(projectId, agent.projectId),
+        );
+        const children = [
+          ...new Set(
+            flow.graph.blocks.flatMap((block) =>
+              block.kind === "subflow" && block.flowId !== null && block.flowId !== flow.id
+                ? [block.flowId]
+                : [],
+            ),
+          ),
+        ].flatMap((childId) => {
+          const child = flows.get(childId);
+          return child && !mayPlaceFlow(projectId, child.projectId) ? [child] : [];
+        });
+        const parents = (yield* currentFlowsPlacingFlow(sql, flow.id)).filter(
+          (parent) => !mayPlaceFlow(parent.project_id, projectId),
+        );
+        return [
+          ...agents.map((agent) => ({
+            code: "owner_change_blocked",
+            path: "projectId",
+            message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
+          })),
+          ...children.map((child) => ({
+            code: "owner_change_blocked",
+            path: "projectId",
+            message: `This Flow places Flow "${child.name}" (${child.id}), which the new owner may not place.`,
+          })),
+          ...parents.map((parent) => ({
+            code: "owner_change_blocked",
+            path: "projectId",
+            message: `Flow "${parent.name}" (${parent.id}) places this Flow and may not place it under the new owner.`,
+          })),
+        ];
       });
     /** The saved Flow a save may replace, or the refusal that stops the save. */
     const savedFlowFor = (
@@ -533,20 +627,19 @@ export const makeDefinitions = (
       yield* appendAgentRevision(sql, copy);
       return copy;
     });
-    /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
-     * block and exit ids, positions and the workspace arrive as exported. */
     const importFlow = Effect.fnUntraced(function* (
+      id: string,
       flow: PortableFlow,
       agentIds: ReadonlyMap<string, string>,
+      flowIds: ReadonlyMap<string, string>,
       projectId: OwningProject,
       now: string,
     ) {
-      const id = yield* newId;
-      const blocks = flow.graph.blocks.map((block): FlowBlock => {
-        if (block.kind !== "agent") return block;
-        const { agentKey, ...rest } = block;
-        return { ...rest, agentId: agentKey === null ? null : agentIds.get(agentKey)! };
-      });
+      const blocks = bindPortableBlocks(
+        flow.graph.blocks,
+        (key) => agentIds.get(key)!,
+        (key) => flowIds.get(key)!,
+      );
       yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
       yield* appendFlowRevision(sql, {
         id,
@@ -556,7 +649,48 @@ export const makeDefinitions = (
         workspace: flow.workspace,
         savedAt: now,
       });
-      return id;
+    });
+    const insertImportedDefinitions = Effect.fnUntraced(function* (
+      commit: CommitImportInput,
+      projectId: OwningProject,
+      now: string,
+    ) {
+      const document = commit.document;
+      const agents = yield* Effect.forEach(document.agents, (entry) =>
+        newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
+      );
+      const flowEntries = document.kind === "flow" && "flows" in document ? document.flows : [];
+      const flows = yield* Effect.forEach(flowEntries, (entry) =>
+        newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
+      );
+      const legacyFlowId = document.kind === "flow" && !("flows" in document) ? yield* newId : null;
+      const agentIds = new Map(agents.map(({ key, id }) => [key, id]));
+      const flowIds = new Map(flows.map(({ key, id }) => [key, id]));
+      for (const entry of document.agents) {
+        const id = agentIds.get(entry.key)!;
+        yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
+        yield* appendAgentRevision(sql, {
+          id,
+          name: entry.name,
+          prompt: entry.prompt,
+          execution: commit.selections[entry.key] ?? null,
+          exits: entry.exits,
+          projectOverrides: [],
+          revision: 1,
+          updatedAt: now,
+        });
+      }
+      let flowId = legacyFlowId;
+      if (document.kind === "flow") {
+        if ("flows" in document) {
+          for (const entry of document.flows)
+            yield* importFlow(flowIds.get(entry.key)!, entry, agentIds, flowIds, projectId, now);
+          flowId = flowIds.get(document.rootFlowKey)!;
+        } else {
+          yield* importFlow(legacyFlowId!, document.flow, agentIds, flowIds, projectId, now);
+        }
+      }
+      return { agents, flowId, ...(flows.length ? { flows } : {}) };
     });
     const operations: DefinitionOperations = {
       createFlow(input) {
@@ -596,7 +730,7 @@ export const makeDefinitions = (
                 };
                 yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
                 yield* appendFlowRevision(sql, { ...flow, savedAt: now });
-                return { ok: true as const, value: toDraft(flow, yield* readinessAgents) };
+                return { ok: true as const, value: toDraft(flow, yield* readinessDefinitions) };
               }),
             );
           }),
@@ -613,12 +747,12 @@ export const makeDefinitions = (
               const { graph } = validated.value;
               const sizeRefusal = flowEditSizeRefusal(graph, flow.graph);
               if (sizeRefusal) return sizeRefusal;
-              const agents = yield* readinessAgents;
+              const definitions = yield* readinessDefinitions;
               return {
                 ok: true as const,
                 value: {
-                  ...flowReadiness(graph, agents, flow.projectId),
-                  agentRevisions: flowAgentRevisions(graph, agents),
+                  ...compositionReadiness(draftRoot(flow, validated.value), definitions).readiness,
+                  agentRevisions: flowAgentRevisions(graph, definitions.agents),
                 },
               };
             }),
@@ -659,7 +793,7 @@ export const makeDefinitions = (
                   updatedAt: now,
                 };
                 yield* appendFlowRevision(sql, { ...flow, savedAt: now });
-                return { ok: true as const, value: toDraft(flow, yield* readinessAgents) };
+                return { ok: true as const, value: toDraft(flow, yield* readinessDefinitions) };
               }),
             );
           }),
@@ -674,28 +808,24 @@ export const makeDefinitions = (
             const [flow] = yield* readCurrentFlows(sql, id);
             if (!flow) return flowNotFound();
             if (flow.projectId !== expectedProjectId) return staleOwner("Flow");
-            const agents = yield* readinessAgents;
             if (projectId === flow.projectId)
-              return { ok: true as const, value: toDraft(flow, agents) };
+              return { ok: true as const, value: toDraft(flow, yield* readinessDefinitions) };
             const refused = yield* ownerRefusal(projectId);
             if (refused) return refused;
-            const blockers = placedAgents(flow, yield* readCurrentAgents(sql)).filter(
-              (agent) => !mayPlaceAgent(projectId, agent.projectId),
-            );
+            const blockers = yield* ownerBlockers(flow, projectId);
             if (blockers.length)
               return failure(
                 "conflict",
-                "This Flow places Agents its new owner may not place. Remove them from the Flow, or Duplicate it into the target instead.",
-                blockers.map((agent) => ({
-                  code: "owner_change_blocked",
-                  path: "projectId",
-                  message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
-                })),
+                "This Flow places, or is placed by, definitions its new owner may not share. Change those definitions, or Duplicate it into the target instead.",
+                blockers,
               );
             // Strictly later, so a move away and back between two live reads still differs.
             const updatedAt = yield* nowAfter(flow.updatedAt);
             yield* sql`UPDATE flows SET project_id=${projectId}, owner_changed_at=${updatedAt} WHERE id=${id}`;
-            return { ok: true as const, value: toDraft({ ...flow, projectId, updatedAt }, agents) };
+            return {
+              ok: true as const,
+              value: toDraft({ ...flow, projectId, updatedAt }, yield* readinessDefinitions),
+            };
           }),
         );
       },
@@ -730,7 +860,12 @@ export const makeDefinitions = (
           withSavedFlow<FlowDuplicatePlan>(id, (flow) =>
             Effect.gen(function* () {
               const { projectId = flow.projectId } = validated.value;
-              const agents = placedAgents(flow, yield* readCurrentAgents(sql));
+              const plan = duplicatePlan(
+                flow,
+                projectId,
+                yield* currentFlowsById,
+                yield* readCurrentAgents(sql),
+              );
               return {
                 ok: true as const,
                 value: {
@@ -738,7 +873,13 @@ export const makeDefinitions = (
                   revision: flow.revision,
                   projectId,
                   name: `${flow.name} copy`,
-                  agents: agents.map((agent) => ({
+                  flows: plan.flows.slice(1).map((placed) => ({
+                    flowId: placed.id,
+                    name: placed.name,
+                    projectId: placed.projectId,
+                    revision: placed.revision,
+                  })),
+                  agents: plan.agents.map((agent) => ({
                     agentId: agent.id,
                     name: agent.name,
                     projectId: agent.projectId,
@@ -762,40 +903,59 @@ export const makeDefinitions = (
               if (refused) return refused;
               if (source.revision !== expectedRevision)
                 return staleDuplicatePlan("expectedRevision");
-              const placed = placedAgents(source, yield* readCurrentAgents(sql));
-              const copied = agentsToCopy(placed, projectId, validated.value.agents);
+              const plan = duplicatePlan(
+                source,
+                projectId,
+                yield* currentFlowsById,
+                yield* readCurrentAgents(sql),
+              );
+              if (!sameCopiedFlows(plan.flows.slice(1), validated.value.flows ?? []))
+                return staleDuplicatePlan("flows");
+              const copied = agentsToCopy(plan.agents, projectId, validated.value.agents);
               if (!copied.ok) return copied;
               const now = yield* currentTime;
+              const flowIds = new Map<string, string>();
+              for (const flow of plan.flows) flowIds.set(flow.id, yield* newId);
               const copies = yield* Effect.forEach(copied.value, (agent) =>
                 insertAgentCopy(agent, projectId, agent.name, now).pipe(
                   Effect.map((copy) => ({ sourceAgentId: agent.id, agentId: copy.id })),
                 ),
               );
-              const copyIds = new Map(copies.map((copy) => [copy.sourceAgentId, copy.agentId]));
-              const flow: CurrentFlow = {
-                id: yield* newId,
-                projectId,
-                name: validated.value.name ?? `${source.name} copy`,
-                revision: 1,
-                graph: {
-                  ...source.graph,
-                  blocks: source.graph.blocks.map((block) => {
-                    const copyId =
-                      block.kind === "agent" && block.agentId !== null
-                        ? copyIds.get(block.agentId)
-                        : undefined;
-                    return copyId ? { ...block, agentId: copyId } : block;
-                  }),
-                },
-                workspace: source.workspace,
-                createdAt: now,
-                updatedAt: now,
-              };
-              yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${flow.id}, ${now}, ${projectId})`;
-              yield* appendFlowRevision(sql, { ...flow, savedAt: now });
+              const agentIds = new Map(copies.map((copy) => [copy.sourceAgentId, copy.agentId]));
+              const written = yield* Effect.forEach(plan.flows, (flow) =>
+                Effect.gen(function* () {
+                  const copy: CurrentFlow = {
+                    id: flowIds.get(flow.id)!,
+                    projectId,
+                    name:
+                      flow === source
+                        ? (validated.value.name ?? `${source.name} copy`)
+                        : `${flow.name} copy`,
+                    revision: 1,
+                    graph: {
+                      ...flow.graph,
+                      blocks: flow.graph.blocks.map((block) =>
+                        copiedBlock(block, agentIds, flowIds),
+                      ),
+                    },
+                    workspace: flow.workspace,
+                    createdAt: now,
+                    updatedAt: now,
+                  };
+                  yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${copy.id}, ${now}, ${projectId})`;
+                  yield* appendFlowRevision(sql, { ...copy, savedAt: now });
+                  return copy;
+                }),
+              );
               return {
                 ok: true as const,
-                value: { flow: toDraft(flow, yield* readinessAgents), copies },
+                value: {
+                  flow: toDraft(written[0]!, yield* readinessDefinitions),
+                  copies,
+                  flowCopies: plan.flows
+                    .slice(1)
+                    .map((flow) => ({ sourceFlowId: flow.id, flowId: flowIds.get(flow.id)! })),
+                },
               };
             }),
           ),
@@ -804,19 +964,46 @@ export const makeDefinitions = (
       listFlows() {
         return provideSql(
           Effect.gen(function* () {
-            const flows = yield* readCurrentFlows(sql);
-            const agents = yield* readinessAgents;
-            return { ok: true as const, value: flows.map((flow) => toDraft(flow, agents)) };
+            const definitions = yield* readinessDefinitions;
+            const flows = [...definitions.flows.values()];
+            return { ok: true as const, value: flows.map((flow) => toDraft(flow, definitions)) };
           }),
         );
       },
       getFlow(id) {
         return provideSql<FlowDraft>(
-          Effect.gen(function* () {
-            const [flow] = yield* readCurrentFlows(sql, id);
-            if (!flow) return flowNotFound();
-            return { ok: true as const, value: toDraft(flow, yield* readinessAgents) };
-          }),
+          withSavedFlow(id, (flow) =>
+            Effect.gen(function* () {
+              return { ok: true as const, value: toDraft(flow, yield* readinessDefinitions) };
+            }),
+          ),
+        );
+      },
+      listFlowFindings(id, input) {
+        const validated = validateListFlowFindings(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const { cursor, draft } = validated.value;
+        return transaction(
+          withSavedFlow<FlowFindingsPage>(id, (flow) =>
+            Effect.gen(function* () {
+              if (draft && flow.projectId !== draft.expectedProjectId) return staleOwner("Flow");
+              const root = draft ? draftRoot(flow, draft) : flow;
+              const composition = compositionReadiness(root, yield* readinessDefinitions);
+              const page = findingsPage(composition, cursor, FINDINGS_PAGE_SIZE);
+              if (page) return { ok: true as const, value: page };
+              return failure(
+                "conflict",
+                "This Flow's readiness changed since these findings were listed. Check the Flow again.",
+                [
+                  {
+                    code: "stale_findings_cursor",
+                    path: "cursor",
+                    message: "Read the Flow's readiness again and page from its new cursor.",
+                  },
+                ],
+              );
+            }),
+          ),
         );
       },
       getAgentCapabilities: () =>
@@ -1066,9 +1253,22 @@ export const makeDefinitions = (
           const capabilities = yield* loadCapabilities();
           return yield* transaction(
             Effect.gen(function* () {
-              const [flow] = yield* readCurrentFlows(sql, id);
-              if (!flow) return flowNotFound();
-              const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
+              const current = yield* currentFlowsById;
+              const root = current.get(id);
+              if (!root) return flowNotFound();
+              const seen = new Map([[id, root]]);
+              const pending = [...root.graph.blocks].reverse();
+              for (let block = pending.pop(); block; block = pending.pop()) {
+                if (block.kind !== "subflow" || block.flowId === null || seen.has(block.flowId))
+                  continue;
+                const child = current.get(block.flowId);
+                if (!child) continue;
+                seen.set(child.id, child);
+                pending.push(...[...child.graph.blocks].reverse());
+              }
+              const flows = [...seen.values()];
+              const agents = placedAgents(flows, yield* readCurrentAgents(sql));
+              const portable = portableComposition(flows, agents, capabilities);
               return definitionExport(
                 {
                   format: PORTABLE_DOCUMENT_FORMAT,
@@ -1076,11 +1276,9 @@ export const makeDefinitions = (
                   kind: "flow",
                   factoryVersion,
                   exportedAt: yield* currentTime,
-                  flow: portable.flow,
-                  agents: portable.agents,
+                  ...portable,
                 },
-                portable.revisions,
-                flow,
+                agents,
               );
             }),
           );
@@ -1120,34 +1318,7 @@ export const makeDefinitions = (
                 const unsupported = unsupportedSelections(commit, capabilities);
                 if (unsupported) return unsupported;
                 const now = yield* currentTime;
-                const agents = yield* Effect.forEach(commit.document.agents, (entry) =>
-                  Effect.gen(function* () {
-                    const id = yield* newId;
-                    yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
-                    yield* appendAgentRevision(sql, {
-                      id,
-                      name: entry.name,
-                      prompt: entry.prompt,
-                      execution: commit.selections[entry.key] ?? null,
-                      exits: entry.exits,
-                      projectOverrides: [],
-                      revision: 1,
-                      updatedAt: now,
-                    });
-                    return { key: entry.key, id };
-                  }),
-                );
-                const document = commit.document;
-                const flowId =
-                  document.kind === "flow"
-                    ? yield* importFlow(
-                        document.flow,
-                        new Map(agents.map((a) => [a.key, a.id])),
-                        projectId,
-                        now,
-                      )
-                    : null;
-                const result: ImportResult = { agents, flowId };
+                const result = yield* insertImportedDefinitions(commit, projectId, now);
                 yield* writeImportReceipt(sql, commit, now, result);
                 return { ok: true as const, value: result };
               }),
@@ -1162,12 +1333,12 @@ export const makeDefinitions = (
         Effect.gen(function* () {
           const agents = yield* readCurrentAgents(sql);
           const flows = yield* readCurrentFlows(sql);
-          const readiness = yield* readinessAgents;
+          const definitions = yield* readinessDefinitions;
           return {
             ok: true as const,
             value: {
               agents,
-              flows: flows.map((flow) => toDraft(flow, readiness)),
+              flows: flows.map((flow) => toDraft(flow, definitions)),
             },
           };
         }),

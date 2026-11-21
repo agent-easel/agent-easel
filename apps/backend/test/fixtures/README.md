@@ -71,7 +71,7 @@ migration keeps the snapshot's endpoint, environment, resolver pin, theme and bo
 the upgraded host shows those colors and declares that source from its first status while T3 is unreachable.
 
 [`optional-finish-upgrade-data.json`](optional-finish-upgrade-data.json) holds Finish blocks with and without endings, which the
-baseline predates; migration `120` removes those without endings. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)
+baseline predates; migration `123` hides those without endings and preserves their stored positions. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)
 checks through public reads that a Flow saved without endings, and the definitions its settled Run captured, have no Finish block,
 while a Flow's configured ending, its wire and the result its Run reached are kept.
 
@@ -124,3 +124,9 @@ ending **Delivered** (Output Optional), Start a Run, report its result and obser
 DDL, triggers as post-data schema and named-column rows were captured, excluding `runner_owner` and SQLite's internal tables. Of the adapter, its
 identity, authorization and project catalog are kept. The disposable workspace path was replaced consistently with
 `/fixtures/optional-finish/neutral`. The capture script and logs stay outside Git.
+`run-scope-baseline-upgrade-data.json` captures `main` at
+`573e7bd07ea067dd8ed5cab901e4b718e9f914b6` with migration 119 applied. Public operations in a
+disposable Factory created numbered Condition evidence beside an unanswered Human step and a
+second Run with a lost worker launch acknowledgement. The captured controlled adapter preserves
+its synthetic launch references. The upgrade checks that the Condition's result and outstanding
+work retain their identities and that the original launch recovers by its accepted key.

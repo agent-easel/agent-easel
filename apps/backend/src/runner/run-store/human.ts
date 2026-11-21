@@ -1,3 +1,4 @@
+import { definitionsAtBlock } from "./run-definitions.ts";
 import type { Result } from "@t3-factory/contracts";
 import { handoffRecipients, HUMAN_EXITS } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
@@ -90,19 +91,24 @@ export function openRunHuman(database: RunnerDatabase) {
             if (occurrence.state !== "pending")
               return settledAnswer(occurrence, runId, { content, requestId });
             const time = yield* now;
-            const graph = runRow.definitions.flow.graph;
+            const definitions = yield* definitionsAtBlock(sql, runRow, occurrence.block_id);
+            const graph = definitions.flow.graph;
             const recipients = handoffRecipients(graph.connections, occurrence.block_id, exit.id);
             yield* sql`UPDATE human_occurrences SET state='answered',pending_context=NULL,settled_at=${time},exit_id=${exit.id},answer_fingerprint=${content},answer_request_id=${requestId ?? null} WHERE id=${id} AND state='pending'`;
-            yield* createHandoffs(sql, runRow, {
-              kind: "human",
-              id,
-              blockId: occurrence.block_id,
-              exitId: exit.id,
-              recipients,
-              message: message ?? "",
-              at: time,
-              origin: storedProvenance(occurrence),
-            });
+            yield* createHandoffs(
+              sql,
+              { ...runRow, definitions },
+              {
+                kind: "human",
+                id,
+                blockId: occurrence.block_id,
+                exitId: exit.id,
+                recipients,
+                message: message ?? "",
+                at: time,
+                origin: storedProvenance(occurrence),
+              },
+            );
             yield* writeBlockState(
               sql,
               { runId, blockId: occurrence.block_id },

@@ -1,5 +1,5 @@
-import { Bot, CornerDownLeft, Hourglass, Split, User } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import { Bot, CornerDownLeft, Hourglass, Split, User, Workflow } from "lucide-react";
+import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@t3-factory/contracts";
 import type { EffectiveExit, ExitSource } from "@t3-factory/domain-validation";
 import { continuedThread } from "./flow-graph.ts";
 import { waitDurationText } from "./wait-display.ts";
@@ -89,6 +89,17 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     singleOutput: false,
     observed: { references: false, freshness: false },
   },
+  subflow: {
+    Icon: Workflow,
+    label: "SUBFLOW",
+    executionLabel: "SUBFLOW",
+    panelLabel: "SUBFLOW",
+    name: "Subflow",
+    workerThread: false,
+    dashedFrame: false,
+    singleOutput: false,
+    observed: { references: false, freshness: false },
+  },
 };
 
 /** The kind of block each exit source belongs to: Agent and Flow-local exits leave Agent blocks. */
@@ -99,6 +110,7 @@ const EXIT_SOURCE_KINDS: Record<ExitSource, FlowBlock["kind"]> = {
   wait: "wait",
   continuation: "continuation",
   condition: "condition",
+  ending: "subflow",
 };
 
 /** Whether `exit` is its block's single unnamed output. */
@@ -141,8 +153,13 @@ export interface BlockReference {
 
 export function blockReference(
   block: FlowBlock,
-  { graph, agents }: { graph: FlowGraph; agents: readonly NamedAgent[] },
+  context: {
+    graph: FlowGraph;
+    agents: readonly NamedAgent[];
+    flows?: ReadonlyMap<string, Pick<FlowDraft, "id" | "name">> | undefined;
+  },
 ): BlockReference {
+  const { graph, agents } = context;
   const kind = BLOCK_KINDS[block.kind].name;
   switch (block.kind) {
     case "agent": {
@@ -176,6 +193,16 @@ export function blockReference(
         card: { label: "Routes", value: routes, tone: "plain" },
         line: { text: `${kind} · ${routes}`, tone: "plain" },
         header: `${kind} · ${routes}`,
+      };
+    }
+    case "subflow": {
+      const child = block.flowId ? context.flows?.get(block.flowId) : undefined;
+      const flow = child?.name ?? (block.flowId ? "Missing Flow" : "not chosen");
+      const tone: ReferenceTone = child ? "plain" : "absent";
+      return {
+        card: { label: "Flow", value: flow, tone },
+        line: { text: `${kind} · ${flow}`, tone },
+        header: kind,
       };
     }
   }

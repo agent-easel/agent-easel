@@ -16,7 +16,8 @@ export type DemoFlows = Record<
   | "humanWait"
   | "conditionRounds"
   | "firstApproval"
-  | "endings",
+  | "endings"
+  | "subflowReview",
   string
 >;
 type Repository = NonNullable<ThreadFacts["repository"]>;
@@ -65,6 +66,8 @@ export type SeedScenario = {
       extraApproval: Report;
     }
   | { state: "ending reached"; result: Report }
+  | { state: "subflow closing" }
+  | { state: "subflow returned" }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
   | ({ grill: Report; approval: string } & (
       | { state: "continuation prompt sent" }
@@ -483,5 +486,19 @@ export const seedScenarioList: readonly SeedScenario[] = [
     prompt:
       "Rank exact project-name matches above partial matches in Atlas search, and keep the current order for everything else.",
     generatedTitle: "Generated title · Exact matches first in search",
+  },
+  {
+    key: "subflow-closing",
+    title: "Subflow · Waiting for the second reviewer to stop",
+    flow: "subflowReview",
+    prompt: "Review the Atlas search design.",
+    state: "subflow closing",
+  },
+  {
+    key: "subflow-returned",
+    title: "Subflow · Review returned to release notes",
+    flow: "subflowReview",
+    prompt: "Prepare Atlas search for release.",
+    state: "subflow returned",
   },
 ];

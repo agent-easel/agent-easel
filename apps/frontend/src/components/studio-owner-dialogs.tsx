@@ -171,6 +171,26 @@ export function ChangeOwnerDialog({
   );
 }
 
+function refusalCopy(kind: Kind, title: string, target: string | null, hasFlowBlocker: boolean) {
+  if (kind === "Agent")
+    return {
+      title: `Flows outside ${title} place this Agent`,
+      body: `A Project Agent can only be placed by Flows of its owning Project. Remove it from these Flows first, or duplicate it into ${title} instead.`,
+      listLabel: "Blocking Flows",
+    };
+  if (hasFlowBlocker)
+    return {
+      title: `Other definitions can’t share this Flow under ${target === null ? "Global" : title}`,
+      body: `Change these definitions first, or duplicate this Flow into ${title} instead; Duplicate copies the Flows and Agents the target can’t place.`,
+      listLabel: "Blocking definitions",
+    };
+  return {
+    title: `This Flow places Agents ${target === null ? "a global Flow" : title} can’t place`,
+    body: `Remove these Agents from the Flow first, or duplicate it into ${title} instead; Duplicate copies the Agents the target can’t place.`,
+    listLabel: "Blocking Agents",
+  };
+}
+
 /** Figma P04: the refused move, its blocking definitions and Duplicate into the target. */
 function ChangeOwnerRefusal({
   kind,
@@ -191,6 +211,10 @@ function ChangeOwnerRefusal({
 }) {
   const title = studioOwner(target, projects).title;
   const asOwner = target === null ? "Global" : `a ${title}`;
+  const hasFlowBlocker = blockers.some(
+    (blocker) => blocker.definition !== null && "graph" in blocker.definition,
+  );
+  const copy = refusalCopy(kind, title, target, hasFlowBlocker);
   return (
     <OwnerDialog
       busy={false}
@@ -213,21 +237,11 @@ function ChangeOwnerRefusal({
         </>
       }
     >
-      <ProblemCard
-        tone="attention"
-        density="compact"
-        title={
-          kind === "Agent"
-            ? `Flows outside ${title} place this Agent`
-            : `This Flow places Agents ${target === null ? "a global Flow" : title} can’t place`
-        }
-      >
-        {kind === "Agent"
-          ? `A Project Agent can only be placed by Flows of its owning Project. Remove it from these Flows first, or duplicate it into ${title} instead.`
-          : `Remove these Agents from the Flow first, or duplicate it into ${title} instead; Duplicate copies the Agents the target can’t place.`}
+      <ProblemCard tone="attention" density="compact" title={copy.title}>
+        {copy.body}
       </ProblemCard>
       <Surface tone="inset" asChild className="grid gap-0.5 px-2 py-1.5">
-        <ul aria-label={kind === "Agent" ? "Blocking Flows" : "Blocking Agents"}>
+        <ul aria-label={copy.listLabel}>
           {blockers.map((blocker) => (
             <BlockerRow
               key={blocker.message}
@@ -252,7 +266,10 @@ function blockerDetail(
     definition.projectId === null ? null : studioOwner(definition.projectId, projects).title;
   if ("graph" in definition) {
     const blocks = definition.graph.blocks.flatMap((block) =>
-      block.kind === "agent" && block.agentId === subjectId ? [block.name] : [],
+      (block.kind === "agent" && block.agentId === subjectId) ||
+      (block.kind === "subflow" && block.flowId === subjectId)
+        ? [block.name]
+        : [],
     );
     const placing = blocks.length
       ? ` · ${blocks.join(", ")} ${blocks.length === 1 ? "block" : "blocks"}`
@@ -455,6 +472,35 @@ export function DuplicateFlowDialog({
         disabled={busy}
         onChange={(target) => void model.setTarget(target)}
       />
+      {state.plan && state.plan.flows.length > 0 && (
+        <div className="grid gap-1.5">
+          <span id="duplicate-flow-subflows" className={fieldLabelClass}>
+            Flows copied into target
+          </span>
+          <Surface tone="inset" asChild className="grid gap-0.5 p-1">
+            <ul aria-labelledby="duplicate-flow-subflows">
+              {state.plan.flows.map((flow) => (
+                <li key={flow.flowId} className="flex h-12 items-center gap-2.5 px-2.5 py-2">
+                  <Workflow
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="truncate text-sm font-medium">{flow.name}</span>
+                    <span className="truncate text-2xs tracking-label text-subtle-foreground">
+                      {studioOwner(flow.projectId, projects).title}
+                    </span>
+                  </span>
+                  <StatusBadge kind="neutral" icon={Copy}>
+                    Copied
+                  </StatusBadge>
+                </li>
+              ))}
+            </ul>
+          </Surface>
+        </div>
+      )}
       <div className="grid gap-1.5">
         <span id="duplicate-flow-agents" className={fieldLabelClass}>
           Agents in this Flow

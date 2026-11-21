@@ -90,10 +90,17 @@ export function openRunnerDispatch(
     return Effect.gen(function* () {
       const release = yield* releaseAtPreparation(store, t3, runRow, handoff);
       if (release.state === "held") return;
-      const current = release.run;
+      const current = {
+        ...release.run,
+        definitions: yield* store.definitionsAtBlock(release.run, handoff.block_id),
+      };
       const kind = targetKind(current, handoff);
       if (kind === "finish") {
         yield* store.reachEnding(current, handoff, arrivalGeneration(release));
+        return;
+      }
+      if (kind === "subflow") {
+        yield* store.handoffToInvocation(current, handoff, arrivalGeneration(release));
         return;
       }
       if (kind === "continuation") return yield* prepareContinuationHandoff(current, handoff);

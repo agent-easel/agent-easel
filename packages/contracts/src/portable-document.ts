@@ -9,8 +9,8 @@ import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
 /** The version every export writes. */
-export const PORTABLE_DOCUMENT_VERSION = 5;
-export type PortableFormatVersion = 1 | 2 | 3 | 4 | typeof PORTABLE_DOCUMENT_VERSION;
+export const PORTABLE_DOCUMENT_VERSION = 6;
+export type PortableFormatVersion = 1 | 2 | 3 | 4 | 5 | typeof PORTABLE_DOCUMENT_VERSION;
 
 /**
  * The exporter's model choice, which a receiving installation may match against its own catalog.
@@ -57,7 +57,8 @@ export interface PortableAgentDocument<
  */
 export type PortableFlowBlock =
   | (Omit<Extract<FlowBlock, { kind: "agent" }>, "agentId"> & { readonly agentKey: string | null })
-  | Exclude<FlowBlock, { kind: "agent" }>;
+  | (Omit<Extract<FlowBlock, { kind: "subflow" }>, "flowId"> & { readonly flowKey: string | null })
+  | Exclude<FlowBlock, { kind: "agent" | "subflow" }>;
 
 export interface PortableFlow {
   readonly name: string;
@@ -68,12 +69,22 @@ export interface PortableFlow {
   readonly workspace: FlowWorkspace;
 }
 
+export interface PortableFlowEntry extends PortableFlow {
+  readonly key: string;
+}
+
 export interface PortableFlowDocument<
-  Version extends PortableFormatVersion = typeof PORTABLE_DOCUMENT_VERSION,
+  Version extends 5 | 6 = typeof PORTABLE_DOCUMENT_VERSION,
 > extends PortableEnvelope<Version> {
   readonly kind: "flow";
+  readonly rootFlowKey: string;
+  readonly flows: readonly PortableFlowEntry[];
+  readonly agents: readonly PortableAgent[];
+}
+
+interface LegacyFlowDocument extends PortableEnvelope<Exclude<PortableFormatVersion, 5 | 6>> {
+  readonly kind: "flow";
   readonly flow: PortableFlow;
-  /** The latest saved revision of each distinct Agent the blocks reference, each exactly once. */
   readonly agents: readonly PortableAgent[];
 }
 
@@ -86,7 +97,8 @@ export type PortableDocument = PortableAgentDocument | PortableFlowDocument;
  */
 export type ImportedDocument =
   | PortableAgentDocument<PortableFormatVersion>
-  | PortableFlowDocument<PortableFormatVersion>;
+  | PortableFlowDocument<5 | 6>
+  | LegacyFlowDocument;
 
 /** What an export answers: the file's document and what it could not keep. */
 export interface DefinitionExport<Document extends PortableDocument = PortableDocument> {
@@ -117,23 +129,30 @@ export interface ImportReviewAgent {
   readonly droppedOptions: readonly AgentModelOptionValue[];
 }
 
-/**
- * A Flow document's Flow as the import review shows it: the workspace in full and the instructions
- * its blocks carry, by block name and length, never their text.
- */
+export type ImportReviewInstruction = {
+  readonly blockId: string;
+  readonly blockName: string;
+  readonly length: number;
+} & (
+  | { readonly kind: "agent"; readonly agentName: string }
+  | { readonly kind: "continuation" | "revisit" }
+);
+
 export interface ImportReviewFlow {
+  readonly key: string | null;
   readonly name: string;
+  readonly opensAfterImport: boolean;
+  readonly blockCount: number;
   readonly workspace: FlowWorkspace;
-  readonly continuations: readonly { readonly blockName: string; readonly promptLength: number }[];
-  /** Only the non-empty Revisit instructions. */
-  readonly revisitInstructions: readonly { readonly blockName: string; readonly length: number }[];
+  readonly uses: readonly { readonly flowName: string; readonly blockName: string }[];
+  readonly usesItself: boolean;
+  readonly instructions: readonly ImportReviewInstruction[];
 }
 
 /** What an import would create, computed without writing anything. */
 export interface ImportReview {
   readonly kind: PortableDocument["kind"];
-  /** Null for an Agent file. */
-  readonly flow: ImportReviewFlow | null;
+  readonly flows: readonly ImportReviewFlow[];
   readonly agents: readonly ImportReviewAgent[];
   /** The live catalog the review read; its picker offers only reporting-capable providers. */
   readonly capabilities: AgentCapabilities;
@@ -158,6 +177,7 @@ export interface ImportResult {
   readonly agents: readonly { readonly key: string; readonly id: string }[];
   /** The created Flow; null for an Agent file. */
   readonly flowId: string | null;
+  readonly flows?: readonly { readonly key: string; readonly id: string }[];
 }
 
 /** Import of a portable document: a review that writes nothing, then an all-or-nothing commit. */

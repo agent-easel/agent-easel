@@ -28,10 +28,13 @@ const document = {
     },
   ],
 };
-const file = { name: "code-reviewer.agent.json", text: JSON.stringify(document) };
+const file = {
+  name: "code-reviewer.agent.json",
+  data: new Blob([JSON.stringify(document)], { type: "application/json" }),
+};
 const reviewed: ImportReview = {
   kind: "agent",
-  flow: null,
+  flows: [],
   agents: [
     {
       key: "agent-1",

@@ -23,11 +23,14 @@ const FLOW_INPUT_NODE_ID = "flow-input";
 const FINISH_NODE_ID = "finish";
 const BLOCK_NODE_PREFIX = "block:";
 
+import type { BlockFrame } from "./dimensions.ts";
+
 export type FlowLayoutDimensions<B extends LayoutBlock = LayoutBlock> = {
   readonly flowInput: { readonly width: number; readonly height: number; readonly outputY: number };
   readonly finish: { readonly firstEndingY: number };
   readonly blockWidth: number;
   readonly blockHeight: (block: B) => number;
+  readonly blockFrame?: ((block: B) => BlockFrame | undefined) | undefined;
   readonly ports: {
     readonly inputY: number;
     readonly firstExitY: number;
@@ -109,6 +112,9 @@ function blockPorts<B extends LayoutBlock>(
   dims: FlowLayoutDimensions<B>,
 ) {
   const { ports } = dims;
+  const frame = dims.blockFrame?.(block);
+  const width = frame?.width ?? dims.blockWidth;
+  const inputY = frame?.inputY ?? ports.inputY;
   const incoming = index.wires(block.id);
   const inputPorts =
     incoming.length > 0
@@ -117,7 +123,7 @@ function blockPorts<B extends LayoutBlock>(
           width: 0,
           height: 0,
           x: 0,
-          y: ports.inputY + index * ports.inputSpacing,
+          y: inputY + index * ports.inputSpacing,
           layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
         }))
       : [
@@ -126,7 +132,7 @@ function blockPorts<B extends LayoutBlock>(
             width: 0,
             height: 0,
             x: 0,
-            y: ports.inputY,
+            y: inputY,
             layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
           },
         ];
@@ -136,8 +142,8 @@ function blockPorts<B extends LayoutBlock>(
       id: exitPortId(block.id, exit.id),
       width: 0,
       height: 0,
-      x: dims.blockWidth,
-      y: ports.firstExitY + index * ports.exitRow,
+      x: width,
+      y: frame?.exitY(exit.id) ?? ports.firstExitY + index * ports.exitRow,
       layoutOptions: { "org.eclipse.elk.port.side": "EAST" },
     })),
   ];
@@ -208,9 +214,10 @@ function blockNode<B extends LayoutBlock>(
   incoming: IncomingIndex,
   dims: FlowLayoutDimensions<B>,
 ): ElkNode {
+  const frame = dims.blockFrame?.(block);
   const node: ElkNode = {
     id: `${BLOCK_NODE_PREFIX}${block.id}`,
-    width: dims.blockWidth,
+    width: frame?.width ?? dims.blockWidth,
     height: dims.blockHeight(block),
     layoutOptions: { "org.eclipse.elk.portConstraints": "FIXED_POS" },
     ports: blockPorts(block, incoming, dims),
@@ -337,6 +344,7 @@ export {
   createNodeGeometry,
   createFlowLayoutDimensions,
   incomingPortY,
+  type BlockFrame,
   type CanvasDimensions,
   type GeometryFacts,
 } from "./dimensions.ts";

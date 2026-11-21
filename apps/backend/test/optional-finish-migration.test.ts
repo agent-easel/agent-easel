@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { DatabaseSync } from "node:sqlite";
 import type { TestContext } from "vitest";
 import { factoryHarness } from "./support/factory.ts";
 import { loadMigrationData, restoreCapturedAdapter } from "./support/migration-data.ts";
@@ -21,6 +22,13 @@ async function capturedRelease(c: TestContext) {
   return { h, t3, capture };
 }
 
+function finishPositions(databasePath: string) {
+  using database = new DatabaseSync(databasePath, { readOnly: true });
+  return database
+    .prepare("SELECT flow_revision_id, x, y FROM flow_revision_finish ORDER BY flow_revision_id")
+    .all();
+}
+
 const delivered = {
   id: "delivered",
   name: "Delivered",
@@ -29,9 +37,11 @@ const delivered = {
   outputDescription: "URL of the PR opened",
 };
 
-it("upgrading v0.9.0 removes the empty Finish block from a Flow saved without endings and from the definitions its settled Run captured", async (c) => {
+it("upgrading v0.9.0 hides legacy empty Finish blocks in Flows and Runs and preserves every stored position", async (c) => {
   // Arrange
   const { h, t3, capture } = await capturedRelease(c);
+
+  const positions = finishPositions(h.databasePath);
 
   // Act
   const factory = await h.open({ t3 });
@@ -51,6 +61,7 @@ it("upgrading v0.9.0 removes the empty Finish block from a Flow saved without en
   expect(run.value.lifecycle).toBe("settled");
   expect(run.value.result).toBeNull();
   expect(run.value.definitions.flow.graph).not.toHaveProperty("finish");
+  expect(finishPositions(h.databasePath)).toStrictEqual(positions);
 });
 
 it("upgrading v0.9.0 keeps a configured Finish block, its ending wire and the result its Run reached", async (c) => {

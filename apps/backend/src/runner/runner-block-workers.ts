@@ -12,7 +12,12 @@ import { unverified, verified } from "./runner-utils.ts";
 import { launchStrategy, sameStrategy, WORKTREE_REJECTED } from "./run-workspace.ts";
 import { now } from "../time.ts";
 import { attachmentName, RUN_IMAGE_MISSING, type RunImages } from "../run-images.ts";
-import { workerTurn, type LaunchImage, type StoredLaunchPayload } from "./worker-payloads.ts";
+import {
+  launchBody,
+  workerTurn,
+  type LaunchImage,
+  type StoredLaunchPayload,
+} from "./worker-payloads.ts";
 
 const LAUNCH_REJECTED = { block: "T3 rejected the worker launch.", worktree: WORKTREE_REJECTED };
 const IMAGE_MISSING = {
@@ -24,12 +29,27 @@ const LAUNCH_RECOVERY =
   "Launch acknowledgement is uncertain. Factory will search for the worker and will not launch another.";
 
 /** Flow-input targets that launch with the accepted Start; a worktree Run starts only its creator. */
-export function entryMessagesTooLong(definitions: RunDefinitions, images: readonly RunImage[]) {
+export function entryMessagesTooLong(
+  definitions: RunDefinitions,
+  images: readonly RunImage[],
+  input: string,
+) {
   const launched = images.map((image, index) => ({ ...image, ordinal: index + 1 }));
-  return definitions.flow.graph.flowInput.targetBlockIds.some((blockId) => {
-    const agent = blockAgent(definitions, blockId);
-    return !!agent && workerTurn(agent.prompt, "0".repeat(36), launched).length > 120000;
-  });
+  const checked = new Set<string>();
+  function tooLong(flow: RunDefinitions["flow"]): boolean {
+    if (checked.has(flow.id)) return false;
+    checked.add(flow.id);
+    return flow.graph.flowInput.targetBlockIds.some((id) => {
+      const block = flow.graph.blocks.find((entry) => entry.id === id);
+      if (block?.kind === "subflow")
+        return tooLong(definitions.subflows!.find((child) => child.id === block.flowId)!);
+      const agent = blockAgent({ ...definitions, flow }, id);
+      const body =
+        agent && launchBody(agent.prompt, definitions.subflows?.length ? input : undefined);
+      return !!body && workerTurn(body, "0".repeat(36), launched).length > 120000;
+    });
+  }
+  return tooLong(definitions.flow);
 }
 
 function blockAgent(definitions: RunDefinitions, blockId: string) {

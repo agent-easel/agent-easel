@@ -36,7 +36,7 @@ export function createDelivery(
     readonly id: string;
     readonly runId: string;
     readonly blockId: string;
-    readonly kind: DeliveryKind;
+    readonly kind: DeliveryKind | "handoff";
     readonly cause: string;
     readonly target: object;
     readonly requestKey: string;
@@ -139,6 +139,8 @@ export function openRunDeliveries(database: RunnerDatabase) {
         WHERE id=${delivery.id} AND state=${delivery.state}
         AND (${releaseGeneration ?? null} IS NULL OR EXISTS(SELECT 1 FROM runs WHERE id=${runRow.id} AND generation=${releaseGeneration ?? null}))
         AND EXISTS(SELECT 1 FROM runs WHERE id=${runRow.id} AND gate_open=1)
+        AND NOT EXISTS(SELECT 1 FROM run_blocks b JOIN subflow_invocations i ON i.id=b.invocation_id
+          WHERE b.run_id=${runRow.id} AND b.block_id=${delivery.block_id} AND i.state<>'active')
         AND EXISTS(SELECT 1 FROM projects WHERE id=${runRow.project_id} AND workspace_root=${runRow.workspace_root} AND availability='available')
         AND EXISTS(SELECT 1 FROM t3_connection WHERE context_id=${delivery.context_id})
         AND EXISTS(SELECT 1 FROM runner_owner WHERE token=${owner.token})
@@ -303,8 +305,15 @@ export function openRunDeliveries(database: RunnerDatabase) {
         );
         const failed =
           yield* sql`UPDATE run_workspaces SET state='failed' WHERE run_id=${runRow.id} AND creator_block_id=${delivery.block_id} AND state='preparing' RETURNING run_id`;
-        if (failed.length)
-          for (const blockId of runRow.definitions.flow.graph.flowInput.targetBlockIds)
+        if (failed.length) {
+          const waiting = yield* sql<{
+            block_id: string;
+          }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${problem.worktree},reconciled_at=${time}
+            WHERE run_id=${runRow.id} AND kind='handoff' AND state='pending' AND json_extract(target_json,'$.flowInput')=1 RETURNING block_id`;
+          for (const blockId of [
+            ...runRow.definitions.flow.graph.flowInput.targetBlockIds,
+            ...waiting.map((row) => row.block_id),
+          ])
             if (blockId !== delivery.block_id)
               yield* writeBlockState(
                 sql,
@@ -314,6 +323,7 @@ export function openRunDeliveries(database: RunnerDatabase) {
                   problem: `${problem.worktree} This worker was not launched.`,
                 },
               );
+        }
         yield* advanceGeneration(sql, runRow.id);
       }),
     );

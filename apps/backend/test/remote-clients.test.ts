@@ -100,12 +100,13 @@ it.for([
   [20, serverUpdate],
   [21, serverUpdate],
   [22, serverUpdate],
-  [23, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [23, serverUpdate],
+  [24, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which may save a Flow without a Finish block, refuses a protocol %i server only when it predates 23",
+  "the current client, which may save a Flow without a Finish block, refuses a protocol %i server only when it predates 24",
   async ([protocol, expected], c) => {
     // Arrange
-    const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
+    const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: protocol } });
     const current = server.client();
 
     // Act
@@ -130,12 +131,12 @@ it("a protocol 20 client, which would skip the host's First-run setup, is told t
   expect(reply.body.error.message).toMatch(/Update this client/);
 });
 
-it("a protocol 22 client, which expects a Finish block on every Flow, is told to update itself while the current client is served", async (c) => {
+it("a protocol 23 client, which expects a Finish block on every Flow, is told to update itself while the current client is served", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const current = await server.approved("Laptop");
   assert((await current.send("GET", "/api/flows")).body.ok);
-  const old = server.client("desktop", { protocol: 22, minimum: 22 });
+  const old = server.client("desktop", { protocol: 23, minimum: 23 });
 
   // Act
   const reply = await old.send("GET", "/api/flows");

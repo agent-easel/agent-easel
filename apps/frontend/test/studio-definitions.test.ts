@@ -9,6 +9,7 @@ import {
   ownerGroups,
   ownerPicker,
   placeableAgents,
+  placeableFlows,
 } from "../src/studio-definitions.ts";
 import {
   currentWindow,
@@ -539,6 +540,7 @@ it("Duplicate commits the previewed revision, the target and every Agent's choic
       { agentId: "coder", revision: 3, projectId: null, choice: "copy" },
       { agentId: "qa", revision: 1, projectId: "northwind", choice: "copy" },
     ],
+    flows: [],
   });
   expect(result).toMatchObject({ flow: { id: "release-copy" } });
 });
@@ -584,4 +586,70 @@ it("a Duplicate refused as a stale plan previews the plan again and says why", a
     error:
       "The Flow or an Agent it places changed after this Duplicate was previewed. Review the updated plan, then Duplicate again.",
   });
+});
+
+it("placeableFlows enforces the Flow placement rule for global and Project Flows", () => {
+  // Arrange
+  const globalChild = savedFlow("Shared review", { id: "shared" });
+  const northwindChild = savedFlow("Northwind review", { id: "nw-review", projectId: "northwind" });
+  const ledgerlyChild = savedFlow("Ledgerly review", { id: "ld-review", projectId: "ledgerly" });
+  const globalParent = savedFlow("Global release", { id: "g-release" });
+  const northwindParent = savedFlow("Northwind release", {
+    id: "nw-release",
+    projectId: "northwind",
+  });
+
+  // Act
+  const forGlobal = placeableFlows([globalChild, northwindChild, ledgerlyChild], globalParent);
+  const forNorthwind = placeableFlows(
+    [globalChild, northwindChild, ledgerlyChild],
+    northwindParent,
+  );
+
+  // Assert
+  expect(forGlobal).toStrictEqual([globalChild]);
+  expect(forNorthwind).toStrictEqual([globalChild, northwindChild]);
+});
+
+it("a refused Flow Change owner resolves both blocking child Flows and blocking parent Flows", async () => {
+  // Arrange
+  const parent = savedFlow("Parent release", { id: "parent" });
+  const child = savedFlow("Northwind review", { id: "child", projectId: "northwind" });
+  const { definitions, factory } = deliveredStudio({
+    agents: [savedAgent()],
+    flows: [parent, child],
+  });
+  factory.changeFlowOwner.mockRejectedValueOnce(
+    new ApiError({
+      code: "conflict",
+      message: "Moving this Flow would break the placement rule.",
+      issues: [
+        {
+          code: "owner_change_blocked",
+          path: "projectId",
+          message: 'Flow "Parent release" (parent) places this Flow outside the new owner.',
+        },
+        {
+          code: "owner_change_blocked",
+          path: "projectId",
+          message: 'This Flow places Flow "Northwind review" (child) outside the new owner.',
+        },
+      ],
+    }),
+  );
+  const change = createChangeOwner(
+    { kind: "flow", id: "target", expected: "northwind" },
+    definitions,
+  );
+  change.setTarget(null);
+
+  // Act
+  const moved = await change.confirm();
+
+  // Assert
+  expect(moved).toBeUndefined();
+  expect(change.getSnapshot().blockers).toMatchObject([
+    { definition: parent },
+    { definition: child },
+  ]);
 });

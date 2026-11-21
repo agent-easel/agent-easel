@@ -33,7 +33,8 @@ function fingerprintDocument(
   document: CommitImportInput["document"],
   legacyRevisitContext?: "keep",
 ) {
-  if (document.kind !== "flow" || document.formatVersion >= 4) return document;
+  if (document.kind !== "flow" || document.formatVersion === 4 || "flows" in document)
+    return document;
   const { flow } = document;
   const blocks = flow.graph.blocks.map((block) =>
     block.kind === "agent" ? { ...block, revisitContext: legacyRevisitContext } : block,
@@ -70,14 +71,18 @@ export const readImportReceipt = Effect.fnUntraced(function* (
   }>`SELECT fingerprint_version, fingerprint, flow_id FROM definition_import_receipts
     WHERE request_id=${requestId}`;
   if (!receipt) return undefined;
-  const rows = yield* sql<{ key: string; id: string }>`
+  const agentRows = yield* sql<{ key: string; id: string }>`
     SELECT agent_key AS key, agent_id AS id FROM definition_import_receipt_agents
     WHERE request_id=${requestId} ORDER BY ordinal`;
-  const agents = rows.map(({ key, id }) => ({ key, id }));
+  const flowRows = yield* sql<{ key: string; id: string }>`
+    SELECT flow_key AS key, flow_id AS id FROM definition_import_receipt_flows
+    WHERE request_id=${requestId} ORDER BY ordinal`;
+  const agents = agentRows.map(({ key, id }) => ({ key, id }));
+  const flows = flowRows.map(({ key, id }) => ({ key, id }));
   return {
     fingerprintVersion: receipt.fingerprint_version,
     fingerprint: receipt.fingerprint,
-    result: { agents, flowId: receipt.flow_id },
+    result: { agents, flowId: receipt.flow_id, ...(flows.length ? { flows } : {}) },
   } satisfies ImportReceipt;
 });
 
@@ -112,6 +117,13 @@ export const writeImportReceipt = Effect.fnUntraced(function* (
     (agent, ordinal) =>
       sql`INSERT INTO definition_import_receipt_agents (request_id, ordinal, agent_key, agent_id)
         VALUES (${commit.requestId}, ${ordinal}, ${agent.key}, ${agent.id})`,
+    { discard: true },
+  );
+  yield* Effect.forEach(
+    result.flows ?? [],
+    (flow, ordinal) =>
+      sql`INSERT INTO definition_import_receipt_flows (request_id, ordinal, flow_key, flow_id)
+        VALUES (${commit.requestId}, ${ordinal}, ${flow.key}, ${flow.id})`,
     { discard: true },
   );
 });

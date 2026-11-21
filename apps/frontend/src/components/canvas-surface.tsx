@@ -43,16 +43,29 @@ import { useConnectionPreview } from "../use-connection-preview.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
 import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
-import { flowInputIdentity } from "./flow-block.tsx";
+import { flowInputIdentity, IdentityRows } from "./flow-block.tsx";
 import {
-  FinishEndingRow,
-  FinishHint,
+  FinishEndingList,
   finishIdentity,
-  finishRowClass,
   finishShowsRows,
   type FinishBlockState,
 } from "./finish-block.tsx";
-import { ConnectionPreview, FlowWires, type WirePresentation } from "./flow-wires.tsx";
+import {
+  ConnectionPreview,
+  FlowWires,
+  nestedWiresReach,
+  type WirePresentation,
+} from "./flow-wires.tsx";
+import { SubflowGroup } from "./subflow-group.tsx";
+import {
+  computeSubflowPreviews,
+  displaceSubflowSiblings,
+  placementKey,
+  previewBlockFrame,
+  SUBFLOW_HEADER_HEIGHT,
+  type CanvasFlow,
+  type SubflowPreview,
+} from "../subflow-preview.ts";
 
 /**
  * How an adapter draws one port. The surface sizes it from the port dimensions and places it
@@ -68,6 +81,7 @@ export type CanvasPort = {
 
 /** What an adapter draws in the Flow input block; the surface sizes its rows and places its port. */
 export type CanvasFlowInputContent = {
+  readonly label?: string;
   /** The frame's look. */
   readonly className?: string;
   /** Wraps the identity rows, and a prompt line, in the block's press target. */
@@ -114,6 +128,8 @@ export type CanvasBlockContent = {
   readonly incomingPort: (pending: boolean) => CanvasPort;
   /** The status footers drawn now, in order. */
   readonly footers: readonly ReactNode[];
+  readonly subflowFooter?: ReactNode;
+  readonly subflowBadge?: ReactNode;
 };
 
 /**
@@ -153,28 +169,6 @@ const REVEAL_MARGIN = 24;
 
 /** Fit keeps this margin at the sides and room for the zoom controls at the bottom. */
 const FIT_MARGIN = { x: 48, bottom: 80 };
-
-/** The header and title rows of a block, sized from its dimensions. */
-export function IdentityRows({
-  rows,
-  header,
-  title,
-}: {
-  rows: { readonly header: number; readonly title: number };
-  header: ReactNode;
-  title: ReactNode;
-}) {
-  return (
-    <>
-      <span className="flex flex-col" style={{ height: rows.header }}>
-        {header}
-      </span>
-      <span className="flex flex-col" style={{ height: rows.title }}>
-        {title}
-      </span>
-    </>
-  );
-}
 
 /**
  * A port centred on its wire anchor: `center` below its container's inner top edge, on the
@@ -237,7 +231,7 @@ function SurfaceFlowInput({
 }) {
   const input = dimensions.flowInput;
   const { prompt } = content;
-  const identity = flowInputIdentity(content.trailing);
+  const identity = flowInputIdentity(content.trailing, content.label);
   return (
     <article
       aria-label="Flow input block"
@@ -314,39 +308,21 @@ function SurfaceFinish({
         />,
       )}
       {finishShowsRows(state, endings.length) && (
-        <>
-          <span className="bg-border" style={{ height: rows.divider }} />
-          <ul
-            aria-label="Endings"
-            style={{ paddingTop: rows.exitPaddingTop, paddingBottom: rows.exitPaddingBottom }}
-          >
-            {endings.length === 0 && (
-              <li className="flex items-center px-3" style={{ height: rows.exitRow }}>
-                <FinishHint />
-              </li>
-            )}
-            {endings.map((ending) => (
-              <li
-                key={ending.id}
-                data-ending-id={ending.id}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-3",
-                  finishRowClass(state, ending),
-                )}
-                style={{ height: rows.exitRow }}
-              >
-                <FinishEndingRow ending={ending} state={state} />
-                <SurfacePort
-                  side="left"
-                  center={rows.exitRow / 2}
-                  border={rows.border}
-                  port={dimensions.port}
-                  look={content.endingPort(ending, ending.id === pendingEnding)}
-                />
-              </li>
-            ))}
-          </ul>
-        </>
+        <FinishEndingList
+          endings={endings}
+          state={state}
+          rows={rows}
+          ariaLabel="Endings"
+          renderPort={(ending) => (
+            <SurfacePort
+              side="left"
+              center={rows.exitRow / 2}
+              border={rows.border}
+              port={dimensions.port}
+              look={content.endingPort(ending, ending.id === pendingEnding)}
+            />
+          )}
+        />
       )}
     </article>
   );
@@ -396,6 +372,7 @@ function SurfaceBlock({
           {footer}
         </span>
       ))}
+      {content.subflowFooter}
     </>
   );
   const inputs = Math.max(1, geometry.incomingPorts(block).length);
@@ -534,6 +511,48 @@ function canvasPoints(surface: RefObject<HTMLElement | null>, view: CanvasView):
   };
 }
 
+const noCollapsed = new Set<string>();
+const noBlocked = new Map();
+
+function useSurfacePreviews(
+  { nested, flows, agents, dimensions, subflowPreviews }: CanvasSurfaceProps,
+  source: CanvasGraph,
+  arranged: ReadonlyMap<string, CanvasFlow> | undefined,
+) {
+  const rootId = nested?.rootId;
+  const collapsed = nested?.collapsed;
+  const runFlows = arranged ?? flows;
+  return useMemo(
+    () =>
+      rootId && collapsed && runFlows
+        ? computeSubflowPreviews({
+            rootFlowId: rootId,
+            graph: source,
+            flows: runFlows,
+            agents,
+            dimensions,
+            collapsed: noCollapsed,
+            blocked: noBlocked,
+            runCollapsed: collapsed,
+            arranged: arranged !== undefined,
+          })
+        : subflowPreviews,
+    [rootId, collapsed, runFlows, source, agents, dimensions, subflowPreviews, arranged],
+  );
+}
+
+type NestedCanvas = {
+  readonly rootId: string;
+  readonly collapsed: ReadonlySet<string>;
+  readonly block: (scope: string, block: CanvasBlock) => CanvasBlockContent;
+  readonly header: (path: string) => ReactNode;
+  readonly input: (path: string) => CanvasFlowInputContent;
+  readonly finish: (path: string) => CanvasFinishContent;
+  readonly reveal: { readonly path: string; readonly request: number } | null;
+  readonly pause: number;
+  readonly resume: () => void;
+};
+
 type CanvasSurfaceProps = {
   /** The canvas region, for callers that move focus to it. */
   ref?: RefObject<HTMLElement | null>;
@@ -544,6 +563,11 @@ type CanvasSurfaceProps = {
   graph: FlowGraph;
   /** The Agents the graph's block exits resolve against. */
   agents: readonly Pick<AgentDefinition, "id" | "exits">[];
+  flows?: ReadonlyMap<string, CanvasFlow> | undefined;
+  nested?: NestedCanvas | undefined;
+  previewAgents?: readonly AgentDefinition[] | undefined;
+  subflowPreviews?: ReadonlyMap<string, SubflowPreview> | undefined;
+  onCollapseSubflow?: ((blockId: string) => void) | undefined;
   dimensions: Dimensions;
   /** The most status footers a block can draw; a local arrangement reserves room for them. */
   reservedFooters: number;
@@ -587,25 +611,54 @@ type CanvasSurfaceProps = {
   overlay?: ReactNode;
 };
 
+function withSubflowFrames<Facts>(
+  facts: Facts,
+  previews: ReadonlyMap<string, SubflowPreview> | undefined,
+) {
+  return previews?.size ? { ...facts, blockFrame: previewBlockFrame(previews) } : facts;
+}
+
+function useLayoutGestures(
+  layout: ReturnType<typeof useFlowLayoutSession>,
+  gesture: CanvasGesture | null,
+  onArranging: ((arranging: boolean) => void) | undefined,
+) {
+  const gesturing = gesture !== null;
+  const { cancel, pending: arranging } = layout;
+  useLayoutEffect(() => {
+    if (gesturing) cancel();
+  }, [gesturing, cancel]);
+  useEffect(() => {
+    onArranging?.(arranging);
+  }, [arranging, onArranging]);
+}
+
 /**
  * The graph as the surface draws it: each block's content, the arrangement, the gesture in
  * progress and the geometry of each. Any gesture abandons an arrangement in flight.
  */
-function useSurfaceGraph({
-  scope,
-  graph: sourceGraph,
-  agents,
-  dimensions,
-  reservedFooters,
-  flowInput,
-  block: blockContent,
-  blockFooters,
-  wires,
-  emptyGraphSize,
-  arrangement,
-  gesture = null,
-}: CanvasSurfaceProps) {
-  const source = useMemo(() => canvasGraph(sourceGraph, agents), [sourceGraph, agents]);
+function useSurfaceGraph(props: CanvasSurfaceProps) {
+  const {
+    scope,
+    graph: sourceGraph,
+    agents,
+    flows,
+    subflowPreviews: studioPreviews,
+    nested,
+    dimensions,
+    reservedFooters,
+    flowInput,
+    block: blockContent,
+    blockFooters,
+    wires,
+    emptyGraphSize,
+    arrangement,
+    gesture = null,
+  } = props;
+  const source = useMemo(
+    () => canvasGraph(sourceGraph, agents, flows),
+    [sourceGraph, agents, flows],
+  );
   const promptKind = flowInput.prompt.kind;
   const hasFlowInputStatus = flowInput.status !== undefined;
   const facts = useMemo(
@@ -622,39 +675,59 @@ function useSurfaceGraph({
     scope,
     graph: sourceGraph,
     agents,
+    flows,
     getDimensions: () =>
-      createFlowLayoutDimensions(source, dimensions, facts, wires.kind === "curved"),
+      createFlowLayoutDimensions(
+        source,
+        dimensions,
+        withSubflowFrames(facts, studioPreviews),
+        wires.kind === "curved",
+      ),
+    composition: nested && flows ? { flows, dimensions } : undefined,
     authoring: arrangement && {
       busy: arrangement.busy,
       savedGraph: arrangement.saved,
       change: arrangement.commit,
     },
   });
-  const arranged = useMemo(
-    () => (layout.graph === sourceGraph ? source : canvasGraph(layout.graph, agents)),
-    [layout.graph, sourceGraph, source, agents],
+  const subflowPreviews = useSurfacePreviews(props, source, layout.arrangedFlows);
+  const drawFacts = useMemo(
+    () => withSubflowFrames(facts, subflowPreviews),
+    [facts, subflowPreviews],
   );
+  const nestedLayout = nested !== undefined;
+  const arranged = useMemo(() => {
+    const graph = layout.graph === sourceGraph ? source : canvasGraph(layout.graph, agents, flows);
+    return nestedLayout && subflowPreviews && !layout.arrangedFlows
+      ? displaceSubflowSiblings(graph, subflowPreviews, dimensions)
+      : graph;
+  }, [
+    layout.graph,
+    layout.arrangedFlows,
+    sourceGraph,
+    source,
+    agents,
+    flows,
+    nestedLayout,
+    subflowPreviews,
+    dimensions,
+  ]);
   const shown = useMemo(() => gestureGraph(arranged, gesture), [arranged, gesture]);
   const geometry = useMemo(
-    () => createCanvasGeometry(arranged, dimensions, facts),
-    [arranged, dimensions, facts],
+    () => createCanvasGeometry(arranged, dimensions, drawFacts),
+    [arranged, dimensions, drawFacts],
   );
   const drawn = useMemo(
     () =>
-      shown.graph === arranged ? geometry : createCanvasGeometry(shown.graph, dimensions, facts),
-    [shown.graph, arranged, geometry, dimensions, facts],
+      shown.graph === arranged
+        ? geometry
+        : createCanvasGeometry(shown.graph, dimensions, drawFacts),
+    [shown.graph, arranged, geometry, dimensions, drawFacts],
   );
-  const gesturing = gesture !== null;
-  const { cancel, pending: arranging } = layout;
-  useLayoutEffect(() => {
-    if (gesturing) cancel();
-  }, [gesturing, cancel]);
-  const onArranging = arrangement?.onArranging;
-  useEffect(() => {
-    onArranging?.(arranging);
-  }, [arranging, onArranging]);
+  useLayoutGestures(layout, gesture, arrangement?.onArranging);
   return {
     layout,
+    subflowPreviews,
     content: blockContent,
     arranged,
     /** Fit, focus and the arrangement use the graph without the gesture. */
@@ -663,7 +736,7 @@ function useSurfaceGraph({
     drawn,
     pending: shown.pending,
     /** Arranged routes are drawn only while no gesture changes the graph. */
-    routes: gesture?.kind === "move" || shown.pending ? null : layout.wireRoutes,
+    routes: gesture?.kind === "move" || shown.pending || nestedLayout ? null : layout.wireRoutes,
   };
 }
 
@@ -715,33 +788,138 @@ function pinnedBlockIds(gesture: CanvasGesture | null, focused: string | null) {
   return ids;
 }
 
+const EMPTY_PREVIEW_AGENTS: readonly AgentDefinition[] = [];
+const EMPTY_PREVIEW_FLOWS: ReadonlyMap<string, CanvasFlow> = new Map();
+
+function SurfaceBlockItem({
+  block,
+  drawn,
+  content,
+  pendingInput,
+  surface,
+  scopePath = "",
+  previews,
+  area = null,
+}: {
+  block: CanvasBlock;
+  drawn: Geometry;
+  content: CanvasBlockContent;
+  pendingInput: number | null;
+  surface: CanvasSurfaceProps;
+  scopePath?: string;
+  previews?: ReadonlyMap<string, SubflowPreview> | undefined;
+  area?: Rect | null;
+}) {
+  const { dimensions, flows, previewAgents, nested, onCollapseSubflow } = surface;
+  const subflowPreview = (previews ?? surface.subflowPreviews)?.get(block.id);
+  const path = placementKey(scopePath, block.id);
+  if (!subflowPreview) {
+    return (
+      <SurfaceBlock
+        block={block}
+        geometry={drawn}
+        dimensions={dimensions}
+        content={content}
+        pendingInput={pendingInput}
+      />
+    );
+  }
+  const inputs = Math.max(1, drawn.incomingPorts(block).length);
+  const incomingPorts = Array.from({ length: inputs }, (_, index) => ({
+    key: `in:${index}`,
+    graphY: drawn.inputPoint(block, index).y - block.position.y,
+  }));
+  const exitPorts = block.exits.map((exit) => ({
+    exit,
+    y: drawn.exitPoint(block, exit.id).y - block.position.y,
+  }));
+  const showPort = (side: "left" | "right", y: number) =>
+    !nested ||
+    (area !== null &&
+      reaches(
+        area,
+        {
+          x: block.position.x + (side === "right" ? subflowPreview.width : 0),
+          y: block.position.y + y,
+          width: 0,
+          height: 0,
+        },
+        16,
+      ));
+  return (
+    <SubflowGroup
+      block={block}
+      preview={subflowPreview}
+      geometry={drawn}
+      dimensions={dimensions}
+      agents={previewAgents ?? EMPTY_PREVIEW_AGENTS}
+      flows={flows ?? EMPTY_PREVIEW_FLOWS}
+      frameClassName={content.className}
+      border={dimensions.block.border}
+      headerPress={content.press.render}
+      trailingBadge={content.subflowBadge}
+      runHeader={
+        nested && {
+          visible:
+            area !== null &&
+            reaches(area, { ...drawn.blockBox(block), height: SUBFLOW_HEADER_HEIGHT }),
+          evidence: nested.header(path),
+        }
+      }
+      onCollapse={() => onCollapseSubflow?.(nested ? path : block.id)}
+      incomingPorts={incomingPorts.filter(({ graphY }) => showPort("left", graphY))}
+      exitPorts={exitPorts.filter(({ y }) => showPort("right", y))}
+      renderPort={({ key, side, center, border, graphY }) => (
+        <SurfacePort
+          key={key}
+          side={side}
+          center={center}
+          border={border}
+          port={dimensions.port}
+          look={
+            side === "left"
+              ? content.incomingPort(Number(key.slice(3)) === pendingInput)
+              : content.exitPort(block.exits.find((candidate) => `exit:${candidate.id}` === key)!)
+          }
+          {...(graphY !== undefined ? { graphY } : {})}
+        />
+      )}
+    />
+  );
+}
+
+function visibleBlocks(
+  blocks: readonly CanvasBlock[],
+  drawn: Geometry,
+  area: Rect | null,
+  pinned: ReadonlySet<string>,
+) {
+  return blocks.filter(
+    (item) => pinned.has(item.id) || (area !== null && reaches(area, drawn.blockBox(item))),
+  );
+}
+
+function pendingBlockInput(pending: FlowWire | null, drawn: Geometry, blockId: string) {
+  return pending?.targetEndingId === undefined && pending?.targetBlockId === blockId
+    ? drawn.incomingPortIndex(blockId, pending.source)
+    : null;
+}
+
 function SurfaceLayer({
-  scope,
-  shown,
+  surface,
   view,
   area,
   surfaceGraph,
-  dimensions,
-  wires,
-  gesture,
-  flowInput,
-  finish,
   startPan,
-  children,
 }: {
+  surface: CanvasSurfaceProps;
   view: CanvasView;
   area: Rect | null;
   surfaceGraph: SurfaceGraph;
-  dimensions: Dimensions;
-  wires: WirePresentation;
-  gesture: CanvasGesture | null;
-  flowInput: CanvasFlowInputContent;
-  finish: CanvasFinishContent | undefined;
   startPan: (event: PointerEvent<HTMLElement>) => void;
-  children: ReactNode;
-  scope: string | null;
-  shown: boolean;
 }) {
+  const { scope, shown = true, dimensions, wires, flowInput, finish, children } = surface;
+  const gesture = surface.gesture ?? null;
   const { geometry, graph, drawn, pending, routes, content } = surfaceGraph;
   // Kept here rather than in the surface, so a preview does not recompute every block's content.
   const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
@@ -749,11 +927,8 @@ function SurfaceLayer({
   const pinned = useMemo(() => new Set(pinnedBlockIds(gesture, focused)), [gesture, focused]);
   const layer = useMemo(() => layerSize([geometry, drawn]), [geometry, drawn]);
   const blocks = useMemo(
-    () =>
-      graph.blocks.filter(
-        (item) => pinned.has(item.id) || (area !== null && reaches(area, drawn.blockBox(item))),
-      ),
-    [graph, drawn, area, pinned],
+    () => visibleBlocks(graph.blocks, drawn, area, pinned),
+    [graph.blocks, drawn, area, pinned],
   );
   return (
     <div
@@ -796,21 +971,194 @@ function SurfaceLayer({
         />
       )}
       {blocks.map((item) => (
-        <SurfaceBlock
+        <SurfaceBlockItem
           key={item.id}
           block={item}
-          geometry={drawn}
-          dimensions={dimensions}
+          drawn={drawn}
           content={content(item)}
-          pendingInput={
-            pending?.targetEndingId === undefined && pending?.targetBlockId === item.id
-              ? drawn.incomingPortIndex(item.id, pending.source)
-              : null
-          }
+          pendingInput={pendingBlockInput(pending, drawn, item.id)}
+          surface={surface}
+          area={area}
         />
       ))}
+      {surface.nested &&
+        area &&
+        surface.subflowPreviews &&
+        drawNestedScopes(surface, surface.nested, graph, surface.subflowPreviews, area)}
     </div>
   );
+}
+
+function containsRect(outer: Rect, inner: Rect) {
+  return (
+    outer.x <= inner.x &&
+    outer.y <= inner.y &&
+    outer.x + outer.width >= inner.x + inner.width &&
+    outer.y + outer.height >= inner.y + inner.height
+  );
+}
+
+function drawNestedScopes(
+  surface: CanvasSurfaceProps,
+  nested: NestedCanvas,
+  root: CanvasGraph,
+  previews: ReadonlyMap<string, SubflowPreview>,
+  area: Rect,
+) {
+  const layers: ReactNode[] = [];
+  function visit(
+    graph: CanvasGraph,
+    groups: ReadonlyMap<string, SubflowPreview>,
+    scope: string,
+    x: number,
+    y: number,
+  ) {
+    if (!groups.size) return;
+    for (const block of graph.blocks) {
+      const group = groups.get(block.id);
+      if (!group) continue;
+      const left = x + block.position.x;
+      const top = y + block.position.y;
+      if (!reaches(area, { x: left, y: top, width: group.width, height: group.height })) continue;
+      const path = placementKey(scope, block.id);
+      const offsetX = left + group.offsetX;
+      const offsetY = top + group.offsetY;
+      const local = { ...area, x: area.x - offsetX, y: area.y - offsetY };
+      const { innerGraph, innerGeometry, innerPreviews } = group;
+      const blocks = innerGraph.blocks.filter((item) => {
+        const box = innerGeometry.blockBox(item);
+        if (!reaches(local, box)) return false;
+        return !innerPreviews.has(item.id) || !containsRect(box, local);
+      });
+      const input = reaches(local, innerGeometry.flowInputBox);
+      const finish = reaches(local, innerGeometry.finishBox);
+      const wire = nestedWiresReach(innerGraph, innerGeometry, local);
+      const entry = group.incomingEntry;
+      const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
+      const entryBridge = reaches(local, {
+        x: -group.offsetX,
+        y: innerEntry.y,
+        width: entry.x,
+        height: 0,
+      });
+      const exitBridges = group.endingRoutes.filter(({ from, to }) =>
+        reaches(local, {
+          x: from.x - group.offsetX,
+          y: from.y - group.offsetY,
+          width: to.x - from.x,
+          height: 0,
+        }),
+      );
+      if (input || finish || wire || blocks.length || entryBridge || exitBridges.length)
+        layers.push(
+          <div
+            key={path}
+            className="pointer-events-none absolute [&>article]:pointer-events-auto"
+            style={{ left: offsetX, top: offsetY, width: 1, height: 1 }}
+          >
+            {(entryBridge || exitBridges.length > 0) && (
+              <svg
+                aria-hidden
+                className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
+              >
+                {entryBridge && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
+                {exitBridges.map(({ endingId, from, to }) => (
+                  <path
+                    key={endingId}
+                    d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
+                  />
+                ))}
+              </svg>
+            )}
+            {wire && (
+              <FlowWires
+                graph={innerGraph}
+                geometry={innerGeometry}
+                presentation={surface.wires}
+                routes={null}
+                pendingWire={null}
+                emphasized={null}
+                finish
+                area={local}
+                nested
+              />
+            )}
+            {input && (
+              <SurfaceFlowInput
+                graph={innerGraph}
+                geometry={innerGeometry}
+                dimensions={surface.dimensions}
+                content={nested.input(path)}
+              />
+            )}
+            {finish && (
+              <SurfaceFinish
+                graph={innerGraph}
+                geometry={innerGeometry}
+                dimensions={surface.dimensions}
+                content={nested.finish(path)}
+                pendingEnding={null}
+              />
+            )}
+            {blocks.map((item) => (
+              <SurfaceBlockItem
+                key={item.id}
+                block={item}
+                drawn={innerGeometry}
+                content={nested.block(path, item)}
+                pendingInput={null}
+                surface={surface}
+                scopePath={path}
+                previews={innerPreviews}
+                area={local}
+              />
+            ))}
+          </div>,
+        );
+      visit(innerGraph, innerPreviews, path, offsetX, offsetY);
+    }
+  }
+  visit(root, previews, "", 0, 0);
+  return layers;
+}
+
+function nestedBlockBounds(
+  graph: CanvasGraph,
+  geometry: Geometry,
+  groups: ReadonlyMap<string, SubflowPreview>,
+) {
+  const boxes = new Map<string, Rect>();
+  function collect(
+    current: CanvasGraph,
+    geo: Geometry,
+    previews: ReadonlyMap<string, SubflowPreview>,
+    scope: string,
+    x: number,
+    y: number,
+  ) {
+    for (const block of current.blocks) {
+      const path = placementKey(scope, block.id);
+      const box = geo.blockBox(block);
+      const group = previews.get(block.id);
+      boxes.set(path, {
+        ...box,
+        x: x + box.x,
+        y: y + box.y,
+        ...(group && { height: SUBFLOW_HEADER_HEIGHT, width: Math.min(box.width, 520) }),
+      });
+      if (group)
+        collect(
+          group.innerGraph,
+          group.innerGeometry,
+          group.innerPreviews,
+          path,
+          x + box.x + group.offsetX,
+          y + box.y + group.offsetY,
+        );
+    }
+  }
+  collect(graph, geometry, groups, "", 0, 0);
+  return boxes;
 }
 
 /** Zoom, fit, Follow active where there are focus targets, and Auto-arrange. */
@@ -819,11 +1167,13 @@ function SurfaceControls({
   layout,
   focusTargets,
   busy,
+  resume,
 }: {
   viewport: ReturnType<typeof useCanvasViewport>;
   layout: SurfaceGraph["layout"];
   focusTargets: readonly string[] | undefined;
   busy: boolean;
+  resume?: (() => void) | undefined;
 }) {
   return (
     <div className="pointer-events-none absolute bottom-4 left-4 flex flex-col items-start gap-2">
@@ -835,7 +1185,10 @@ function SurfaceControls({
           focusTargets && {
             available: focusTargets.length > 0,
             changed: viewport.focusChanged,
-            onFollow: viewport.followActive,
+            onFollow: () => {
+              resume?.();
+              viewport.followActive();
+            },
           }
         }
         arrange={
@@ -868,6 +1221,82 @@ function entryTarget(
     : mergeGraphBounds(geometry.flowInputBox, []);
 }
 
+function useSurfaceFocus(
+  props: CanvasSurfaceProps,
+  { geometry, arranged, subflowPreviews }: SurfaceGraph,
+  padding: { readonly x: number; readonly top: number; readonly bottom: number },
+) {
+  const { focusTargets } = props;
+  const nested = props.nested !== undefined;
+  const nestedBoxes = useMemo(
+    () =>
+      nested && subflowPreviews ? nestedBlockBounds(arranged, geometry, subflowPreviews) : null,
+    [nested, subflowPreviews, arranged, geometry],
+  );
+  const focusBounds = (ids: readonly string[]) => {
+    if (!nestedBoxes) return geometry.focusBounds(ids);
+    const [first, ...rest] = ids.flatMap((id) => {
+      const box = nestedBoxes.get(id);
+      return box ? [box] : [];
+    });
+    return first ? mergeGraphBounds(first, rest) : geometry.bounds();
+  };
+  const getEntryView = (width: number, height: number) =>
+    focusTargets
+      ? entryView(
+          nestedBoxes && (props.entryTargets ?? focusTargets).length
+            ? focusBounds(props.entryTargets ?? focusTargets)
+            : entryTarget(geometry, props.entryTargets ?? focusTargets, width, height),
+          geometry.boxes(),
+          { width, height },
+          padding,
+        )
+      : authoringEntryView(
+          geometry.flowInputBox,
+          geometry.bounds(),
+          geometry.boxes(),
+          { width, height },
+          padding,
+        );
+  return { nestedBoxes, focusBounds, getEntryView };
+}
+
+function useRevealBounds({
+  nestedReveal,
+  nestedBoxes,
+  revealTargets,
+  geometry,
+  reveal,
+  top,
+}: {
+  nestedReveal: NestedCanvas["reveal"] | undefined;
+  nestedBoxes: ReadonlyMap<string, Rect> | null;
+  revealTargets: readonly CanvasBlockSelection[] | undefined;
+  geometry: Geometry;
+  reveal: ReturnType<typeof useCanvasViewport>["reveal"];
+  top: number;
+}) {
+  const revealBox = nestedReveal ? nestedBoxes?.get(nestedReveal.path) : undefined;
+  const revealBounds = revealBox
+    ? mergeGraphBounds(revealBox, [])
+    : revealTargets?.length
+      ? geometry.focusBounds(revealTargets)
+      : null;
+  const revealKey = revealBounds && JSON.stringify(revealBounds);
+  const revealRequest = nestedReveal?.request;
+  useLayoutEffect(() => {
+    if (!revealKey) return;
+    const bounds = JSON.parse(revealKey) as GraphBounds;
+    // Keeps a margin, and the covered top, around the revealed Blocks.
+    reveal({
+      minX: bounds.minX - REVEAL_MARGIN,
+      minY: bounds.minY - top,
+      width: bounds.width + REVEAL_MARGIN * 2,
+      height: bounds.height + top + REVEAL_MARGIN,
+    });
+  }, [revealKey, revealRequest, reveal, top]);
+}
+
 /**
  * The transformed canvas a Flow graph is drawn on. It owns block geometry, the drawn frames,
  * wires, the viewport with following, the arrangement and the zoom controls; the adapter
@@ -876,56 +1305,44 @@ function entryTarget(
  * the surface only through `arrangement.commit`.
  */
 export function CanvasSurface(props: CanvasSurfaceProps) {
-  const { ref, label, scope, dimensions, focusTargets, shown = true, covered } = props;
+  const { ref, label, focusTargets, shown = true, covered } = props;
   const own = useRef<HTMLElement>(null);
   const surface = ref ?? own;
   const surfaceGraph = useSurfaceGraph(props);
-  const { geometry, layout } = surfaceGraph;
+  const { geometry, layout, subflowPreviews } = surfaceGraph;
   const padding = { ...FIT_MARGIN, top: covered.top };
+  const { nestedBoxes, focusBounds, getEntryView } = useSurfaceFocus(props, surfaceGraph, padding);
   const viewport = useCanvasViewport({
     surface,
-    scope,
+    scope: props.scope,
     shown,
     getBounds: geometry.bounds,
     getFocusView:
       focusTargets &&
-      ((width, height) => fitGraphView(geometry.focusBounds(focusTargets), width, height, padding)),
-    getEntryView: (width, height) =>
-      focusTargets
-        ? entryView(
-            entryTarget(geometry, props.entryTargets ?? focusTargets, width, height),
-            geometry.boxes(),
-            { width, height },
-            padding,
-          )
-        : authoringEntryView(
-            geometry.flowInputBox,
-            geometry.bounds(),
-            geometry.boxes(),
-            { width, height },
-            padding,
-          ),
+      ((width, height) => fitGraphView(focusBounds(focusTargets), width, height, padding)),
+    getEntryView,
     focusTargets,
+    onFollow: props.nested?.resume,
     padding,
     fitRevision: layout.arranged,
     onTap: props.onTap,
   });
-  const { view, reveal } = viewport;
+  const { view, reveal, stopFollowing } = viewport;
+  const pause = props.nested?.pause;
+  useLayoutEffect(() => {
+    if (pause) stopFollowing();
+  }, [pause, stopFollowing]);
+  const nestedReveal = props.nested?.reveal;
   const area = useDrawWindow(view, useSurfaceSize(surface));
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
-  const revealBounds = props.reveal?.length ? geometry.focusBounds(props.reveal) : null;
-  const revealKey = revealBounds && JSON.stringify(revealBounds);
-  useLayoutEffect(() => {
-    if (!revealKey) return;
-    const bounds = JSON.parse(revealKey) as GraphBounds;
-    // Keeps a margin, and the covered top, around the revealed Blocks.
-    reveal({
-      minX: bounds.minX - REVEAL_MARGIN,
-      minY: bounds.minY - covered.top,
-      width: bounds.width + REVEAL_MARGIN * 2,
-      height: bounds.height + covered.top + REVEAL_MARGIN,
-    });
-  }, [revealKey, reveal, covered.top]);
+  useRevealBounds({
+    nestedReveal,
+    nestedBoxes,
+    revealTargets: props.reveal,
+    geometry,
+    reveal,
+    top: covered.top,
+  });
   return (
     <section
       ref={surface}
@@ -938,20 +1355,12 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer
-        scope={scope}
-        shown={shown}
+        surface={{ ...props, subflowPreviews }}
         view={view}
         area={area}
         surfaceGraph={surfaceGraph}
-        dimensions={dimensions}
-        wires={props.wires}
-        gesture={props.gesture ?? null}
-        flowInput={props.flowInput}
-        finish={props.finish}
         startPan={viewport.startPan}
-      >
-        {props.children}
-      </SurfaceLayer>
+      />
       {props.overlay && (
         <div className="pointer-events-none absolute top-4 left-4 flex max-w-[calc(100%-2rem)] flex-col items-start gap-2 *:pointer-events-auto">
           {props.overlay}
@@ -962,6 +1371,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         layout={layout}
         focusTargets={focusTargets}
         busy={props.arrangement?.busy === true}
+        resume={props.nested?.resume}
       />
     </section>
   );

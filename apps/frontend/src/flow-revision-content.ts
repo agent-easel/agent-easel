@@ -14,6 +14,8 @@ function blockSettings(block: FlowBlock, agent: AgentDefinition | undefined): Re
   switch (block.kind) {
     case "human":
       return [];
+    case "subflow":
+      return [revisionLine(`    Flow  ${block.flowId ?? "No Flow"}`, block.flowId)];
     case "wait":
       return [
         `    Wait for  ${block.duration ? `${block.duration.amount} ${block.duration.unit}` : "No duration"}`,

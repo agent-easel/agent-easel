@@ -59,7 +59,13 @@ it("a worker PR cannot supply an executable link to Factory clients", async (c) 
   // Assert
   await expect(observation).rejects.toThrow("Invalid worker pull request URL.");
 });
-import { allTurnsEnd, finishedReport, report, turnBegins } from "./support/scenarios.ts";
+import {
+  allTurnsEnd,
+  finishedReport,
+  report,
+  turnBegins,
+  workingReported,
+} from "./support/scenarios.ts";
 
 it("a captured checkout worker retains exact execution identity from its nested thread read", async (c) => {
   // Arrange
@@ -157,6 +163,128 @@ it("a reported worker's result is released when the live thread read and delegat
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toEqual(expect.any(String));
   expect(f.t3.threads.launches.size).toBe(2);
+});
+
+it.for([
+  {
+    caseName: "waiting on an awaited pull-request watch",
+    thread: {
+      status: "waiting",
+      pendingBackgroundTasks: [
+        {
+          taskId: "pull-request-watch:github.com/alimek/t3-factory#678",
+          kind: "monitor",
+          description: "Watching pull request #678",
+          awaited: true,
+        },
+      ],
+    },
+    workerFinished: false,
+    needsInput: false,
+  },
+  {
+    caseName: "in waiting status without pending requests",
+    thread: { status: "waiting", pendingBackgroundTasks: [] },
+    workerFinished: false,
+    needsInput: false,
+  },
+  {
+    caseName: "holding an awaited background task after a completed turn",
+    thread: {
+      status: "completed",
+      pendingBackgroundTasks: [{ taskId: "watch:1", kind: "monitor", awaited: true }],
+    },
+    workerFinished: false,
+    needsInput: false,
+  },
+  {
+    caseName: "holding a checks-only monitor with awaited omitted after a completed turn",
+    thread: {
+      status: "completed",
+      pendingBackgroundTasks: [
+        { taskId: "pull-request-watch:github.com/alimek/t3-factory#678", kind: "monitor" },
+      ],
+    },
+    workerFinished: true,
+    needsInput: true,
+  },
+  {
+    caseName: "holding only unawaited background tasks after a completed turn",
+    thread: {
+      status: "completed",
+      pendingBackgroundTasks: [{ taskId: "daemon:dev-server", kind: "daemon", awaited: false }],
+    },
+    workerFinished: true,
+    needsInput: true,
+  },
+])(
+  "a working worker $caseName classifies worker completion and Needs input accurately",
+  async ({ thread, workerFinished, needsInput }, c) => {
+    // Arrange
+    const f = await wireWorker(c, settledAnswer, thread);
+    await workingReported(f.world, f.worker);
+    allTurnsEnd(f.world, f.worker);
+
+    // Act
+    await f.f.reconcileRuns();
+
+    // Assert
+    const run = await f.f.getRun(f.runId);
+    assert(run.ok);
+    expect(run.value.blocks[0]).toMatchObject({
+      state: "working",
+      engineStatus: "completed",
+      reportStatus: "working",
+      workerFinished,
+    });
+    const navigation = await f.f.listRunNavigation();
+    expect(navigation).toMatchObject({
+      ok: true,
+      value: [{ attention: { needsInput, problem: false, matters: [] } }],
+    });
+  },
+);
+
+it("a waiting worker with a pending native request still marks its Run Needs input", async (c) => {
+  // Arrange
+  const f = await wireWorker(c, settledAnswer, {
+    status: "waiting",
+    pendingBackgroundTasks: [
+      {
+        taskId: "pull-request-watch:github.com/alimek/t3-factory#678",
+        kind: "monitor",
+        awaited: true,
+      },
+    ],
+  });
+  await workingReported(f.world, f.worker);
+  allTurnsEnd(f.world, f.worker);
+  f.t3.threads.recordThreadFacts(f.worker.threadId, { pendingRequestCount: 1 });
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.blocks[0]).toMatchObject({
+    state: "working",
+    workerFinished: false,
+    pendingRequestCount: 1,
+  });
+  const navigation = await f.f.listRunNavigation();
+  expect(navigation).toMatchObject({
+    ok: true,
+    value: [
+      {
+        attention: {
+          needsInput: true,
+          problem: false,
+          matters: [{ kind: "native-request", pendingRequestCount: 1 }],
+        },
+      },
+    ],
+  });
 });
 
 it("an image upload posts its exact bytes to T3's signed upload address without the OAuth bearer", async (c) => {
