@@ -707,8 +707,9 @@ update and nothing accrues while it stays revoked. After a regrant, Factory corr
 posted to the Run's current state without a new message, and posts a card it never managed to post only
 if the Run is Active or Snoozed or has pending Needs input or Problems. Revocation stops further
 create attempts. Factory records a message ID or definitive refusal from the request already sent.
-An unproven create keeps its warning through revocation and regrant. Retry requires the restored grant and the
-host's acceptance of the duplicate risk. Removing the requester from Access
+An unproven create keeps its warning through revocation and regrant. Retry requires the restored
+grant and the host's acceptance of the duplicate risk. A refusal of that Retry leaves the original
+create unproven and another Retry requires a fresh choice. Removing the requester from Access
 does not stop the card: it depends on the channel's grant and the bot's access.
 
 Editing in an archived thread needs it unarchived: when Discord refuses the edit because the thread is

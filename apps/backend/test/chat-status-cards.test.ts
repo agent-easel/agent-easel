@@ -859,6 +859,38 @@ it("Retry of an unknown card refuses a revoked destination and preserves the war
   expect(settings.delivery.problems).toContainEqual(problem);
 });
 
+it("a refused warned Retry across regrant does not authorize another Status card POST", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const known = await chatStartedRun(world, 2);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  world.discord.nonceWindowPassed();
+  world.discord.faultMessages("paused-refusal");
+  assert(
+    (await world.factory.retryChatDelivery({ deliveryId: problem.id, duplicateRiskAccepted: true }))
+      .ok,
+  );
+  await world.discord.request("POST", MESSAGES, posts + 1);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assert((await world.factory.snoozeRun(known.runId)).ok);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, known.card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([
+    expect.objectContaining({ id: problem.id, state: "unknown", message: CORRECTIONS.unknown }),
+  ]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts + 1);
+  expect(statusCardsIn(world.discord)).toHaveLength(2);
+});
+
 it("after regrant, Retry of an unknown card still requires duplicate-risk acceptance", async (c) => {
   // Arrange
   const world = await startingWorld(c);

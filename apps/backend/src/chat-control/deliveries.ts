@@ -99,6 +99,8 @@ const backoffMs = (attempts: number) =>
 export const UNKNOWN_CREATE_PROBLEM =
   "Factory cannot tell whether Discord created the message. Retrying may post it twice.";
 
+export const REVOKED_CARD_CREATE = "The Project grant was revoked while the card was being sent.";
+
 const PROBLEMS: Record<SendFailure, string> = {
   transient: "Discord asked Factory to slow down. Factory retries automatically.",
   rejected:
@@ -258,7 +260,7 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
       JOIN chat_access_users u ON u.user_id=p.requester_id
       WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
     ) AS user_id FROM chat_deliveries d
-      WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${UNKNOWN_CREATE_PROBLEM}`,
+      WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${REVOKED_CARD_CREATE}`,
     ([access]) => {
       if (!access) return false as const;
       return access.user_id === null ? {} : { requesterId: access.user_id };
@@ -380,15 +382,21 @@ export const makeChatDeliveries = (
           problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id} AND state='sending'`;
       });
 
-    const cancelUnpostedCard = (id: string) =>
+    const recordUnpostedCreate = (row: DeliveryRow, problem: string | null, retryable = false) =>
       Effect.gen(function* () {
-        const [card] = yield* sql<{ run_id: string }>`UPDATE chat_deliveries
-          SET state='cancelled',next_attempt_at=NULL,problem=NULL,problem_at=NULL
-          WHERE id=${id} AND state='sending' AND problem=${UNKNOWN_CREATE_PROBLEM}
-          RETURNING run_id`;
-        if (!card) return false;
-        cardChanged(card.run_id);
-        return true;
+        const at = yield* now;
+        const next = retryable
+          ? new Date(Date.parse(at) + backoffMs(row.attempts)).toISOString()
+          : null;
+        const state = problem === null ? "cancelled" : retryable ? "owed" : "failed";
+        const revoked = sql`problem=${REVOKED_CARD_CREATE}`;
+        const [updated] = yield* sql<Pick<DeliveryRow, "state" | "run_id">>`UPDATE chat_deliveries
+          SET state=CASE WHEN ${revoked} THEN 'cancelled' ELSE ${state} END,
+            next_attempt_at=CASE WHEN ${revoked} THEN NULL ELSE ${next} END,
+            problem=CASE WHEN ${revoked} THEN NULL ELSE ${problem} END,
+            problem_at=CASE WHEN ${revoked} THEN NULL ELSE ${problem === null ? null : at} END
+          WHERE id=${row.id} AND state='sending' RETURNING state,run_id`;
+        if (updated?.state === "cancelled" && updated.run_id !== null) cardChanged(updated.run_id);
       });
 
     /** Owed again after a wait: 1 s doubling to five minutes over consecutive attempts. */
@@ -512,8 +520,10 @@ export const makeChatDeliveries = (
         const lock = yield* Effect.result(request(() => sender.locked(destinationOf(due))));
         if (lock._tag === "Success" && lock.success) {
           const at = yield* now;
-          yield* sql`UPDATE chat_deliveries SET state='failed',next_attempt_at=NULL,
-            problem=${CORRECTIONS[DISCORD_CODES.locked]!},problem_at=${at}
+          yield* sql`UPDATE chat_deliveries
+            SET state=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN 'unknown' ELSE 'failed' END,
+            next_attempt_at=NULL,problem=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN problem
+              ELSE ${CORRECTIONS[DISCORD_CODES.locked]!} END,problem_at=${at}
             WHERE id=${due.id} AND state='owed'`;
           return;
         }
@@ -533,23 +543,15 @@ export const makeChatDeliveries = (
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );
         if ("messageId" in sent) return yield* delivered(row, sent.messageId, sender.applicationId);
-        if ("withdrawn" in sent) {
-          if (sent.unproven) yield* record(row.id, { state: "unknown", problem: PROBLEMS.unknown });
-          else yield* cancelUnpostedCard(row.id);
-          return;
-        }
         if (
-          row.purpose === "status-card" &&
-          sent.failure !== "unknown" &&
-          (yield* cancelUnpostedCard(row.id))
+          row.problem === UNKNOWN_CREATE_PROBLEM ||
+          ("withdrawn" in sent ? sent.unproven : sent.failure === "unknown")
         )
-          return;
+          return yield* record(row.id, { state: "unknown", problem: PROBLEMS.unknown });
+        if ("withdrawn" in sent) return yield* recordUnpostedCreate(row, null);
         if (sent.failure === "transient")
-          return yield* later(row.id, row.attempts, PROBLEMS.transient);
-        yield* record(row.id, {
-          state: sent.failure === "rejected" ? "failed" : "unknown",
-          problem: sent.failure === "rejected" ? correction(sent.cause) : PROBLEMS.unknown,
-        });
+          return yield* recordUnpostedCreate(row, PROBLEMS.transient, true);
+        yield* recordUnpostedCreate(row, correction(sent.cause));
       });
 
     /**
@@ -561,7 +563,9 @@ export const makeChatDeliveries = (
       Effect.uninterruptible(
         Effect.gen(function* () {
           if (!(yield* destinationPermitted(sql, row))) {
-            yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id} AND state='owed'`;
+            yield* sql`UPDATE chat_deliveries
+              SET state=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN 'unknown' ELSE 'cancelled' END,
+                next_attempt_at=NULL WHERE id=${row.id} AND state='owed'`;
             return;
           }
           if (row.message_id === null) return yield* attemptCreate(sender, row, bounded);
@@ -649,13 +653,21 @@ export const makeChatDeliveries = (
             "Access no longer permits this destination; the message was cancelled.",
           );
         }
-        const [scheduled] =
-          yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,problem=NULL,problem_at=NULL
+        const retainedProblem = row.purpose === "status-card" && row.state === "unknown";
+        const [scheduled] = yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,
+              problem=${retainedProblem ? UNKNOWN_CREATE_PROBLEM : null},
+              problem_at=${retainedProblem ? row.problem_at : null}
           WHERE id=${row.id} AND state=${row.state} RETURNING id`;
         if (!scheduled) return failure("conflict", "This message no longer needs a Retry.");
-        dispatcher.wake();
         return { ok: true, value: undefined };
-      });
+      }).pipe(
+        sql.withTransaction,
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.ok) dispatcher.wake();
+          }),
+        ),
+      );
 
     return {
       serve,
