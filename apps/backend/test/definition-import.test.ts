@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { FlowGraph, Result } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import { HttpServerResponse } from "effect/http";
@@ -13,11 +14,13 @@ import {
   agentFile,
   exportedAgent,
   factoryFailingInserts,
+  factoryWithHistoricalFlowReceipt,
   factoryWithVersion1Receipt,
   fileBody,
   flowFile,
   flowUnderCreateLimitBy,
   fullLegacyFlowFile,
+  historicalFlowReceipts,
   importFullLegacyFlow,
   interruptedUpload,
   reviewedCommit,
@@ -982,6 +985,104 @@ it("after restart and removal of the imported Agent a retried commit replays its
   expect(retried).toStrictEqual({ ok: true, value: first });
   expect(await reopened.listAgents()).toStrictEqual({ ok: true, value: [] });
 });
+
+it.for(historicalFlowReceipts)(
+  "a v$formatVersion Flow import recorded at $source replays after restart and removal",
+  async (receipt, context) => {
+    // Arrange
+    const { harness, request, flowId, agents } = await factoryWithHistoricalFlowReceipt(
+      context,
+      receipt,
+    );
+    const factory = await harness.open({ t3: new ControlledT3() });
+    assertOk(await factory.removeFlow(flowId));
+    using database = new DatabaseSync(harness.databasePath, { readOnly: true });
+    const before = database.prepare("PRAGMA data_version").get();
+
+    // Act
+    const retried = await factory.commitImport(request);
+
+    // Assert
+    expect(retried).toStrictEqual({ ok: true, value: { flowId, agents } });
+    expect(assertOk(await factory.listFlows())).toStrictEqual([]);
+    expect(assertOk(await factory.listAgents())).toHaveLength(1);
+    expect(database.prepare("PRAGMA data_version").get()).toStrictEqual(before);
+  },
+);
+
+const historicalVersion2Files = historicalFlowReceipts.filter(
+  ({ formatVersion }) => formatVersion === 2,
+);
+
+it.for(historicalVersion2Files)(
+  "changed Flow content conflicts with the receipt from $source without writes",
+  async (receipt, context) => {
+    // Arrange
+    const { harness, request } = await factoryWithHistoricalFlowReceipt(context, receipt);
+    const factory = await harness.open({ t3: new ControlledT3() });
+    const { document } = request;
+    const changed = { ...document, flow: { ...document.flow, name: "Different Flow" } };
+    using database = new DatabaseSync(harness.databasePath, { readOnly: true });
+    const before = database.prepare("PRAGMA data_version").get();
+
+    // Act
+    const retried = await factory.commitImport({ ...request, document: changed });
+
+    // Assert
+    assert(!retried.ok);
+    expect(retried.error).toMatchObject({
+      code: "conflict",
+      issues: [{ code: "import_request_conflict", path: "requestId" }],
+    });
+    expect(database.prepare("PRAGMA data_version").get()).toStrictEqual(before);
+  },
+);
+
+it.for(historicalVersion2Files)(
+  "a different target conflicts with the Flow receipt from $source without writes",
+  async (receipt, context) => {
+    // Arrange
+    const { harness, request } = await factoryWithHistoricalFlowReceipt(context, receipt);
+    const factory = await harness.open({ t3: new ControlledT3() });
+    using database = new DatabaseSync(harness.databasePath, { readOnly: true });
+    const before = database.prepare("PRAGMA data_version").get();
+
+    // Act
+    const retried = await factory.commitImport({ ...request, projectId: "another-project" });
+
+    // Assert
+    assert(!retried.ok);
+    expect(retried.error).toMatchObject({
+      code: "conflict",
+      issues: [{ code: "import_request_conflict", path: "requestId" }],
+    });
+    expect(database.prepare("PRAGMA data_version").get()).toStrictEqual(before);
+  },
+);
+
+it.for([1, 2, 3])(
+  "a version-%i Flow file rejects the version-4 Revisit context field",
+  async (formatVersion, context) => {
+    // Arrange
+    const { factory } = await openFactoryWithApprovedT3(context);
+    const file = flowFile({ formatVersion });
+    const { graph } = file.flow;
+    const blocks = [{ ...graph.blocks[0]!, revisitContext: "keep" }, ...graph.blocks.slice(1)];
+    const document = { ...file, flow: { ...file.flow, graph: { ...graph, blocks } } };
+
+    // Act
+    const committed = await factory.commitImport(
+      reviewedCommit("import-flow", undefined, document),
+    );
+
+    // Assert
+    assert(!committed.ok);
+    expect(committed.error.issues).toMatchObject([
+      { code: "unknown_field", path: "flow.graph.blocks.0.revisitContext" },
+    ]);
+    expect(assertOk(await factory.listFlows())).toStrictEqual([]);
+  },
+);
 
 it("after upgrading, a retried commit of a version-1 file replays the receipt the earlier release recorded", async (context) => {
   // Arrange
