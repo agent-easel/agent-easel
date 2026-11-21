@@ -169,16 +169,22 @@ export const triggerNameTaken = (sql: SqlClient.SqlClient, name: string, exceptI
     Effect.map((rows) => rows.length > 0),
   );
 
-/** Names of the other current Triggers that read the repository `nodeId`. */
 export const triggersWatching = (
   sql: SqlClient.SqlClient,
   nodeId: string,
   exceptId: string | null,
 ) =>
-  sql<{ name: string }>`SELECT t.name FROM run_triggers t
+  sql<{
+    name: string;
+    repository_name_with_owner: string;
+  }>`SELECT t.name, g.repository_name_with_owner FROM run_triggers t
       JOIN run_trigger_github_issues g ON g.trigger_id = t.id
     WHERE g.repository_node_id = ${nodeId} AND t.id IS NOT ${exceptId}
-    ORDER BY t.name`.pipe(Effect.map((rows) => rows.map((row) => row.name)));
+    ORDER BY t.name`.pipe(
+    Effect.map((rows) =>
+      rows.map((row) => ({ name: row.name, nameWithOwner: row.repository_name_with_owner })),
+    ),
+  );
 
 /** Runs `triggerId` started that are neither Settled nor Archived. */
 export const activeTriggerRuns = (sql: SqlClient.SqlClient, triggerId: string) =>
@@ -263,33 +269,49 @@ export interface CheckOutcome {
   readonly runs: readonly TriggerStartedRun[];
 }
 
-/**
- * Replaces the latest check and sets or clears the current error. A repeated problem keeps its
- * first sighting and counts the checks that hit it. Does nothing once the Trigger is removed.
- */
-export const writeCheckOutcome = Effect.fnUntraced(function* (
-  sql: SqlClient.SqlClient,
-  triggerId: string,
+export interface CheckRecord {
+  readonly latestCheck: NonNullable<TriggerDefinition["latestCheck"]>;
+  readonly error: TriggerDefinition["error"];
+}
+
+export function checkRecord(
+  previous: TriggerDefinition["error"],
   outcome: CheckOutcome,
   time: string,
-) {
-  const [current] = yield* sql<{
-    error_code: string | null;
-    error_first_seen_at: string | null;
-    error_count: number | null;
-  }>`SELECT error_code, error_first_seen_at, error_count FROM run_triggers WHERE id = ${triggerId}`;
-  if (!current) return;
+): CheckRecord {
   const { problem } = outcome;
-  const repeated = problem !== null && current.error_code === problem.code;
-  yield* sql`UPDATE run_triggers SET latest_check_at = ${time},
-      latest_check_started = ${outcome.started}, latest_check_waiting = ${outcome.waiting},
-      error_code = ${problem?.code ?? null}, error_message = ${problem?.message ?? null},
-      error_first_seen_at = ${problem === null ? null : repeated ? current.error_first_seen_at : time},
-      error_last_seen_at = ${problem === null ? null : time},
-      error_count = ${problem === null ? null : repeated ? current.error_count! + 1 : 1}
+  const repeated = problem !== null && previous?.code === problem.code ? previous : null;
+  return {
+    latestCheck: {
+      checkedAt: time,
+      started: outcome.started,
+      waiting: outcome.waiting,
+      notStarted: outcome.notStarted,
+    },
+    error: problem && {
+      code: problem.code,
+      message: problem.message,
+      firstSeenAt: repeated?.firstSeenAt ?? time,
+      lastSeenAt: time,
+      count: (repeated?.count ?? 0) + 1,
+    },
+  };
+}
+
+export const writeCheckRecord = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  triggerId: string,
+  { latestCheck, error }: CheckRecord,
+) {
+  yield* sql`UPDATE run_triggers SET latest_check_at = ${latestCheck.checkedAt},
+      latest_check_started = ${latestCheck.started},
+      latest_check_waiting = ${latestCheck.waiting},
+      error_code = ${error?.code ?? null}, error_message = ${error?.message ?? null},
+      error_first_seen_at = ${error?.firstSeenAt ?? null},
+      error_last_seen_at = ${error?.lastSeenAt ?? null}, error_count = ${error?.count ?? null}
     WHERE id = ${triggerId}`;
   yield* sql`DELETE FROM run_trigger_check_misses WHERE trigger_id = ${triggerId}`;
-  for (const [position, miss] of outcome.notStarted.entries())
+  for (const [position, miss] of latestCheck.notStarted.entries())
     yield* sql`INSERT INTO run_trigger_check_misses (trigger_id, position, issue, reason)
       VALUES (${triggerId}, ${position}, ${miss.issue}, ${miss.reason})`;
 });

@@ -44,6 +44,7 @@ import {
   resultResponse,
   runImageResponse,
   sendFaviconResponse,
+  optionalStandardBody,
   standardBody,
   writeJsonResponse,
   type RouteTrust,
@@ -443,7 +444,13 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
   return {
     getTriggerReadiness: {
       handle: ({ parameters }) =>
-        answer(() => factory.getTriggerReadiness(parameters.projectId, parameters.flowId)),
+        answer(() =>
+          factory.getTriggerReadiness(
+            parameters.projectId,
+            parameters.flowId,
+            parameters.triggerId,
+          ),
+        ),
     },
     listTriggers: { handle: () => answer(() => factory.listTriggers()) },
     createTrigger: {
@@ -460,7 +467,10 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
       handle: ({ parameters, input }) =>
         answer(() => factory.setTriggerEnabled(parameters.id, input)),
     },
-    runTrigger: { handle: ({ parameters }) => answer(() => factory.runTrigger(parameters.id)) },
+    runTrigger: {
+      body: optionalStandardBody,
+      handle: ({ parameters, input }) => answer(() => factory.runTrigger(parameters.id, input)),
+    },
     previewNewTrigger: {
       body: standardBody,
       handle: ({ input }) => answer(() => factory.previewNewTrigger(input)),

@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import type { TriggerDefinition } from "@t3-factory/contracts";
 import { createTriggerDraft, triggerFlows } from "../src/trigger-draft.ts";
-import { deliveredStudio, savedFlow } from "./support/studio-definitions.ts";
+import { deliveredStudio, savedFlow, studioSnapshot } from "./support/studio-definitions.ts";
 
 it("the Trigger form offers global Flows and the chosen Project's Flows", () => {
   // Arrange
@@ -42,6 +42,85 @@ it("a case-insensitive Trigger name already in Studio disables saving the draft"
   // Assert
   expect(draft.getSnapshot().nameTaken).toBe(true);
   expect(draft.getSnapshot().canSave).toBe(false);
+  disconnect();
+  close();
+});
+
+const savedTrigger: TriggerDefinition = {
+  id: "trigger-1",
+  kind: "github_issues",
+  name: "Ready issues",
+  enabled: true,
+  projectId: "atlas",
+  flowId: "global",
+  schedule: { enabled: true, intervalMinutes: 5 },
+  maxActiveRuns: 2,
+  revision: 3,
+  nextCheckAt: null,
+  latestCheck: null,
+  error: null,
+  github: {
+    repository: { host: "github.com", nameWithOwner: "factory-demo/atlas", nodeId: "atlas" },
+    query: "label:factory:ready",
+    readyLabel: "factory:ready",
+  },
+  createdAt: "2026-11-10T09:00:00.000Z",
+  updatedAt: "2026-11-10T09:00:00.000Z",
+};
+
+it("a check refused for a newer revision enters the revision conflict a stale save enters", () => {
+  // Arrange
+  const { definitions, close } = deliveredStudio({
+    flows: [],
+    agents: [],
+    triggers: [savedTrigger],
+  });
+  const draft = createTriggerDraft(savedTrigger, definitions);
+  const disconnect = draft.connect();
+  draft.edit({ name: "Renamed" });
+
+  // Act
+  draft.noteStaleRevision(3);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3 },
+    content: { name: "Renamed" },
+    dirty: true,
+    conflict: { status: "detected", revision: null },
+    canSave: false,
+  });
+  disconnect();
+  close();
+});
+
+it("a check refusal that arrives after the editor took the newer revision leaves the editor current", () => {
+  // Arrange
+  const { definitions, studio, close } = deliveredStudio({
+    flows: [],
+    agents: [],
+    triggers: [savedTrigger],
+  });
+  const draft = createTriggerDraft(savedTrigger, definitions);
+  const disconnect = draft.connect();
+  const newer = {
+    ...savedTrigger,
+    name: "Renamed elsewhere",
+    revision: 4,
+    updatedAt: "2026-11-10T10:00:00.000Z",
+  };
+  studio.message(studioSnapshot({ flows: [], agents: [], triggers: [newer] }));
+  expect(draft.getSnapshot().saved?.revision).toBe(4);
+
+  // Act
+  draft.noteStaleRevision(3);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { revision: 4 },
+    content: { name: "Renamed elsewhere" },
+    conflict: { status: "none" },
+  });
   disconnect();
   close();
 });

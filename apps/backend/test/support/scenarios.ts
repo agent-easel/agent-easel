@@ -89,7 +89,7 @@ export async function triggerChecked(
   factory: Pick<FactoryOperations, "runTrigger">,
   triggerId: string,
 ) {
-  const checked = await factory.runTrigger(triggerId);
+  const checked = await factory.runTrigger(triggerId, {});
   if (!checked.ok) throw new Error(checked.error.message);
   return checked.value;
 }

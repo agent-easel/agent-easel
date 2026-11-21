@@ -11,7 +11,7 @@ import {
   type GitHubRepositoryIdentity,
 } from "../../src/adapters/github.ts";
 
-type GitHubCall = keyof GitHubAdapter;
+export type GitHubCall = keyof GitHubAdapter;
 
 /** An issue as GitHub holds it, with every `labeled` event it has had. */
 export interface ControlledIssue extends GitHubIssue {

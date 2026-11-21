@@ -13,7 +13,6 @@ import type {
   TriggerDefinition,
   TriggerMissedIssue,
   TriggerPreviewIssue,
-  TriggerRepository,
   TriggerStartedRun,
 } from "@t3-factory/contracts";
 import {
@@ -33,12 +32,13 @@ import { now } from "../time.ts";
 import {
   activeTriggerRuns,
   admittedRun,
+  checkRecord,
   deleteAdmissions,
   deleteAttempt,
   deleteUnadmitted,
   readTriggerAdmissions,
   writeAdmissionAttempt,
-  writeCheckOutcome,
+  writeCheckRecord,
   type CheckOutcome,
 } from "./trigger-store.ts";
 
@@ -64,21 +64,16 @@ export interface TriggerCheckDeps {
   ) => Effect.Effect<Result<undefined>, unknown>;
 }
 
-/**
- * What a check reads its settings from: a saved Trigger, or proposed settings to preview. Without
- * an id nothing is guarded yet and no Run counts against the limit.
- */
 export interface AdmissionSubject {
   readonly id: string | null;
   readonly projectId: string;
   readonly flowId: string;
   readonly maxActiveRuns: number;
   readonly github: Pick<GitHubIssuesSettings, "query" | "readyLabel"> & {
-    readonly repository: Pick<TriggerRepository, "nodeId">;
+    readonly repository: { readonly nodeId: string | null };
   };
 }
 
-/** A preview's issues, or the shared problem, and the repository GitHub answered with. */
 interface TriggerPlanPreview {
   readonly repository: GitHubRepository | null;
   readonly issues: readonly TriggerPreviewIssue[];
@@ -93,6 +88,8 @@ interface Candidate {
   readonly labellingEventId: string | null;
 }
 
+type ReadRepository = GitHubRepository | null | undefined;
+
 /** Everything a check decides before it writes, or the shared problem that stops it. */
 type AdmissionPlan =
   | {
@@ -103,7 +100,7 @@ type AdmissionPlan =
       readonly released: readonly string[];
       readonly free: number;
     }
-  | { readonly ok: false; readonly problem: Problem };
+  | { readonly ok: false; readonly problem: Problem; readonly repository?: ReadRepository };
 
 /**
  * How one admission ended: `full` when no Run slot was free after all, `stopped` when the Trigger
@@ -380,24 +377,26 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           readonly matching: readonly GitHubIssue[];
           readonly states: ReadonlyMap<string, GitHubLabelState>;
         }
-      | { readonly ok: false; readonly problem: Problem },
+      | { readonly ok: false; readonly problem: Problem; readonly repository: ReadRepository },
       unknown
     > {
       const read = yield* Effect.promise(() => github.repository(project.workspaceRoot));
-      if (!read.ok) return { ok: false, problem: gitHubFailed(read.failure) };
-      if (read.value.nodeId !== subject.github.repository.nodeId)
+      if (!read.ok) return { ok: false, problem: gitHubFailed(read.failure), repository: null };
+      const repository = read.value;
+      const { nodeId } = subject.github.repository;
+      if (nodeId !== null && repository.nodeId !== nodeId)
         return {
           ok: false,
           problem: gitHubFailed({
             reason: "repository_mismatch",
-            nameWithOwner: read.value.nameWithOwner,
+            nameWithOwner: repository.nameWithOwner,
           }),
+          repository,
         };
-      const repository = read.value;
       const matching = yield* Effect.promise(() =>
         github.openIssues(repository, subject.github.query),
       );
-      if (!matching.ok) return { ok: false, problem: gitHubFailed(matching.failure) };
+      if (!matching.ok) return { ok: false, problem: gitHubFailed(matching.failure), repository };
       const ids = [
         ...new Set([
           ...matching.value.map((issue) => issue.nodeId),
@@ -410,7 +409,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           : yield* Effect.promise(() =>
               github.labelStates(repository, ids, subject.github.readyLabel),
             );
-      if (!states.ok) return { ok: false, problem: gitHubFailed(states.failure) };
+      if (!states.ok) return { ok: false, problem: gitHubFailed(states.failure), repository };
       return { ok: true, repository, matching: matching.value, states: states.value };
     });
 
@@ -491,12 +490,43 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return yield* admitAll(trigger, plan.repository.nameWithOwner, plan.candidates, plan.free);
     });
 
-  /** What a check of `subject` would start now and what would wait, without starting or writing. */
+  const projectRepository = (projectId: string) =>
+    Effect.gen(function* () {
+      const project = yield* deps.hostLocalProject(projectId);
+      if (!project.ok) return null;
+      const read = yield* Effect.promise(() => github.repository(project.value.workspaceRoot));
+      return read.ok ? read.value : null;
+    });
+
   const preview = (subject: AdmissionSubject) =>
     admissionPlan(subject).pipe(
-      Effect.map((plan): TriggerPlanPreview => {
-        if (!plan.ok) return { repository: null, issues: [], problem: plan.problem };
-        return {
+      Effect.flatMap((plan): Effect.Effect<TriggerPlanPreview, unknown> => {
+        if (!plan.ok)
+          return (
+            plan.repository === undefined
+              ? projectRepository(subject.projectId)
+              : Effect.succeed(plan.repository)
+          ).pipe(
+            Effect.map((repository) => {
+              const { nodeId } = subject.github.repository;
+              const moved =
+                subject.id === null &&
+                nodeId !== null &&
+                repository &&
+                repository.nodeId !== nodeId;
+              return {
+                repository,
+                issues: [],
+                problem: moved
+                  ? gitHubFailed({
+                      reason: "repository_mismatch",
+                      nameWithOwner: repository.nameWithOwner,
+                    })
+                  : plan.problem,
+              };
+            }),
+          );
+        return Effect.succeed({
           repository: plan.repository,
           problem: null,
           issues: plan.candidates.map(({ issue }, index) => ({
@@ -507,17 +537,28 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             createdAt: issue.createdAt,
             admission: index < plan.free ? "starts_now" : "waits",
           })),
-        };
+        });
       }),
     );
 
-  /** Checks an enabled Trigger once and records what the check did. */
-  const check = (triggerId: string) =>
+  const check = (triggerId: string, expectedRevision?: number) =>
     lanes
       .serial(triggerId, () =>
         Effect.gen(function* (): Effect.fn.Return<Result<TriggerCheckReply>, unknown> {
           const trigger = yield* deps.readTrigger(triggerId);
           if (!trigger) return failure("not_found", "This Trigger does not exist.");
+          if (expectedRevision !== undefined && trigger.revision !== expectedRevision)
+            return failure(
+              "conflict",
+              `Revision ${trigger.revision} of this Trigger was saved after revision ${expectedRevision}, so nothing was checked. Review its current settings before checking.`,
+              [
+                {
+                  code: "stale_revision",
+                  path: "expectedRevision",
+                  message: `The Trigger is at revision ${trigger.revision}.`,
+                },
+              ],
+            );
           if (!trigger.enabled)
             return failure("conflict", "Enable this Trigger before running a check.", [
               {
@@ -527,11 +568,20 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
               },
             ]);
           const outcome = yield* inspect(trigger);
-          yield* sql.withTransaction(writeCheckOutcome(sql, triggerId, outcome, yield* now));
-          const checked = yield* deps.readTrigger(triggerId);
-          return checked
-            ? { ok: true as const, value: { ...checked, startedRuns: outcome.runs } }
-            : failure("not_found", "This Trigger was removed during the check.");
+          const time = yield* now;
+          const current = yield* sql.withTransaction(
+            Effect.gen(function* () {
+              const stored = yield* deps.readTrigger(triggerId);
+              const recorded = checkRecord((stored ?? trigger).error, outcome, time);
+              if (stored) yield* writeCheckRecord(sql, triggerId, recorded);
+              return { stored, recorded };
+            }),
+          );
+          const checked = current.stored?.revision === trigger.revision ? current.stored : trigger;
+          return {
+            ok: true as const,
+            value: { ...checked, ...current.recorded, startedRuns: outcome.runs },
+          };
         }),
       )
       .pipe(Effect.uninterruptible);

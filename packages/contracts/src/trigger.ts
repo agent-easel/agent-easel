@@ -68,7 +68,6 @@ export interface TriggerDefinition {
   readonly schedule: TriggerSchedule;
   /** 1 to 10 Runs from this Trigger that are neither Settled nor Archived. */
   readonly maxActiveRuns: number;
-  /** Counts saved settings; enabling or disabling keeps it. */
   readonly revision: number;
   readonly nextCheckAt: string | null;
   readonly latestCheck: TriggerLatestCheck | null;
@@ -98,7 +97,9 @@ export interface CreateTriggerInput {
   readonly github: GitHubIssuesInput;
 }
 
-/** A complete replacement of the saved settings; the kind must stay the same. */
+type OptionalRepositoryInput = Omit<GitHubIssuesInput, "repositoryNodeId"> &
+  Partial<Pick<GitHubIssuesInput, "repositoryNodeId">>;
+
 export interface UpdateTriggerInput {
   readonly expectedRevision: number;
   readonly kind: TriggerKind;
@@ -107,7 +108,17 @@ export interface UpdateTriggerInput {
   readonly flowId: string;
   readonly schedule: TriggerSchedule;
   readonly maxActiveRuns: number;
-  readonly github: Required<GitHubIssuesInput>;
+  readonly github: Required<Omit<GitHubIssuesInput, "repositoryNodeId">> & OptionalRepositoryInput;
+}
+
+export interface PreviewNewTriggerInput extends Omit<CreateTriggerInput, "github"> {
+  readonly github: OptionalRepositoryInput;
+}
+
+export type PreviewTriggerInput = UpdateTriggerInput;
+
+export interface RunTriggerInput {
+  readonly expectedRevision?: number;
 }
 
 /**
@@ -142,6 +153,10 @@ export interface TriggerReadiness {
     | { readonly ready: true; readonly repository: TriggerRepositoryChoice }
     | { readonly ready: false; readonly problem: string }
     | null;
+  readonly repositoryWarnings: readonly {
+    readonly nodeId: string;
+    readonly warnings: readonly ValidationIssue[];
+  }[];
   /** The same readiness New Run shows for the Flow. */
   readonly flow: FlowReadiness | null;
 }
@@ -178,6 +193,7 @@ export interface TriggerPreview {
    * Trigger or an unsaved edit.
    */
   readonly revision: number | null;
+  readonly repository: TriggerRepositoryChoice | null;
 }
 
 /** A Run this check started, so the list can open it without storing the check. */
@@ -188,18 +204,16 @@ export interface TriggerStartedRun {
   readonly title: string;
 }
 
-/** The Trigger after a check, plus the Runs that check started. */
 export interface TriggerCheckReply extends TriggerDefinition {
   readonly startedRuns: readonly TriggerStartedRun[];
 }
 
 /** The Trigger operations the Factory facade implements; any approved client may call them. */
 export const triggerOperations = {
-  /** Query parameters may be empty: readiness then covers only what was chosen. */
   getTriggerReadiness: operation<never, TriggerReadiness>()({
     method: "GET",
     path: "/api/triggers/readiness",
-    query: ["projectId", "flowId"],
+    query: ["projectId", "flowId", "triggerId"],
   }),
   listTriggers: operation<never, readonly TriggerDefinition[]>()({
     method: "GET",
@@ -221,17 +235,13 @@ export const triggerOperations = {
     path: "/api/triggers/:id/enabled",
     body: "json",
   }),
-  /**
-   * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
-   * check's summary and the Runs it started. Every limit of a scheduled check applies. Those Runs
-   * are not stored on the Trigger.
-   */
-  runTrigger: operation<never, TriggerCheckReply>()({
+  runTrigger: operation<RunTriggerInput, TriggerCheckReply>()({
     method: "POST",
     path: "/api/triggers/:id/run",
+    body: "json",
   }),
   /** Previews the settings a new Trigger would be created with. */
-  previewNewTrigger: operation<CreateTriggerInput, TriggerPreview>()({
+  previewNewTrigger: operation<PreviewNewTriggerInput, TriggerPreview>()({
     method: "POST",
     path: "/api/triggers/preview",
     body: "json",
@@ -240,7 +250,7 @@ export const triggerOperations = {
    * Previews a saved Trigger with the given settings, its current ones or an edit from its
    * current revision, counting its guards and active Runs.
    */
-  previewTrigger: operation<UpdateTriggerInput, TriggerPreview>()({
+  previewTrigger: operation<PreviewTriggerInput, TriggerPreview>()({
     method: "POST",
     path: "/api/triggers/:id/preview",
     body: "json",
