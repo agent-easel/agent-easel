@@ -2,6 +2,8 @@ import { OfflineError, protocolHeaders, transport, unreachableHeader } from "./t
 import {
   AGENT_CREATE_WINDOW_MS,
   agentOperations,
+  featureUsageOperations,
+  type ReportedFeature,
   definitionImportOperations,
   flowOperations,
   projectOperations,
@@ -40,7 +42,12 @@ async function send(path: string, init: RequestInit): Promise<Response> {
 }
 
 /** Adds the Factory protocol and mutation headers; refuses a mutation the view cannot send now. */
-function factoryRequest(path: string, init?: RequestInit, admitted = false): Promise<Response> {
+function factoryRequest(
+  path: string,
+  init?: RequestInit,
+  admitted = false,
+  dispatch = send,
+): Promise<Response> {
   const headers = new Headers(init?.headers);
   const mutation = !["GET", "HEAD"].includes(init?.method ?? "GET");
   if (mutation) headers.set("X-Factory-Request", "1");
@@ -50,7 +57,7 @@ function factoryRequest(path: string, init?: RequestInit, admitted = false): Pro
   // cancelled halfway by a later catch-up, but none of its requests is sent while offline.
   const accepted = admitted ? transport.acceptsAdmittedRequests() : transport.acceptsMutations();
   if (mutation && !accepted) throw new OfflineError("not-sent");
-  return send(path, { ...init, headers });
+  return dispatch(path, { ...init, headers });
 }
 
 async function request<A>(path: string, init?: RequestInit, admitted = false): Promise<A> {
@@ -115,6 +122,16 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
     };
   }
   return calls as OperationCalls<Definitions>;
+}
+
+export function reportFeature(feature: ReportedFeature): void {
+  const definition = featureUsageOperations.reportFeatureUsed;
+  void Promise.resolve()
+    .then(() =>
+      factoryRequest(operationPath(definition), requestInit(definition, feature), false, fetch),
+    )
+    .then((response) => response.body?.cancel())
+    .catch(() => undefined);
 }
 
 export const api = {

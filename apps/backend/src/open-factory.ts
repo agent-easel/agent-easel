@@ -1,3 +1,4 @@
+import type { EventName, EventProperties } from "./telemetry.ts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
@@ -18,6 +19,10 @@ export interface Factory extends FactoryOperations {
   readonly live: LiveStreams;
   setRuntimeBackendUrl(url: string): void;
   awaitWorkerTitles(): Promise<void>;
+  readonly recordTelemetry: <K extends EventName>(
+    event: K,
+    properties: EventProperties[K],
+  ) => Promise<void>;
   close(): Promise<void>;
 }
 
@@ -63,7 +68,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     startTextRun,
     setRuntimeBackendUrl,
     live,
-    telemetry: _telemetry,
+    telemetry,
     ...operations
   } = service;
   const facade = promiseOperations(runtime, operations);
@@ -74,6 +79,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     startTextRun: (input) => runtime.runPromise(startTextRun(input)),
     setRuntimeBackendUrl,
     live,
+    recordTelemetry: (event, properties) => runtime.runPromise(telemetry.record(event, properties)),
     close: () => (closing ??= runtime.dispose()),
   };
 }

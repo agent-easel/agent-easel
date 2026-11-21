@@ -3,6 +3,7 @@
  * local backend (server role) or one pinned remote server (client role). Business rules
  * stay in the backend's public operations.
  */
+import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -493,6 +494,8 @@ async function setAppearance(preference: unknown): Promise<DesktopResult> {
   return { ok: true };
 }
 
+const updateReceiptPath = () => join(app.getPath("userData"), "pending-update.json");
+
 /** Confirmed in the upgrade review; the backend still shuts down in order before replacement. */
 async function installUpdate(): Promise<DesktopResult> {
   if (installingUpdate) return failed("Update installation is already in progress.");
@@ -503,6 +506,17 @@ async function installUpdate(): Promise<DesktopResult> {
     await persistWindowBounds();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
+    if (app.isPackaged && store.get().role === "server") {
+      await writeFile(
+        updateReceiptPath(),
+        JSON.stringify({
+          fromVersion: app.getVersion(),
+          toVersion: updates.current.version,
+          channel: updateChannel(),
+        }),
+        { mode: 0o600 },
+      ).catch(() => undefined);
+    }
     quitting = true;
     updates.install();
     return { ok: true };
@@ -734,6 +748,7 @@ async function start() {
     join(here, "backend-host.js"),
     {
       FACTORY_UI_DIRECTORY: uiDirectory,
+      FACTORY_UPDATE_RECEIPT: updateReceiptPath(),
       FACTORY_APPLICATION_VERSION: app.getVersion(),
       FACTORY_DESKTOP_PACKAGED: String(app.isPackaged),
     },

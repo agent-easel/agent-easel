@@ -1,3 +1,4 @@
+import { reportFeature } from "./api.ts";
 import { useSyncExternalStore } from "react";
 import { APPEARANCE_COLOR_TOKENS, type AppearancePresentation } from "@t3-factory/contracts";
 import type { AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
@@ -118,12 +119,16 @@ export async function chooseAppearance(preference: AppearancePreference): Promis
       ok: false as const,
       message: cause instanceof Error ? cause.message : "The desktop app couldn’t save the mode.",
     }));
-    if (result.ok) return null;
+    if (result.ok) {
+      if (previous !== preference) reportFeature("theme_changed");
+      return null;
+    }
     applyPreference(previous);
     return result.message;
   }
   try {
     window.localStorage.setItem(storageKey, preference);
+    if (previous !== preference) reportFeature("theme_changed");
     return null;
   } catch {
     return "This browser blocks saved settings, so the appearance applies until this tab closes.";

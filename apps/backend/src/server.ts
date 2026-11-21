@@ -1,3 +1,4 @@
+import { reportInstalledUpdate } from "./telemetry.ts";
 import { createServer, type Server } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,8 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
 import {
   agentOperations,
+  featureUsageOperations,
+  isReportedFeature,
   definitionImportOperations,
   flowOperations,
   projectOperations,
@@ -128,6 +131,22 @@ function apiRoutes(factory: Factory) {
     ...importRoutes(factory),
     ...chatControlRoutes(factory),
     ...triggerRoutes(factory),
+    ...featureUsageRoutes(factory),
+  };
+}
+
+function featureUsageRoutes(factory: Factory): RouteEntries<typeof featureUsageOperations> {
+  return {
+    reportFeatureUsed: {
+      body: standardBody,
+      handle: ({ input }) =>
+        isReportedFeature(input)
+          ? Effect.promise(async () => {
+              await factory.recordTelemetry("feature.used", { feature: input });
+              return resultResponse({ ok: true, value: null });
+            })
+          : Effect.succeed(resultResponse(failure("validation", "Unknown feature."))),
+    },
   };
 }
 
@@ -652,6 +671,17 @@ function serveLive(
   return binding.live.serve(
     request,
     admission(liveTrust, declared, requestCredential(request.headers), binding),
+    (clientId) =>
+      Effect.promise(() =>
+        binding.factory.recordTelemetry("client.connected", {
+          surface:
+            clientId !== null
+              ? "approved_remote_client"
+              : request.headers["x-factory-desktop"] === "1"
+                ? "desktop"
+                : "browser",
+        }),
+      ),
   );
 }
 
@@ -757,6 +787,7 @@ export interface ServerOptions {
   readonly protocol?: Pick<ProtocolDescriptor, "protocol" | "minimumPeerProtocol">;
   /** The desktop server's updater, which approved clients may operate. */
   readonly applicationUpdates?: ApplicationUpdates;
+  readonly updateReceipt?: string;
 }
 
 const accessRequestsPerMinute = 5;
@@ -821,7 +852,12 @@ export async function startServer(config: Configuration, options: ServerOptions 
       };
       return (request: HttpServerRequestType) => handleHttpRequest(request, binding);
     };
-  const remote = remoteAccessController(config, handlerFor("remote", config.allowedHosts ?? []));
+  const remote = remoteAccessController(
+    config,
+    handlerFor("remote", config.allowedHosts ?? []),
+    (enabled, certificateMode) =>
+      factory.recordTelemetry("remote_access.toggled", { enabled, certificateMode }),
+  );
   const nodeServer = createServer();
   let host: Awaited<ReturnType<typeof listen>>;
   try {
@@ -846,6 +882,9 @@ export async function startServer(config: Configuration, options: ServerOptions 
   factory.setRuntimeBackendUrl(loopbackUrl(config.host, host.address.port));
   // A remote-access failure is reported on the host panel; the host-local surface keeps serving.
   await remote.start().catch(() => undefined);
+  const updateReported = options.updateReceipt
+    ? reportInstalledUpdate(options.updateReceipt, protocol.application, factory.recordTelemetry)
+    : undefined;
   let closing: Promise<void> | undefined;
   return {
     factory,
@@ -854,7 +893,7 @@ export async function startServer(config: Configuration, options: ServerOptions 
     remoteAddress: () => remote.address(),
     remoteAccess: remote,
     close() {
-      return (closing ??= Promise.allSettled([remote.close(), host.close()])
+      return (closing ??= Promise.allSettled([remote.close(), host.close(), updateReported])
         .then(() => limiter.close())
         .then(() => live.close())
         .then(() => factory.close()));

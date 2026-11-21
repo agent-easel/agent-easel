@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { link, open, unlink } from "node:fs/promises";
+import { link, open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -51,6 +51,9 @@ const agentProperties = Schema.Struct({
   hasProjectOverrides: Schema.Boolean,
 });
 const definitionProperties = Schema.Struct({ kind: definitionKind });
+const releaseVersion = /^\d{1,10}\.\d{1,10}\.\d{1,10}(?:-beta\.[1-9]\d{0,9})?$/;
+const version = Schema.String.check(Schema.isPattern(releaseVersion));
+const triggerKind = Schema.Literal("github_issues");
 
 const eventProperties = {
   "flow.created": flowProperties,
@@ -65,6 +68,35 @@ const eventProperties = {
   "owner.changed": Schema.Struct({
     kind: definitionKind,
     direction: Schema.Literals(["to_project", "to_global"]),
+  }),
+  "trigger.saved": Schema.Struct({ kind: triggerKind }),
+  "trigger.fired": Schema.Struct({
+    kind: triggerKind,
+    outcome: Schema.Literals(["started_run", "skipped", "failed"]),
+  }),
+  "chat_control.used": Schema.Struct({
+    platform: Schema.Literal("discord"),
+    command: Schema.Literals(["start_run", "status", "human_reply"]),
+  }),
+  "client.connected": Schema.Struct({
+    surface: Schema.Literals(["desktop", "browser", "approved_remote_client"]),
+  }),
+  "remote_access.toggled": Schema.Struct({
+    enabled: Schema.Boolean,
+    certificateMode: Schema.Literals(["factory_ca", "custom_cert"]),
+  }),
+  "update.installed": Schema.Struct({
+    channel: Schema.Literals(["stable", "beta"]),
+    fromVersion: version,
+    toVersion: version,
+  }),
+  "feature.used": Schema.Struct({
+    feature: Schema.Literals([
+      "auto_arrange",
+      "run_title_generated",
+      "keyboard_shortcut",
+      "theme_changed",
+    ]),
   }),
   "app.started": Schema.Struct({
     isFirstRun: Schema.Boolean,
@@ -99,8 +131,10 @@ const eventProperties = {
   "run.cancelled": Schema.Struct({}),
 };
 
-type EventProperties = { [K in keyof typeof eventProperties]: (typeof eventProperties)[K]["Type"] };
-type EventName = keyof EventProperties;
+export type EventProperties = {
+  [K in keyof typeof eventProperties]: (typeof eventProperties)[K]["Type"];
+};
+export type EventName = keyof EventProperties;
 type ServerMode = "desktop" | "server";
 
 export interface TelemetryOptions {
@@ -121,6 +155,29 @@ export interface Telemetry {
     properties: EventProperties[K],
   ) => Effect.Effect<void>;
   readonly flush: () => Effect.Effect<void>;
+}
+
+export async function reportInstalledUpdate(
+  path: string,
+  applicationVersion: string,
+  record: (
+    event: "update.installed",
+    properties: EventProperties["update.installed"],
+  ) => Promise<void>,
+) {
+  try {
+    const receipt: unknown = JSON.parse(await readFile(path, "utf8"));
+    const decoded = Schema.decodeUnknownOption(eventProperties["update.installed"], {
+      onExcessProperty: "error",
+    })(receipt);
+    if (Option.isNone(decoded)) return;
+    const { fromVersion, toVersion } = decoded.value;
+    if (fromVersion === toVersion || toVersion !== applicationVersion) return;
+    await unlink(path);
+    await record("update.installed", decoded.value);
+  } catch {
+    return;
+  }
 }
 
 export function telemetryCount(count: number): typeof bucket.Type {
@@ -288,9 +345,7 @@ export const makeTelemetry = (
     );
     if (distinctId === null) return disabled;
 
-    const appVersion =
-      applicationVersion?.match(/^\d{1,10}\.\d{1,10}\.\d{1,10}(?:-beta\.[1-9]\d{0,9})?$/)?.[0] ??
-      "source";
+    const appVersion = applicationVersion?.match(releaseVersion)?.[0] ?? "source";
     const metadata = {
       appVersion,
       channel: options.packagedChannel ?? "stable",
@@ -351,7 +406,7 @@ export const makeTelemetry = (
           event,
           distinct_id: distinctId,
           timestamp: new Date(now).toISOString(),
-          properties: { ...decoded.value, ...metadata, ...startup },
+          properties: { ...metadata, ...decoded.value, ...startup },
         });
       });
 
