@@ -200,6 +200,40 @@ it("blank, duplicate and unwired endings save as a draft whose readiness names e
   ]);
 });
 
+it("a Flow saved without finish has no Finish block, so the author removes one by omitting it", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const { finish: _finish, ...plain } = finishGraph(agent.id, [], []);
+  const created = toolReply(
+    await client.callTool({
+      name: "factory_create_flow",
+      arguments: { name: "Deliver", graph: finishGraph(agent.id, [delivered], []) },
+    }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_flow",
+    arguments: {
+      flowId: created.id,
+      name: created.name,
+      expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
+      graph: plain,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result).graph).toStrictEqual(plain);
+  expect(
+    toolReply(
+      await client.callTool({ name: "factory_get_flow", arguments: { flowId: created.id } }),
+    ).graph,
+  ).toStrictEqual(plain);
+});
+
 it("a Flow without endings is ready, and a Flow input wire to Finish is refused without saving", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);
@@ -269,6 +303,6 @@ it("a Flow save after Start leaves the Run on the endings it captured", async (c
   assert(saved.ok);
   const run = await f.getRun(started.value.id);
   assert(run.ok);
-  expect(run.value.definitions.flow.graph.finish.endings).toStrictEqual([delivered]);
+  expect(run.value.definitions.flow.graph.finish?.endings).toStrictEqual([delivered]);
   expect(run.value.definitions.flow.graph.connections).toStrictEqual(first.value.graph.connections);
 });

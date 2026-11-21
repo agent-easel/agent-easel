@@ -385,7 +385,9 @@ function flowBody(flow: ReadinessFlow) {
       },
       blocks: graph.blocks.map(savedBlock),
       connections: graph.connections,
-      finish: { position: graph.finish?.position ?? ORIGIN, endings: graph.finish?.endings ?? [] },
+      ...(graph.finish && {
+        finish: { position: graph.finish.position ?? ORIGIN, endings: graph.finish.endings },
+      }),
     },
   };
 }
@@ -475,7 +477,8 @@ function budgetIssues(closure: Closure, definitions: CompositionDefinitions): Re
     });
   const agentRows = agentCounted(closure, definitions, paths);
   const unique = { flows: closure.order.length, agents: agentRows.length };
-  const ownBlocks = (flow: ReadinessFlow) => BigInt(flow.graph.blocks.length + 1);
+  const ownBlocks = (flow: ReadinessFlow) =>
+    BigInt(flow.graph.blocks.length + (flow.graph.finish === undefined ? 0 : 1));
   const ownConnections = (flow: ReadinessFlow) => BigInt(flow.graph.connections.length);
   const bytes = [
     ...flowCounted((flow) => BigInt(utf8Length(canonicalJson(flowBody(flow)))), false),

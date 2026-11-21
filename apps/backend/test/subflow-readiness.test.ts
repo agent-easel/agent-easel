@@ -373,6 +373,8 @@ it("Agents whose multibyte prompts total over 64 MiB of canonical bytes exceed t
   expect(BigInt(budget.total)).toBeGreaterThan(67_108_864n);
   expect(budget.unique).toStrictEqual({ flows: 2, agents: 191 });
   const { flow, agent } = budget.subtotals;
+  const { name, workspace, graph } = heavy;
+  expect(flow?.root).toBe(String(Buffer.byteLength(JSON.stringify({ name, workspace, graph }))));
   const sum = [flow!.root, flow!.direct, flow!.deeper, agent!.root, agent!.direct, agent!.deeper]
     .map(BigInt)
     .reduce((a, b) => a + b);

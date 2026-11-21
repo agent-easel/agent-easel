@@ -70,6 +70,7 @@ function PreviewFinishCard({
   const { innerGraph, innerGeometry, offsetX, offsetY } = preview;
   const rows = dimensions.block;
   const box = innerGeometry.finishBox;
+  if (!box || !innerGraph.finish) return null;
   const { endings } = innerGraph.finish;
   const state = { kind: "authoring" as const, unconnected: emptyUnconnected };
   const identity = finishIdentity(state, endings.length);
@@ -201,7 +202,7 @@ function PreviewWires({ preview }: { preview: SubflowPreview }) {
   const { innerGraph, innerGeometry, offsetX, offsetY, incomingEntry, inputY, endingRoutes } =
     preview;
   const blocks = new Map(innerGraph.blocks.map((block) => [block.id, block]));
-  const endings = new Map(innerGraph.finish.endings.map((ending, index) => [ending.id, index]));
+  const endings = new Map(innerGraph.finish?.endings.map((ending, index) => [ending.id, index]));
   const shift = (point: { x: number; y: number }) => ({
     x: offsetX + point.x,
     y: offsetY + point.y,

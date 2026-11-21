@@ -105,18 +105,9 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
         revisitContext: "keep",
       };
 
-const upgradedFinishPosition = ({ flowInput, blocks }: ReleasedFlow["graph"]) => ({
-  x: Math.max(flowInput.position.x + 200, ...blocks.map((block) => block.position.x + 240)) + 80,
-  y: flowInput.position.y,
-});
-
 export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) => ({
   ...flow,
-  graph: {
-    ...flow.graph,
-    blocks: flow.graph.blocks.map(currentBlock),
-    finish: { position: upgradedFinishPosition(flow.graph), endings: [] },
-  },
+  graph: { ...flow.graph, blocks: flow.graph.blocks.map(currentBlock) },
   workspace: { mode: "checkout" as const },
 });
 

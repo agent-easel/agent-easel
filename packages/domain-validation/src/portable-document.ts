@@ -97,7 +97,7 @@ const CONDITION_OTHERWISE_FIELDS = ["id"];
  */
 interface FormatReader {
   readonly version: PortableFormatVersion;
-  readonly finish: boolean;
+  readonly finish: "none" | "required" | "optional";
   readonly kindFields: ReadonlyMap<unknown, readonly string[]>;
   readonly kindChoice: string;
 }
@@ -112,7 +112,7 @@ const VERSION_1_KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
 /** Version 1 holds no Condition block, so its definitions already are the current model. */
 const VERSION_1: FormatReader = {
   version: 1,
-  finish: false,
+  finish: "none",
   kindFields: VERSION_1_KIND_FIELDS,
   kindChoice: "an Agent, Human, Wait or Continuation block",
 };
@@ -120,12 +120,12 @@ const VERSION_1: FormatReader = {
 /** Version 2 is version 1 plus the Condition block. */
 const VERSION_2: FormatReader = {
   version: 2,
-  finish: false,
+  finish: "none",
   kindFields: new Map([...VERSION_1_KIND_FIELDS, ["condition", ["rules", "otherwise"]]]),
   kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
 };
 
-const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: true };
+const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: "required" };
 
 const VERSION_4: FormatReader = {
   ...VERSION_3,
@@ -143,8 +143,19 @@ const VERSION_5: FormatReader = {
   kindChoice: "an Agent, Human, Wait, Continuation, Condition or Subflow block",
 };
 
+const VERSION_6: FormatReader = {
+  ...VERSION_5,
+  version: PORTABLE_DOCUMENT_VERSION,
+  finish: "optional",
+};
+
+const isBundleVersion = (version: unknown): version is 5 | 6 => version === 5 || version === 6;
+
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5].map((reader) => [reader.version, reader]),
+  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5, VERSION_6].map((reader) => [
+    reader.version,
+    reader,
+  ]),
 );
 
 type Issues = ValidationIssue[];
@@ -217,7 +228,7 @@ function countIssue(fields: Record<string, unknown>): ValidationIssue | undefine
     );
   const flows = fields.flows;
   if (
-    fields.formatVersion === 5 &&
+    isBundleVersion(fields.formatVersion) &&
     fields.kind === "flow" &&
     Array.isArray(flows) &&
     flows.length > PORTABLE_DOCUMENT_FLOW_LIMIT
@@ -329,7 +340,7 @@ function checkList(
 function shapeIssues(fields: Record<string, unknown>, reader: FormatReader): Issues {
   const issues: Issues = [];
   const flow = fields.kind === "flow";
-  const bundle = reader.version === 5;
+  const bundle = isBundleVersion(reader.version);
   const envelope = !flow
     ? ENVELOPE_FIELDS
     : bundle
@@ -382,6 +393,12 @@ function checkAgentShape(agent: unknown, path: string, subject: string, issues: 
   );
 }
 
+const FINISH_GRAPH_FIELDS = {
+  none: { required: GRAPH_FIELDS, optional: [], connection: [] },
+  required: { required: [...GRAPH_FIELDS, "finish"], optional: [], connection: ["targetEndingId"] },
+  optional: { required: GRAPH_FIELDS, optional: ["finish"], connection: ["targetEndingId"] },
+} as const;
+
 function checkFlowShape(
   flow: unknown,
   path: string,
@@ -389,7 +406,7 @@ function checkFlowShape(
   reader: FormatReader,
   issues: Issues,
 ) {
-  const required = reader.version === 5 ? ["key", ...FLOW_FIELDS] : FLOW_FIELDS;
+  const required = isBundleVersion(reader.version) ? ["key", ...FLOW_FIELDS] : FLOW_FIELDS;
   const fields = checkFields(flow, path, required, [], subject, issues);
   if (!fields) return;
   if ("graph" in fields) checkGraphShape(fields.graph, `${path}.graph`, subject, reader, issues);
@@ -403,8 +420,8 @@ function checkGraphShape(
   reader: FormatReader,
   issues: Issues,
 ) {
-  const graphFields = reader.finish ? [...GRAPH_FIELDS, "finish"] : GRAPH_FIELDS;
-  const graph = checkFields(value, path, graphFields, [], subject, issues);
+  const finish = FINISH_GRAPH_FIELDS[reader.finish];
+  const graph = checkFields(value, path, finish.required, finish.optional, subject, issues);
   if (!graph) return;
   checkList(graph.blocks, `${path}.blocks`, subject, issues).forEach((block, index) =>
     checkBlockShape(block, `${path}.blocks.${index}`, blockLabel(block, index), reader, issues),
@@ -415,7 +432,7 @@ function checkGraphShape(
         connection,
         `${path}.connections.${index}`,
         CONNECTION_FIELDS,
-        reader.finish ? ["targetEndingId"] : [],
+        finish.connection,
         subject,
         issues,
       ),
@@ -505,7 +522,7 @@ interface CheckedFlow {
 
 function checkedFlows(fields: Record<string, unknown>): readonly CheckedFlow[] {
   if (fields.kind !== "flow") return [];
-  return fields.formatVersion === 5
+  return isBundleVersion(fields.formatVersion)
     ? (fields.flows as Record<string, unknown>[]).map((entry, index) => ({
         fields: entry,
         path: `flows.${index}`,
@@ -556,7 +573,7 @@ function referenceIssues(
       );
     return issues;
   }
-  const bundle = fields.formatVersion === 5;
+  const bundle = isBundleVersion(fields.formatVersion);
   const flowKeys = bundle
     ? checkedKeys(
         flows.map(({ fields: flow, path }, index) => ({
@@ -710,7 +727,7 @@ function definitionSizeIssue(
   version: PortableFormatVersion,
 ): ValidationIssue | undefined {
   const { name, prompt, exits } = agent;
-  const overrides = version === 5 ? { projectOverrides: [] } : {};
+  const overrides = isBundleVersion(version) ? { projectOverrides: [] } : {};
   return !definitionSaveFits({ name, prompt, execution, exits, ...overrides })
     ? issue(
         "definition_too_large",
@@ -788,7 +805,7 @@ function flowDocument(
   if (!agents.ok) return agents;
   const decoded: PortableFlowEntry[] = [];
   for (const flow of flows) {
-    const result = decodeFlow(flow, reader);
+    const result = decodeFlow(flow);
     if (!result.ok) return result;
     decoded.push({ key: flow.fields.key as string, ...result.value });
   }
@@ -798,7 +815,7 @@ function flowDocument(
   ];
   if (oversized.length > 0) return rejected("too_large", oversized);
   const envelope = { ...envelopeOf(fields, reader, "flow"), agents: agents.value };
-  if (reader.version === 5)
+  if (isBundleVersion(reader.version))
     return {
       ok: true,
       value: {
@@ -830,10 +847,7 @@ function flowIssue(
 }
 
 /** The Flow domain validator over the file's Flow, with each Agent block's key in its id's place. */
-function decodeFlow(
-  { fields: flow, path }: CheckedFlow,
-  reader: FormatReader,
-): Result<PortableFlow> {
+function decodeFlow({ fields: flow, path }: CheckedFlow): Result<PortableFlow> {
   const blocks = flowBlocks(flow);
   const validated = validateCreateFlow(
     {
@@ -863,7 +877,7 @@ function decodeFlow(
       flowInput: graph!.flowInput as FlowInputBlock,
       connections: graph!.connections,
       blocks: graph!.blocks.map(portableBlock),
-      ...(reader.finish ? { finish: graph!.finish as FlowFinishBlock } : {}),
+      ...(graph!.finish && { finish: graph!.finish as FlowFinishBlock }),
     },
   };
   return { ok: true, value: decoded };

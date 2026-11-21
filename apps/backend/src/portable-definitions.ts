@@ -257,7 +257,7 @@ function flowUses(flows: readonly PortableFlowEntry[], names: ReadonlyMap<string
 function reviewFlows(document: ImportedDocument): ImportReviewFlow[] {
   if (document.kind === "agent") return [];
   const agents = new Map(document.agents.map((agent) => [agent.key, agent]));
-  if (document.formatVersion !== 5) {
+  if (!("flows" in document)) {
     const { flow } = document;
     return [
       {

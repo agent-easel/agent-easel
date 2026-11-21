@@ -61,7 +61,6 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly footerCount?: (block: B) => number;
   readonly reservedFooterCount?: number;
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
-  readonly finish?: boolean;
   readonly blockFrame?: ((block: B) => BlockFrame | undefined) | undefined;
 };
 
@@ -141,7 +140,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
       (facts.flowInputStatus ? input.statusLine : 0),
   };
   const finishEndingY = ports.firstExitY - rows.title + finishTitle;
-  const finishBox = {
+  const finishBox = graph.finish && {
     ...graph.finish.position,
     width: rows.width,
     height:

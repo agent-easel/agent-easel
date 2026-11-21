@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { flowExitsUpgradeData, upgradedGraph } from "./support/flow-exits-upgrade.ts";
 
-it("upgrading outcome exits keeps Agent block exits as Flow-local exits, maps Human exits to Approve and Request changes with merged wires, adds an empty Finish block right of every block without changing a wire, and keeps in-progress and finished Runs with their history and result origins, including a pending review's and those of its answers", async (c) => {
+it("upgrading outcome exits keeps Agent block exits as Flow-local exits, maps Human exits to Approve and Request changes with merged wires, adds no Finish block, and keeps in-progress and finished Runs with their history and result origins, including a pending review's and those of its answers", async (c) => {
   // Arrange
   const fixture = await flowExitsUpgradeData(c);
   const graph = upgradedGraph(fixture.agent.id, fixture.flow.graph.flowInput);

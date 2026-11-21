@@ -355,12 +355,14 @@ export const makeDefinitions = (
           }),
         };
         const graph: FlowGraph = {
-          ...input,
+          connections: input.connections,
           ...placed,
-          finish: {
-            endings: input.finish?.endings ?? [],
-            position: input.finish?.position ?? unplacedFinishPosition(placed),
-          },
+          ...(input.finish && {
+            finish: {
+              endings: input.finish.endings,
+              position: input.finish.position ?? unplacedFinishPosition(placed),
+            },
+          }),
         };
         if (
           input.flowInput.position !== undefined &&
@@ -386,7 +388,9 @@ export const makeDefinitions = (
               value: {
                 ...graph,
                 flowInput: { ...graph.flowInput, position: positions.flowInput },
-                finish: { ...graph.finish, position: positions.finish },
+                ...(graph.finish && {
+                  finish: { ...graph.finish, position: positions.finish ?? graph.finish.position },
+                }),
                 blocks,
               },
             };
@@ -645,14 +649,7 @@ export const makeDefinitions = (
         id,
         revision: 1,
         name: flow.name,
-        graph: {
-          ...flow.graph,
-          blocks,
-          finish: flow.graph.finish ?? {
-            endings: [],
-            position: unplacedFinishPosition({ ...flow.graph, blocks }),
-          },
-        },
+        graph: { ...flow.graph, blocks },
         workspace: flow.workspace,
         savedAt: now,
       });
@@ -666,13 +663,11 @@ export const makeDefinitions = (
       const agents = yield* Effect.forEach(document.agents, (entry) =>
         newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
       );
-      const flowEntries =
-        document.kind === "flow" && document.formatVersion === 5 ? document.flows : [];
+      const flowEntries = document.kind === "flow" && "flows" in document ? document.flows : [];
       const flows = yield* Effect.forEach(flowEntries, (entry) =>
         newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
       );
-      const legacyFlowId =
-        document.kind === "flow" && document.formatVersion !== 5 ? yield* newId : null;
+      const legacyFlowId = document.kind === "flow" && !("flows" in document) ? yield* newId : null;
       const agentIds = new Map(agents.map(({ key, id }) => [key, id]));
       const flowIds = new Map(flows.map(({ key, id }) => [key, id]));
       for (const entry of document.agents) {
@@ -691,7 +686,7 @@ export const makeDefinitions = (
       }
       let flowId = legacyFlowId;
       if (document.kind === "flow") {
-        if (document.formatVersion === 5) {
+        if ("flows" in document) {
           for (const entry of document.flows)
             yield* importFlow(flowIds.get(entry.key)!, entry, agentIds, flowIds, projectId, now);
           flowId = flowIds.get(document.rootFlowKey)!;

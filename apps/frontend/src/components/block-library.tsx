@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { ChevronRight, Flag, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -21,7 +21,7 @@ import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { newBlock, type BlockPosition } from "../flow-graph.ts";
 import type { GrabOffset } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
-import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
+import { BlockPreview, FinishPreview, type DropAt } from "./flow-canvas.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 import { ownerGroups } from "../studio-definitions.ts";
 
@@ -31,6 +31,14 @@ const STEPS = [
   { kind: "continuation", name: "Continuation", detail: "Same thread, new prompt" },
   { kind: "condition", name: "Condition", detail: "Routes by arrival number" },
 ] as const satisfies readonly { kind: FlowBlock["kind"]; name: string; detail: string }[];
+
+const FINISH_STEP = {
+  kind: "finish",
+  name: "Finish",
+  detail: "Ends the Run with a result",
+} as const;
+
+type LibraryKind = FlowBlock["kind"] | "finish";
 
 const headingClass = "text-label tracking-label text-muted-foreground";
 
@@ -56,7 +64,9 @@ export function BlockLibrary({
   projects,
   capabilities,
   agentError,
+  finishPlaced,
   onAdd,
+  onAddFinish,
   onAddFlow,
   dropAt,
 }: {
@@ -71,43 +81,27 @@ export function BlockLibrary({
   projects: readonly FactoryProject[];
   capabilities: AgentCapabilities | null;
   agentError: string;
+  finishPlaced: boolean;
   onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
+  onAddFinish: (position?: BlockPosition) => void;
   onAddFlow: (flow: FlowDraft, position?: BlockPosition) => void;
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
-  const searching = query.trim() !== "";
-  const matches = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
-  const steps = STEPS.filter((step) => matches(step.name));
-  const shown = agents.filter((agent) => matches(agent.name));
-  const otherFlows = flows.filter((candidate) => candidate.id !== flowId);
-  const shownFlows = otherFlows.filter((candidate) => matches(candidate.name));
+  const { searching, steps, finish, shown, shownFlows, matchCount } = libraryMatches(
+    query,
+    agents,
+    flows,
+    flowId,
+    finishPlaced,
+  );
   const flowMap = new Map(allFlows.map((candidate) => [candidate.id, candidate]));
   const groups = ownerGroups(shown, projects, { kind: "all" });
   const summaries = new Map(
     agents.map((agent) => [agent.id, agentRuntimeMeta(agent.execution, capabilities)]),
   );
   const placeable = [...summaries.values()].some(Boolean);
-  if (!open)
-    return (
-      <div className="flex w-11 shrink-0 flex-col items-center border-r bg-sidebar py-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Expand library"
-              aria-expanded={false}
-              aria-controls="block-library"
-              onClick={() => onOpenChange(true)}
-            >
-              <PanelLeftOpen aria-hidden />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Expand library</TooltipContent>
-        </Tooltip>
-      </div>
-    );
+  if (!open) return <CollapsedLibrary onExpand={() => onOpenChange(true)} />;
   return (
     <div
       id="block-library"
@@ -146,22 +140,16 @@ export function BlockLibrary({
           <TooltipContent side="right">Collapse library</TooltipContent>
         </Tooltip>
       </div>
-      {searching && !steps.length && !shown.length && !shownFlows.length && (
+      {searching && matchCount === 0 && (
         <p className="px-1.5 text-sm text-muted-foreground">No matching steps or Agents</p>
       )}
-      {steps.length > 0 && (
-        <section aria-label="Steps" className="flex flex-col gap-1">
-          <h3 className={cn(headingClass, "px-1.5 py-1")}>Steps</h3>
-          {steps.map((step) => (
-            <LibraryItem
-              key={step.kind}
-              {...step}
-              dropAt={dropAt}
-              onAdd={(position) => onAdd(step.kind, undefined, position)}
-            />
-          ))}
-        </section>
-      )}
+      <LibrarySteps
+        steps={steps}
+        finish={finish}
+        dropAt={dropAt}
+        onAdd={(kind, position) => onAdd(kind, undefined, position)}
+        onAddFinish={onAddFinish}
+      />
       {agentError && (
         <p role="alert" className="text-xs text-destructive">
           {agentError}
@@ -185,6 +173,45 @@ export function BlockLibrary({
         dropAt={dropAt}
         onAddFlow={onAddFlow}
       />
+    </div>
+  );
+}
+
+function libraryMatches(
+  query: string,
+  agents: readonly AgentDefinition[],
+  flows: readonly FlowDraft[],
+  flowId: string,
+  finishPlaced: boolean,
+) {
+  const term = query.trim().toLowerCase();
+  const matches = (name: string) => name.toLowerCase().includes(term);
+  const steps = STEPS.filter((step) => matches(step.name));
+  const finish = !finishPlaced && matches(FINISH_STEP.name);
+  const shown = agents.filter((agent) => matches(agent.name));
+  const shownFlows = flows.filter((flow) => flow.id !== flowId && matches(flow.name));
+  const matchCount = steps.length + Number(finish) + shown.length + shownFlows.length;
+  return { searching: term !== "", steps, finish, shown, shownFlows, matchCount };
+}
+
+function CollapsedLibrary({ onExpand }: { onExpand: () => void }) {
+  return (
+    <div className="flex w-11 shrink-0 flex-col items-center border-r bg-sidebar py-3">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Expand library"
+            aria-expanded={false}
+            aria-controls="block-library"
+            onClick={onExpand}
+          >
+            <PanelLeftOpen aria-hidden />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Expand library</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -260,7 +287,7 @@ function AgentLibrarySection({
 function flowLibraryDetail(candidate: FlowDraft, flowName: string, loops: boolean): string {
   if (loops) return `Uses ${flowName}, would loop`;
   if (!reachesEnding(candidate.graph)) return "No reachable ending";
-  const endings = candidate.graph.finish.endings.length;
+  const endings = candidate.graph.finish?.endings.length ?? 0;
   return `${endings} ${endings === 1 ? "ending" : "endings"} · Revision ${candidate.revision}`;
 }
 
@@ -307,6 +334,36 @@ function FlowLibrarySection({
   );
 }
 
+function LibrarySteps({
+  steps,
+  finish,
+  dropAt,
+  onAdd,
+  onAddFinish,
+}: {
+  steps: readonly (typeof STEPS)[number][];
+  finish: boolean;
+  dropAt: DropAt;
+  onAdd: (kind: FlowBlock["kind"], position?: BlockPosition) => void;
+  onAddFinish: (position?: BlockPosition) => void;
+}) {
+  if (!steps.length && !finish) return null;
+  return (
+    <section aria-label="Steps" className="flex flex-col gap-1">
+      <h3 className={cn(headingClass, "px-1.5 py-1")}>Steps</h3>
+      {steps.map((step) => (
+        <LibraryItem
+          key={step.kind}
+          {...step}
+          dropAt={dropAt}
+          onAdd={(position) => onAdd(step.kind, position)}
+        />
+      ))}
+      {finish && <LibraryItem {...FINISH_STEP} dropAt={dropAt} onAdd={onAddFinish} />}
+    </section>
+  );
+}
+
 /** The ghost hangs from the pointer near its header's left edge, where a canvas block is grabbed. */
 const GHOST_GRAB: GrabOffset = { x: 28, y: 15 };
 
@@ -329,7 +386,7 @@ function LibraryItem({
 }: {
   name: string;
   detail: ReactNode;
-  kind: FlowBlock["kind"];
+  kind: LibraryKind;
   agent?: AgentDefinition;
   flow?: FlowDraft;
   /** An Agent without a model is listed but can't be placed. */
@@ -338,7 +395,7 @@ function LibraryItem({
   onAdd: (position?: BlockPosition) => void;
 }) {
   const [ghost, setGhost] = useState<Ghost | null>(null);
-  const { Icon } = BLOCK_KINDS[kind];
+  const Icon = kind === "finish" ? Flag : BLOCK_KINDS[kind].Icon;
   const icon = (
     <span
       aria-hidden
@@ -394,12 +451,13 @@ function LibraryItem({
   );
 }
 
-const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
+const LIBRARY_ICON_TILES: Record<LibraryKind, string> = {
   agent: "bg-brand-soft text-link",
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
   condition: "border bg-muted text-muted-foreground",
+  finish: "border bg-muted text-muted-foreground",
   subflow: "border bg-muted text-muted-foreground",
 };
 
@@ -408,7 +466,6 @@ const UNCONNECTED: FlowGraph = {
   blocks: [],
   connections: [],
   flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
-  finish: { position: { x: 800, y: 0 }, endings: [] },
 };
 
 /** A compact, non-interactive preview of the block a library drag would add. */
@@ -420,11 +477,18 @@ function BlockGhost({
   flow,
 }: {
   ghost: Ghost;
-  kind: FlowBlock["kind"];
+  kind: LibraryKind;
   name: string;
   agent: AgentDefinition | undefined;
   flow: FlowDraft | undefined;
 }) {
+  const ghostClass = cn(
+    "pointer-events-none fixed z-50 pb-1.5 shadow-lift",
+    ghost.overCanvas ? "opacity-90" : "opacity-50",
+  );
+  const style = { left: ghost.left, top: ghost.top };
+  if (kind === "finish")
+    return createPortal(<FinishPreview className={ghostClass} style={style} />, document.body);
   const { label, value } = blockReference(newBlock(UNCONNECTED, kind, agent, undefined, flow), {
     graph: UNCONNECTED,
     agents: agent ? [agent] : [],
@@ -436,11 +500,8 @@ function BlockGhost({
       name={name}
       label={label}
       value={value}
-      className={cn(
-        "pointer-events-none fixed z-50 pb-1.5 shadow-lift",
-        ghost.overCanvas ? "opacity-90" : "opacity-50",
-      )}
-      style={{ left: ghost.left, top: ghost.top }}
+      className={ghostClass}
+      style={style}
     />,
     document.body,
   );

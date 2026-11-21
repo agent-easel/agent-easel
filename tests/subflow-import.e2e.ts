@@ -130,7 +130,7 @@ async function writeBundle() {
   };
   const document: PortableFlowDocument = {
     format: "t3-factory/definitions",
-    formatVersion: 5,
+    formatVersion: 6,
     kind: "flow",
     factoryVersion: "source",
     exportedAt: "2026-11-21T09:00:00.000Z",

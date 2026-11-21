@@ -21,6 +21,7 @@ import {
   flowUnderCreateLimitBy,
   fullLegacyFlowFile,
   historicalFlowReceipts,
+  importFullFlowWithEmptyFinish,
   importFullLegacyFlow,
   nestedFlowFile,
   interruptedUpload,
@@ -96,7 +97,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 6 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 7 })),
   );
 
   // Assert
@@ -106,7 +107,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 6, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 7, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -528,7 +529,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(5);
+  expect(document.formatVersion).toBe(6);
 
   // Act
   const committed = assertOk(
@@ -588,7 +589,7 @@ it("retrying a commit with the same request id and content returns the original 
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });
 
-it("a full-size version-1 Flow still imports with its ordinary finish block and wires", async (context) => {
+it("a full-size version-1 Flow still imports with its ordinary finish block and wires and no Finish block", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const file = fullLegacyFlowFile(1);
@@ -610,9 +611,9 @@ it("a full-size version-1 Flow still imports with its ordinary finish block and 
     graph: {
       flowInput: file.flow.graph.flowInput,
       connections: file.flow.graph.connections,
-      finish: { endings: [] },
     },
   });
+  expect(flow.graph).not.toHaveProperty("finish");
   expect(flow.graph.blocks).toHaveLength(500);
   expect(flow.graph.blocks[0]).toMatchObject({
     id: "finish",
@@ -671,7 +672,7 @@ it("a version-4 Flow file preserves fresh revisitContext on import", async (cont
   expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "fresh" });
 });
 
-it("a full-size version-2 Flow imports with an empty Finish block placed right of its blocks", async (context) => {
+it("a full-size version-2 Flow imports without a Finish block", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const file = fullLegacyFlowFile();
@@ -688,8 +689,7 @@ it("a full-size version-2 Flow imports with an empty Finish block placed right o
   // Assert
   const flow = assertOk(await factory.getFlow(committed.flowId!));
   expect(flow.graph.blocks).toHaveLength(500);
-  expect(flow.graph.finish.endings).toStrictEqual([]);
-  expect(flow.graph.finish.position.x).toBeGreaterThan(480);
+  expect(flow.graph).not.toHaveProperty("finish");
 });
 
 it("renaming a Flow at the former block limit keeps its entire graph", async (context) => {
@@ -712,7 +712,7 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a full-size child Flow with an empty Finish can be exported and reimported as version 5", async (context) => {
+it("a full-size child Flow without Finish can be exported and reimported in a version-6 bundle", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
   const parent = await savedFlow(factory, {
@@ -728,18 +728,22 @@ it("a full-size child Flow with an empty Finish can be exported and reimported a
   assert(agentBlock?.kind === "agent" && agentBlock.agentId);
 
   // Act
-  const copied = await factory.commitImport(reviewedCommit("import-v5", undefined, document));
+  const copied = await factory.commitImport(reviewedCommit("import-v6", undefined, document));
 
   // Assert
   assert(copied.ok);
-  expect(document.formatVersion).toBe(5);
-  const restored = assertOk(await factory.getFlow(copied.value.flows![1]!.id));
+  expect(document.formatVersion).toBe(6);
+  const child = copied.value.flows?.find(({ key }) => key === "flow-2");
+  assert(child);
+  const restored = assertOk(await factory.getFlow(child.id));
   const placedAgents = new Map([[agentBlock.agentId, copied.value.agents[0]!.id]]);
   expect(restored.graph).toStrictEqual({
     ...flow.graph,
     blocks: remapAgentPlacements(flow.graph.blocks, placedAgents),
   });
 });
+
+const emptyFinish = { position: { x: 960, y: 0 }, endings: [] };
 
 const finishWithEnding = {
   position: { x: 960, y: 0 },
@@ -771,9 +775,9 @@ it("a version-3 import counts a Finish with endings toward the block limit", asy
   expect(assertOk(await factory.listFlows())).toStrictEqual([]);
 });
 
-it("version-5 export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
+it("export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
   // Arrange
-  const { factory, flow } = await importFullLegacyFlow(context);
+  const { factory, flow } = await importFullFlowWithEmptyFinish(context);
   const saved = assertOk(
     await factory.updateFlow(flow.id, {
       name: flow.name,
@@ -792,12 +796,33 @@ it("version-5 export refuses a 500-block Flow with an ending while preserving th
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(saved.graph);
 });
 
-it("newly authored Flows must count the Finish block toward the block limit", async (context) => {
+it("a saved 500-block Flow without a Finish block cannot add one", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
 
   // Act
-  const created = await factory.createFlow({ name: "Too many blocks", graph: flow.graph });
+  const saved = await factory.updateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+    graph: { ...flow.graph, finish: finishWithEnding },
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
+  expect(assertOk(await factory.getFlow(flow.id)).revision).toBe(flow.revision);
+});
+
+it("newly authored Flows must count an added Finish block toward the block limit", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+
+  // Act
+  const created = await factory.createFlow({
+    name: "Too many blocks",
+    graph: { ...flow.graph, finish: emptyFinish },
+  });
 
   // Assert
   assert(!created.ok);
@@ -805,7 +830,7 @@ it("newly authored Flows must count the Finish block toward the block limit", as
   expect(assertOk(await factory.listFlows())).toHaveLength(1);
 });
 
-it("saving a newly authored Flow cannot exceed the block limit by adding one block", async (context) => {
+it("saving a newly authored Flow with a Finish block cannot exceed the block limit by adding one block", async (context) => {
   // Arrange
   const {
     factory,
@@ -814,7 +839,7 @@ it("saving a newly authored Flow cannot exceed the block limit by adding one blo
   const created = assertOk(
     await factory.createFlow({
       name: "At the authoring limit",
-      graph: { ...graph, blocks: graph.blocks.slice(0, -1) },
+      graph: { ...graph, blocks: graph.blocks.slice(0, -1), finish: emptyFinish },
     }),
   );
 
@@ -823,13 +848,67 @@ it("saving a newly authored Flow cannot exceed the block limit by adding one blo
     name: created.name,
     expectedRevision: created.revision,
     expectedProjectId: created.projectId,
-    graph,
+    graph: { ...graph, finish: emptyFinish },
   });
 
   // Assert
   assert(!saved.ok);
   expect(saved.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
   expect(assertOk(await factory.getFlow(created.id)).revision).toBe(created.revision);
+});
+
+it("a version-4 Flow file without its Finish block is rejected as missing it, as every version-4 Flow had one", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 4 });
+  const { finish: _finish, ...graph } = flow.graph;
+
+  // Act
+  const review = await factory.reviewImport(fileBody({ ...file, flow: { ...flow, graph } }));
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "missing_field", path: "flow.graph.finish" },
+  ]);
+});
+
+it("a version-6 Flow file without a Finish block imports a Flow without one", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 6 });
+  const { finish: _finish, ...graph } = flow.graph;
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-v6-plain",
+    document: { ...file, rootFlowKey: "root", flows: [{ ...flow, key: "root", graph }] },
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  expect(assertOk(await factory.getFlow(committed.value.flowId!)).graph).not.toHaveProperty(
+    "finish",
+  );
+});
+
+it("a version-5 bundle still requires Finish on each Flow", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 5 });
+  const { finish: _finish, ...graph } = flow.graph;
+
+  // Act
+  const review = await factory.reviewImport(
+    fileBody({ ...file, rootFlowKey: "root", flows: [{ ...flow, key: "root", graph }] }),
+  );
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.issues).toMatchObject([
+    { code: "missing_field", path: "flows.0.graph.finish" },
+  ]);
 });
 
 it("a version-2 Flow file holding a Finish block is rejected at it, as version 2 has none", async (context) => {

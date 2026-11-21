@@ -26,7 +26,7 @@ export type IssueSelect = (
 
 function issueEnding(path: string, graph: FlowGraph): string | undefined {
   const index = /^graph\.finish\.endings\.(\d+)/.exec(path)?.[1];
-  return index === undefined ? undefined : graph.finish.endings[Number(index)]?.id;
+  return index === undefined ? undefined : graph.finish?.endings[Number(index)]?.id;
 }
 
 /** The Condition rule control an issue path such as `graph.blocks.2.rules.5.fromArrival` names. */

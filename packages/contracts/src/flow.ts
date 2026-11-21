@@ -109,7 +109,7 @@ export interface FlowGraph {
   readonly blocks: readonly FlowBlock[];
   readonly connections: readonly FlowConnection[];
   readonly flowInput: FlowInputBlock;
-  readonly finish: FlowFinishBlock;
+  readonly finish?: FlowFinishBlock;
 }
 type OptionalPosition<B extends { readonly position: FlowBlock["position"] }> = B extends unknown
   ? Omit<B, "position"> & { readonly position?: B["position"] }

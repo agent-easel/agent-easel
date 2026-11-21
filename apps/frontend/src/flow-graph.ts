@@ -1,4 +1,9 @@
-import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
+import {
+  AUTHORING_DIMENSIONS,
+  defaultFinishPosition,
+  type CanvasGraph,
+  type WireSource,
+} from "@t3-factory/flow-layout";
 import {
   CONDITION_OTHERWISE_ID,
   FINISH_BLOCK_ID,
@@ -15,6 +20,7 @@ import {
   continuationSources,
   effectiveExits,
   type EffectiveExit,
+  type ExitFlows,
 } from "@t3-factory/domain-validation";
 import { randomId } from "@/lib/ids";
 
@@ -179,7 +185,7 @@ export function canConnect(graph: FlowGraph, source: WireSource, target: WireTar
     return (
       source.kind === "exit" &&
       target.targetBlockId === FINISH_BLOCK_ID &&
-      graph.finish.endings.some((ending) => ending.id === target.targetEndingId)
+      !!graph.finish?.endings.some((ending) => ending.id === target.targetEndingId)
     );
   const block = graph.blocks.find((b) => b.id === target.targetBlockId);
   if (!block) return false;
@@ -243,6 +249,30 @@ export function removeBlock(graph: FlowGraph, blockId: string): FlowGraph {
   };
 }
 
+export function addFinish(graph: FlowGraph, position?: BlockPosition): FlowGraph {
+  if (graph.finish) return graph;
+  const placed =
+    position ??
+    defaultFinishPosition(graph, {
+      flowInputWidth: AUTHORING_DIMENSIONS.flowInput.width,
+      blockWidth: AUTHORING_DIMENSIONS.block.width,
+    });
+  return { ...graph, finish: { position: placed, endings: [] } };
+}
+
+export function removeFinish({ finish: _removed, ...graph }: FlowGraph): FlowGraph {
+  return { ...graph, connections: graph.connections.filter((c) => c.targetEndingId === undefined) };
+}
+
+function withEndings(
+  graph: FlowGraph,
+  edit: (endings: readonly FlowEnding[]) => readonly FlowEnding[],
+): FlowGraph {
+  return graph.finish
+    ? { ...graph, finish: { ...graph.finish, endings: edit(graph.finish.endings) } }
+    : graph;
+}
+
 export function addEnding(graph: FlowGraph): FlowGraph {
   const ending: FlowEnding = {
     id: uid(),
@@ -251,46 +281,39 @@ export function addEnding(graph: FlowGraph): FlowGraph {
     output: "none",
     outputDescription: "",
   };
-  return { ...graph, finish: { ...graph.finish, endings: [...graph.finish.endings, ending] } };
+  return withEndings(graph, (endings) => [...endings, ending]);
 }
 
 export function replaceEnding(graph: FlowGraph, next: FlowEnding): FlowGraph {
-  return {
-    ...graph,
-    finish: {
-      ...graph.finish,
-      endings: graph.finish.endings.map((ending) => (ending.id === next.id ? next : ending)),
-    },
-  };
+  return withEndings(graph, (endings) =>
+    endings.map((ending) => (ending.id === next.id ? next : ending)),
+  );
 }
 
 export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
   return {
-    ...graph,
-    finish: {
-      ...graph.finish,
-      endings: graph.finish.endings.filter((ending) => ending.id !== endingId),
-    },
+    ...withEndings(graph, (endings) => endings.filter((ending) => ending.id !== endingId)),
     connections: graph.connections.filter(
       (c) => c.targetBlockId !== FINISH_BLOCK_ID || c.targetEndingId !== endingId,
     ),
   };
 }
 
-function restoredEndings(
-  current: readonly FlowEnding[],
-  before: readonly FlowEnding[],
-  after: readonly FlowEnding[],
-) {
-  const endings = [...current];
-  const has = (list: readonly FlowEnding[], id: string) => list.some((e) => e.id === id);
-  before.forEach((ending, index) => {
-    if (has(after, ending.id) || has(endings, ending.id)) return;
-    const previous = before.slice(0, index).findLast((candidate) => has(endings, candidate.id));
-    const at = previous ? endings.findIndex((e) => e.id === previous.id) + 1 : 0;
-    endings.splice(at, 0, ending);
+function restoreInOrder<T>(
+  current: readonly T[],
+  before: readonly T[],
+  key: (item: T) => string,
+  restore: (item: T) => boolean,
+): T[] {
+  const items = [...current];
+  const has = (item: T) => items.some((candidate) => key(candidate) === key(item));
+  before.forEach((item, index) => {
+    if (has(item) || !restore(item)) return;
+    const previous = before.slice(0, index).findLast(has);
+    const at = previous ? items.findIndex((candidate) => key(candidate) === key(previous)) + 1 : 0;
+    items.splice(at, 0, item);
   });
-  return endings;
+  return items;
 }
 
 /**
@@ -308,7 +331,7 @@ function recipientNames(graph: FlowGraph) {
   const names = new Map<string, string>();
   for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
   const endings = new Map<string, string>();
-  for (const ending of graph.finish.endings)
+  for (const ending of graph.finish?.endings ?? [])
     if (!endings.has(ending.id)) endings.set(ending.id, ending.name);
   return ({ targetBlockId, targetEndingId }: FlowConnection) => {
     if (targetEndingId === undefined) return names.get(targetBlockId);
@@ -351,32 +374,78 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
 }
 
-export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
-  const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
-  const blocks = [
-    ...current.blocks,
-    ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
-  ];
-  const endings = restoredEndings(
-    current.finish.endings,
-    before.finish.endings,
-    after.finish.endings,
+export type GraphRemoval = {
+  readonly before: FlowGraph;
+  readonly after: FlowGraph;
+  readonly agentsAtRemoval: readonly Pick<AgentDefinition, "id" | "exits">[];
+  readonly flowsAtRemoval?: ExitFlows;
+};
+
+function exitIdsByBlock(
+  blocks: readonly FlowBlock[],
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows: ExitFlows | undefined,
+) {
+  return new Map(
+    blocks.map((block) => [
+      block.id,
+      new Set(effectiveExits(block, agents, flows).map((exit) => exit.id)),
+    ]),
   );
-  const exists = (id: string) => blocks.some((b) => b.id === id);
-  const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
-    targetEndingId !== undefined
-      ? endings.some((ending) => ending.id === targetEndingId)
-      : exists(targetBlockId);
-  const restored = (graph: FlowGraph, wire: FlowWire) =>
-    !hasWire(after, wire) && !hasWire(graph, wire) && targetExists(wire);
-  let next: FlowGraph = { ...current, blocks, finish: { ...current.finish, endings } };
-  for (const targetBlockId of before.flowInput.targetBlockIds) {
-    const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
-    if (restored(next, wire)) next = addWire(next, wire);
-  }
-  for (const connection of before.connections) {
-    const wire = connectionWire(connection);
-    if (exists(connection.sourceBlockId) && restored(next, wire)) next = addWire(next, wire);
-  }
-  return next;
+}
+
+export function undoRemoval(
+  current: FlowGraph,
+  { before, after, agentsAtRemoval, flowsAtRemoval }: GraphRemoval,
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows?: ExitFlows,
+): FlowGraph {
+  const removedBy =
+    <T>(list: readonly T[], key: (item: T) => string) =>
+    (item: T) =>
+      !list.some((candidate) => key(candidate) === key(item));
+  const byId = (item: { readonly id: string }) => item.id;
+  const blocks = restoreInOrder(current.blocks, before.blocks, byId, removedBy(after.blocks, byId));
+  const finish = current.finish ?? (after.finish ? undefined : before.finish);
+  const endings = restoreInOrder(
+    current.finish?.endings ?? [],
+    finish ? (before.finish?.endings ?? []) : [],
+    byId,
+    removedBy(after.finish?.endings ?? [], byId),
+  );
+  const restored = { ...current, blocks, ...(finish && { finish: { ...finish, endings } }) };
+  const exits = exitIdsByBlock(blocks, agents, flows);
+  const priorReferenceExits = exitIdsByBlock(
+    before.blocks.filter((block) => block.kind === "agent" || block.kind === "subflow"),
+    agentsAtRemoval,
+    flowsAtRemoval,
+  );
+  const restorable = (wire: FlowWire) =>
+    !hasWire(after, wire) && canConnect(restored, wire.source, wire);
+  const targetBlockIds = restoreInOrder(
+    current.flowInput.targetBlockIds,
+    before.flowInput.targetBlockIds,
+    (id) => id,
+    (targetBlockId) => restorable({ source: { kind: "flow-input" }, targetBlockId }),
+  );
+  const connections = restoreInOrder(
+    current.connections,
+    before.connections,
+    connectionKey,
+    (connection) => {
+      const { sourceBlockId, exitId } = connection;
+      const currentExits = exits.get(sourceBlockId);
+      const wasUnavailable = priorReferenceExits.get(sourceBlockId)?.has(exitId) === false;
+      return (
+        !!currentExits &&
+        (currentExits.has(exitId) || wasUnavailable) &&
+        restorable(connectionWire(connection))
+      );
+    },
+  );
+  return {
+    ...restored,
+    flowInput: { ...current.flowInput, targetBlockIds },
+    connections,
+  };
 }

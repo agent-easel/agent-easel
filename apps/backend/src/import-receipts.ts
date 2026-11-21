@@ -33,7 +33,7 @@ function fingerprintDocument(
   document: CommitImportInput["document"],
   legacyRevisitContext?: "keep",
 ) {
-  if (document.kind !== "flow" || document.formatVersion === 4 || document.formatVersion === 5)
+  if (document.kind !== "flow" || document.formatVersion === 4 || "flows" in document)
     return document;
   const { flow } = document;
   const blocks = flow.graph.blocks.map((block) =>

@@ -59,7 +59,7 @@ function targetChoices(graph: FlowGraph, source: WireSource) {
     label: block.name || "Unnamed block",
     name: block.name || "Unnamed block",
   }));
-  const endings = graph.finish.endings.map((ending): TargetChoice => {
+  const endings = (graph.finish?.endings ?? []).map((ending): TargetChoice => {
     const name = ending.name || "Unnamed ending";
     return {
       key: `ending:${ending.id}`,

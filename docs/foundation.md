@@ -54,13 +54,16 @@ and restricted OAuth credentials live outside project repositories.
   input or block and level with the Flow input (within the canvas limit), added immutable ending
   rows, and rebuilt the connection table under its restored immutability guards so a connection
   enters exactly one block or one ending of its revision, with every stored wire unchanged.
-  Migration `119` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
+  Migration `120` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
   `kind = 'subflow'` and a nullable `flow_id` (required to be null for all other block kinds and
   with no foreign key to `flows`, so removed child Flows remain repairable in saved revisions and
   existing rows stay unchanged).
+  Migration `124` marks legacy empty Finish blocks inactive, so they are absent from Flow and Run
+  graphs. Each stored Finish row and its position are preserved under the restored immutability
+  guard. Finish blocks with endings remain active.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for version-5 Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
+  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for bundled Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
   receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import

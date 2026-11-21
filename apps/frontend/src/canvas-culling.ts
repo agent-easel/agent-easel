@@ -44,8 +44,9 @@ export function windowFits(window: Rect, shown: Rect) {
   );
 }
 
-export function reaches(window: Rect, item: Rect, room = 0) {
+export function reaches(window: Rect, item: Rect | undefined, room = 0) {
   return (
+    item !== undefined &&
     item.x - room <= window.x + window.width &&
     item.x + item.width + room >= window.x &&
     item.y - room <= window.y + window.height &&

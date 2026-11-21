@@ -30,7 +30,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 5,
+        formatVersion: 6,
         kind: "agent",
         factoryVersion: "source",
         exportedAt: expect.any(String),
@@ -102,7 +102,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     blocks: [first, second, missing],
     connections: [connection("first", "done", "second")],
   };
-  const saved = assertOk(
+  assertOk(
     await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: created.revision,
@@ -125,7 +125,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 5,
+        formatVersion: 6,
         kind: "flow",
         factoryVersion: "source",
         exportedAt: expect.any(String),
@@ -136,7 +136,6 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
             name: "Two passes",
             graph: {
               ...graph,
-              finish: saved.graph.finish,
               blocks: [
                 portable(first, "agent-1"),
                 portable(second, "agent-1"),
@@ -231,7 +230,7 @@ it("export follows first-placement depth-first order and bundles a shared child 
 
   // Assert
   expect(exported.document).toMatchObject({
-    formatVersion: 5,
+    formatVersion: 6,
     rootFlowKey: "flow-1",
     flows: [
       {

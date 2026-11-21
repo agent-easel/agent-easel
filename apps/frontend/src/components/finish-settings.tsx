@@ -107,7 +107,7 @@ export function FinishSettings({
   const headingId = useId();
   const [list, setList] = useState<HTMLDivElement | null>(null);
   const focusEnding = useEndingFocus(list, focus);
-  const { endings } = graph.finish;
+  const endings = graph.finish?.endings ?? [];
   const incoming = incomingWires(graph, agents, flows);
   const full = endings.length >= ENDING_LIMIT;
   return (
@@ -118,7 +118,7 @@ export function FinishSettings({
             Endings
           </h3>
           <p className="text-label text-muted-foreground">
-            Every Flow has one Finish block. Each ending is an input on its left edge: wire the
+            A Flow can have one Finish block. Each ending is an input on its left edge: wire the
             exits that mean this ending into it.
           </p>
         </section>

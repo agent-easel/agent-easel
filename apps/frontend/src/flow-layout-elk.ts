@@ -84,7 +84,9 @@ export function applyLayoutPositions(graph: FlowGraph, layout: FlowLayoutResult)
   return {
     ...graph,
     flowInput: { ...graph.flowInput, position: layout.flowInput },
-    finish: { ...graph.finish, position: layout.finish },
+    ...(graph.finish && {
+      finish: { ...graph.finish, position: layout.finish ?? graph.finish.position },
+    }),
     blocks: graph.blocks.map((block) => {
       const next = layout.blocks.get(block.id);
       return next ? { ...block, position: next } : block;

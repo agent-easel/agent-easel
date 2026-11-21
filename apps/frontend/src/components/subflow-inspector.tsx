@@ -44,7 +44,7 @@ function flowChoiceDescription(
     return { description: `Uses ${current.name}, would loop`, disabled: true };
   if (!reachesEnding(candidate.graph))
     return { description: "No reachable ending", disabled: false };
-  const count = candidate.graph.finish.endings.length;
+  const count = candidate.graph.finish?.endings.length ?? 0;
   return {
     description: `${count} ${count === 1 ? "ending" : "endings"} · Revision ${candidate.revision}`,
     disabled: false,
@@ -99,7 +99,7 @@ function FlowPicker({
 
 function wireTargetLabel(graph: FlowGraph, connection: FlowConnection) {
   if (connection.targetEndingId !== undefined) {
-    const ending = graph.finish.endings.find((item) => item.id === connection.targetEndingId);
+    const ending = graph.finish?.endings.find((item) => item.id === connection.targetEndingId);
     return `Finish · ${ending?.name || connection.targetEndingId}`;
   }
   const target = graph.blocks.find((item) => item.id === connection.targetBlockId);
@@ -208,7 +208,7 @@ export function SubflowBlockSettings({
   const child = block.flowId ? flowMap.get(block.flowId) : undefined;
   const flowProblem = fieldProblem(issues, "flowId");
   const ownerTitle = child ? studioOwner(child.projectId, flows.projects).title : "";
-  const endings = child?.graph.finish.endings ?? [];
+  const endings = child?.graph.finish?.endings ?? [];
   const exits = new Map(exitsWithEndings(block, graph, [], flowMap).map((exit) => [exit.id, exit]));
   const validEndingIds = new Set(endings.map((ending) => ending.id));
   const brokenWires = graph.connections.filter(

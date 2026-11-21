@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: installed_update_receipts
+-- Newest applied migration: optional_finish_block
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -639,7 +639,7 @@ CREATE TABLE flow_revision_finish (
   flow_revision_id TEXT PRIMARY KEY NOT NULL REFERENCES flow_revisions(id),
   x REAL NOT NULL,
   y REAL NOT NULL
-);
+, active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)));
 
 CREATE TRIGGER immutable_flow_revision_finish_delete BEFORE DELETE ON flow_revision_finish BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 

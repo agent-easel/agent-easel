@@ -417,8 +417,11 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **23**. The server and the Desktop and browser clients all require
-at least protocol **23** from their peer.
+The current protocol is **24**. The server and the Desktop and browser clients require protocol **24**.
+
+Protocol 24 makes the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
+Protocol 23 clients assume every graph has one, and protocol 23 servers would add it back on save.
+Update both peers. Existing approvals and credentials carry forward.
 
 Protocol 23 adds [Subflow authoring](studio.md), captured invocation evidence
 in [Runs](runs.md), and portable definition format v5. A protocol 22 or older approved client

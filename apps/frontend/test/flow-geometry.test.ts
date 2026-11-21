@@ -42,7 +42,7 @@ it("the execution Finish block reserves no activity line, and its ending ports a
     ...geometryGraph(),
     finish: { position: { x: 800, y: 0 }, endings: [ending("delivered"), ending("blocked")] },
   };
-  const geometry = createCanvasGeometry(graph, EXECUTION_DIMENSIONS, { finish: true });
+  const geometry = createCanvasGeometry(graph, EXECUTION_DIMENSIONS);
 
   // Act
   const finishPorts = buildElkGraph(
@@ -98,14 +98,14 @@ it("the laid-out wires to an ordinary Block and an ending keep separate routes",
       },
     ],
     finish: {
-      ...base.finish,
+      position: { x: 800, y: 0 },
       endings: [
         { id: "done", name: "Delivered", output: "none", description: "", outputDescription: "" },
       ],
     },
   } as const;
   const layout = buildElkGraph(graph, createFlowLayoutDimensions(graph, AUTHORING_DIMENSIONS));
-  const geometry = createCanvasGeometry(graph, AUTHORING_DIMENSIONS, { finish: true });
+  const geometry = createCanvasGeometry(graph, AUTHORING_DIMENSIONS);
 
   // Act
   const [review, delivered] = exitWires(graph, "orthogonal", geometry, undefined, true);

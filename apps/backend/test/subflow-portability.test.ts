@@ -411,7 +411,7 @@ it("draft import keeps a removed child ending, a null reference and a missing re
     ]),
   );
   const child = assertOk(await factory.getFlow(copy.flows![1]!.id));
-  expect(child.graph.finish.endings).toMatchObject([{ id: "replacement", name: "Done" }]);
+  expect(child.graph.finish?.endings).toMatchObject([{ id: "replacement", name: "Done" }]);
   expect(child.graph.blocks).toMatchObject([{ kind: "agent", agentId: null }]);
 });
 
@@ -468,7 +468,7 @@ async function exportedBrokenDraft(factory: Factory) {
   assertOk(
     await resave(factory, child.id, {
       ...child.graph,
-      finish: { ...child.graph.finish, endings: [ending("replacement", "Done")] },
+      finish: { ...child.graph.finish!, endings: [ending("replacement", "Done")] },
     }),
   );
   assertOk(await factory.removeFlow(removed.id));

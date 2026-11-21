@@ -459,7 +459,11 @@ function checkConnections(
 
 const MAX_ORDINARY_BLOCKS = 500;
 const ORDINARY_BLOCK_LIMIT_WITH_FINISH = MAX_ORDINARY_BLOCKS - 1;
-type BlockLimit = number | "portable";
+type BlockLimit = number | "authored" | "portable";
+
+function authoredBlockLimit(finish: unknown) {
+  return finish === undefined ? MAX_ORDINARY_BLOCKS : ORDINARY_BLOCK_LIMIT_WITH_FINISH;
+}
 
 function portableBlockLimit(finish: unknown) {
   const empty =
@@ -471,27 +475,34 @@ function portableBlockLimit(finish: unknown) {
 function graphSizeIssue(
   blocks: number,
   connections: number,
-  ordinaryBlockLimit: number,
+  blockLimit: number,
+  counted: "ordinary" | "including Finish" = blockLimit === MAX_ORDINARY_BLOCKS
+    ? "ordinary"
+    : "including Finish",
 ): ValidationIssue | undefined {
-  if (blocks <= ordinaryBlockLimit && connections <= 5000) return;
+  if (blocks <= blockLimit && connections <= 5000) return;
   return {
     code: "graph_too_large",
     path: "graph",
     message:
-      ordinaryBlockLimit === MAX_ORDINARY_BLOCKS
+      counted === "ordinary"
         ? "Use at most 500 ordinary blocks and 5000 connections."
         : "Use at most 500 blocks, including Finish, and 5000 connections.",
   };
 }
+
+const authoredBlockCount = (graph: Pick<FlowGraphInput, "blocks" | "finish">) =>
+  graph.blocks.length + (graph.finish === undefined ? 0 : 1);
 
 export function flowEditSizeRefusal(
   graph: FlowGraphInput,
   saved: FlowGraphInput,
 ): Result<never> | undefined {
   const issue = graphSizeIssue(
-    graph.blocks.length,
+    authoredBlockCount(graph),
     graph.connections.length,
-    Math.max(ORDINARY_BLOCK_LIMIT_WITH_FINISH, saved.blocks.length),
+    Math.max(MAX_ORDINARY_BLOCKS, authoredBlockCount(saved)),
+    "including Finish",
   );
   if (issue)
     return { ok: false, error: { code: "validation", message: issue.message, issues: [issue] } };
@@ -514,7 +525,11 @@ function checkGraph(graph: unknown, blockLimit: BlockLimit, issue: IssueReporter
   const sizeIssue = graphSizeIssue(
     graph.blocks.length,
     graph.connections.length,
-    blockLimit === "portable" ? portableBlockLimit(graph.finish) : blockLimit,
+    blockLimit === "portable"
+      ? portableBlockLimit(graph.finish)
+      : blockLimit === "authored"
+        ? authoredBlockLimit(graph.finish)
+        : blockLimit,
   );
   if (sizeIssue) issue(sizeIssue.code, sizeIssue.path, sizeIssue.message);
   graph.blocks.forEach((block, i) =>
@@ -599,11 +614,7 @@ export function validateCreateFlow(
   input: unknown,
   source: "authoring" | "portable" = "authoring",
 ): Result<CreateFlowInput> {
-  const checked = checkFlowBody(
-    input,
-    false,
-    source === "portable" ? "portable" : ORDINARY_BLOCK_LIMIT_WITH_FINISH,
-  );
+  const checked = checkFlowBody(input, false, source === "portable" ? "portable" : "authored");
   if (!checked.ok) return checked;
   const projectId = parseOwningProject(input);
   if (!projectId.ok) return projectId;

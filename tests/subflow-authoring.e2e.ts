@@ -124,8 +124,8 @@ async function renameChildEnding(
     graph: {
       ...latestChild.graph,
       finish: {
-        ...latestChild.graph.finish,
-        endings: latestChild.graph.finish.endings.map((item) =>
+        ...latestChild.graph.finish!,
+        endings: latestChild.graph.finish!.endings.map((item) =>
           item.id === endingId ? { ...item, name } : item,
         ),
       },
@@ -133,15 +133,12 @@ async function renameChildEnding(
   });
 }
 
-async function removeChildEnding(baseUrl: string | undefined, child: FlowDraft, endingId: string) {
+async function removeChildFinish(baseUrl: string | undefined, child: FlowDraft) {
+  const { finish: _finish, ...graph } = child.graph;
   return saveFlowElsewhere(baseUrl, child, {
     graph: {
-      ...child.graph,
-      connections: child.graph.connections.filter((edge) => edge.targetEndingId !== endingId),
-      finish: {
-        ...child.graph.finish,
-        endings: child.graph.finish.endings.filter((item) => item.id !== endingId),
-      },
+      ...graph,
+      connections: graph.connections.filter((edge) => edge.targetEndingId === undefined),
     },
   });
 }
@@ -346,7 +343,7 @@ test("an expanded Subflow group culls offscreen with invariant crossing wire, st
   await app.screenshot("p1-s1-subflow-coexistence-arranged");
 });
 
-test("renaming a child ending preserves its wire while removing an ending or child Flow stays repairable", async ({
+test("renaming a child ending preserves its wire while removing Finish or the child Flow stays repairable", async ({
   app,
   screen,
   browser,
@@ -405,7 +402,7 @@ test("renaming a child ending preserves its wire while removing an ending or chi
   const group = screen.getByRole("article", "Subflow Review step");
   await expect(group).toContainText("Signed off");
 
-  await removeChildEnding(app.baseUrl, renamedChild, "approved");
+  await removeChildFinish(app.baseUrl, renamedChild);
   await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await group.getByRole("button", /^Subflow Review step/).tap();
   const brokenSection = screen.getByRole("region", "Broken wires");

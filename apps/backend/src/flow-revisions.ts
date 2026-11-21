@@ -155,10 +155,11 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
       }),
     { discard: true },
   );
-  yield* sql`INSERT INTO flow_revision_finish (flow_revision_id, x, y)
-    VALUES (${revisionId}, ${graph.finish.position.x}, ${graph.finish.position.y})`;
+  if (graph.finish)
+    yield* sql`INSERT INTO flow_revision_finish (flow_revision_id, x, y)
+      VALUES (${revisionId}, ${graph.finish.position.x}, ${graph.finish.position.y})`;
   yield* Effect.forEach(
-    graph.finish.endings,
+    graph.finish?.endings ?? [],
     (ending, ordinal) =>
       sql`INSERT INTO flow_revision_endings (flow_revision_id, ending_id, ordinal, name, description, output, output_description)
         VALUES (${revisionId}, ${ending.id}, ${ordinal}, ${ending.name}, ${ending.description},
@@ -346,7 +347,7 @@ const readGraphs = Effect.fnUntraced(function* (
       sql<ConditionRuleRow>`SELECT * FROM flow_revision_condition_rules WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
       sql<ConnectionRow>`SELECT * FROM flow_revision_connections WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
       sql<TargetRow>`SELECT * FROM flow_revision_input_targets WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-      sql<FinishRow>`SELECT * FROM flow_revision_finish WHERE flow_revision_id IN ${ids}`,
+      sql<FinishRow>`SELECT flow_revision_id, x, y FROM flow_revision_finish WHERE flow_revision_id IN ${ids} AND active = 1`,
       sql<EndingRow>`SELECT * FROM flow_revision_endings WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     ],
   );
@@ -383,26 +384,28 @@ const readGraphs = Effect.fnUntraced(function* (
             (target) => target.block_id,
           ),
         },
-        finish: finishOf(
-          finishByRevision.get(revision.id),
-          endingsByRevision.get(revision.id) ?? [],
-        ),
+        ...finishOf(finishByRevision.get(revision.id), endingsByRevision.get(revision.id) ?? []),
       },
     ]),
   );
 });
 
-function finishOf(row: FinishRow | undefined, endings: readonly EndingRow[]): FlowGraph["finish"] {
-  if (!row) throw new Error("A Flow revision has no Finish block");
+function finishOf(
+  row: FinishRow | undefined,
+  endings: readonly EndingRow[],
+): Pick<FlowGraph, "finish"> {
+  if (!row) return {};
   return {
-    position: { x: row.x, y: row.y },
-    endings: endings.map((ending) => ({
-      id: ending.ending_id,
-      name: ending.name,
-      description: ending.description,
-      output: ending.output,
-      outputDescription: ending.output_description,
-    })),
+    finish: {
+      position: { x: row.x, y: row.y },
+      endings: endings.map((ending) => ({
+        id: ending.ending_id,
+        name: ending.name,
+        description: ending.description,
+        output: ending.output,
+        outputDescription: ending.output_description,
+      })),
+    },
   };
 }
 

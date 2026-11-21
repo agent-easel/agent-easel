@@ -107,8 +107,9 @@ function previewExitPositions(
 ) {
   const exitPositions = new Map<string, number>();
   const endingRoutes: SubflowEndingRoute[] = [];
-  const finishRight = innerGeometry.finishBox.x + innerGeometry.finishBox.width;
-  childFlow.graph.finish.endings.forEach((ending, index) => {
+  const finishBox = innerGeometry.finishBox;
+  const finishRight = finishBox ? finishBox.x + finishBox.width : 0;
+  childFlow.graph.finish?.endings.forEach((ending, index) => {
     const point = innerGeometry.endingPoint(index);
     const y = offsetY + point.y;
     exitPositions.set(ending.id, y);
@@ -211,7 +212,6 @@ function buildPreviewGeometry(
     innerGraph = displaceSubflowSiblings(innerGraph, innerPreviews, dimensions);
   const innerGeometry = createCanvasGeometry(innerGraph, dimensions, {
     ...(runCollapsed && { prompt: "line", footerCount: executionFooters }),
-    finish: true,
     blockFrame: previewBlockFrame(innerPreviews),
   });
   return { childFlow, innerGraph, innerGeometry, innerPreviews };
@@ -338,7 +338,6 @@ export function displaceSubflowSiblings(
 ): CanvasGraph {
   if (!previews.size) return graph;
   const geometry = createCanvasGeometry(graph, dimensions, {
-    finish: true,
     prompt: "line",
     footerCount: executionFooters,
     blockFrame: previewBlockFrame(previews),
@@ -349,7 +348,7 @@ export function displaceSubflowSiblings(
       box: geometry.blockBox(block),
       group: previews.has(block.id),
     })),
-    { id: null, box: geometry.finishBox, group: false },
+    ...(geometry.finishBox ? [{ id: null, box: geometry.finishBox, group: false }] : []),
   ].sort((a, b) => a.box.x - b.box.x || a.box.y - b.box.y);
   const moved = new Map<string | null, { x: number; y: number }>();
   const occupied = [{ box: geometry.flowInputBox, group: false }];
@@ -375,7 +374,7 @@ export function displaceSubflowSiblings(
   return {
     ...graph,
     blocks: graph.blocks.map((block) => ({ ...block, position: moved.get(block.id)! })),
-    finish: { ...graph.finish, position: moved.get(null)! },
+    ...(graph.finish && { finish: { ...graph.finish, position: moved.get(null)! } }),
   };
 }
 
@@ -427,7 +426,6 @@ export async function arrangeSubflowComposition(
     }
     const facts = {
       prompt: "line" as const,
-      finish: true,
       footerCount: executionFooters,
       blockFrame: previewBlockFrame(children),
     };

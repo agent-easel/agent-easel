@@ -82,6 +82,7 @@ import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
   addEnding,
+  addFinish,
   addWire,
   FINISH_SELECTION,
   type CanvasBlockSelection,
@@ -89,12 +90,14 @@ import {
   newBlock,
   removeBlock,
   removeEnding,
+  removeFinish,
   removeWire,
   replaceBlock,
   replaceEnding,
   undoRemoval,
   type BlockPosition,
   type FlowWire,
+  type GraphRemoval,
 } from "../flow-graph.ts";
 import {
   createFlowDraft,
@@ -257,9 +260,6 @@ function useDeleteKey(
   }, [enabled, scope]);
 }
 
-/** A removal ⌘Z can undo: the graph before and after it. */
-type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
-
 /**
  * Structural edits ⌘Z undoes until Save: a removed Block together with its wires, or a removed
  * wire. Undo brings back what the last removal took and keeps every edit made since; a field
@@ -267,10 +267,21 @@ type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
  */
 function useStructuralUndo(
   scope: RefObject<HTMLElement | null>,
-  draft: { graph: FlowGraph; dirty: boolean; busy: boolean; change: (next: FlowGraph) => void },
+  draft: {
+    graph: FlowGraph;
+    undoScope: symbol;
+    agents: readonly AgentDefinition[];
+    flows: ReadonlyMap<string, FlowDraft>;
+    busy: boolean;
+    change: (next: FlowGraph) => void;
+  },
 ) {
-  const [removals, setRemovals] = useState<readonly Removal[]>([]);
-  if (!draft.dirty && removals.length) setRemovals([]);
+  const [removals, setRemovals] = useState<readonly GraphRemoval[]>([]);
+  const [undoScope, setUndoScope] = useState(draft.undoScope);
+  if (undoScope !== draft.undoScope) {
+    setUndoScope(draft.undoScope);
+    setRemovals([]);
+  }
   const latest = useRef({ ...draft, removals });
   useEffect(() => {
     latest.current = { ...draft, removals };
@@ -280,19 +291,22 @@ function useStructuralUndo(
       if (!matchesShortcut(event, fixedShortcuts.undoFlowEdit)) return;
       if (event.defaultPrevented || isEditing(event.target)) return;
       if (!inEditorLayer(scope.current, event.target)) return;
-      const { graph, busy, change, removals: stack } = latest.current;
+      const { graph, agents, flows, busy, change, removals: stack } = latest.current;
       const last = stack.at(-1);
       if (busy || !last) return;
       event.preventDefault();
       setRemovals(stack.slice(0, -1));
-      change(undoRemoval(graph, last.before, last.after));
+      change(undoRemoval(graph, last, agents, flows));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [scope]);
   /** Applies a removal that ⌘Z can undo. */
   return (after: FlowGraph) => {
-    setRemovals((stack) => [...stack, { before: draft.graph, after }]);
+    setRemovals((stack) => [
+      ...stack,
+      { before: draft.graph, after, agentsAtRemoval: draft.agents, flowsAtRemoval: draft.flows },
+    ]);
     draft.change(after);
   };
 }
@@ -316,8 +330,9 @@ function useCanvasSelection(
   if (
     selected !== null &&
     selected !== FLOW_INPUT &&
-    selected !== FINISH_SELECTION &&
-    !graph.blocks.some((block) => block.id === selected)
+    (selected === FINISH_SELECTION
+      ? !graph.finish
+      : !graph.blocks.some((block) => block.id === selected))
   )
     setSelected(null);
   /** Selects a block or the Flow input, or with null clears every selection. */
@@ -344,8 +359,8 @@ function useCanvasSelection(
     if (wire) deleteWire(wire);
   });
   /** Removes a block with its wires and closes its settings. */
-  function deleteBlock(blockId: string) {
-    draft.remove(removeBlock(graph, blockId));
+  function deleteBlock(blockId: CanvasBlockSelection) {
+    draft.remove(blockId === FINISH_SELECTION ? removeFinish(graph) : removeBlock(graph, blockId));
     select(null);
   }
   return { selected, wire, select, selectWire, deleteWire, deleteBlock } as const;
@@ -528,7 +543,7 @@ function finishActions(
     onAdd: () => {
       const next = addEnding(graph);
       change(next);
-      return next.finish.endings.at(-1)!.id;
+      return next.finish!.endings.at(-1)!.id;
     },
     onEdit: (ending: FlowEnding) => change(replaceEnding(graph, ending)),
     onRemove: (endingId: string) => remove(removeEnding(graph, endingId)),
@@ -566,7 +581,9 @@ export function FlowDetail({
   const { change, editBlock } = graphEdits(draft, graph);
   const remove = useStructuralUndo(canvas, {
     graph,
-    dirty: state.dirty,
+    undoScope: state.undoScope,
+    agents,
+    flows: new Map(flows.map((flow) => [flow.id, flow])),
     busy: state.busy,
     change,
   });
@@ -584,7 +601,11 @@ export function FlowDetail({
   const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
   // A Project that left T3 leaves its Flow read-only until it is moved or removed.
   const readOnly = owner.gone;
-  const { add, addFlow, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
+  const { add, addFlow, addFinishBlock, dropAt, placement } = useBlockAdding(
+    graph,
+    change,
+    selectBlock,
+  );
   if (!saved) return <FlowLoadState error={error} />;
   const draftInput = dirtyDraftInput(state, saved);
   return (
@@ -624,7 +645,9 @@ export function FlowDetail({
           projects={projects}
           capabilities={blockAgents.capabilities}
           agentError={agentError}
+          finishPlaced={graph.finish !== undefined}
           onAdd={add}
+          onAddFinish={addFinishBlock}
           onAddFlow={addFlow}
           dropAt={dropAt}
         />
@@ -730,7 +753,7 @@ function EditorBody({
 function useBlockAdding(
   graph: FlowGraph,
   change: (next: FlowGraph) => void,
-  select: (blockId: string) => void,
+  select: (blockId: CanvasBlockSelection) => void,
 ) {
   /** The canvas fills it with the placement of a drop point. */
   const placement = useRef<DropAt | null>(null);
@@ -740,6 +763,10 @@ function useBlockAdding(
       const next = newBlock(graph, kind, agent, position);
       change({ ...graph, blocks: [...graph.blocks, next] });
       select(next.id);
+    },
+    addFinishBlock(position?: BlockPosition) {
+      change(addFinish(graph, position));
+      select(FINISH_SELECTION);
     },
     addFlow(flow: FlowDraft, position?: BlockPosition) {
       const next = newBlock(graph, "subflow", undefined, position, flow);
@@ -800,7 +827,7 @@ function EditorSettings({
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
   onWireChange: (wire: FlowWire, connected: boolean) => void;
-  onRemove: (blockId: string) => void;
+  onRemove: (blockId: CanvasBlockSelection) => void;
 }) {
   const close = () => onClose(null);
   const flowMap = new Map(flows.all.map((flow) => [flow.id, flow]));
@@ -831,6 +858,7 @@ function EditorSettings({
         icon={Flag}
         iconClassName="text-muted-foreground"
         onClose={close}
+        footer={<RemoveBlockButton onClick={() => onRemove(FINISH_SELECTION)} />}
       >
         <FinishSettings
           graph={graph}
@@ -849,15 +877,7 @@ function EditorSettings({
       title={BLOCK_KINDS[block.kind].name}
       icon={BLOCK_KINDS[block.kind].Icon}
       onClose={close}
-      footer={
-        <Button
-          variant="outline"
-          className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onRemove(block.id)}
-        >
-          Remove block
-        </Button>
-      }
+      footer={<RemoveBlockButton onClick={() => onRemove(block.id)} />}
     >
       <BlockConfiguration
         key={block.id}
@@ -872,6 +892,18 @@ function EditorSettings({
         onWireChange={onWireChange}
       />
     </SettingsPanel>
+  );
+}
+
+function RemoveBlockButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+      onClick={onClick}
+    >
+      Remove block
+    </Button>
   );
 }
 

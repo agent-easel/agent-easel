@@ -34,7 +34,7 @@ export function createCanvasGeometry(
     reservedHeight,
     incomingGrowth,
   } = createNodeGeometry(graph, dimensions, facts);
-  const finishBoxes = facts.finish ? [finishBox] : [];
+  const finishBoxes = finishBox ? [finishBox] : [];
   const rowOf = exitRows(graph.blocks);
   const blockBox = (block: CanvasBlock) => ({
     ...block.position,
@@ -76,8 +76,8 @@ export function createCanvasGeometry(
     blockBox,
     finishBox,
     endingPoint: (index: number): Point => ({
-      x: finishBox.x,
-      y: finishBox.y + finishEndingY + index * ports.exitRow,
+      x: finishBox!.x,
+      y: finishBox!.y + finishEndingY + index * ports.exitRow,
     }),
     blockHeight,
     bounds,
