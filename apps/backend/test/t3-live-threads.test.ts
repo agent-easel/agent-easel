@@ -469,7 +469,7 @@ const updateSchema = {
 
 it("a rename reply that echoes the sent title is acknowledged", async (c) => {
   // Arrange
-  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+  const { threads, endpoint, live } = await authorizedLiveOAuth(c, {
     updateSchema,
     update: () => ({
       isError: false,
@@ -478,8 +478,17 @@ it("a rename reply that echoes the sent title is acknowledged", async (c) => {
     }),
   });
 
+  const { authorizationIdentity } = await live.contract.inspect({ endpoint });
+  assert(authorizationIdentity);
+  const target = {
+    endpoint,
+    authorizationIdentity,
+    authorizeDispatch: async () => true,
+    signal: new AbortController().signal,
+  };
+
   // Act
-  const disposition = await threads.renameThread({ endpoint }, renameRequest);
+  const disposition = await threads.renameThread(target, renameRequest);
 
   // Assert
   expect(disposition).toStrictEqual({
@@ -491,7 +500,7 @@ it("a rename reply that echoes the sent title is acknowledged", async (c) => {
 
 it("an installed plain-text missing-thread error retires that rename as thread-not-found", async (c) => {
   // Arrange
-  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+  const { threads, endpoint, live } = await authorizedLiveOAuth(c, {
     updateSchema,
     update: () => ({
       isError: true,
@@ -499,8 +508,17 @@ it("an installed plain-text missing-thread error retires that rename as thread-n
     }),
   });
 
+  const { authorizationIdentity } = await live.contract.inspect({ endpoint });
+  assert(authorizationIdentity);
+  const target = {
+    endpoint,
+    authorizationIdentity,
+    authorizeDispatch: async () => true,
+    signal: new AbortController().signal,
+  };
+
   // Act
-  const disposition = await threads.renameThread({ endpoint }, renameRequest);
+  const disposition = await threads.renameThread(target, renameRequest);
 
   // Assert
   expect(disposition).toStrictEqual({ kind: "thread-not-found" });
@@ -556,4 +574,28 @@ it("a replayed rename that returns a different current title is superseded", () 
     threadId: "thread-1",
     title: "F#1 Entry worker · Other",
   });
+});
+
+it.for([
+  { reason: "expired grant", identity: () => "previous", current: true },
+  { reason: "cancelled claim", identity: (id: string) => id, current: false },
+])("a rename with a $reason cannot reach the T3 wire", async ({ identity, current }, c) => {
+  // Arrange
+  const { live, threads, endpoint, external } = await authorizedLiveOAuth(c, { updateSchema });
+  const { authorizationIdentity } = await live.contract.inspect({ endpoint });
+  assert(authorizationIdentity);
+  const target = {
+    endpoint,
+    authorizationIdentity: identity(authorizationIdentity),
+    signal: new AbortController().signal,
+    authorizeDispatch: async () => current,
+  };
+
+  // Act
+  await threads.renameThread(target, renameRequest);
+
+  // Assert
+  expect(
+    external.sessionRequests.filter((request) => request.tool === "t3_thread_update"),
+  ).toStrictEqual([]);
 });

@@ -1,6 +1,7 @@
 import {
   T3Failure,
   structured,
+  type DispatchFence,
   type T3Calls,
   type T3Endpoint,
   type T3Target,
@@ -256,27 +257,31 @@ export class LiveT3Threads implements T3Threads {
     });
   }
   async renameThread(
-    target: T3Endpoint,
+    target: T3Endpoint & DispatchFence,
     request: WorkerTitleRenameRequest,
   ): Promise<WorkerTitleRenameDisposition> {
     const unavailable = (): WorkerTitleRenameDisposition => ({ kind: "unavailable" });
     try {
-      return await this.connection.authorized(target, async (session) => {
-        const answer = await session.call(
-          "t3_thread_update",
-          {
-            threadId: request.threadId,
-            action: "rename",
-            title: request.title,
-            clientRequestId: request.clientRequestId,
-            ...(request.environmentId !== undefined
-              ? { environmentId: request.environmentId }
-              : {}),
-          },
-          10_000,
-        );
-        return workerTitleRenameDisposition(request, answer);
-      });
+      return await this.connection.authorized(
+        target,
+        async (session) => {
+          const answer = await session.call(
+            "t3_thread_update",
+            {
+              threadId: request.threadId,
+              action: "rename",
+              title: request.title,
+              clientRequestId: request.clientRequestId,
+              ...(request.environmentId !== undefined
+                ? { environmentId: request.environmentId }
+                : {}),
+            },
+            10_000,
+          );
+          return workerTitleRenameDisposition(request, answer);
+        },
+        target,
+      );
     } catch (error) {
       if (error instanceof T3Failure && error.kind === "refused") return { kind: "unclassified" };
       if (error instanceof T3Failure && error.kind === "authorization-required")

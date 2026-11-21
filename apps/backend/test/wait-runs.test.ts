@@ -294,9 +294,14 @@ it.effect(
       yield* Effect.promise(() => resultReleasedToWait(f.world, worker));
       f.t3.connection.available = false;
       yield* TestClock.adjust(WAIT_MINUTES * MINUTE);
-      const forwarded = yield* f.factory.getRun(worker.runId);
-      assert(forwarded.ok);
-      expect(forwarded.value.waitArrivals[0]?.state).toBe("forwarded");
+      yield* Effect.promise(() =>
+        observeFor(
+          "wait for committed forwarding",
+          f.world,
+          worker.runId,
+          (run) => run.waitArrivals[0]?.state === "forwarded",
+        ),
+      );
       yield* f.close;
       f.t3.connection.available = true;
       const followUpLaunch = nextLaunch(f.world);

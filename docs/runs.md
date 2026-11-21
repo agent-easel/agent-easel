@@ -198,7 +198,7 @@ setting off cancels nothing. Once an outcome is recorded Factory stops the title
 settles it in T3 once it finished, best effort; the [Runner](runner.md#run-title-generations) owns the deadline,
 cancellation, restart and cleanup rules. Restart never launches a title thread twice.
 
-Applying a generated title is like Rename: it is not Run activity and moves no row. It also
+Applying a generated title, like Rename, updates the bound worker thread titles for Active, Snoozed and Settled Runs. Factory commits the Run title first. Background synchronization adds no timeline event, changes no activity time or navigation order, and raises no Problem or attention. Archive cancels outstanding synchronization. Applying a generated title also
 clears the setting's diagnostic, because it shows the setting works. A timed-out or failed outcome records its reason as
 the setting's latest diagnostic in the transaction that records the outcome; dropped and cancelled are owner actions
 and record none. Like every outcome they are quiet, raising no Problem or attention. The title thread is not a
@@ -601,8 +601,8 @@ menu items never opens a row preview.
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.
   A Settle still stopping workers focuses the row; when the Run settles later, focus moves to the destination only if it is
   still on that row or was lost because the row left; focus the user moved elsewhere, including to the page, stays.
-- **Rename** changes that Run's or draft's title only (trimmed, non-empty, ≤500 characters) and makes its title provenance
-  manual, dropping a pending [title generation](#run-title-generation); renaming never moves a row.
+- **Rename** changes the selected title (trimmed, non-empty, ≤500 characters) and makes its title provenance
+  manual, dropping a pending [title generation](#run-title-generation); renaming never moves a row. Draft Rename stays local to the draft. For Runs, this revises [#310](https://github.com/alimek/t3-factory/issues/310): a changed title also reaches bound T3 workers through [worker title synchronization](runner.md#worker-title-synchronization).
   The same shadcn/Radix row menu serves desktop and browser clients. Right click opens it at the pointer;
   Shift+F10 and the context-menu key anchor it below the focused row. Touch devices retain a ⋯ button;
   mouse layouts omit it. Closing the menu or Rename/Archive dialogs returns focus to the row when it remains visible. Rename

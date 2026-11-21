@@ -24,7 +24,7 @@ import { openRunSettlement } from "./settlement.ts";
 import { openRunStart } from "./start.ts";
 import { openRunWorkspace } from "./workspace.ts";
 import { openRunWaits } from "./waits.ts";
-import { openWorkerTitles } from "./worker-titles.ts";
+import { openWorkerTitles, resumeWorkerTitleClaims } from "./worker-titles.ts";
 
 export type { Delivery, Handoff } from "./records.ts";
 export { passedThrough } from "./release.ts";
@@ -61,6 +61,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     database.transaction((sql) =>
       Effect.gen(function* () {
         yield* sql`INSERT INTO runner_owner(singleton,token,pid,acquired_at) VALUES(1,${owner.token},${process.pid},${yield* now}) ON CONFLICT(singleton) DO UPDATE SET token=excluded.token,pid=excluded.pid,acquired_at=excluded.acquired_at`;
+        yield* resumeWorkerTitleClaims(sql);
         yield* sql`UPDATE operation_intents SET state='uncertain',problem='Previous owner exited with an in-flight reservation.' WHERE state='reserved'`;
         yield* sql`UPDATE run_blocks SET freshness='stale' WHERE thread_id IS NOT NULL AND run_id IN(SELECT id FROM runs WHERE archived_at IS NULL AND settled_at IS NULL)`;
       }),

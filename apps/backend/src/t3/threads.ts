@@ -1,5 +1,5 @@
 import type { RunPullRequest } from "@t3-factory/contracts";
-import type { T3Endpoint, T3Target } from "./connection.ts";
+import type { DispatchFence, T3Endpoint, T3Target } from "./connection.ts";
 import type { DelegatedSettlement } from "./delegated-settlement.ts";
 
 /** Every call that rejects does so only with a `T3Failure`. */
@@ -29,7 +29,7 @@ export interface T3Threads {
   /** One thread read: active/latest run, recent runs and the pending native request count. */
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
   renameThread(
-    target: T3Endpoint,
+    target: T3Endpoint & DispatchFence,
     request: WorkerTitleRenameRequest,
   ): Promise<WorkerTitleRenameDisposition>;
 }

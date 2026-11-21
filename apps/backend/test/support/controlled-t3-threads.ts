@@ -1,4 +1,9 @@
-import { T3Failure, type T3Endpoint, type T3Target } from "../../src/t3/connection.ts";
+import {
+  T3Failure,
+  type DispatchFence,
+  type T3Endpoint,
+  type T3Target,
+} from "../../src/t3/connection.ts";
 import type { DelegatedSettlement } from "../../src/t3/delegated-settlement.ts";
 import type {
   AttachmentUpload,
@@ -110,6 +115,14 @@ export class ControlledT3Threads implements T3Threads {
   readonly renameReceipts = new Map<string, { threadId: string; title: string }>();
   readonly deletedThreads = new Set<string>();
   loseRenameReply = false;
+  private renameReply: Promise<void> | undefined;
+  holdRenameReply() {
+    let release = () => {};
+    this.renameReply = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
   compactRenameKeys = new Set<string>();
   renameDisposition: WorkerTitleRenameDisposition | undefined;
   beforeRename?: (request: WorkerTitleRenameRequest) => Promise<void>;
@@ -121,11 +134,17 @@ export class ControlledT3Threads implements T3Threads {
     return this.remoteTitles.get(threadId) ?? this.launchedThread(threadId)?.payload.title;
   }
   async renameThread(
-    _target: T3Endpoint,
+    target: T3Endpoint & DispatchFence,
     request: WorkerTitleRenameRequest,
   ): Promise<WorkerTitleRenameDisposition> {
     this.connection.requireConnection();
     await this.beforeRename?.(request);
+    if (
+      !(await target.authorizeDispatch()) ||
+      target.signal.aborted ||
+      this.connection.identity !== target.authorizationIdentity
+    )
+      return { kind: "unavailable" };
     this.renames.push(request);
     for (const notify of this.renameWaiters.splice(0)) notify(request);
     if (this.renameDisposition) return this.renameDisposition;
@@ -139,6 +158,9 @@ export class ControlledT3Threads implements T3Threads {
         title: request.title,
       });
     }
+    const reply = this.renameReply;
+    this.renameReply = undefined;
+    await reply;
     if (this.loseRenameReply) return { kind: "unavailable" };
     const title = this.compactRenameKeys.has(request.clientRequestId)
       ? (this.threadTitle(request.threadId) ?? request.title)

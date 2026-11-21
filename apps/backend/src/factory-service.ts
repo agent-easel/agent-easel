@@ -365,7 +365,7 @@ export const makeFactoryService = (
     };
     runner = yield* makeRunner(
       factory,
-      connection.snapshots.fresh,
+      connection.snapshots,
       projects.refreshProjects,
       t3.threads,
       git,

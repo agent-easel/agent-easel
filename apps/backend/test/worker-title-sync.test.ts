@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { copyFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { fingerprint } from "../src/fingerprint.ts";
 import { prepared } from "./support/prepared-runner.ts";
@@ -7,6 +8,7 @@ import {
   continuationFlow,
   enableRunTitles,
   handoffFlow,
+  heldWorkerRename,
   nextRename,
   observeFor,
   resultReleasedToSecondWorker,
@@ -232,6 +234,8 @@ it("editing only the clipped tail of a Run title does not call T3 again", async 
   const first = nextRename(world);
   assert((await f.renameRun(started.value.id, { title: "a".repeat(300) })).ok);
   const sent = await first;
+  await f.reconcileRuns();
+  t3.threads.remoteTitles.set(sent.threadId, "Manually chosen in T3");
 
   // Act
   assert((await f.renameRun(started.value.id, { title: `${"a".repeat(299)}b` })).ok);
@@ -239,6 +243,7 @@ it("editing only the clipped tail of a Run title does not call T3 again", async 
 
   // Assert
   expect(t3.threads.renames.map((rename) => rename.title)).toStrictEqual([sent.title]);
+  expect(t3.threads.threadTitle(sent.threadId)).toBe("Manually chosen in T3");
 });
 
 it("a Continuation keeps the launching Block's title when the Run is renamed", async (c) => {
@@ -293,4 +298,188 @@ it("a downstream worker launches with the Run title chosen before its first hand
   expect([...t3.threads.launches.values()][1]?.payload.title).toBe(
     "F#1 Parallel work · New subject",
   );
+});
+
+it("a return to the launch title repairs a rename whose acknowledgement was lost", async (c) => {
+  // Arrange
+  const { f, t3, input } = await prepared(c);
+  const started = await f.startRun(input);
+  assert(started.ok);
+  await f.reconcileRuns();
+  t3.threads.loseRenameReply = true;
+  assert((await f.renameRun(started.value.id, { title: "Intermediate" })).ok);
+  await f.reconcileRuns();
+  const [intermediate] = t3.threads.renames;
+  assert(intermediate);
+  t3.threads.loseRenameReply = false;
+
+  // Act
+  assert((await f.renameRun(started.value.id, { title: input.title })).ok);
+
+  // Assert
+  await f.reconcileRuns();
+  expect(t3.threads.threadTitle(intermediate.threadId)).toBe("F#1 Entry worker · Improve search");
+  expect(t3.threads.renames.at(-1)?.clientRequestId).not.toBe(intermediate.clientRequestId);
+});
+
+it("a replacement grant selected after the claim cannot dispatch the old Run's rename", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  t3.threads.beforeRename = async () => t3.connection.approve("replacement-grant");
+
+  // Act
+  assert((await f.renameRun(worker.runId, { title: "New subject" })).ok);
+
+  // Assert
+  await f.reconcileRuns();
+  expect(t3.threads.renames).toStrictEqual([]);
+});
+
+it.for(["thread-not-found", "capability-denied"] as const)(
+  "a %s refusal preserves the binding and prevents later revisions from retrying",
+  async (kind, c) => {
+    // Arrange
+    const { f, t3, world, input } = await prepared(c);
+    const worker = await workerAtWork(world, input);
+    const before = await f.getRun(worker.runId);
+    assert(before.ok);
+    t3.threads.renameDisposition = { kind };
+    assert((await f.renameRun(worker.runId, { title: "First title" })).ok);
+    await f.reconcileRuns();
+    const [sent] = t3.threads.renames;
+    assert(sent);
+    t3.threads.renameDisposition = undefined;
+
+    // Act
+    assert((await f.renameRun(worker.runId, { title: "Second title" })).ok);
+
+    // Assert
+    await f.reconcileRuns();
+    expect(t3.threads.renames).toStrictEqual([sent]);
+    const after = await f.getRun(worker.runId);
+    assert(after.ok);
+    expect(after.value.blocks.map((block) => block.threadId)).toContain(worker.threadId);
+    expect(after.value.events).toEqual(before.value.events);
+    expect(after.value.attention).toEqual(before.value.attention);
+  },
+);
+
+it("Archive between claim and dispatch cancels the unsent rename", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  let archived = false;
+  t3.threads.beforeRename = async () => {
+    archived = (await f.archiveRun(worker.runId)).ok;
+  };
+
+  // Act
+  assert((await f.renameRun(worker.runId, { title: "Cancelled title" })).ok);
+
+  // Assert
+  await f.reconcileRuns();
+  expect(archived).toBe(true);
+  expect(t3.threads.renames).toStrictEqual([]);
+});
+
+it("a restart with a sent claim and a newer target dispatches only the latest revision", async (c) => {
+  // Arrange
+  const { h, f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  const { sent, release } = await heldWorkerRename(world, worker.runId, "Intermediate");
+  assert((await f.renameRun(worker.runId, { title: input.title })).ok);
+  const snapshot = h.databasePath + ".at-dispatch";
+  const db = new DatabaseSync(h.databasePath);
+  db.prepare("VACUUM INTO ?").run(snapshot);
+  db.close();
+  t3.contract.support.rename = false;
+  release();
+  await f.close();
+  await copyFile(snapshot, h.databasePath);
+  t3.contract.support.rename = true;
+
+  // Act
+  const restored = await h.open({ t3 });
+
+  // Assert
+  await restored.reconcileRuns();
+  expect(t3.threads.renames.map((request) => request.title)).toStrictEqual([
+    sent.title,
+    "F#1 Entry worker · Improve search",
+  ]);
+  expect(t3.threads.renames[1]?.clientRequestId).not.toBe(sent.clientRequestId);
+});
+
+it("a matching acknowledgement for an older revision cannot finish a newer in-flight edit", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  const { sent, release } = await heldWorkerRename(world, worker.runId, "First title");
+  assert((await f.renameRun(worker.runId, { title: "Intermediate" })).ok);
+  assert((await f.renameRun(worker.runId, { title: "First title" })).ok);
+
+  // Act
+  release();
+
+  // Assert
+  await f.reconcileRuns();
+  expect(t3.threads.renames.map((request) => request.title)).toStrictEqual([
+    sent.title,
+    sent.title,
+  ]);
+  expect(t3.threads.renames[1]?.clientRequestId).not.toBe(sent.clientRequestId);
+});
+
+it("Archive ignores an already dispatched result and discards its queued successor", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  const { sent, release } = await heldWorkerRename(world, worker.runId, "Already sent");
+  assert((await f.renameRun(worker.runId, { title: "Unsent" })).ok);
+
+  // Act
+  assert((await f.archiveRun(worker.runId)).ok);
+
+  // Assert
+  release();
+  await f.reconcileRuns();
+  expect(t3.threads.renames).toStrictEqual([sent]);
+  expect(t3.threads.threadTitle(worker.threadId)).toBe(sent.title);
+});
+
+it("a capability withdrawn while connecting prevents dispatch of the claimed rename", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  t3.threads.beforeRename = async () => {
+    t3.contract.support.rename = false;
+    assert((await f.recheckConnection()).ok);
+  };
+
+  // Act
+  assert((await f.renameRun(worker.runId, { title: "Held" })).ok);
+
+  // Assert
+  await f.reconcileRuns();
+  expect(t3.threads.renames).toStrictEqual([]);
+});
+
+it("returning to the acknowledged title before dispatch preserves the worker's manual T3 title", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  t3.threads.remoteTitles.set(worker.threadId, "Manual T3 title");
+  t3.threads.beforeRename = async () => {
+    delete t3.threads.beforeRename;
+    assert((await f.renameRun(worker.runId, { title: input.title })).ok);
+  };
+
+  // Act
+  assert((await f.renameRun(worker.runId, { title: "Never sent" })).ok);
+
+  // Assert
+  await f.reconcileRuns();
+  expect(t3.threads.renames).toStrictEqual([]);
+  expect(t3.threads.threadTitle(worker.threadId)).toBe("Manual T3 title");
 });

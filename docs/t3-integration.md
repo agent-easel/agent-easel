@@ -441,6 +441,14 @@ number, or read it on the Factory host with `GET /api/runs/:id` using the receip
 
 **Direct Start authority.** `factory_start_run` starts a Run as soon as it is called. The user-invoked [`factory-start-run` skill](installation.md#optional-skills) asks for review and explicit confirmation first, but that gate exists only in the skill's instructions: any local caller of Factory MCP can start Runs, launch workers and spend provider budget without it. The host-local boundary [above](#factory-mcp-and-block-ids) is unchanged; reaching Factory from a phone works by driving a T3 conversation on the Factory host, never by exposing Factory MCP remotely.
 
+## Worker thread renames
+
+On a ready connection Factory inspects the optional `t3_thread_update` schema for `action: "rename"` and string `threadId`, `title` and `clientRequestId` fields compatible with its payload. Factory includes `environmentId` only when advertised. Older contracts can still Start and Rename Runs locally. Title-generation threads keep their technical title, `Factory title · Run #<number> · <Run id>`.
+
+The live context must match the Run's accepted context through credential selection and dispatch. New approval never transfers outstanding work to the replacement grant. A missing thread permanently retires synchronization for its binding. A capability denial pauses work under that grant without timed retries. Other failures leave a backend diagnostic and follow the [Runner retry rules](runner.md#worker-title-synchronization).
+
+Factory checks the thread ID, action and returned title. A retained receipt and event can replay the original acknowledgement even after a manual edit. After event compaction T3 can instead return the current projection. A different title closes that revision as superseded and leaves newer revisions eligible. A matching title acknowledges the command without proving what T3 currently displays.
+
 ## Title threads
 
 [Run title generation](runs.md#run-title-generation) launches one title thread per pending generation, beside the

@@ -402,6 +402,7 @@ export interface ScenarioWorld {
     | "getRun"
     | "reconcileRuns"
     | "requestReport"
+    | "renameRun"
     | "archiveRun"
     | "settleRun"
     | "snoozeRun"
@@ -544,6 +545,13 @@ export const report = (world: ScenarioWorld, worker: WorkerHandle, fields: Repor
 
 /** Resolves with the next worker launch T3 records, also one background work issues. */
 export const nextLaunch = (world: ScenarioWorld) => world.t3.threads.nextLaunch();
+export async function heldWorkerRename(world: ScenarioWorld, runId: string, title: string) {
+  const release = world.t3.threads.holdRenameReply();
+  const first = world.t3.threads.nextRename();
+  const renamed = await world.factory.renameRun(runId, { title });
+  if (!renamed.ok) stepFailed("rename Run", renamed.error.message);
+  return { sent: await first, release };
+}
 export const nextRename = (world: ScenarioWorld) => world.t3.threads.nextRename();
 
 /** Resolves with the next send T3 records, also one background work issues. */

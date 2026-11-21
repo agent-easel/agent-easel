@@ -547,6 +547,16 @@ settlement and stays latched across restart. Only [manual settlement](#manual-se
 cancelling the waiting deliveries without numbering them; neither reports success nor changes the count. Flow edits affect
 only later Runs.
 
+## Worker title synchronization
+
+Direct launch acknowledgement and exact-title recovery both bind the physical worker using the saved launch title as its baseline. Before releasing the launch payload, Factory compares that baseline with the current Run title rendered for the launching Agent Block. A Revisit or Continuation reuses that binding. On upgrade, already-bound workers keep their legacy titles until the Run title changes. An unbound legacy launch still recovers by its saved title and reconciles on first bind.
+
+Each committed title change advances the Run title revision. Factory keeps the latest desired revision per worker and skips a rendered title identical to its acknowledged baseline while that baseline is certain. A worker's manual T3 title therefore survives edits confined to the clipped tail. Once a write may have reached T3, returning to an earlier title requires a new command.
+
+The Runner serializes attempts, coalesces unsent revisions and resumes pending or interrupted claims on startup. A revision keeps its request key across retries. A newer revision gets its own key, even if an older in-flight command had the same title. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
+
+Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
+
 ## Run title generations
 
 A [Run title generation](runs.md#run-title-generation) runs beside its Run and is never Run work: it holds no gate,

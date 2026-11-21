@@ -20,6 +20,8 @@ type TitleBinding = {
   readonly block_id: string;
   readonly thread_id: string;
   readonly title_acknowledged: string | null;
+  readonly title_disposition: string | null;
+  readonly title_inflight_request_id: string | null;
   readonly title_sync_state: string | null;
 };
 export type WorkerTitleSyncClaim = {
@@ -30,6 +32,7 @@ export type WorkerTitleSyncClaim = {
   readonly title: string;
   readonly requestId: string;
   readonly contextId: string;
+  readonly authorizationIdentity: string;
   readonly endpoint: string;
   readonly environmentId: string;
 };
@@ -54,15 +57,18 @@ function queueBinding(
     const desired = renderedTitle(blocks, run, binding.block_id);
     if (desired === undefined) return;
     const requestId = workerTitleRequestId(run.id, binding.thread_id, run.title_revision);
-    if (binding.title_sync_state === "paused" || binding.title_sync_state === "inflight") {
-      yield* sql`UPDATE run_thread_bindings SET title_target=${desired},title_target_revision=${run.title_revision},title_request_id=${requestId},title_not_before=NULL WHERE id=${binding.id} AND title_sync_state=${binding.title_sync_state}`;
-      return;
-    }
-    if (desired === binding.title_acknowledged) {
-      yield* sql`UPDATE run_thread_bindings SET title_sync_state=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL,title_disposition=NULL WHERE id=${binding.id} AND title_sync_state IS NOT 'inflight' AND title_sync_state IS NOT 'retired' AND title_sync_state IS NOT 'paused'`;
-      return;
-    }
-    yield* sql`UPDATE run_thread_bindings SET title_sync_state='pending',title_target=${desired},title_target_revision=${run.title_revision},title_request_id=${requestId},title_not_before=NULL,title_disposition=NULL,title_blocked_context=NULL,title_attempt=0 WHERE id=${binding.id} AND title_sync_state IS NOT 'inflight' AND title_sync_state IS NOT 'retired' AND title_sync_state IS NOT 'paused'`;
+    const unchanged = binding.title_disposition === null && desired === binding.title_acknowledged;
+    const state =
+      binding.title_sync_state === "paused" || binding.title_inflight_request_id !== null
+        ? binding.title_sync_state
+        : unchanged
+          ? null
+          : "pending";
+    yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},
+      title_target=${state ? desired : null},title_target_revision=${state ? run.title_revision : null},
+      title_request_id=${state ? requestId : null},title_not_before=NULL,title_attempt=0,
+      title_inflight_revision=CASE WHEN title_inflight_request_id IS NOT NULL THEN title_inflight_revision END
+      WHERE id=${binding.id}`;
   });
 }
 
@@ -73,7 +79,7 @@ export function queueWorkerTitleSync(sql: SqlClient.SqlClient, runId: string) {
     if (!run || run.archived_at) return;
     const flow = yield* readFlowRevision(sql, run.flow_revision_id);
     const bindings =
-      yield* sql<TitleBinding>`SELECT id,block_id,thread_id,title_acknowledged,title_sync_state FROM run_thread_bindings WHERE run_id=${runId} AND role='worker'`;
+      yield* sql<TitleBinding>`SELECT id,block_id,thread_id,title_acknowledged,title_disposition,title_sync_state,title_inflight_request_id FROM run_thread_bindings WHERE run_id=${runId} AND role='worker'`;
     for (const binding of bindings) yield* queueBinding(sql, run, flow.graph.blocks, binding);
   });
 }
@@ -99,11 +105,13 @@ export function baselineWorkerTitle(
 }
 
 export function cancelWorkerTitleSync(sql: SqlClient.SqlClient, runId: string) {
-  return sql`UPDATE run_thread_bindings SET title_sync_state=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL WHERE run_id=${runId} AND role='worker' AND title_sync_state IN ('pending','paused')`;
+  return sql`UPDATE run_thread_bindings SET title_sync_state=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL,title_inflight_request_id=NULL,title_inflight_revision=NULL WHERE run_id=${runId} AND role='worker' AND title_sync_state IN ('pending','paused','inflight')`;
 }
 
-function clearInflight(sql: SqlClient.SqlClient, bindingId: string, requestId: string) {
-  return sql`UPDATE run_thread_bindings SET title_sync_state=NULL,title_inflight_revision=NULL,title_inflight_request_id=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL WHERE id=${bindingId} AND title_inflight_request_id=${requestId}`;
+export function resumeWorkerTitleClaims(sql: SqlClient.SqlClient) {
+  return sql`UPDATE run_thread_bindings SET title_sync_state='pending',
+    title_disposition=CASE WHEN title_inflight_request_id IS NULL THEN title_disposition ELSE 'unavailable' END,
+    title_inflight_revision=NULL,title_inflight_request_id=NULL WHERE title_sync_state='inflight'`;
 }
 
 function finishRename(
@@ -111,36 +119,40 @@ function finishRename(
   claim: WorkerTitleSyncClaim,
   acknowledged: boolean,
 ) {
-  return Effect.gen(function* () {
-    if (acknowledged) {
-      yield* sql`UPDATE run_thread_bindings SET title_acknowledged=${claim.title},title_synced_revision=${claim.revision} WHERE id=${claim.bindingId}`;
-    }
-    const keep =
-      yield* sql`UPDATE run_thread_bindings SET title_sync_state='pending',title_inflight_revision=NULL,title_inflight_request_id=NULL,title_disposition=NULL,title_not_before=NULL
-      WHERE id=${claim.bindingId} AND title_target_revision > ${claim.revision} AND (${Number(acknowledged)}=0 OR title_target IS NOT ${claim.title}) RETURNING id`;
-    if (!keep.length) {
-      yield* clearInflight(sql, claim.bindingId, claim.requestId);
-      yield* sql`UPDATE run_thread_bindings SET title_disposition=${acknowledged ? null : "superseded"} WHERE id=${claim.bindingId}`;
-    }
-  });
+  return sql`UPDATE run_thread_bindings SET
+    title_acknowledged=CASE WHEN ${Number(acknowledged)} THEN ${claim.title} ELSE title_acknowledged END,
+    title_synced_revision=CASE WHEN ${Number(acknowledged)} THEN ${claim.revision} ELSE title_synced_revision END,
+    title_sync_state=CASE WHEN title_target_revision>${claim.revision} THEN 'pending' END,
+    title_inflight_revision=NULL,title_inflight_request_id=NULL,title_attempt=0,title_not_before=NULL,
+    title_disposition=${acknowledged ? null : "superseded"},
+    title_target=CASE WHEN title_target_revision>${claim.revision} THEN title_target END,
+    title_request_id=CASE WHEN title_target_revision>${claim.revision} THEN title_request_id END,
+    title_target_revision=CASE WHEN title_target_revision>${claim.revision} THEN title_target_revision END
+    WHERE id=${claim.bindingId}`;
 }
 
 export function openWorkerTitles(database: RunnerDatabase) {
   const dueWorkerTitleSyncs = (runId: string) =>
-    database.transaction(
-      (sql) =>
-        sql<{
+    database.transaction((sql) =>
+      Effect.gen(function* () {
+        return yield* sql<{
           id: string;
           context_id: string;
-        }>`SELECT b.id,r.context_id FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id WHERE b.role='worker' AND b.title_sync_state='pending' AND b.title_not_before IS NULL AND r.archived_at IS NULL AND b.run_id=${runId} ORDER BY b.rowid`,
+        }>`SELECT b.id,r.context_id FROM run_thread_bindings b
+          JOIN runs r ON r.id=b.run_id WHERE b.title_sync_state='pending' AND r.archived_at IS NULL
+          AND (b.title_not_before IS NULL OR b.title_not_before<=${yield* now}) AND b.run_id=${runId} ORDER BY b.rowid`;
+      }),
     );
 
   const runsPendingWorkerTitleSync = () =>
-    database.transaction(
-      (sql) =>
-        sql<{
+    database.transaction((sql) =>
+      Effect.gen(function* () {
+        return yield* sql<{
           id: string;
-        }>`SELECT DISTINCT b.run_id AS id FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id WHERE b.role='worker' AND b.title_sync_state='pending' AND b.title_not_before IS NULL AND r.archived_at IS NULL ORDER BY b.run_id`,
+        }>`SELECT DISTINCT b.run_id AS id FROM run_thread_bindings b
+          JOIN runs r ON r.id=b.run_id WHERE b.title_sync_state='pending' AND r.archived_at IS NULL
+          AND (b.title_not_before IS NULL OR b.title_not_before<=${yield* now}) ORDER BY b.run_id`;
+      }),
     );
 
   const claimWorkerTitleSync = (runId: string, bindingId: string, contextId: string) =>
@@ -157,35 +169,31 @@ export function openWorkerTitles(database: RunnerDatabase) {
           )
             return null;
           const claimed =
-            yield* sql`UPDATE run_thread_bindings SET title_sync_state='inflight',title_inflight_revision=title_target_revision,title_inflight_request_id=title_request_id,title_attempt=title_attempt+1 WHERE id=${bindingId} AND role='worker' AND title_sync_state='pending' AND title_not_before IS NULL AND title_target IS NOT NULL AND title_request_id IS NOT NULL AND run_id=${runId} RETURNING id`;
+            yield* sql`UPDATE run_thread_bindings SET title_sync_state='inflight',title_inflight_revision=title_target_revision,title_inflight_request_id=NULL,title_attempt=title_attempt+1 WHERE id=${bindingId} AND role='worker' AND title_sync_state='pending' AND (title_not_before IS NULL OR title_not_before<=${yield* now}) AND title_target IS NOT NULL AND title_request_id IS NOT NULL AND run_id=${runId} RETURNING id`;
           if (!claimed.length) return null;
-          const [row] = yield* sql<{
-            binding_id: string;
-            run_id: string;
-            thread_id: string;
-            revision: number;
-            title: string;
-            request_id: string;
-            context_id: string;
-            endpoint: string;
-            environment_id: string;
-          }>`SELECT b.id AS binding_id,b.run_id,b.thread_id,b.title_inflight_revision AS revision,b.title_target AS title,b.title_inflight_request_id AS request_id,r.context_id,c.endpoint,c.environment_id FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id JOIN t3_authorization_contexts c ON c.id=r.context_id WHERE b.id=${bindingId}`;
-          if (!row?.request_id || !row.title || row.revision === null) return null;
-          const claim: WorkerTitleSyncClaim = {
-            bindingId: row.binding_id,
-            runId: row.run_id,
-            threadId: row.thread_id,
-            revision: row.revision,
-            title: row.title,
-            requestId: row.request_id,
-            contextId: row.context_id,
-            endpoint: row.endpoint,
-            environmentId: row.environment_id,
-          };
+          const [claim] = yield* sql<WorkerTitleSyncClaim>`
+            SELECT b.id AS bindingId,b.run_id AS runId,b.thread_id AS threadId,
+              b.title_inflight_revision AS revision,b.title_target AS title,b.title_request_id AS requestId,
+              r.context_id AS contextId,c.authorization_identity AS authorizationIdentity,
+              c.endpoint,c.environment_id AS environmentId
+            FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id
+            JOIN t3_authorization_contexts c ON c.id=r.context_id WHERE b.id=${bindingId}`;
+          if (!claim) throw Error("Missing claimed worker binding.");
           return claim;
         }),
       () => false,
     );
+
+  function currentClaim(sql: SqlClient.SqlClient, claim: WorkerTitleSyncClaim) {
+    return Effect.map(
+      sql<{ title_attempt: number; title_target_revision: number }>`
+      SELECT b.title_attempt,b.title_target_revision FROM run_thread_bindings b
+      JOIN runs r ON r.id=b.run_id JOIN runner_owner o ON o.singleton=1 JOIN t3_connection c ON c.singleton=1
+      WHERE b.id=${claim.bindingId} AND b.title_sync_state='inflight' AND b.title_inflight_revision=${claim.revision}
+      AND r.archived_at IS NULL AND c.context_id=${claim.contextId} AND o.token=${database.owner.token}`,
+      ([row]) => row,
+    );
+  }
 
   const recordWorkerTitleSync = (
     claim: WorkerTitleSyncClaim,
@@ -201,27 +209,24 @@ export function openWorkerTitles(database: RunnerDatabase) {
       claim.runId,
       (sql) =>
         Effect.gen(function* () {
-          const [row] = yield* sql<{
-            title_inflight_request_id: string | null;
-            archived_at: string | null;
-          }>`SELECT b.title_inflight_request_id,r.archived_at FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id WHERE b.id=${claim.bindingId}`;
-          if (!row || row.title_inflight_request_id !== claim.requestId) return;
-          if (row.archived_at) {
-            yield* clearInflight(sql, claim.bindingId, claim.requestId);
-            return;
-          }
+          const row = yield* currentClaim(sql, claim);
+          if (!row) return;
           if (disposition === "acknowledged" || disposition === "superseded") {
             yield* finishRename(sql, claim, disposition === "acknowledged");
             return;
           }
           if (disposition === "thread-not-found") {
-            yield* sql`UPDATE run_thread_bindings SET title_sync_state='retired',title_disposition='thread-not-found',title_inflight_revision=NULL,title_inflight_request_id=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL WHERE id=${claim.bindingId} AND title_inflight_request_id=${claim.requestId}`;
+            yield* sql`UPDATE run_thread_bindings SET title_sync_state='retired',title_disposition='thread-not-found',title_inflight_revision=NULL,title_inflight_request_id=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL WHERE id=${claim.bindingId}`;
             return;
           }
-          const time = yield* now;
+          const delay = Math.min(60_000, 1000 * 2 ** Math.min(row.title_attempt - 1, 6));
+          const retryAt =
+            row.title_target_revision === claim.revision && disposition !== "capability-denied"
+              ? new Date(Date.parse(yield* now) + delay).toISOString()
+              : null;
           const blocked = disposition === "capability-denied" ? claim.contextId : null;
           const state = disposition === "capability-denied" ? "paused" : "pending";
-          yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},title_disposition=${disposition},title_blocked_context=${blocked},title_inflight_revision=NULL,title_inflight_request_id=NULL,title_not_before=${time} WHERE id=${claim.bindingId} AND title_inflight_request_id=${claim.requestId}`;
+          yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},title_disposition=${disposition},title_blocked_context=${blocked},title_inflight_revision=NULL,title_inflight_request_id=NULL,title_not_before=${retryAt} WHERE id=${claim.bindingId}`;
         }),
       () => false,
     );
@@ -231,5 +236,14 @@ export function openWorkerTitles(database: RunnerDatabase) {
     runsPendingWorkerTitleSync,
     claimWorkerTitleSync,
     recordWorkerTitleSync,
+    authorizeWorkerTitleDispatch: (claim: WorkerTitleSyncClaim) =>
+      database.transaction((sql) =>
+        Effect.gen(function* () {
+          const row = yield* currentClaim(sql, claim);
+          if (row?.title_target_revision !== claim.revision) return false;
+          yield* sql`UPDATE run_thread_bindings SET title_inflight_request_id=${claim.requestId} WHERE id=${claim.bindingId}`;
+          return true;
+        }),
+      ),
   };
 }

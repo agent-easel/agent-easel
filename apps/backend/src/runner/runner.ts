@@ -34,7 +34,7 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
-  freshSnapshot: ContractSnapshots["fresh"],
+  snapshots: ContractSnapshots,
   /** The Project catalog reconciled under the latest connection check, without checking again. */
   refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   t3: T3Threads,
@@ -47,6 +47,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   images: RunImages,
   titles: RunnerTitleGeneration,
 ) {
+  const freshSnapshot = snapshots.fresh;
   const scope = yield* Effect.scope;
   const store = yield* openRunStore(owner, changes);
   const { readRun: row, getRun, listAttention } = store;
@@ -82,9 +83,9 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       recoverOperation(
         Effect.gen(function* () {
           if (closed) return;
-          yield* syncWorkerTitles(store, t3, freshSnapshot, runId);
+          yield* syncWorkerTitles(store, t3, snapshots, runId);
         }),
-        () => Effect.void,
+        () => Effect.logWarning("Worker title synchronization failed", { runId }),
       ),
     );
   const titleSync = Latch.makeUnsafe(false);
