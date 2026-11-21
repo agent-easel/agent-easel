@@ -204,7 +204,7 @@ async function startRun(factory: LaunchOperations, args: Record<string, unknown>
     run: {
       id: run.id,
       number: run.number,
-      title: run.title,
+      title: run.titleGeneration?.automaticTitle ?? run.title,
       project: {
         id: run.task.projectId,
         title: project?.title ?? null,

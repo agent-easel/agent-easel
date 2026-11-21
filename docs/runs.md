@@ -170,9 +170,10 @@ and an absolute deadline 30 seconds after acceptance, and records its generation
 - **skipped** without a diagnostic when the prompt has no letter or digit, counting `[Image N: name]` labels as text, or
   when the setting changed between these checks and acceptance while staying on;
 - **applied** at acceptance, without these checks or a title thread, when the whole prompt is one GitHub issue URL or
-  reference (`https://github.com/<owner>/<repo>/issues/<number>`, `<owner>/<repo>#<number>` or `#<number>`): such a
-  prompt has no language to title in, so Factory titles the Run `Issue #<number>` with the model label **Factory**, and
-  its workers launch with that title.
+  reference (`https://github.com/<owner>/<repo>/issues/<number>`, `<owner>/<repo>#<number>` or `#<number>`) whose
+  number is a positive GitHub issue number without leading zeros: such a prompt has no language to title in, so
+  Factory titles the Run `Issue #<number>` with the model label **Factory**, and its workers launch with that title.
+  No model ran, so the setting's diagnostic stays as it was. Any other reference is titled by a title thread.
 
 A title thread writes in the prompt's language, and in English when the prompt has no natural-language text, such as
 only a URL, issue reference or identifier.
@@ -206,7 +207,7 @@ settles it in T3 once it finished, best effort; the [Runner](runner.md#run-title
 cancellation, restart and cleanup rules. Restart never launches a title thread twice.
 
 Applying a generated title, like Rename, updates the bound worker thread titles for Active, Snoozed and Settled Runs. Factory commits the Run title first. Background synchronization adds no timeline event, changes no activity time or navigation order, and raises no Problem or attention. Archive cancels outstanding synchronization. Applying a generated title also
-clears the setting's diagnostic, because it shows the setting works. A timed-out or failed outcome records its reason as
+clears the setting's diagnostic, because it shows the setting works; a title Factory derives at acceptance does not. A timed-out or failed outcome records its reason as
 the setting's latest diagnostic in the transaction that records the outcome; dropped and cancelled are owner actions
 and record none. Like every outcome they are quiet, raising no Problem or attention. The title thread is not a
 Block or worker: it never counts toward settlement, Needs input, attention, Problems, missing reports or Block

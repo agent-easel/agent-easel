@@ -181,6 +181,60 @@ it("a bare GitHub issue URL is titled Issue #<number> at Start without launching
   expect(fixture.t3.threads.launches.size).toBe(1);
 });
 
+it.for([
+  ["issue zero", "#0"],
+  ["a leading zero", "#042"],
+  ["beyond GitHub's issue numbers", "#2147483648"],
+  [
+    "a URL beyond GitHub's issue numbers",
+    `https://github.com/alimek/t3-factory/issues/${"9".repeat(114)}`,
+  ],
+] as const)(
+  "a bare issue reference with %s is left to the title thread instead of a derived title",
+  async ([, input], c) => {
+    // Arrange
+    const fixture = await prepared(c);
+    await enableRunTitles(fixture.f);
+    c.onTestFinished(holdTitleThreadLaunch(fixture.t3));
+
+    // Act
+    const started = await fixture.f.startRun({ ...fixture.input, input, title: input });
+
+    // Assert
+    assert(started.ok);
+    expect(started.value.title).toBe(input);
+    expect(started.value.titleGeneration).toMatchObject({ state: "pending", generatedTitle: null });
+  },
+);
+
+it("a derived issue title keeps the setting's diagnostic, because no title model ran", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const withdraw = await enableRunTitlesWithCheapModel(fixture.f, fixture.t3);
+  withdraw();
+  const failed = await fixture.f.startRun(fixture.input);
+  assert(failed.ok);
+
+  // Act
+  const started = await fixture.f.startRun({
+    ...fixture.input,
+    requestId: "start-issue-42",
+    input: "#42",
+    title: "#42",
+  });
+
+  // Assert
+  assert(started.ok);
+  expect(started.value.titleGeneration?.state).toBe("applied");
+  const setting = await fixture.f.getRunTitleSetting();
+  assert(setting.ok);
+  expect(setting.value.diagnostic).toMatchObject({
+    runId: failed.value.id,
+    outcome: "skipped",
+    message: "T3 does not offer gpt-6.1-luna for Codex.",
+  });
+});
+
 it("a replayed Start keeps its pending generation and decides nothing again after the title model is withdrawn", async (c) => {
   // Arrange
   const fixture = await prepared(c);

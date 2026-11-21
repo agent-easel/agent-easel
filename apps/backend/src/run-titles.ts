@@ -97,14 +97,17 @@ const hasMeaningfulText = (prompt: StartPrompt) =>
   /[\p{L}\p{N}]/u.test(labelledPromptText(prompt.segments, prompt.images));
 
 const BARE_ISSUE_REFERENCE = [
-  /^https?:\/\/(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+\/issues\/(\d+)\/?(?:[?#]\S*)?$/iu,
-  /^(?:[\w.-]+\/[\w.-]+)?#(\d+)$/u,
+  /^https?:\/\/(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+\/issues\/([1-9]\d{0,9})\/?(?:[?#]\S*)?$/iu,
+  /^(?:[\w.-]+\/[\w.-]+)?#([1-9]\d{0,9})$/u,
 ];
+const LARGEST_ISSUE_NUMBER = 2147483647;
 
 function bareIssueTitle(prompt: StartPrompt) {
   const text = labelledPromptText(prompt.segments, prompt.images).trim();
-  const number = BARE_ISSUE_REFERENCE.map((pattern) => pattern.exec(text)?.[1]).find(Boolean);
-  return number ? `Issue #${number}` : null;
+  const number = Number(
+    BARE_ISSUE_REFERENCE.map((pattern) => pattern.exec(text)?.[1]).find(Boolean),
+  );
+  return number <= LARGEST_ISSUE_NUMBER ? `Issue #${number}` : null;
 }
 
 const DERIVED_TITLE = {
