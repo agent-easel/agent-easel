@@ -1,9 +1,21 @@
-import { Archive, CircleCheck, Moon, Pencil, Undo2 } from "lucide-react";
+import { Archive, CircleCheck, Copy, Fingerprint, Hash, Moon, Pencil, Undo2 } from "lucide-react";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { KeyChip } from "./ui/key-chip";
-import { ContextMenuItem, ContextMenuSeparator } from "./ui/context-menu";
-import { DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
+import {
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from "./ui/context-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "./ui/dropdown-menu";
 import {
   Fragment,
   useCallback,
@@ -20,6 +32,7 @@ import {
   createRunActions,
   focusStep,
   runActionAvailability,
+  runCopyText,
   type FocusRequest,
   type RunActionPorts,
   type RunActionSubject,
@@ -46,6 +59,7 @@ export const runActions = createRunActions({
   searching: () => getSidebarNavigation().searching,
   navigationEntry: (runId) => mountedHost().navigationEntry(runId),
   requestFocus: (request) => mountedHost().requestFocus(request),
+  copy: (text) => navigator.clipboard.writeText(text),
 });
 
 type RunActionsState = ReturnType<typeof runActions.getSnapshot>;
@@ -81,8 +95,12 @@ export function RunActionItems({
   const lifecycle = detail?.lifecycle ?? entry?.lifecycle;
   const { available } = useRunActions(subject);
   const { bindings, hint } = useShortcutPreferences();
-  const Item = surface === "row" ? ContextMenuItem : DropdownMenuItem;
-  const Separator = surface === "row" ? ContextMenuSeparator : DropdownMenuSeparator;
+  const row = surface === "row";
+  const Item = row ? ContextMenuItem : DropdownMenuItem;
+  const Separator = row ? ContextMenuSeparator : DropdownMenuSeparator;
+  const Sub = row ? ContextMenuSub : DropdownMenuSub;
+  const SubTrigger = row ? ContextMenuSubTrigger : DropdownMenuSubTrigger;
+  const SubContent = row ? ContextMenuSubContent : DropdownMenuSubContent;
   const snoozed = entry?.presentation.snoozed;
   const items = [
     ...(lifecycle === "active"
@@ -98,9 +116,35 @@ export function RunActionItems({
     { id: "rename", label: "Rename", Icon: Pencil },
     { id: "archive", label: "Archive…", Icon: Archive },
   ] as const;
+  const copies = [
+    { target: "number", label: "Run number", Icon: Hash },
+    { target: "id", label: "Run ID", Icon: Fingerprint },
+  ] as const;
   return items.map(({ id, label, Icon }) => (
     <Fragment key={id}>
-      {id === "archive" && <Separator />}
+      {id === "archive" && (
+        <>
+          <Sub>
+            <SubTrigger className="px-2">
+              <Copy aria-hidden strokeWidth={1.5} />
+              Copy
+            </SubTrigger>
+            <SubContent className="min-w-40">
+              {copies.map((copy) => (
+                <Item
+                  key={copy.target}
+                  disabled={runCopyText(subject, copy.target) === undefined}
+                  onSelect={() => void runActions.copy(subject, copy.target)}
+                >
+                  <copy.Icon aria-hidden strokeWidth={1.5} />
+                  {copy.label}
+                </Item>
+              ))}
+            </SubContent>
+          </Sub>
+          <Separator />
+        </>
+      )}
       <Item
         disabled={!available[id]}
         variant={id === "archive" ? "destructive" : "default"}
