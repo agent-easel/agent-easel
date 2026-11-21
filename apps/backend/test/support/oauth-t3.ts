@@ -72,6 +72,8 @@ export async function oauthT3(
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
     attachments?: boolean;
     themeRead?: (args: Record<string, unknown>) => unknown;
+    updateSchema?: Record<string, unknown>;
+    update?: (args: Record<string, unknown>) => unknown;
     /** Protected-resource metadata always answers with a server error; the SDK treats it as
      * optional, so a grant is approved and refreshed without caching it. */
     resourceMetadataUnavailable?: boolean;
@@ -165,6 +167,8 @@ export async function oauthT3(
   let rejectionGate: { readonly reached: () => void; readonly release: Promise<void> } | undefined;
   /** Live MCP sessions, one per handshake; forgetting them is what a T3 restart looks like. */
   const sessions = new Set<string>();
+  let rejectHandshake = false;
+  let handshakeAttempts = 0;
   let openedSessions = 0;
   /** The session each authorized MCP request carried, with the tool it called, in arrival order. */
   const sessionRequests: { readonly session: string; readonly tool?: string }[] = [];
@@ -231,6 +235,9 @@ export async function oauthT3(
       : []),
     ...(options.send ? [{ name: "t3_thread_send", inputSchema: options.sendSchema! }] : []),
     ...(options.launch ? [{ name: "t3_thread_launch", inputSchema: options.launchSchema! }] : []),
+    ...(options.updateSchema
+      ? [{ name: "t3_thread_update", inputSchema: options.updateSchema }]
+      : []),
     ...(options.themeRead
       ? [
           {
@@ -294,6 +301,7 @@ export async function oauthT3(
     ["t3_thread_send", structuredTool(options.send)],
     ["t3_thread_interrupt", structuredTool(options.interrupt)],
     ["t3_thread_organize", options.organize],
+    ["t3_thread_update", options.update],
     ["t3_queue", structuredTool(options.queue)],
     ["t3_thread_list", structuredTool(options.threads)],
     ["t3_thread_wait", structuredTool(options.wait)],
@@ -328,6 +336,18 @@ export async function oauthT3(
     }
     return {};
   }
+  async function handshake(response: ServerResponse, message: McpRequest) {
+    handshakeAttempts++;
+    if (rejectHandshake) {
+      json(response, 503, {});
+      return;
+    }
+    const opened = randomUUID();
+    sessions.add(opened);
+    openedSessions++;
+    const result = await mcpResult(message);
+    json(response, 200, { jsonrpc: "2.0", id: message.id, result }, { "mcp-session-id": opened });
+  }
   async function answerMcp(request: IncomingMessage, response: ServerResponse, body: Buffer) {
     if (request.headers.authorization !== `Bearer ${accessToken}` || revoked) {
       if (rejectionGate) {
@@ -361,11 +381,7 @@ export async function oauthT3(
       });
     }
     if (message.method === "initialize") {
-      const opened = randomUUID();
-      sessions.add(opened);
-      openedSessions++;
-      const result = await mcpResult(message);
-      json(response, 200, { jsonrpc: "2.0", id: message.id, result }, { "mcp-session-id": opened });
+      await handshake(response, message);
       return;
     }
     if (message.id === undefined) {
@@ -429,6 +445,9 @@ export async function oauthT3(
     get openedSessions() {
       return openedSessions;
     },
+    get handshakeAttempts() {
+      return handshakeAttempts;
+    },
     sessionRequests,
     /** Prepared uploads carry an address no URL parser accepts. */
     malformUploadAddresses() {
@@ -439,7 +458,8 @@ export async function oauthT3(
       cutNextToolReply = true;
     },
     /** Forgets every MCP session, as a restarted T3 would. */
-    dropSessions() {
+    dropSessions(failReplacement = false) {
+      rejectHandshake = failReplacement;
       sessions.clear();
     },
     approvalUrl(authorizationUrl: string) {

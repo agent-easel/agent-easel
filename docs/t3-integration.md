@@ -481,6 +481,14 @@ Failures use the [authoring envelope](#authoring-tools): an outer code, issues w
 
 **Host-local trust.** Triggers read GitHub with the Factory host's own `gh` login, and Factory MCP keeps its [host-local, single-user trust](#factory-mcp-and-block-ids): any local caller may read, preview, save, enable, check and remove every Trigger. A check spends Runs and model budget, so the description's confirmation rule is guidance for the agent and not a server check.
 
+## Worker thread renames
+
+On a ready connection Factory inspects the optional `t3_thread_update` schema for `action: "rename"` and string `threadId`, `title` and `clientRequestId` fields compatible with its payload. Factory includes `environmentId` only when advertised. Older contracts can still Start and Rename Runs locally. Title-generation threads keep their technical title, `Factory title · Run #<number> · <Run id>`.
+
+The live context must match the Run's accepted context through credential selection and dispatch. New approval never transfers outstanding work to the replacement grant. A missing thread permanently retires synchronization for its binding. A capability denial pauses work under that grant without timed retries. Other failures leave a backend diagnostic and follow the [Runner retry rules](runner.md#worker-title-synchronization).
+
+Factory checks the thread ID, action and returned title. A retained receipt and event can replay the original acknowledgement even after a manual edit. After event compaction T3 can instead return the current projection. A different title on first dispatch leaves the revision eligible for retry. On replay of a previously dispatched key, a different title closes that revision as superseded and leaves newer revisions eligible. A matching title acknowledges the command without proving what T3 currently displays.
+
 ## Title threads
 
 [Run title generation](runs.md#run-title-generation) launches one title thread per pending generation, beside the
@@ -489,7 +497,7 @@ Flow.
 - **Launch.** A top-level thread in the Project checkout (`root` strategy, also for a worktree Run) with the provider
   instance, model and options captured at Start, `interactionMode: "default"` and no `runtimeMode`, like a worker. Its
   title is `Factory title · Run #<n> · <Run id>`, which never matches a worker's
-  `Factory #<n> · <position> <name>`; its request key also names the Run. The request, with its key, is recorded
+  `F#<n> <Block label> · <Run title>`; its request key also names the Run. The request, with its key, is recorded
   when Start accepts the Run. Just before dispatch Factory rechecks eligibility, confirms that the Run's saved
   authorization context is still the live one, marks the request sent and calls `t3_thread_launch` once. After
   [reauthorization](#credentials-and-reauthorization) the launch stays unsent, like any operation intent with a

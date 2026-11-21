@@ -18,6 +18,7 @@ import { readRunOrigins } from "./run-origins.ts";
 import { storedProjectIcon } from "../../projects.ts";
 import { projectFaviconUrl } from "../../project-favicon.ts";
 import { dropTitleGeneration, readTitleGenerations } from "./title-generations.ts";
+import { queueWorkerTitleSync } from "./worker-titles.ts";
 export function openRunNavigation(database: RunnerDatabase) {
   return {
     listRunNavigation(): Effect.Effect<Result<readonly RunNavigationEntry[]>, unknown> {
@@ -208,10 +209,12 @@ export function openRunNavigation(database: RunnerDatabase) {
       return Effect.gen(function* () {
         const found = yield* database.transaction((sql) =>
           Effect.gen(function* () {
-            const rows =
-              yield* sql`UPDATE runs SET title=${title},title_provenance='manual' WHERE id=${id} RETURNING id`;
+            const [current] = yield* sql<{ title: string }>`SELECT title FROM runs WHERE id=${id}`;
+            if (!current) return false;
+            yield* sql`UPDATE runs SET title=${title},title_provenance='manual' WHERE id=${id}`;
             yield* dropTitleGeneration(sql, id);
-            return rows.length > 0;
+            if (current.title !== title) yield* queueWorkerTitleSync(sql, id);
+            return true;
           }),
         );
         if (!found) return failure("not_found", "This Run does not exist.");

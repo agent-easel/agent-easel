@@ -3,6 +3,7 @@ import { HUMAN_EXITS } from "@t3-factory/domain-validation";
 import type { LaunchPayload, SendPayload } from "../t3/threads.ts";
 import type { T3Target } from "../t3/connection.ts";
 import { attachmentName } from "../run-images.ts";
+import { workerThreadTitle } from "./worker-title.ts";
 
 /* Worker messages and launch payloads, pure so the Run store can persist them inside its
  * transactions and orchestration can verify them before a T3 call. */
@@ -38,25 +39,19 @@ export function workerTurn(body: string, blockId: string, images: readonly Launc
   ].join("\n");
 }
 
-/** Stable title saved with the launch. Later Block renames do not change recovery's target. */
-function workerTitle(number: number, index: number, name: string) {
-  return `Factory #${number} · ${index + 1} ${name}`.slice(0, 200);
-}
-
 /** A worker launch with the Agent's captured provider, model and options and its first turn. */
 export function workerLaunchPayload(
   definitions: RunDefinitions,
   blockId: string,
   target: Pick<T3Target, "environmentId" | "projectId">,
   key: string,
-  number: number,
+  run: { readonly number: number | null; readonly title: string },
   publicId: string,
   workspaceStrategy: LaunchPayload["workspaceStrategy"],
   images: readonly LaunchImage[] = [],
 ): StoredLaunchPayload {
   const blocks = definitions.flow.graph.blocks;
-  const index = blocks.findIndex((entry) => entry.id === blockId);
-  const block = blocks[index];
+  const block = blocks.find((entry) => entry.id === blockId);
   if (!block || block.kind !== "agent") throw Error("Launch target is not an Agent Block");
   const agent = definitions.agents.find((entry) => entry.id === block.agentId);
   if (!agent) throw Error("Launch target Agent is not in the definitions");
@@ -64,7 +59,7 @@ export function workerLaunchPayload(
     environmentId: target.environmentId,
     projectId: target.projectId,
     clientRequestId: key,
-    title: workerTitle(number, index, block.name),
+    title: workerThreadTitle(run, blocks, blockId),
     workspaceStrategy,
     interactionMode: "default",
     modelSelection: {

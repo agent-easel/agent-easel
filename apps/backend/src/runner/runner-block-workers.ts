@@ -77,6 +77,7 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
       return;
     }
     const { images: launchImages = [], ...payload } = stored;
+    if (launchImages.length && (yield* store.launchTitleHeld(runRow.id, payload.title))) return;
     const attachments = yield* uploadLaunchImages(context, launchImages);
     if (!attachments) return;
     if (!(yield* store.reserveDelivery(runRow, launch, support.retryScope))) return;
@@ -152,7 +153,8 @@ function searchLaunchedWorker(
       current,
       retryNotBefore(current, launch.recovery_attempt + 1),
     );
-    const launched = yield* verifiedLaunchedThread(t3, runRow, payload);
+    const bound = yield* store.boundWorkerThreads(runRow.environment_id);
+    const launched = yield* verifiedLaunchedThread(t3, runRow, payload, bound);
     if (!launched) return yield* miss;
     yield* store.bindLaunchedWorker(runRow, launch, launched);
   });

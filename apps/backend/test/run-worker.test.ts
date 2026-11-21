@@ -85,8 +85,8 @@ it("a Flow with two entry Agents launches an independent top-level worker for ea
   expect(f.t3.threads.launches.size).toBe(2);
   const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
-    "Factory #1 · 1 Review",
-    "Factory #1 · 2 Draft",
+    "F#1 Review · Improve search",
+    "F#1 Draft · Improve search",
   ]);
   expect(launches[0]!.message).toMatch(workerMessage("Follow repository instructions."));
   expect(launches[1]!.message).toMatch(workerMessage("Edit the draft."));
@@ -138,8 +138,8 @@ it("two Blocks that share one Agent still launch separate workers", async (c) =>
   assert(result.ok);
   const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
-    "Factory #1 · 1 Review",
-    "Factory #1 · 2 Second review",
+    "F#1 Review · Improve search",
+    "F#1 Second review · Improve search",
   ]);
   expect(launches[0]!.message).toMatch(workerMessage("Follow repository instructions."));
   expect(launches[1]!.message).toMatch(workerMessage("Follow repository instructions."));
@@ -168,7 +168,7 @@ it("normal Start launches the entry worker with its own Agent settings and no Ru
   expect(result.value.number).toBe(1);
   expect(f.t3.threads.launches.size).toBe(1);
   const payload = [...f.t3.threads.launches.values()][0]!.payload;
-  expect(payload.title).toBe("Factory #1 · 1 Entry worker");
+  expect(payload.title).toBe("F#1 Entry worker · Improve search");
   expect(payload.message).toMatch(workerMessage("Follow repository instructions."));
   expect(payload.modelSelection.model).toBe(f.agent.execution.modelId);
   expect(payload.modelSelection.instanceId).toBe(f.agent.execution.providerInstanceId);

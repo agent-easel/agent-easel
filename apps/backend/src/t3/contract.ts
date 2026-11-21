@@ -29,8 +29,14 @@ export interface T3Support {
   readonly freshContextSend: boolean;
   readonly settle: ReportSupport;
   readonly stop: ReportSupport;
+  readonly rename: RenameSupport;
   /** Whether public thread reads can retrieve reporting activity, before any harness check. */
   readonly reportReads: boolean;
+}
+export interface RenameSupport {
+  readonly supported: boolean;
+  readonly includeEnvironmentId: boolean;
+  readonly explanation: string;
 }
 /** One connection check's answer: the authorization context, only while T3 is ready, and the
  * support answers of the same inspection. `answered` is false when T3 could not be reached for
@@ -60,24 +66,25 @@ type SchemaProperty = {
 const propertiesOf = <P = SchemaProperty>(schema: ToolSchema) =>
   (schema?.properties ?? {}) as Record<string, P>;
 
+const INDIRECT_SCHEMA = [
+  "$ref",
+  "$dynamicRef",
+  "allOf",
+  "anyOf",
+  "oneOf",
+  "not",
+  "if",
+  "then",
+  "else",
+  "dependentSchemas",
+  "dependentRequired",
+  "dependencies",
+];
+
 const permitsOmittingRuntimeMode = (schema: ToolSchema) => {
   if (schema?.type !== "object") return false;
   // Only the flat launch contract is understood; compositions may impose hidden requirements.
-  const indirectConstraints = [
-    "$ref",
-    "$dynamicRef",
-    "allOf",
-    "anyOf",
-    "oneOf",
-    "not",
-    "if",
-    "then",
-    "else",
-    "dependentSchemas",
-    "dependentRequired",
-    "dependencies",
-  ];
-  if (indirectConstraints.some((key) => key in schema)) return false;
+  if (INDIRECT_SCHEMA.some((key) => key in schema)) return false;
   const required = schema.required;
   return required === undefined || (Array.isArray(required) && !required.includes("runtimeMode"));
 };
@@ -250,6 +257,80 @@ function supportsReportReads(schema: ToolSchema) {
   );
 }
 
+const RENAMED_FIELDS = ["threadId", "action", "title", "clientRequestId"] as const;
+const STRING_CONSTRAINTS = ["pattern", "format", ...INDIRECT_SCHEMA];
+
+type BoundedString = SchemaProperty & { minLength?: unknown; maxLength?: unknown };
+
+function flatToolSchema(schema: ToolSchema) {
+  return (
+    schema?.type === "object" &&
+    !INDIRECT_SCHEMA.some((key) => key in schema) &&
+    (schema.required === undefined || Array.isArray(schema.required))
+  );
+}
+
+function plainString(property: BoundedString | undefined, shortest: number, longest: number) {
+  return (
+    property?.type === "string" &&
+    property.enum === undefined &&
+    property.const === undefined &&
+    !STRING_CONSTRAINTS.some((key) => key in property) &&
+    lengthAllows(property, shortest, longest)
+  );
+}
+
+function lengthAllows(property: BoundedString | undefined, shortest: number, longest: number) {
+  const minLength = property?.minLength;
+  const maxLength = property?.maxLength;
+  return (
+    (minLength === undefined || (typeof minLength === "number" && minLength <= shortest)) &&
+    (maxLength === undefined || (typeof maxLength === "number" && maxLength >= longest))
+  );
+}
+
+function actionPermitsRename(action: BoundedString | undefined) {
+  if (action?.type !== "string" || STRING_CONSTRAINTS.some((key) => key in action)) return false;
+  if (action.const !== undefined && action.const !== "rename") return false;
+  if (action.enum !== undefined && !(Array.isArray(action.enum) && action.enum.includes("rename")))
+    return false;
+  return (action.enum !== undefined || action.const !== undefined) && lengthAllows(action, 6, 6);
+}
+
+const unsupportedRename = (explanation: string): RenameSupport => ({
+  supported: false,
+  includeEnvironmentId: false,
+  explanation,
+});
+
+function renameSupport(ready: boolean, schema: ToolSchema): RenameSupport {
+  if (!ready || !flatToolSchema(schema))
+    return unsupportedRename("T3 thread update schema does not advertise thread rename.");
+  const props = propertiesOf<BoundedString>(schema);
+  const environmentId = plainString(props.environmentId, 1, Infinity);
+  const allowed = new Set<string>([...RENAMED_FIELDS, ...(environmentId ? ["environmentId"] : [])]);
+  const required = Array.isArray(schema?.required) ? schema.required : [];
+  const supported =
+    plainString(props.threadId, 1, Infinity) &&
+    actionPermitsRename(props.action) &&
+    plainString(props.title, 5, 200) &&
+    plainString(props.clientRequestId, 64, 64) &&
+    (props.environmentId === undefined || environmentId) &&
+    !["enum", "const", "propertyNames", "patternProperties", "minProperties", "maxProperties"].some(
+      (key) => key in schema!,
+    ) &&
+    required.every((field) => typeof field === "string" && allowed.has(field));
+  if (!supported)
+    return unsupportedRename("T3 thread update schema cannot accept a worker title rename.");
+  return {
+    supported: true,
+    includeEnvironmentId: environmentId,
+    explanation: environmentId
+      ? "Thread rename is supported and includes environmentId."
+      : "Thread rename is supported.",
+  };
+}
+
 /**
  * Every support answer T3's listed tools give while T3 is `ready`; nothing is supported otherwise.
  * Replay scopes stay null: only the adapter can prove continuity for a supported answer.
@@ -269,6 +350,7 @@ export function contractSupport(ready: boolean, tools: T3Contract["tools"]): T3S
       !(Array.isArray(sendSchema?.required) && sendSchema.required.includes("freshContext")),
     settle: settleSupport(objectReady("t3_thread_organize"), schema("t3_thread_organize")),
     stop: stopSupport(objectReady("t3_thread_interrupt"), schema("t3_thread_interrupt")),
+    rename: renameSupport(objectReady("t3_thread_update"), schema("t3_thread_update")),
     reportReads: ready && supportsReportReads(schema("t3_thread_read")),
   };
 }

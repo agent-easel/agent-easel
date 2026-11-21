@@ -185,7 +185,27 @@ export function holdTitleThreadLaunch(t3: ControlledT3) {
   };
   return release;
 }
-/** The title thread's launch T3 recorded; Flow workers are titled `Factory #<n> · …`. */
+
+export function holdWorkerLaunchReply(t3: ControlledT3, title: string) {
+  const launch = t3.threads.launchThread.bind(t3.threads);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let notify = (_reference: Awaited<ReturnType<typeof launch>>) => {};
+  const reached = new Promise<Awaited<ReturnType<typeof launch>>>((resolve) => {
+    notify = resolve;
+  });
+  t3.threads.launchThread = async (target, payload) => {
+    const reference = await launch(target, payload);
+    if (payload.title === title) {
+      notify(reference);
+      await held;
+    }
+    return reference;
+  };
+  return { release, reached };
+}
 const titleThreadEntry = (t3: ControlledT3) =>
   [...t3.threads.launches.values()].find((launch) =>
     launch.payload.title.startsWith("Factory title · "),
@@ -409,6 +429,7 @@ export interface ScenarioWorld {
     | "getRun"
     | "reconcileRuns"
     | "requestReport"
+    | "renameRun"
     | "archiveRun"
     | "settleRun"
     | "snoozeRun"
@@ -551,6 +572,14 @@ export const report = (world: ScenarioWorld, worker: WorkerHandle, fields: Repor
 
 /** Resolves with the next worker launch T3 records, also one background work issues. */
 export const nextLaunch = (world: ScenarioWorld) => world.t3.threads.nextLaunch();
+export async function heldWorkerRename(world: ScenarioWorld, runId: string, title: string) {
+  const release = world.t3.threads.holdRenameReply();
+  const first = world.t3.threads.nextRename();
+  const renamed = await world.factory.renameRun(runId, { title });
+  if (!renamed.ok) stepFailed("rename Run", renamed.error.message);
+  return { sent: await first, release };
+}
+export const nextRename = (world: ScenarioWorld) => world.t3.threads.nextRename();
 
 /** Resolves with the next send T3 records, also one background work issues. */
 export const nextSend = (world: ScenarioWorld) => world.t3.threads.nextSend();
@@ -1308,6 +1337,39 @@ export const fanOutFlow: ReadyFlowShape = (world) =>
       followUp(agentId),
     ],
     connections: [connection("worker", "done", "follow-up")],
+  }));
+
+export const manyEntryWorkers: ReadyFlowShape = (world) =>
+  workerShape(world, "Many entry workers", (agentId) => {
+    const blocks = Array.from({ length: 12 }, (_, n) =>
+      agentBlock("worker-" + n, "Worker " + n, agentId),
+    );
+    return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
+  });
+
+export const clippedEntryFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Overlapping entry titles", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [agentBlock("worker", "A", agentId), agentBlock("second", "A · B", agentId)],
+    connections: [],
+  }));
+
+export const separatorLaunchFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Overlapping launch titles", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "A", agentId),
+      agentBlock("later", "A · B", agentId),
+    ],
+    connections: [connection("worker", "done", "later")],
+  }));
+
+export const collidingEntryFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Colliding entry names", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [entryWorker(agentId), agentBlock("second", "Entry\u2003worker", agentId)],
+    connections: [],
   }));
 
 /** A worktree Flow from the default branch whose input starts Entry worker and Second entry. */
@@ -2189,3 +2251,21 @@ export function solidPng(red: number, green: number, blue: number): Uint8Array {
 }
 
 export const sha256Hex = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
+
+export function holdRunRenames(world: ScenarioWorld, prefix: string, limit: number) {
+  let release = () => {};
+  let ready = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  let count = 0;
+  world.t3.threads.beforeRename = async (request) => {
+    if (!request.title.startsWith(prefix)) return;
+    if (++count === limit) ready();
+    await hold;
+  };
+  return { release, reached, count: () => count };
+}

@@ -31,7 +31,6 @@ export function openRunWorkspace(database: RunnerDatabase) {
           sql,
           {
             runId: run.id,
-            number: run.number,
             definitions: run.definitions,
             workspace: { ...workspace, state: "bound", worktreePath, branch },
             project: runTarget(run),

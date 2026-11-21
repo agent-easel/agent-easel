@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { dirname, join } from "node:path";
 import { makeLiveT3 } from "../src/index.ts";
 import { T3Failure } from "../src/t3/connection.ts";
-import { attachmentSupport, reportSupport } from "../src/t3/contract.ts";
+import { attachmentSupport, contractSupport, reportSupport } from "../src/t3/contract.ts";
 import {
   authorizedLiveOAuth,
   malformedSendLiveT3,
@@ -234,6 +234,109 @@ it("a malformed send schema read after a recovered T3 server error is classified
   await expect(inspection).rejects.toMatchObject({ name: "T3Failure", kind: "unavailable" });
   expect(external.refreshes).toBe(refreshes + 1);
 });
+
+const renameTool = (
+  properties: Record<string, unknown>,
+  required: readonly string[] = ["threadId", "action", "title", "clientRequestId"],
+) => [{ name: "t3_thread_update", inputSchema: { type: "object", properties, required } }];
+
+const renameProperties = {
+  threadId: { type: "string" },
+  action: { type: "string", enum: ["rename"] },
+  title: { type: "string", minLength: 1, maxLength: 512 },
+  clientRequestId: { type: "string", minLength: 1, maxLength: 256 },
+};
+
+it("an advertised rename schema is optional support and omits environmentId when T3 does not list it", () => {
+  // Arrange
+  const tools = renameTool(renameProperties);
+
+  // Act
+  const rename = contractSupport(true, tools).rename;
+
+  // Assert
+  expect(rename).toStrictEqual({
+    supported: true,
+    includeEnvironmentId: false,
+    explanation: "Thread rename is supported.",
+  });
+});
+
+it("rename support sends environmentId only when the advertised schema includes it", () => {
+  // Arrange
+  const tools = renameTool({ ...renameProperties, environmentId: { type: "string" } }, [
+    "threadId",
+    "action",
+    "title",
+    "clientRequestId",
+    "environmentId",
+  ]);
+
+  // Act
+  const rename = contractSupport(true, tools).rename;
+
+  // Assert
+  expect(rename.supported).toBe(true);
+  expect(rename.includeEnvironmentId).toBe(true);
+});
+
+it("a thread update schema that does not permit rename leaves the capability unsupported", () => {
+  // Arrange
+  const tools = renameTool({
+    ...renameProperties,
+    action: { type: "string", enum: ["settle"] },
+  });
+
+  // Act
+  const rename = contractSupport(true, tools).rename;
+
+  // Assert
+  expect(rename.supported).toBe(false);
+  expect(rename.includeEnvironmentId).toBe(false);
+});
+
+it("a ready connection without t3_thread_update does not support rename", () => {
+  // Arrange
+  const tools = [{ name: "t3_thread_launch", inputSchema: { type: "object", properties: {} } }];
+
+  // Act
+  const support = contractSupport(true, tools);
+
+  // Assert
+  expect(support.rename.supported).toBe(false);
+  expect(support.launch.checkout.supported).toBe(false);
+});
+
+it.each([
+  { action: { type: "string", enum: ["rename"], const: "settle" } },
+  { action: { type: "string", enum: { rename: true } } },
+  { threadId: { type: "string", maxLength: 1 } },
+  { title: { type: "string", if: { const: "x" }, else: false } },
+])("incompatible rename constraints disable the optional capability", (overrides) => {
+  // Arrange
+  const tools = renameTool({ ...renameProperties, ...overrides });
+
+  // Act
+  const support = contractSupport(true, tools);
+
+  // Assert
+  expect(support.rename.supported).toBe(false);
+});
+
+it.each([{ enum: [{}] }, { const: {} }])(
+  "object constraints excluding rename disable support",
+  (constraint) => {
+    // Arrange
+    const [tool] = renameTool(renameProperties);
+    const restricted = { ...tool!, inputSchema: { ...tool!.inputSchema, ...constraint } };
+
+    // Act
+    const support = contractSupport(true, [restricted]);
+
+    // Assert
+    expect(support.rename.supported).toBe(false);
+  },
+);
 
 it("send contract advertises freshContextSend only when t3_thread_send exposes a boolean freshContext field", async (c) => {
   // Arrange

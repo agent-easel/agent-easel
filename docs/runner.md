@@ -55,9 +55,17 @@ reporting protocol.
   one Agent still get separate workers. Captured execution settings are always complete: Start
   rejects a Flow that places an Agent without them through readiness, and decoding a Run's captured definitions fails rather than
   launch or recover a worker from a model-less revision.
-- The saved launch title is `Factory #<number> · <block position> <Block name>`, sliced to
-  200 characters. The number is a durable Run sequence. The position is the 1-based index
-  in the captured block list. Later renames do not change the title recovery searches for.
+- A worker launches with `F#<number> <Block label> · <Run title>`, using the Run's title when
+  its launch is recorded and the Agent Block from its captured Flow. A blank label is omitted,
+  and a numberless historical Run uses `F` as the prefix. Factory collapses whitespace to
+  one line and clips on grapheme boundaries with an ellipsis, within 24 code points for
+  the Block label and 200 for the entire title. Agent Blocks whose labels would be identical
+  receive ordinals in captured Flow order. Factory makes room for the ordinals within the label
+  budget and skips reserved literal or already assigned labels. Distinct rendered labels retain their names.
+- The formatted title is saved in the launch payload. Launch recovery searches for that exact
+  title, even if a Run title or the live Flow definition has since changed. Recovery excludes
+  threads Factory already bound in the environment. An uncertain launch holds a later launch
+  of the same Run with the same saved title until Factory resolves ownership.
 - Start mints a **Block id** for each Agent Block and Continuation. The first message starts with
   `$factory-block`, then a `Factory Block id: <id>.` line; every later visit and Request
   report message repeats the same id. The worker passes it to `factory_get_block`, then
@@ -577,6 +585,16 @@ pending attention, shows unfinished Blocks stopped and records `run-settled` (`f
 that already has its result records `finish` too. Edits a stopped branch already made in the shared workspace stay. A Run
 whose branches end without reaching an ending settles automatically as before and keeps its open gate, so a later accepted
 report can still reach an ending.
+
+## Worker title synchronization
+
+Direct launch acknowledgement and exact-title recovery both bind the physical worker using the saved launch title as its baseline. Before releasing the launch payload, Factory compares that baseline with the current Run title rendered for the launching Agent Block. A Revisit or Continuation reuses that binding. On upgrade, already-bound workers keep their legacy titles until the Run title changes. An unbound legacy launch still recovers by its saved title and reconciles on first bind.
+
+Each committed title change advances the Run title revision. Factory keeps the latest desired revision per worker and skips a rendered title identical to its acknowledged baseline while that baseline is certain. A worker's manual T3 title therefore survives edits confined to the clipped tail. Once a write may have reached T3, returning to an earlier title requires a new command.
+
+A background worker serializes attempts per binding, coalesces unsent revisions and resumes pending or interrupted claims on startup. Startup and execution sweeps schedule eligible bindings and proceed independently of remote renames. Each pass takes a finite list of due bindings. Up to four workers per Run and eight workers globally may synchronize at once. A newly bound worker can use an available slot while another worker from the same Run is still synchronizing. A revision keeps its request key across retries. An acknowledgement satisfies the latest revision when it renders the same title. A refusal before delivery preserves the previous baseline certainty. A rejected MCP session clears only that HTTP attempt’s delivery marker before reconnection, including on disk for restart recovery. A different returned title is retryable on first dispatch and closes a revision only on replay of a previously dispatched key. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
+
+Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
 
 ## Run title generations
 

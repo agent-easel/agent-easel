@@ -7,6 +7,12 @@ export interface T3Target {
   readonly projectId: string;
   readonly workspaceRoot: string;
 }
+export interface DispatchFence {
+  readonly authorizationIdentity: string;
+  readonly signal: AbortSignal;
+  readonly refuseDispatch: () => Promise<void>;
+  readonly authorizeDispatch: () => Promise<boolean>;
+}
 export type T3Endpoint = Pick<T3Target, "endpoint">;
 export type T3EnvironmentTarget = Pick<T3Target, "endpoint" | "environmentId">;
 export type T3ProjectTarget = Pick<T3Target, "endpoint" | "environmentId" | "workspaceRoot">;
@@ -72,6 +78,7 @@ export type T3ListedTool = Pick<ListToolsResult["tools"][number], "name" | "inpu
 export interface T3ToolAnswer {
   readonly isError: boolean;
   readonly content: unknown;
+  readonly text?: string;
 }
 /** One MCP connection as the live T3 modules use it. */
 export interface T3Session {
@@ -109,7 +116,11 @@ export interface T3Calls {
   /** Runs `action` once on the endpoint's reused connection with the saved grant, after any
    * in-flight consent completes. A connection T3 no longer knows is replaced and `action` run once
    * more; any other failure is reported, so an action T3 may have executed is never repeated. */
-  authorized<A>(target: T3Endpoint, action: (session: T3Session) => Promise<A>): Promise<A>;
+  authorized<A>(
+    target: T3Endpoint,
+    action: (session: T3Session) => Promise<A>,
+    fence?: DispatchFence,
+  ): Promise<A>;
   /** Inspects the endpoint without requiring a grant: keeps a pending approval listening, revokes a
    * rejected grant and reports a contract failure; an unreachable T3 rejects as `unavailable`.
    * `finish` derives the answer within the same call, so its failure is classified with what the

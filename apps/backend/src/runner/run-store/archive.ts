@@ -6,6 +6,7 @@ import { now } from "../../time.ts";
 import { guardsHold } from "./guards.ts";
 import { withLifecycle } from "./lifecycle.ts";
 import { cancelOwedWork } from "./owed-work.ts";
+import { cancelWorkerTitleSync } from "./worker-titles.ts";
 import { clearSnooze } from "./presentation.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
@@ -37,6 +38,7 @@ export function openRunArchive(database: RunnerDatabase) {
         yield* sql`UPDATE runs SET gate_open=0,archived_at=${time},archive_request_id=${requestId ?? null} WHERE id=${id}`;
         yield* advanceGeneration(sql, id);
         yield* cancelOwedWork(sql, id, time, "archive");
+        yield* cancelWorkerTitleSync(sql, id);
         yield* clearSnooze(sql, id);
         yield* appendTimelineEvent(sql, { kind: "run-archived", runId: id, observedAt: time });
         return { ok: true as const, value: true };

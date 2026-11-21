@@ -11,6 +11,7 @@ import type { RunnerDatabase } from "./database.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { DeliveryKind } from "./states.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
+import { baselineWorkerTitle } from "./worker-titles.ts";
 
 /** A send's worker turn holds its Block until an observation sees the turn's run. */
 const UNOBSERVED_WORKER_HOLD = "Worker thread not observed yet.";
@@ -145,6 +146,9 @@ export function openRunDeliveries(database: RunnerDatabase) {
           SELECT 1 FROM report_recoveries rr JOIN run_executions e ON e.run_id=rr.run_id AND e.block_id=rr.block_id AND e.execution_id=rr.source_execution_id
           JOIN run_blocks b ON b.run_id=rr.run_id AND b.block_id=rr.block_id
           WHERE rr.intent_id=${delivery.id} AND e.engine_status='completed' AND e.report_status IS NOT 'finished' AND b.execution_id=e.execution_id AND b.pending_request_count=0))
+        AND NOT EXISTS(SELECT 1 FROM operation_intents other WHERE other.run_id=${runRow.id}
+          AND other.state='uncertain' AND other.kind='launch' AND operation_intents.kind='launch'
+          AND json_extract(other.payload_json,'$.title')=json_extract(operation_intents.payload_json,'$.title'))
         AND NOT EXISTS(SELECT 1 FROM operation_intents WHERE run_id=${runRow.id} AND state='reserved' AND id!=${delivery.id}) RETURNING id`;
         if (changed.length) yield* advanceGeneration(sql, runRow.id);
         return changed.length > 0;
@@ -217,9 +221,12 @@ export function openRunDeliveries(database: RunnerDatabase) {
         });
         if (!held) return;
         const [reserved] = yield* sql<{
-          id: string;
-        }>`SELECT id FROM operation_intents WHERE id=${delivery.id} AND state IN ('reserved','uncertain') AND payload_json IS NOT NULL`;
+          payload_json: string;
+        }>`SELECT payload_json FROM operation_intents WHERE id=${delivery.id} AND state IN ('reserved','uncertain') AND payload_json IS NOT NULL`;
         if (!reserved) return;
+        const launchTitle = (JSON.parse(reserved.payload_json) as { title?: unknown }).title;
+        if (typeof launchTitle !== "string" || !launchTitle)
+          return yield* Effect.fail(Error("Invalid launch reference; outcome is uncertain"));
         const time = yield* now;
         const bindingId = randomUUID();
         const link = scopedThreadHref(runRow.environment_id, reference.threadId);
@@ -232,6 +239,14 @@ export function openRunDeliveries(database: RunnerDatabase) {
         }>`SELECT id FROM run_activations WHERE run_id=${runRow.id} AND block_id=${delivery.block_id} ORDER BY rowid DESC LIMIT 1`;
         if (!binding || !activation)
           return yield* Effect.fail(Error("Worker binding is incomplete"));
+        yield* baselineWorkerTitle(
+          sql,
+          runRow.id,
+          binding.id,
+          delivery.block_id,
+          reference.threadId,
+          launchTitle,
+        );
         yield* sql`INSERT INTO run_executions(run_id,block_id,thread_id,execution_id,binding_id,activation_id,engine_status) VALUES(${runRow.id},${delivery.block_id},${reference.threadId},${reference.runId},${binding.id},${activation.id},${reference.status}) ON CONFLICT DO NOTHING`;
         yield* writeBlockState(
           sql,
@@ -359,6 +374,14 @@ export function openRunDeliveries(database: RunnerDatabase) {
     runsToReconcile,
     dispatchable,
     noteUnresolved,
+    launchTitleHeld: (runId: string, title: string) =>
+      database.transaction((sql) =>
+        Effect.map(
+          sql`SELECT 1 FROM operation_intents WHERE run_id=${runId} AND kind='launch'
+          AND state='uncertain' AND json_extract(payload_json,'$.title')=${title} LIMIT 1`,
+          (rows) => rows.length > 0,
+        ),
+      ),
     reserveDelivery,
     acknowledgeSend,
     bindLaunchedWorker,

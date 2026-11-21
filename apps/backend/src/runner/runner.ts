@@ -25,6 +25,7 @@ import { recoverOperation } from "./runner-effects.ts";
 import { bindRunWorkspace } from "./run-workspace-binding.ts";
 import { readWorkerThread } from "./worker-thread.ts";
 import { makeWaitTimers } from "./runner-wait-timers.ts";
+import { openWorkerTitleDispatch } from "./worker-title-dispatch.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import type { RunImages } from "../run-images.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
@@ -32,7 +33,7 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
-  freshSnapshot: ContractSnapshots["fresh"],
+  snapshots: ContractSnapshots,
   /** The Project catalog reconciled under the latest connection check, without checking again. */
   refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   t3: T3Threads,
@@ -45,6 +46,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   images: RunImages,
   titles: RunnerTitleGeneration,
 ) {
+  const freshSnapshot = snapshots.fresh;
   const scope = yield* Effect.scope;
   const store = yield* openRunStore(owner, changes);
   const { readRun: row, getRun, listAttention } = store;
@@ -74,6 +76,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       });
       yield* fork(titles.reconcileTitleGeneration(runId));
     });
+  const titleSync = yield* openWorkerTitleDispatch(store, t3, snapshots, changes);
   const { dispatchIntent } = openRunnerDispatch(
     store,
     ops,
@@ -214,6 +217,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           });
           // Title generations run beside their Runs, also Archived ones still owing cleanup.
           yield* titles.reconcileTitleGenerations();
+          for (const run of yield* store.runsPendingWorkerTitleSync()) titleSync.queue(run.id);
           // Include dispatches queued by reports while the sweep observed its Runs' workers.
           yield* drives.drain(ids.map((run) => run.id));
           return { ok: true as const, value: undefined };
@@ -228,6 +232,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           if (closed) return;
           closed = true;
           if (timer) yield* Fiber.interrupt(timer);
+          yield* Fiber.interrupt(titleSync.worker);
           yield* waitTimers.close();
           yield* titleDeadlines.close();
           yield* starts.withPermit(Effect.void);
@@ -297,6 +302,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           ),
         };
       }),
+    awaitWorkerTitles: () => titleSync.idle.await,
     reconcileRuns,
     initialize: () =>
       Effect.gen(function* () {

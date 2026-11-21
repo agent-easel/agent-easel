@@ -22,7 +22,9 @@ it("a default-base worktree Start asks T3 to fetch origin for its single creator
 
   // Assert
   const launches = [...t3.threads.launches.values()].map((launch) => launch.payload);
-  expect(launches.map((launch) => launch.title)).toStrictEqual(["Factory #1 · 1 Entry worker"]);
+  expect(launches.map((launch) => launch.title)).toStrictEqual([
+    "F#1 Entry worker · Improve search",
+  ]);
   expect(launches[0]!.workspaceStrategy).toStrictEqual({
     type: "worktree",
     baseRef: "origin/main",
@@ -52,12 +54,26 @@ it("a custom local worktree base asks T3 to preserve the local ref", async (c) =
   });
 });
 
-it("once T3 shows the worktree path and branch, the other Flow-input worker launches once on that worktree", async (c) => {
+it("a worker joining a newly bound worktree uses the latest Run title and its captured Block name", async (c) => {
   // Arrange
-  const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
+  const { f, t3, input, flow } = await prepared(c, worktreeFanOutFlow);
   t3.threads.worktreeMetadataPending = true;
-  assert((await f.startRun(input)).ok);
+  const started = await f.startRun(input);
+  assert(started.ok);
   await f.reconcileRuns();
+  assert((await f.renameRun(started.value.id, { title: "Polish search" })).ok);
+  const [creatorBlock, joiningBlock] = flow.graph.blocks;
+  const edited = await f.updateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+    workspace: flow.workspace,
+    graph: {
+      ...flow.graph,
+      blocks: [creatorBlock!, { ...joiningBlock!, name: "Updated entry" }],
+    },
+  });
+  assert(edited.ok);
   t3.threads.worktreeMetadataPending = false;
 
   // Act
@@ -66,7 +82,8 @@ it("once T3 shows the worktree path and branch, the other Flow-input worker laun
   // Assert
   const [creator, second] = [...t3.threads.launches.values()].map((launch) => launch.payload);
   expect(t3.threads.launches.size).toBe(2);
-  expect(second!.title).toBe("Factory #1 · 2 Second entry");
+  expect(creator!.title).toBe("F#1 Entry worker · Improve search");
+  expect(second!.title).toBe("F#1 Second entry · Polish search");
   expect(second!.workspaceStrategy).toStrictEqual({
     type: "existing_worktree",
     worktreePath: "/t3-worktrees/thread-1",
@@ -292,7 +309,7 @@ it("after a Human step, the first arrival at a later Block launches its worker w
   expect(t3.threads.launchCalls).toBe(2);
   expect(t3.threads.sends.size).toBe(0);
   expect(parallel).toMatchObject({
-    title: "Factory #1 · 3 Parallel work",
+    title: "F#1 Parallel work · Improve search",
     workspaceStrategy: {
       type: "existing_worktree",
       worktreePath: "/t3-worktrees/thread-1",

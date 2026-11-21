@@ -48,6 +48,7 @@ import { makeTriggers } from "./triggers/triggers.ts";
 export class FactoryService extends Context.Service<
   FactoryService,
   EffectOperations<FactoryOperations> & {
+    readonly awaitWorkerTitles: () => Effect.Effect<void>;
     readonly runtime: RuntimeReports;
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
@@ -336,6 +337,7 @@ export const makeFactoryService = (
     const guarded = guardOperations(operations);
     const factory: FactoryService["Service"] = {
       ...guarded,
+      awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
       setRuntimeBackendUrl: (url) => {
@@ -367,7 +369,7 @@ export const makeFactoryService = (
     };
     runner = yield* makeRunner(
       factory,
-      connection.snapshots.fresh,
+      connection.snapshots,
       projects.refreshProjects,
       t3.threads,
       git,

@@ -33,6 +33,7 @@ import {
   T3Failure,
   isApprovalPending,
   type AuthorizationResumption,
+  type DispatchFence,
   type T3Authorization,
   type T3Calls,
   type T3ConnectionReason,
@@ -106,6 +107,11 @@ function toolContent(result: ToolResult): unknown {
   return undefined;
 }
 
+function firstToolText(result: ToolResult) {
+  for (const item of result.content) if (item.type === "text" && item.text) return item.text;
+  return undefined;
+}
+
 /** Collects every tools/list page; repeated or runaway cursors fail with `invalidPagination`. */
 async function listAllTools(
   client: Client,
@@ -128,7 +134,12 @@ const session = (client: Client, invalidPagination: () => Error): T3Session => (
   tools: () => listAllTools(client, invalidPagination),
   call: async (name, args, timeout) => {
     const result = await client.callTool({ name, arguments: args }, { timeout });
-    return { isError: Boolean(result.isError), content: toolContent(result) };
+    const text = firstToolText(result);
+    return {
+      isError: Boolean(result.isError),
+      content: toolContent(result),
+      ...(text !== undefined ? { text } : {}),
+    };
   },
 });
 /** An inspection answers an invalid catalog as a contract failure. */
@@ -160,6 +171,7 @@ const isContractFailure = (error: unknown) =>
  * OAuth refresh the SDK makes inside it, so concurrent calls never see each other's failures. */
 interface CallRecord {
   unavailable: boolean;
+  fence?: DispatchFence;
 }
 const currentCall = new AsyncLocalStorage<CallRecord>();
 
@@ -310,12 +322,19 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     if (data.endpoint !== endpoint) throw new Error("Credential endpoint mismatch");
     return data;
   }
+  private dispatchCredentials(endpoint: string) {
+    const credentials = this.read(endpoint);
+    const fence = currentCall.getStore()?.fence;
+    if (fence && (fence.signal.aborted || credentials.identity !== fence.authorizationIdentity))
+      throw new T3Failure("authorization-required", "The dispatch authorization has expired.");
+    return credentials;
+  }
   private save(data: Credentials) {
     writeCredentialFile(this.path(data.endpoint), data);
   }
   private provider(endpoint: string, interactive: boolean): OAuthClientProvider {
     const update = (change: (data: Credentials) => void) => {
-      const data = this.read(endpoint);
+      const data = this.dispatchCredentials(endpoint);
       change(data);
       this.save(data);
     };
@@ -343,7 +362,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
         update((data) => {
           data.client = client;
         }),
-      tokens: () => this.read(endpoint).tokens,
+      tokens: () => this.dispatchCredentials(endpoint).tokens,
       // Refresh preserves grant lineage. A new code grant already has a new identity.
       saveTokens: (tokens) =>
         update((data) => {
@@ -396,6 +415,46 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
         }),
     };
   }
+  private async fetchRequest(
+    endpoint: string,
+    input: Parameters<typeof fetch>[0],
+    init: RequestInit | undefined,
+    stream: boolean,
+  ) {
+    const fence = currentCall.getStore()?.fence;
+    const toolCall =
+      fence &&
+      init?.method === "POST" &&
+      typeof init.body === "string" &&
+      new URL(input instanceof Request ? input.url : input).href === new URL(endpoint).href &&
+      JSON.parse(init.body).method === "tools/call";
+    if (fence && !toolCall) this.dispatchCredentials(endpoint);
+    if (toolCall) {
+      if (!(await fence.authorizeDispatch())) throw new T3Failure("refused", "Dispatch cancelled.");
+      try {
+        this.dispatchCredentials(endpoint);
+      } catch (error) {
+        await fence.refuseDispatch();
+        throw error;
+      }
+    }
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: AbortSignal.any([
+          ...(init?.signal ? [init.signal] : []),
+          ...(fence ? [fence.signal] : []),
+          ...(stream ? [] : [AbortSignal.timeout(10_000)]),
+        ]),
+      });
+      if (toolCall && [401, 403, 404].includes(response.status)) await fence.refuseDispatch();
+      return response;
+    } catch {
+      markCallUnavailable();
+      // SDK refresh warnings include error messages. Never let URLs/bodies reach them.
+      throw new T3Failure("unavailable", "T3 request is temporarily unavailable.");
+    }
+  }
   private transport(endpoint: string, provider?: OAuthClientProvider) {
     return new StreamableHTTPClientTransport(new URL(endpoint), {
       ...(provider ? { authProvider: provider } : {}),
@@ -405,20 +464,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
         const stream =
           init?.method === "GET" &&
           new Headers(init.headers).get("accept")?.includes("text/event-stream");
-        let response: Response;
-        try {
-          response = await fetch(input, {
-            ...init,
-            signal: AbortSignal.any([
-              ...(init?.signal ? [init.signal] : []),
-              ...(stream ? [] : [AbortSignal.timeout(10_000)]),
-            ]),
-          });
-        } catch {
-          markCallUnavailable();
-          // SDK refresh warnings include error messages. Never let URLs/bodies reach them.
-          throw new T3Failure("unavailable", "T3 request is temporarily unavailable.");
-        }
+        const response = await this.fetchRequest(endpoint, input, init, !!stream);
         if (response.status >= 500) markCallUnavailable();
         if (response.ok || response.status === 405) {
           const record = currentCall.getStore();
@@ -841,11 +887,16 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       if (connection.retired && connection.active === 0) void closeConnection(connection);
     }
   }
-  authorized<A>(target: T3Endpoint, action: (session: T3Session) => Promise<A>): Promise<A> {
-    return classifiedCall(async () => {
+  authorized<A>(
+    target: T3Endpoint,
+    action: (session: T3Session) => Promise<A>,
+    fence?: DispatchFence,
+  ): Promise<A> {
+    return classifiedCall(async (record) => {
+      if (fence) record.fence = fence;
       await this.completion;
       const latest = this.read(target.endpoint);
-      if (!latest.tokens)
+      if (!latest.tokens || (fence && latest.identity !== fence.authorizationIdentity))
         throw new T3Failure("authorization-required", "T3 authorization is required.");
       return this.onConnection(target.endpoint, (client) => action(authorizedSession(client)));
     });

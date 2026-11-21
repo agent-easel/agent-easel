@@ -262,7 +262,7 @@ Save each Agent's worker settings (environment, provider, model and every option
 | Case | Required observed result |
 | --- | --- |
 | Install and attribution | Settings installs Factory MCP into the disposable home, preserving unrelated entries; a fresh session shows the tool without bypassing native trust; a denied call yields no accepted result or downstream work; a call without the worker's Block id or with an unknown one yields no accepted result |
-| Factory → worker | One top-level worker per Block with the captured provider, model and options; title `Factory #<number> · <position> <name>`; no Run conversation and no second launch after a lost acknowledgement |
+| Factory → worker | One top-level worker per Block with the captured provider, model and options; title `F#<number> <Block label> · <Run title>`; no Run conversation and no second launch after a lost acknowledgement |
 | Report before completion | `ACCEPTED` arrives while the execution runs; an identical retry returns the same acknowledgement; a changed final becomes the new result; no chat message substitutes for the call |
 | Held release | The handoff stays held until the worker thread is finished (no active run or native request, settled delegated wait); backend restarts while held and after release yield one recipient, no duplicate work and a preserved acknowledgement |
 | Human step | One Human occurrence, answered in Factory without a T3 thread; a correction revisits the same worker with a new activation and execution; another thread's reply cannot impersonate the Human |

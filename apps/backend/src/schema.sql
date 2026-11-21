@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: revisit_context
+-- Newest applied migration: worker_title_dispatch
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -1056,7 +1056,13 @@ CREATE TABLE "run_thread_bindings" (
   environment_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('direct-worker','coordinator','worker','descendant')),
-  parent_binding_id TEXT REFERENCES run_thread_bindings(id), link TEXT,
+  parent_binding_id TEXT REFERENCES run_thread_bindings(id), link TEXT, title_acknowledged TEXT, title_synced_revision INTEGER, title_target TEXT, title_target_revision INTEGER, title_request_id TEXT, title_inflight_revision INTEGER, title_inflight_request_id TEXT, title_sync_state TEXT CHECK (
+  title_sync_state IS NULL OR title_sync_state IN ('pending', 'inflight', 'retired', 'paused')
+), title_disposition TEXT CHECK (
+  title_disposition IS NULL OR title_disposition IN (
+    'thread-not-found', 'capability-denied', 'superseded', 'unavailable', 'unclassified'
+  )
+), title_blocked_context TEXT, title_attempt INTEGER NOT NULL DEFAULT 0, title_not_before TEXT, title_last_dispatched_key TEXT,
   UNIQUE(run_id,environment_id,thread_id),
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );
@@ -1235,7 +1241,7 @@ CREATE TABLE runs (
   creation_key TEXT NOT NULL DEFAULT '',
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id)
 , settled_at TEXT, archived_at TEXT, block_settlement_enabled INTEGER NOT NULL DEFAULT 0 CHECK(block_settlement_enabled IN (0,1)), prompt_segments_json TEXT, title_provenance TEXT NOT NULL DEFAULT 'legacy'
-  CHECK (title_provenance IN ('automatic', 'manual', 'generated', 'legacy')), archive_request_id TEXT);
+  CHECK (title_provenance IN ('automatic', 'manual', 'generated', 'legacy')), archive_request_id TEXT, title_revision INTEGER NOT NULL DEFAULT 0 CHECK (title_revision >= 0));
 
 CREATE UNIQUE INDEX runs_archive_request ON runs(archive_request_id)
   WHERE archive_request_id IS NOT NULL
