@@ -87,7 +87,7 @@ it("undoing a Block removal brings back its wires and keeps an edit made since",
   const edited = { ...after, flowInput: { ...after.flowInput, position: { x: 90, y: 40 } } };
 
   // Act
-  const undone = undoRemoval(edited, before, after, []);
+  const undone = undoRemoval(edited, { before, after, agentsAtRemoval: [] }, []);
 
   // Assert
   expect(undone.blocks.map((block) => block.id)).toStrictEqual(["gate", "next"]);
@@ -119,7 +119,7 @@ it("undoing a Block removal brings back its wires into Finish endings unchanged"
   const after = removeBlock(before, "gate");
 
   // Act
-  const undone = undoRemoval(after, before, after, []);
+  const undone = undoRemoval(after, { before, after, agentsAtRemoval: [] }, []);
 
   // Assert
   expect(undone.connections).toStrictEqual(before.connections);
@@ -157,7 +157,7 @@ it("undoing an ending removal brings the ending back in its place with its wires
   const edited = { ...after, flowInput: { ...after.flowInput, position: { x: 90, y: 40 } } };
 
   // Act
-  const undone = undoRemoval(edited, before, after, []);
+  const undone = undoRemoval(edited, { before, after, agentsAtRemoval: [] }, []);
 
   // Assert
   expect(after.connections).toStrictEqual(before.connections.slice(0, 1));
@@ -173,7 +173,7 @@ it("removing the Finish block takes the wires into its endings, and undo restore
   const after = removeFinish(before);
 
   // Act
-  const undone = undoRemoval(after, before, after, []);
+  const undone = undoRemoval(after, { before, after, agentsAtRemoval: [] }, []);
 
   // Assert
   expect(after).not.toHaveProperty("finish");
@@ -190,23 +190,23 @@ it("undo restores Finish without reconnecting a Condition rule deleted since its
   const edited = replaceBlock(after, condition([]));
 
   // Act
-  const undone = undoRemoval(edited, before, after, []);
+  const undone = undoRemoval(edited, { before, after, agentsAtRemoval: [] }, []);
 
   // Assert
   expect(undone.finish).toStrictEqual(before.finish);
   expect(undone.connections).toStrictEqual([endingWire]);
 });
 
-it("undo restores Finish wires only for Agent exits still available after editing the block", () => {
+it("undo restores already-missing Agent wires and keeps later exit changes", () => {
   // Arrange
   const flow = endingFlow();
-  const exits = ["keep", "hide", "local"].map((id) => ({
+  const exits = ["keep", "hide", "removed", "local", "already-missing"].map((id) => ({
     id,
     name: id,
     description: "",
     messageRequired: false,
   }));
-  const agent = { id: "agent", exits: exits.slice(0, 2) };
+  const agent = { id: "agent", exits: exits.slice(0, 3) };
   const block = {
     id: "worker",
     name: "Worker",
@@ -214,7 +214,7 @@ it("undo restores Finish wires only for Agent exits still available after editin
     kind: "agent",
     agentId: agent.id,
     hiddenExitIds: [],
-    localExits: exits.slice(2),
+    localExits: exits.slice(3, 4),
     revisitInstruction: "",
     revisitContext: "keep",
   } as const satisfies FlowBlock;
@@ -226,12 +226,13 @@ it("undo restores Finish wires only for Agent exits still available after editin
   const before = { ...flow, blocks: [block], connections };
   const after = removeFinish(before);
   const edited = replaceBlock(after, { ...block, hiddenExitIds: ["hide"], localExits: [] });
+  const currentAgent = { ...agent, exits: exits.slice(0, 2) };
 
   // Act
-  const undone = undoRemoval(edited, before, after, [agent]);
+  const undone = undoRemoval(edited, { before, after, agentsAtRemoval: [agent] }, [currentAgent]);
 
   // Assert
-  expect(undone.connections).toStrictEqual(connections.slice(0, 1));
+  expect(undone.connections).toStrictEqual([connections[0], connections[4]]);
 });
 
 it("an exit reaches each ending at most once, and the Flow input reaches no ending", () => {

@@ -1,5 +1,6 @@
 import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
+import type { Browser } from "@e2e-dev/web";
 import { FINISH_BLOCK_ID, type FlowConnection } from "../packages/contracts/src/index.ts";
 import { readFlow, saveFlowElsewhere, saveSingleAgentFlow } from "./support/flows.ts";
 import { chooseDecision } from "./support/human-answers.ts";
@@ -18,6 +19,18 @@ function endingWire(sourceBlockId: string, exitId: string, targetEndingId: strin
 async function addEnding(screen: Screen, name: string) {
   await screen.getByRole("button", "Add ending", { exact: true }).tap();
   await ending(screen, "Unnamed ending").getByLabel("Name", { exact: true }).fill(name);
+}
+
+async function undoFlowRemoval(browser: Browser) {
+  const shortcut = await browser.evaluate(
+    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
+  );
+  await browser.keyboard.press(shortcut as string);
+}
+
+async function removeSelectedFinish(screen: Screen) {
+  await screen.getByRole("button", "Remove block", { exact: true }).tap();
+  await expect(finishBlock(screen)).toHaveCount(0);
 }
 
 async function saveDeliveredFlow(
@@ -231,10 +244,7 @@ test("a Finish block added from the library takes endings wired in Studio, keepi
   await app.screenshot("finish-ending-not-connected");
   await ending(screen, "Shipped").getByLabel("Name", { exact: true }).fill("Delivered");
   await screen.getByRole("button", "Remove ending Dropped", { exact: true }).tap();
-  const undo = await browser.evaluate(
-    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
-  );
-  await browser.keyboard.press(undo as string);
+  await undoFlowRemoval(browser);
   await expect(ending(screen, "Dropped")).toContainText("Coder → fail");
   await screen.getByRole("button", "Remove ending Dropped", { exact: true }).tap();
   await screen.getByRole("button", "Remove ending Needs a person", { exact: true }).tap();
@@ -284,10 +294,9 @@ test("removing the Finish block takes its endings and their wires, and the libra
   await app.screenshot("finish-settings-remove-block");
 
   // Act
-  await screen.getByRole("button", "Remove block", { exact: true }).tap();
+  await removeSelectedFinish(screen);
 
   // Assert
-  await expect(finishBlock(screen)).toHaveCount(0);
   await expect(screen.getByRole("button", "Add Finish", { exact: true })).toBeVisible();
   await screen.getByRole("button", "Save", { exact: true }).tap();
   await expectFlowSaved(screen);
@@ -312,18 +321,40 @@ test("undo brings back a Finish block added and removed before saving, with its 
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Add Finish", { exact: true }).tap();
   await addEnding(screen, "Shipped");
-  await screen.getByRole("button", "Remove block", { exact: true }).tap();
-  await expect(finishBlock(screen)).toHaveCount(0);
-  const undo = await browser.evaluate(
-    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
-  );
+  await removeSelectedFinish(screen);
 
   // Act
-  await browser.keyboard.press(undo as string);
+  await undoFlowRemoval(browser);
 
   // Assert
   await expect(finishBlock(screen)).toContainText("Shipped");
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
+});
+
+test("undoing Finish removal restores the saved wires from a hidden Agent exit", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await saveDeliveredFlow(app.baseUrl, "Undo Finish with a hidden exit");
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Agent Ship the fix", { exact: true }).tap();
+  await screen.getByRole("button", "Hide exit Done", { exact: true }).tap();
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await save.tap();
+  await expectFlowSaved(screen);
+  expect((await readFlow(app.baseUrl, flowId)).graph.connections).toHaveLength(2);
+  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await removeSelectedFinish(screen);
+
+  // Act
+  await undoFlowRemoval(browser);
+
+  // Assert
+  await expect(finishBlock(screen)).toContainText("Delivered");
+  await expect(save).toBeDisabled();
 });
 
 test("keeping local edits after another client saves preserves undo for a removed Finish", async ({
@@ -336,19 +367,15 @@ test("keeping local edits after another client saves preserves undo for a remove
   const flow = await readFlow(app.baseUrl, flowId);
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Finish", { exact: true }).tap();
-  await screen.getByRole("button", "Remove block", { exact: true }).tap();
-  await expect(finishBlock(screen)).toHaveCount(0);
+  await removeSelectedFinish(screen);
   const latest = await saveFlowElsewhere(app.baseUrl, flow, { name: "Rename in another client" });
   await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
   const comparison = screen.getByRole("dialog", `Compare with revision ${latest.revision}`);
-  const undo = await browser.evaluate(
-    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
-  );
 
   // Act
   await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
-  await browser.keyboard.press(undo as string);
+  await undoFlowRemoval(browser);
 
   // Assert
   await expect(finishBlock(screen)).toContainText("Delivered");

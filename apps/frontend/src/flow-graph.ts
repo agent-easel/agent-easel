@@ -363,10 +363,27 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
 }
 
+export type GraphRemoval = {
+  readonly before: FlowGraph;
+  readonly after: FlowGraph;
+  readonly agentsAtRemoval: readonly Pick<AgentDefinition, "id" | "exits">[];
+};
+
+function exitIdsByBlock(
+  blocks: readonly FlowBlock[],
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+) {
+  return new Map(
+    blocks.map((block) => [
+      block.id,
+      new Set(effectiveExits(block, agents).map((exit) => exit.id)),
+    ]),
+  );
+}
+
 export function undoRemoval(
   current: FlowGraph,
-  before: FlowGraph,
-  after: FlowGraph,
+  { before, after, agentsAtRemoval }: GraphRemoval,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
 ): FlowGraph {
   const removedBy =
@@ -383,11 +400,10 @@ export function undoRemoval(
     removedBy(after.finish?.endings ?? [], byId),
   );
   const restored = { ...current, blocks, ...(finish && { finish: { ...finish, endings } }) };
-  const exits = new Map(
-    blocks.map((block) => [
-      block.id,
-      new Set(effectiveExits(block, agents).map((exit) => exit.id)),
-    ]),
+  const exits = exitIdsByBlock(blocks, agents);
+  const priorAgentExits = exitIdsByBlock(
+    before.blocks.filter((block) => block.kind === "agent"),
+    agentsAtRemoval,
   );
   const restorable = (wire: FlowWire) =>
     !hasWire(after, wire) && canConnect(restored, wire.source, wire);
@@ -401,9 +417,16 @@ export function undoRemoval(
     current.connections,
     before.connections,
     connectionKey,
-    (connection) =>
-      exits.get(connection.sourceBlockId)?.has(connection.exitId) === true &&
-      restorable(connectionWire(connection)),
+    (connection) => {
+      const { sourceBlockId, exitId } = connection;
+      const currentExits = exits.get(sourceBlockId);
+      const wasUnavailable = priorAgentExits.get(sourceBlockId)?.has(exitId) === false;
+      return (
+        !!currentExits &&
+        (currentExits.has(exitId) || wasUnavailable) &&
+        restorable(connectionWire(connection))
+      );
+    },
   );
   return {
     ...restored,

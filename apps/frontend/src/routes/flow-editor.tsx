@@ -95,6 +95,7 @@ import {
   undoRemoval,
   type BlockPosition,
   type FlowWire,
+  type GraphRemoval,
 } from "../flow-graph.ts";
 import {
   createFlowDraft,
@@ -256,9 +257,6 @@ function useDeleteKey(
   }, [enabled, scope]);
 }
 
-/** A removal ⌘Z can undo: the graph before and after it. */
-type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
-
 /**
  * Structural edits ⌘Z undoes until Save: a removed Block together with its wires, or a removed
  * wire. Undo brings back what the last removal took and keeps every edit made since; a field
@@ -274,7 +272,7 @@ function useStructuralUndo(
     change: (next: FlowGraph) => void;
   },
 ) {
-  const [removals, setRemovals] = useState<readonly Removal[]>([]);
+  const [removals, setRemovals] = useState<readonly GraphRemoval[]>([]);
   const [undoScope, setUndoScope] = useState(draft.undoScope);
   if (undoScope !== draft.undoScope) {
     setUndoScope(draft.undoScope);
@@ -294,14 +292,17 @@ function useStructuralUndo(
       if (busy || !last) return;
       event.preventDefault();
       setRemovals(stack.slice(0, -1));
-      change(undoRemoval(graph, last.before, last.after, agents));
+      change(undoRemoval(graph, last, agents));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [scope]);
   /** Applies a removal that ⌘Z can undo. */
   return (after: FlowGraph) => {
-    setRemovals((stack) => [...stack, { before: draft.graph, after }]);
+    setRemovals((stack) => [
+      ...stack,
+      { before: draft.graph, after, agentsAtRemoval: draft.agents },
+    ]);
     draft.change(after);
   };
 }
