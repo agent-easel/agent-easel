@@ -283,7 +283,6 @@ export {
   CANVAS_COORD_MIN,
   flowEditSizeRefusal,
   isCanvasPosition,
-  portableFlowSizeIssue,
   validateCreateFlow,
   validateDuplicateFlow,
   validateListFlowFindings,
@@ -299,6 +298,7 @@ export {
   validateUpdateRunTitleSetting,
 } from "./agent.ts";
 export {
+  bindPortableBlocks,
   DEFINITION_REQUEST_LIMIT_BYTES,
   definitionSaveFits,
   parsePortableFile,
@@ -307,6 +307,7 @@ export {
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,
   validateCommitImport,
+  validatePortableDocument,
 } from "./portable-document.ts";
 export {
   CHAT_MODEL_BASE_URL_LIMIT,
