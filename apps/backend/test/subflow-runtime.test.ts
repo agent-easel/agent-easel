@@ -405,6 +405,105 @@ it("simultaneous copies of a captured Flow use independent Condition counters an
   );
 });
 
+it("pages a finished invocation's Condition after a newer invocation receives an arrival", async (c) => {
+  // Arrange
+  const { f, mcp, input, agent, world } = await preparedServer(c);
+  const child = await savedFlow(f, {
+    name: "Count two reviews",
+    graph: {
+      flowInput: flowInput("review-a", "review-b"),
+      blocks: [
+        agentBlock("review-a", "Review A", agent.id),
+        agentBlock("review-b", "Review B", agent.id),
+        conditionBlock("gate", "Review count", [conditionRule("complete", "Complete", 2)]),
+        humanStep("hold", "Hold first review"),
+      ],
+      connections: [
+        connection("review-a", "done", "gate"),
+        connection("review-b", "done", "gate"),
+        connection("gate", "otherwise", "hold"),
+        toEnding("gate", "complete", "done"),
+      ],
+      finish: { position: { x: 800, y: 0 }, endings: [ending("done", "Done")] },
+    },
+  });
+  const base = placingGraph(child.id);
+  const parent = await savedFlow(f, {
+    name: "Serial reviews",
+    graph: {
+      ...base,
+      flowInput: flowInput("first", "second"),
+      finish: { ...base.finish!, endings: [] },
+      blocks: [
+        ...base.blocks,
+        agentBlock("first", "First", agent.id),
+        agentBlock("second", "Second", agent.id),
+      ],
+      connections: [
+        connection("first", "done", "inner-0"),
+        connection("second", "done", "inner-0"),
+      ],
+    },
+  });
+  const run = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const first = await blockWorkerLaunched(world, run.id, "first");
+  const second = await blockWorkerLaunched(world, run.id, "second");
+  await resultReported(world, first, { message: "First invocation" });
+  const older = await observeFor(
+    "observe the first invocation",
+    world,
+    run.id,
+    (detail) => detail.subflows?.[0]?.defaultInvocation?.number === 1,
+  );
+  const oldGate = older.blocks.find((block) => block.templateBlockId === "gate")!.blockId;
+  const oldReviewA = older.blocks.find((block) => block.templateBlockId === "review-a")!.blockId;
+  const oldReviewB = older.blocks.find((block) => block.templateBlockId === "review-b")!.blockId;
+  await resultReported(world, await blockWorkerLaunched(world, run.id, oldReviewA), {
+    message: "Old first review",
+  });
+  await observeFor("number the first old arrival", world, run.id, (detail) =>
+    detail.conditions.some((summary) => summary.blockId === oldGate && summary.arrivals === 1),
+  );
+  const oldSecond = await blockWorkerLaunched(world, run.id, oldReviewB);
+  await resultReported(world, second, { message: "Second invocation" });
+  await resultReported(world, oldSecond, { message: "Old second review" });
+  const current = await observeFor(
+    "advance the default to invocation two",
+    world,
+    run.id,
+    (detail) => detail.subflows?.[0]?.defaultInvocation?.number === 2,
+  );
+  const newGate = current.blocks.find((block) => block.templateBlockId === "gate")!.blockId;
+  const newReview = current.blocks.find((block) => block.templateBlockId === "review-a")!.blockId;
+  const cached = assertOk(await f.listConditionArrivals(run.id, oldGate, "1", ""));
+  await resultReported(world, await blockWorkerLaunched(world, run.id, newReview), {
+    message: "New review",
+  });
+  await observeFor("number a live arrival in invocation two", world, run.id, (detail) =>
+    detail.conditions.some((summary) => summary.blockId === newGate && summary.arrivals === 1),
+  );
+  const url = new URL(`/api/runs/${run.id}/conditions/${oldGate}/arrivals`, mcp);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("cursor", cached.nextCursor!);
+
+  // Act
+  const page = await fetch(url);
+
+  // Assert
+  expect(newGate).not.toBe(oldGate);
+  expect(page.status).toBe(200);
+  expect(await page.json()).toMatchObject({
+    ok: true,
+    value: {
+      highWater: 2,
+      nextCursor: null,
+      arrivals: [
+        { arrivalNumber: 2, outputId: "complete", origin: { threadId: oldSecond.threadId } },
+      ],
+    },
+  });
+});
+
 it("advances a quiet invocation as Nothing returned without waking its parent recipient", async (c) => {
   // Arrange
   const { f, input, agent, world } = await prepared(c);

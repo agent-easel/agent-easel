@@ -417,15 +417,18 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **22**. A server accepts clients from protocol **22**, and the current
-client requires a protocol **22** server, so only protocol 22 peers interoperate.
+The current protocol is **23**. The server and the Desktop and browser clients all require
+at least protocol **23** from their peer.
 
-Protocol 22 adds the [Finish block](studio.md#finish-block) with its endings to Flows and captured
-Run definitions, connections that enter an ending and the Run's `result` in Run detail. Older clients can neither read nor save such
-a Flow, so the server refuses them at the handshake before product screens mount and they must
-update; their credentials and stored data are kept. A current client likewise refuses a protocol 21
-or older server, which rejects or lacks the Finish block, and shows the update gate naming the
-server. This is an intentional transport break; the stored Flows are migrated separately.
+Protocol 23 adds [Subflow authoring](studio.md), captured invocation evidence
+in [Runs](runs.md), and portable definition format v5. A protocol 22 or older approved client
+shows the client update gate before product screens open. A protocol 23 client connecting to
+a protocol 22 or older server shows the server update gate. Update both peers to use the new
+contracts. Existing approvals and credentials carry forward, and the host upgrades its stored
+definitions, Runs, and import receipts on startup.
+
+Protocol 22 added the [Finish block](studio.md#finish-block) with its endings to Flows and
+captured Run definitions, connections that enter an ending, and the Run's `result` in Run detail.
 
 Protocol 21 added the [First-run setup](t3-integration.md#first-run-setup) status read
 (`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the
