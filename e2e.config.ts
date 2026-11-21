@@ -12,7 +12,10 @@ export default {
         command: {
           executable: "node",
           args: ["--conditions=factory-source", "tests/support/server.ts"],
-          env: { PORT: "{port}" },
+          env: {
+            PORT: "{port}",
+            FACTORY_E2E_TELEMETRY: process.env.FACTORY_E2E_TELEMETRY === "off" ? "off" : "on",
+          },
           log: ".e2e/logs/fixture.log",
         },
         // The result reader's Copy Markdown is read back from the clipboard.

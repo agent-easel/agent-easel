@@ -1,4 +1,3 @@
-import type { EventName, EventProperties } from "./telemetry.ts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
@@ -10,6 +9,7 @@ import { FactoryService } from "./factory-service.ts";
 import type { RuntimeReports } from "./runtime.ts";
 import type { RuntimeReply } from "./runtime-types.ts";
 import type { LiveStreams } from "./live-streams.ts";
+import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
 export interface Factory extends FactoryOperations {
   readonly runtime: { [K in keyof RuntimeReports]: (input: unknown) => Promise<RuntimeReply> };
@@ -17,6 +17,9 @@ export interface Factory extends FactoryOperations {
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
   /** Scoped live observation; each stream needs no services and runs on any Effect runtime. */
   readonly live: LiveStreams;
+  readonly telemetry: Pick<Telemetry, "enabled" | "disabledReason"> & {
+    setPreference(enabled: boolean): Promise<void>;
+  };
   setRuntimeBackendUrl(url: string): void;
   awaitWorkerTitles(): Promise<void>;
   readonly recordTelemetry: <K extends EventName>(
@@ -80,6 +83,13 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     setRuntimeBackendUrl,
     live,
     recordTelemetry: (event, properties) => runtime.runPromise(telemetry.record(event, properties)),
+    telemetry: {
+      get enabled() {
+        return telemetry.enabled;
+      },
+      disabledReason: telemetry.disabledReason,
+      setPreference: (enabled) => runtime.runPromise(telemetry.setPreference(enabled)),
+    },
     close: () => (closing ??= runtime.dispose()),
   };
 }

@@ -31,7 +31,7 @@ import {
 } from "@t3-factory/domain-validation";
 import type { FactoryOptions } from "./factory-options.ts";
 import { openFactory, type Factory } from "./open-factory.ts";
-import type { Configuration } from "./config.ts";
+import { configurationWriter, type Configuration } from "./config.ts";
 import { failure } from "./result.ts";
 import { accessRoutes } from "./access-routes.ts";
 import {
@@ -58,6 +58,7 @@ import { remoteAccessController } from "./remote-listener.ts";
 import { serverUpdateRoutes, type ApplicationUpdates } from "./server-update-routes.ts";
 import { startLiveTransport, type LiveTransport } from "./live-transport.ts";
 import { routeTable, type RouteEntries, type RouteTable } from "./route-table.ts";
+import { privacyRoutes } from "./privacy-routes.ts";
 
 export type { ApplicationUpdates } from "./server-update-routes.ts";
 
@@ -782,7 +783,7 @@ export interface ServerOptions {
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
   /** Reported by the handshake; desktop builds pass their release, source runs say `source`. */
   readonly applicationVersion?: string;
-  readonly telemetry?: Omit<NonNullable<FactoryOptions["telemetry"]>, "home">;
+  readonly telemetry?: Omit<NonNullable<FactoryOptions["telemetry"]>, "home" | "preference">;
   /** Another release's protocol range, for compatibility tests of mixed installations. */
   readonly protocol?: Pick<ProtocolDescriptor, "protocol" | "minimumPeerProtocol">;
   /** The desktop server's updater, which approved clients may operate. */
@@ -797,7 +798,11 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
   return {
     databasePath: config.databasePath,
     credentialsDirectory: config.credentialsDirectory,
-    telemetry: { ...options.telemetry, home: config.home },
+    telemetry: {
+      ...options.telemetry,
+      home: config.home,
+      preference: config.telemetryEnabled,
+    },
     ...(options.reportingStateDirectory
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),
@@ -852,9 +857,11 @@ export async function startServer(config: Configuration, options: ServerOptions 
       };
       return (request: HttpServerRequestType) => handleHttpRequest(request, binding);
     };
+  const writeConfiguration = configurationWriter(config.home);
   const remote = remoteAccessController(
     config,
     handlerFor("remote", config.allowedHosts ?? []),
+    writeConfiguration,
     (enabled, certificateMode) =>
       factory.recordTelemetry("remote_access.toggled", { enabled, certificateMode }),
   );
@@ -865,6 +872,7 @@ export async function startServer(config: Configuration, options: ServerOptions 
     routes = routeTable({
       ...accessRoutes(factory, protocol, remote, limiter, live),
       ...apiRoutes(factory),
+      ...privacyRoutes(factory.telemetry, writeConfiguration, config.telemetryEnabled),
       ...serverUpdateRoutes(factory, protocol.application, options.applicationUpdates),
     });
     host = await listen(

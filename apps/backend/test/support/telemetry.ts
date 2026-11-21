@@ -3,6 +3,9 @@ import { EventEmitter, once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { json } from "node:stream/consumers";
+import { loadConfiguration } from "../../src/config.ts";
+import { startServer } from "../../src/server.ts";
+import { factoryHarness } from "./factory.ts";
 
 export async function mockIngest(
   context: TestContext,
@@ -45,4 +48,39 @@ export async function mockIngest(
     firstRequest,
     disconnected,
   };
+}
+
+export async function settingsHost(
+  context: TestContext,
+  statuses: readonly (number | "hang")[] = [],
+) {
+  const ingest = await mockIngest(context, statuses);
+  const harness = await factoryHarness(context);
+  const open = async (override?: string) => {
+    const config = await loadConfiguration({
+      FACTORY_HOME: harness.processHome,
+      FACTORY_PORT: "0",
+    });
+    const server = await startServer(config, {
+      uiDirectory: null,
+      git: harness.git,
+      telemetry: {
+        packagedChannel: "stable",
+        env: { ...ingest.env, FACTORY_TELEMETRY_ENABLED: override },
+      },
+    });
+    context.onTestFinished(() => server.close());
+    const url = `http://127.0.0.1:${server.address.port}/api/settings/telemetry`;
+    return {
+      close: server.close,
+      read: () => fetch(url),
+      set: (telemetryEnabled: boolean) =>
+        fetch(url, {
+          method: "PUT",
+          headers: { "content-type": "application/json", "x-factory-request": "1" },
+          body: JSON.stringify({ telemetryEnabled }),
+        }),
+    };
+  };
+  return { ingest, open };
 }
