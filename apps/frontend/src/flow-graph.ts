@@ -329,7 +329,14 @@ function recipientNames(graph: FlowGraph) {
   };
 }
 
+const exitRecipientsCache = new WeakMap<
+  FlowGraph,
+  (blockId: string, exitId: string) => readonly (string | undefined)[]
+>();
+
 export function exitRecipients(graph: FlowGraph) {
+  const cached = exitRecipientsCache.get(graph);
+  if (cached) return cached;
   const name = recipientNames(graph);
   const recipients = new Map<string, (string | undefined)[]>();
   for (const connection of graph.connections) {
@@ -338,8 +345,10 @@ export function exitRecipients(graph: FlowGraph) {
     list.push(name(connection));
     recipients.set(key, list);
   }
-  return (blockId: string, exitId: string): readonly (string | undefined)[] =>
+  const lookup = (blockId: string, exitId: string): readonly (string | undefined)[] =>
     recipients.get(JSON.stringify([blockId, exitId])) ?? [];
+  exitRecipientsCache.set(graph, lookup);
+  return lookup;
 }
 
 export function blockExitRecipients(graph: FlowGraph, blockId: string) {

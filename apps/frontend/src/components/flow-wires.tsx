@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { FlowConnection } from "@t3-factory/contracts";
 import { wireRouteKey } from "@t3-factory/flow-layout";
@@ -21,6 +22,7 @@ import {
   type FlowWire,
 } from "../flow-graph.ts";
 import { type WireRoute } from "../flow-layout-elk.ts";
+import { wireReaches, type Rect } from "../canvas-culling.ts";
 
 /** Selecting and deleting a wire. */
 type WireSelection = {
@@ -56,11 +58,11 @@ function routedPath(
   from: Point,
   fromBottom: number,
   { input, bottom, lane }: WireEnd,
-) {
+): WireRoute {
   if (kind === "curved") return wirePath(from, input, incomingApproachLane(lane));
   const below = Math.max(fromBottom, bottom) + 24;
   return {
-    d: orthogonalWirePath(from, input, below, incomingApproachLane(lane)),
+    ...orthogonalWirePath(from, input, below, incomingApproachLane(lane)),
     label: null,
   };
 }
@@ -68,7 +70,7 @@ function routedPath(
 type Wire = {
   readonly key: string;
   readonly wire: FlowWire;
-  readonly path: { d: string; label: { x: number; y: number } | null };
+  readonly path: WireRoute;
   /** The exit's name for its accessible name; Flow input and Continuation wires are unnamed. */
   readonly exit: string | null;
   readonly source: string;
@@ -169,6 +171,76 @@ function flowInputWires(
   });
 }
 
+function visibleWires(
+  inputs: readonly Wire[],
+  connections: readonly Wire[],
+  area: Rect | null,
+  current: FlowWire | null,
+  focused: string | null,
+) {
+  const keep = (item: Wire) =>
+    item.key === focused ||
+    (current !== null && sameWire(item.wire, current)) ||
+    (area !== null && wireReaches(area, item.path.bounds));
+  const shown: Wire[] = [];
+  for (const item of inputs) if (keep(item)) shown.push(item);
+  for (const item of connections) if (keep(item)) shown.push(item);
+  return shown;
+}
+
+function useVisibleWires({
+  graph,
+  kind,
+  geometry,
+  routed,
+  finish,
+  pendingWire,
+  area,
+  current,
+  focused,
+}: {
+  graph: CanvasGraph;
+  kind: WirePresentation["kind"];
+  geometry: Geometry;
+  routed: ReadonlyMap<string, WireRoute> | undefined;
+  finish: boolean;
+  pendingWire: FlowWire | null;
+  area: Rect | null;
+  current: FlowWire | null;
+  focused: string | null;
+}) {
+  const allInputs = useMemo(
+    () => flowInputWires(graph, kind, geometry, routed),
+    [graph, kind, geometry, routed],
+  );
+  const allConnections = useMemo(
+    () => exitWires(graph, kind, geometry, routed, finish),
+    [graph, kind, geometry, routed, finish],
+  );
+  const connections = useMemo(
+    () =>
+      pendingWire
+        ? allConnections.filter((item) => !sameWire(item.wire, pendingWire))
+        : allConnections,
+    [allConnections, pendingWire],
+  );
+  const inputs = useMemo(
+    () => (pendingWire ? allInputs.filter((item) => !sameWire(item.wire, pendingWire)) : allInputs),
+    [allInputs, pendingWire],
+  );
+  const wires = useMemo(
+    () => visibleWires(inputs, connections, area, current, focused),
+    [inputs, connections, area, current, focused],
+  );
+  return { inputs, connections, wires };
+}
+
+function wireKeyOf(target: EventTarget | null) {
+  return target instanceof Element
+    ? (target.closest("[data-wire-key]")?.getAttribute("data-wire-key") ?? null)
+    : null;
+}
+
 /**
  * Configured connections and the Flow input's wires in one neutral style, without labels.
  * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
@@ -183,6 +255,7 @@ export function FlowWires({
   pendingWire,
   emphasized,
   finish,
+  area,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
@@ -193,16 +266,23 @@ export function FlowWires({
   /** Rendered separately by the drag preview, but reserves its incoming port. */
   pendingWire: FlowWire | null;
   emphasized: CanvasNode | null;
+  area: Rect | null;
 }) {
-  const routed = routes ?? undefined;
-  const { kind } = presentation;
-  const visible = (item: { wire: FlowWire }) => !pendingWire || !sameWire(item.wire, pendingWire);
-  const connections = exitWires(graph, kind, geometry, routed, finish).filter(visible);
-  const inputs = flowInputWires(graph, kind, geometry, routed).filter(visible);
-  const wires = [...inputs, ...connections];
   const selection = presentation.kind === "curved" ? presentation : null;
   const marker = selection ? "arrow" : "execution-arrow";
-  const current = selection?.selected;
+  const current = selection?.selected ?? null;
+  const [focused, setFocused] = useState<string | null>(null);
+  const { inputs, connections, wires } = useVisibleWires({
+    graph,
+    kind: presentation.kind,
+    geometry,
+    routed: routes ?? undefined,
+    finish,
+    pendingWire,
+    area,
+    current,
+    focused,
+  });
   const selected = current && wires.find((wire) => sameWire(wire.wire, current));
   const emphasis = (item: Wire) => emphasized !== null && leavesNode(item.wire, emphasized);
   return (
@@ -214,6 +294,8 @@ export function FlowWires({
         aria-label={presentation.label}
         data-connection-count={connections.length}
         data-flow-input-count={inputs.length}
+        onFocus={(event) => setFocused(wireKeyOf(event.target))}
+        onBlur={(event) => setFocused(wireKeyOf(event.relatedTarget))}
       >
         <defs>
           {selection ? (
@@ -314,6 +396,7 @@ function SelectableWire({
     <g
       role="button"
       tabIndex={0}
+      data-wire-key={wire.key}
       aria-label={
         wire.exit === null
           ? `Connection from ${wire.source} to ${wire.target}`

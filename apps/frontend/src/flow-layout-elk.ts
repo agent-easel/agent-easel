@@ -6,10 +6,15 @@ import {
   type FlowLayoutPositions,
 } from "@t3-factory/flow-layout";
 import type { CanvasBlock } from "./flow-graph.ts";
-import { PORT_RIM, roundedPolyline } from "./flow-geometry.ts";
+import type { Rect } from "./canvas-culling.ts";
+import { PORT_RIM, pointsBounds, roundedPolyline } from "./flow-geometry.ts";
 
 export type FlowLayoutDimensions = LayoutDimensions<CanvasBlock>;
-export type WireRoute = { readonly d: string; readonly label: { x: number; y: number } | null };
+export type WireRoute = {
+  readonly d: string;
+  readonly label: { x: number; y: number } | null;
+  readonly bounds: Rect;
+};
 export type FlowLayoutResult = FlowLayoutPositions & {
   readonly routes: ReadonlyMap<string, WireRoute>;
 };
@@ -56,6 +61,7 @@ function parseRoutes(edges: ElkExtendedEdge[] | undefined) {
     if (!sections.length) continue;
     routes.set(edge.id, {
       d: sections.map(sectionPath).join(" "),
+      bounds: pointsBounds(sections.flat()),
       label:
         edge.labels?.[0]?.x !== undefined && edge.labels[0].y !== undefined
           ? {

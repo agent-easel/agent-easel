@@ -1,6 +1,51 @@
 import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
+import { saveLargeFlow } from "./large-flow.ts";
 import { liveRun } from "./live.ts";
+
+export const PAN_INTO_FILLERS = 2300;
+
+export async function openLargeFlow({
+  app,
+  screen,
+  browser,
+}: {
+  app: App;
+  screen: Screen;
+  browser: Browser;
+}) {
+  await browser.setViewport({ width: 1600, height: 900 });
+  const name = `Canvas culling · Large Flow ${Date.now()}`;
+  await saveLargeFlow(app.baseUrl, name, { fillers: 150, wires: 1200, columns: 8 });
+  await app.open("/studio/flows");
+  await screen.getByRole("link", name, { exact: false }).tap();
+  await expect(screen.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(1);
+}
+
+export async function panFlowCanvas(browser: Browser, dy: number) {
+  await browser.mouse.move(800, 450);
+  await browser.mouse.wheel(0, dy);
+}
+
+export async function openLargeFlowPannedToFillers(args: {
+  app: App;
+  screen: Screen;
+  browser: Browser;
+}) {
+  await openLargeFlow(args);
+  await panFlowCanvas(args.browser, PAN_INTO_FILLERS);
+  await expect(args.screen.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(0);
+}
+
+export async function openLargeFlowWithReturnedFiller(args: {
+  app: App;
+  screen: Screen;
+  browser: Browser;
+}) {
+  await openLargeFlowPannedToFillers(args);
+  await panFlowCanvas(args.browser, -PAN_INTO_FILLERS);
+  await expect(args.screen.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(1);
+}
 
 /** Zooms and pans the Run canvas by hand; the returned check proves that view is unchanged. */
 export async function manualRunView(screen: Screen, browser: Browser) {
@@ -44,6 +89,28 @@ export async function openFollowedReviewRun(
 ) {
   await browser.setViewport({ width: 1600, height: 1000 });
   const run = await liveRun(app, key, "review");
+  await app.open(`/runs/${run}`);
+  const canvas = screen.getByRole("region", "Execution canvas");
+  await expect(
+    canvas.getByRole("button", "Agent Implement change, Working", { exact: true }),
+  ).toBeVisible();
+  await expect(canvas).toHaveAttribute("data-following", "true");
+  return canvas;
+}
+
+export async function openFollowedLargeRun(
+  app: App,
+  screen: Screen,
+  browser: Browser,
+  key: string,
+) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const flow = await saveLargeFlow(app.baseUrl, `Canvas culling · Large Run ${key} ${Date.now()}`, {
+    fillers: 150,
+    wires: 1200,
+    columns: 8,
+  });
+  const run = await liveRun(app, key, { id: flow });
   await app.open(`/runs/${run}`);
   const canvas = screen.getByRole("region", "Execution canvas");
   await expect(
@@ -114,6 +181,37 @@ export const releaseApprovalHumanStep = {
 export async function drawnHeight(browser: Browser, label: string) {
   const selector = JSON.stringify(`[aria-label="${label}"]`);
   return Number(await browser.evaluate(`document.querySelector(${selector}).offsetHeight`));
+}
+
+export async function wireEnds(browser: Browser, wire: string, source: string, target: string) {
+  return await browser.evaluate<{ d: string; start: number | null; end: number | null } | null>(
+    `(() => {
+      const canvas = document.querySelector('[aria-label="Flow canvas"]');
+      const wire = [...canvas.querySelectorAll('g[role="button"]')].find(
+        (g) => g.getAttribute("aria-label") === ${JSON.stringify(wire)},
+      );
+      if (!wire) return null;
+      const path = wire.querySelectorAll("path")[1];
+      const at = (length) => path.getPointAtLength(length).matrixTransform(path.getScreenCTM());
+      const ports = (block, incoming) => {
+        const element = canvas.querySelector('[aria-label=' + JSON.stringify(block) + ']');
+        if (!element) return null;
+        return [...element.querySelectorAll("span.rounded-full")]
+          .filter((el) => el.hasAttribute("data-incoming-port") === incoming)
+          .map((el) => {
+            const box = el.getBoundingClientRect();
+            return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+          });
+      };
+      const nearest = (point, centres) =>
+        centres && Math.min(...centres.map((c) => Math.hypot(c.x - point.x, c.y - point.y)));
+      return {
+        d: path.getAttribute("d"),
+        start: nearest(at(0), ports(${JSON.stringify(`Block ${source}`)}, false)),
+        end: nearest(at(path.getTotalLength()), ports(${JSON.stringify(`Block ${target}`)}, true)),
+      };
+    })()`,
+  );
 }
 
 /**
