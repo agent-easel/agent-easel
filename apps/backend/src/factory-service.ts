@@ -110,6 +110,8 @@ export const makeFactoryService = (
       { connection: t3.connection, contract: t3.contract, close: () => t3.close() },
       intervalMs,
       changes,
+      telemetry,
+      t3.projects,
     );
     const appearance = yield* makeAppearance(
       t3.appearance,
@@ -146,7 +148,6 @@ export const makeFactoryService = (
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
-    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
     const reportingContext = yield* Layer.build(
       ReportingInstaller.ReportingInstallerLayer(
         dirname(options.databasePath),
@@ -156,6 +157,12 @@ export const makeFactoryService = (
       ),
     );
     const reporting = Context.get(reportingContext, ReportingInstaller.ReportingInstaller);
+    const firstRunSetup = yield* makeFirstRunSetup(
+      t3StateDirectory,
+      telemetry,
+      connection.getConnection,
+      reporting.getReportingInstallations,
+    );
     const setupContext = yield* Layer.build(
       RuntimeSetup.RuntimeSetupLayer(
         {
@@ -389,6 +396,7 @@ export const makeFactoryService = (
       changes,
       images,
       runTitles,
+      telemetry,
     );
     yield* runner.initialize();
     // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.

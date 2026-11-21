@@ -1,3 +1,5 @@
+import { telemetryDriverKinds, type Telemetry } from "./telemetry.ts";
+import type { T3Projects } from "./t3/projects.ts";
 import { periodicWorker } from "./periodic.ts";
 import * as Semaphore from "effect/Semaphore";
 import { now } from "./time.ts";
@@ -81,9 +83,12 @@ export const makeConnection = (
   },
   intervalMs: number,
   changes: LiveChanges,
+  telemetry: Telemetry,
+  projects: T3Projects,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    const scope = yield* Effect.scope;
     const mutex = yield* Semaphore.make(1);
     const [savedRow] = yield* sql<{
       endpoint: string;
@@ -130,6 +135,27 @@ export const makeConnection = (
         changes.connectionChecked();
       else changes.connectionChanged();
     };
+    const recordConnection = Effect.fn(function* (endpoint: string, before: T3Connection) {
+      if (
+        telemetry.enabled &&
+        status.readyGeneration !== before.readyGeneration &&
+        status.state === "ready"
+      ) {
+        yield* Effect.tryPromise(() => projects.orchestratorCapabilities({ endpoint })).pipe(
+          Effect.orElseSucceed(() => []),
+          Effect.flatMap((providers) =>
+            telemetry.record("t3.connected", {
+              mode: isLocalEndpoint(endpoint) ? "local" : "remote",
+              driverKinds: telemetryDriverKinds.filter((kind) =>
+                providers.some((provider) => provider.driverKind === kind),
+              ),
+            }),
+          ),
+          Effect.interruptible,
+          Effect.forkIn(scope),
+        );
+      }
+    });
     const check = Effect.fn("Connection.check")(function* () {
       if (!saved || closed) return value();
       const endpoint = saved.endpoint;
@@ -195,6 +221,7 @@ export const makeConnection = (
           };
           publishCheck(before);
         }
+        yield* recordConnection(endpoint, before);
         return value();
       }).pipe(
         Effect.catch(() =>
