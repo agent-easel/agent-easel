@@ -11,6 +11,29 @@ import type { UpdateChannel } from "@t3-factory/contracts";
 
 const bucket = Schema.Literals(["0", "1", "2-5", "6+"]);
 
+const duration = Schema.Literals(["<1s", "1-9s", "10-59s", "1-9m", "10m+"]);
+const setupOutcome = Schema.Literals(["completed", "skipped", "incomplete"]);
+export const telemetryDriverKinds = [
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "grok",
+  "muse",
+  "pi",
+  "opencode",
+  "antigravity",
+  "mistral-vibe",
+] as const;
+const runBlockTypes = Schema.Literals(["agent", "condition", "wait", "subflow", "finish"]);
+
+export function telemetryDuration(milliseconds: number): typeof duration.Type {
+  if (milliseconds < 1_000) return "<1s";
+  if (milliseconds < 10_000) return "1-9s";
+  if (milliseconds < 60_000) return "10-59s";
+  if (milliseconds < 600_000) return "1-9m";
+  return "10m+";
+}
+
 const eventProperties = {
   "app.started": Schema.Struct({
     isFirstRun: Schema.Boolean,
@@ -18,6 +41,31 @@ const eventProperties = {
     flowCount: bucket,
     agentCount: bucket,
   }),
+  "setup.completed": Schema.Struct({
+    duration,
+    t3Connection: setupOutcome,
+    agentInstallation: setupOutcome,
+  }),
+  "t3.connected": Schema.Struct({
+    mode: Schema.Literals(["local", "remote"]),
+    driverKinds: Schema.Array(Schema.Literals(telemetryDriverKinds)),
+  }),
+  "run.started": Schema.Struct({
+    source: Schema.Literals(["manual", "trigger", "chat_control", "mcp"]),
+    flowScope: Schema.Literals(["global", "project"]),
+    blockCount: bucket,
+    hasImages: Schema.Boolean,
+    blockTypes: Schema.Array(runBlockTypes),
+  }),
+  "run.finished": Schema.Struct({
+    status: Schema.Literals(["completed", "failed", "cancelled"]),
+    duration,
+    executedBlockCount: bucket,
+    hadHumanWait: Schema.Boolean,
+    usedContinuation: Schema.Boolean,
+  }),
+  "run.continued": Schema.Struct({}),
+  "run.cancelled": Schema.Struct({}),
 };
 
 type EventProperties = { [K in keyof typeof eventProperties]: (typeof eventProperties)[K]["Type"] };
