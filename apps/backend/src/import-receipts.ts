@@ -29,18 +29,34 @@ function canonicalJson(value: unknown): string {
 const sha256 = (content: unknown) =>
   createHash("sha256").update(canonicalJson(content)).digest("hex");
 
-/**
- * The content a request id commits to: the decoded document, the selections and the target, in
- * canonical JSON so a retry of equal content hashes equally however its file orders object fields.
- */
-const currentFingerprint = ({ document, selections, projectId = null }: CommitImportInput) =>
-  sha256({ document, selections, projectId });
+function fingerprintDocument(
+  document: CommitImportInput["document"],
+  legacyRevisitContext?: "keep",
+) {
+  if (document.kind !== "flow" || document.formatVersion >= 4) return document;
+  const { flow } = document;
+  const blocks = flow.graph.blocks.map((block) =>
+    block.kind === "agent" ? { ...block, revisitContext: legacyRevisitContext } : block,
+  );
+  return { ...document, flow: { ...flow, graph: { ...flow.graph, blocks } } };
+}
 
-/** The commit's fingerprint under a receipt's version; version 1 exists only for a global import. */
-function fingerprintUnder(commit: CommitImportInput, version: FingerprintVersion) {
-  if (version === CURRENT_FINGERPRINT_VERSION) return currentFingerprint(commit);
+const currentFingerprint = ({ document, selections, projectId = null }: CommitImportInput) =>
+  sha256({ document: fingerprintDocument(document, "keep"), selections, projectId });
+
+function matchesFingerprint(receipt: ImportReceipt, commit: CommitImportInput): boolean {
   const { document, selections, projectId = null } = commit;
-  return projectId === null ? sha256({ document, selections }) : undefined;
+  if (receipt.fingerprintVersion === 1)
+    return (
+      projectId === null &&
+      receipt.fingerprint === sha256({ document: fingerprintDocument(document), selections })
+    );
+  if (receipt.fingerprint === currentFingerprint(commit)) return true;
+  const legacyDocument = fingerprintDocument(document);
+  return (
+    legacyDocument !== document &&
+    receipt.fingerprint === sha256({ document: legacyDocument, selections, projectId })
+  );
 }
 
 export const readImportReceipt = Effect.fnUntraced(function* (
@@ -70,8 +86,7 @@ export function replayedImport(
   receipt: ImportReceipt,
   commit: CommitImportInput,
 ): Result<ImportResult> {
-  if (receipt.fingerprint === fingerprintUnder(commit, receipt.fingerprintVersion))
-    return { ok: true, value: receipt.result };
+  if (matchesFingerprint(receipt, commit)) return { ok: true, value: receipt.result };
   return failure("conflict", "This import request was already committed with different content.", [
     {
       code: "import_request_conflict",

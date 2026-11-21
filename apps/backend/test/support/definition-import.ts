@@ -4,10 +4,12 @@ import * as Effect from "effect/Effect";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type { PortableAgent, RawBody } from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
+import historicalFlowImport from "../fixtures/historical-flow-import-receipts.json" with { type: "json" };
 import { ControlledT3 } from "./controlled-t3.ts";
 import { assertOk, openFactoryWithApprovedT3, sampleAgentInput } from "./domain-setup.ts";
 import { factoryHarness } from "./factory.ts";
 import {
+  agentBlock,
   blockExit,
   connection,
   continuationStep,
@@ -15,6 +17,49 @@ import {
   flowInput,
   humanStep,
 } from "./scenarios.ts";
+
+export const historicalFlowReceipts = historicalFlowImport.receipts;
+
+export async function factoryWithHistoricalFlowReceipt(
+  context: TestContext,
+  receipt: (typeof historicalFlowReceipts)[number],
+) {
+  const harness = await factoryHarness(context);
+  const first = await harness.open({ t3: new ControlledT3() });
+  const { formatVersion, fingerprintVersion, fingerprint } = receipt;
+  const { document } = historicalFlowImport;
+  const { finish, ...graph } = document.flow.graph;
+  const request = {
+    requestId: `historical-flow-${formatVersion}`,
+    document: {
+      ...document,
+      formatVersion,
+      flow: { ...document.flow, graph: formatVersion === 3 ? { ...graph, finish } : graph },
+    },
+    selections: { "agent-1": null },
+  };
+  const { name, prompt, exits } = document.agents[0]!;
+  const agent = assertOk(await first.createAgent({ name, prompt, exits, execution: null }));
+  const flow = assertOk(
+    await first.createFlow({
+      name: document.flow.name,
+      graph: { ...graph, blocks: [agentBlock("review", "Review", agent.id, { x: 240, y: 0 })] },
+    }),
+  );
+  await first.close();
+  using database = new DatabaseSync(harness.databasePath);
+  database
+    .prepare(
+      "INSERT INTO definition_import_receipts (request_id, fingerprint_version, fingerprint, flow_id, created_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(request.requestId, fingerprintVersion, fingerprint, flow.id, flow.updatedAt);
+  database
+    .prepare(
+      "INSERT INTO definition_import_receipt_agents (request_id, ordinal, agent_key, agent_id) VALUES (?, 0, 'agent-1', ?)",
+    )
+    .run(request.requestId, agent.id);
+  return { harness, request, flowId: flow.id, agents: [{ key: "agent-1", id: agent.id }] };
+}
 
 /** The Agent another installation exported: its hint names a provider instance this one lacks. */
 export const exportedAgent = (overrides: Partial<PortableAgent> = {}): PortableAgent => ({
