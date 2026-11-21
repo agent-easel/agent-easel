@@ -198,6 +198,17 @@ it.for([
     needsInput: false,
   },
   {
+    caseName: "holding a checks-only monitor with awaited omitted after a completed turn",
+    thread: {
+      status: "completed",
+      pendingBackgroundTasks: [
+        { taskId: "pull-request-watch:github.com/alimek/t3-factory#678", kind: "monitor" },
+      ],
+    },
+    workerFinished: true,
+    needsInput: true,
+  },
+  {
     caseName: "holding only unawaited background tasks after a completed turn",
     thread: {
       status: "completed",

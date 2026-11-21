@@ -19,12 +19,7 @@ import type {
 } from "../../src/t3/threads.ts";
 import type { ControlledT3Connection } from "./controlled-t3-connection.ts";
 
-export type ThreadFacts = Partial<
-  Pick<
-    ExecutionObservation,
-    "repository" | "pendingRequestCount" | "status" | "pendingBackgroundTasks"
-  >
->;
+export type ThreadFacts = Partial<Pick<ExecutionObservation, "repository" | "pendingRequestCount">>;
 
 const terminalStatuses = ["completed", "failed", "cancelled", "interrupted", "rolled_back"];
 

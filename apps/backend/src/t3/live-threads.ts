@@ -53,17 +53,23 @@ type RecentRun = {
 
 const isNullableString = (value: unknown) => value === null || typeof value === "string";
 
-const isPendingBackgroundTask = (value: unknown): value is PendingBackgroundTask => {
+type RawPendingBackgroundTask = {
+  readonly taskId: string;
+  readonly kind: string;
+  readonly awaited?: boolean;
+};
+
+const isPendingBackgroundTask = (value: unknown): value is RawPendingBackgroundTask => {
   if (!value || typeof value !== "object") return false;
   const task = value as Record<string, unknown>;
   return (
     typeof task.taskId === "string" &&
     typeof task.kind === "string" &&
-    typeof task.awaited === "boolean"
+    (task.awaited === undefined || typeof task.awaited === "boolean")
   );
 };
 
-const isPendingBackgroundTasks = (value: unknown): value is readonly PendingBackgroundTask[] =>
+const isPendingBackgroundTasks = (value: unknown): value is readonly RawPendingBackgroundTask[] =>
   Array.isArray(value) && value.every(isPendingBackgroundTask);
 
 function isObservedThread(thread: ThreadExecutionRead["thread"] | undefined, threadId: string) {
@@ -103,7 +109,11 @@ function executionObservation(threadId: string, body: ThreadExecutionRead): Exec
     ...(isPendingBackgroundTasks(body.thread.pendingBackgroundTasks)
       ? {
           pendingBackgroundTasks: body.thread.pendingBackgroundTasks.map(
-            ({ taskId, kind, awaited }) => ({ taskId, kind, awaited }),
+            ({ taskId, kind, awaited }): PendingBackgroundTask => ({
+              taskId,
+              kind,
+              awaited: awaited === true,
+            }),
           ),
         }
       : {}),
