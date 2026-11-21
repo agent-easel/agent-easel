@@ -69,10 +69,10 @@ jobs:
             apps/frontend/dist
             packages/*/dist
           key: ui-build-v2-${{ steps.ui_sig.outputs.sig }}
-      - name: Build and run frontend, desktop and script suites
+      - name: Build and run frontend, desktop, landing and script suites
         run: |
           pnpm build
-          pnpm exec vp run --concurrency-limit 8 --filter @t3-factory/frontend --filter @t3-factory/desktop test
+          pnpm exec vp run --concurrency-limit 8 --filter @t3-factory/frontend --filter @t3-factory/desktop --filter @t3-factory/landing test
           pnpm test:scripts
 
   backend-tests:

@@ -60,7 +60,7 @@ and restricted OAuth credentials live outside project repositories.
   existing rows stay unchanged).
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created root Flow id. Migration `121` adds ordered Flow identities by actual document key for version-5 Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
+  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for version-5 Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
   receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import
@@ -180,6 +180,16 @@ issues. Storage failures are sanitized at this boundary. Validate untrusted inpu
 keep transports limited to translating requests and responses. Product routes are shared
 by host and approved clients, with explicit [host-only boundaries](desktop-and-clients.md#two-listeners-two-trust-domains).
 
+## Anonymous product analytics
+
+The backend validates each analytics event against a closed catalog before buffering it. The catalog accepts only the values declared for that event. The backend supplies the installation hash and build metadata itself. `app.started` records whether First-run setup is still pending and reports only the bucketed totals for Projects, active Flows and active Agents.
+
+Flow authoring events report the saved graph's structure, including whether it contains a Subflow block. Run Start reports the captured root Flow's structure. Run completion counts distinct executed Blocks across the root and all invocations, including activated Subflow placements and reached Finish blocks. Each invocation is part of the same Run. An import reports the definition kind once for a newly committed request, including when a Flow document creates multiple definitions.
+
+The backend creates its random installation identity in `FACTORY_HOME/telemetry-id` with owner-only permissions when analytics is available. The UUID stays on disk and only its SHA-256 hash is sent. A damaged or inaccessible identity disables delivery. Events are held in memory, and retries keep the same event UUID and timestamp so PostHog can deduplicate them. Delivery uses a bounded background queue and a one-second best-effort flush at shutdown.
+
+Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://t3factory.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. Factory disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
+
 ## Live delivery
 
 Run detail, sidebar navigation, shared T3 connection status, [theme colors](t3-integration.md#theme-colors),
@@ -293,7 +303,7 @@ public results; they never edit current data to fabricate an old contract. See t
 
 Settings and Studio open over the current Run or composer. Closing them returns to that
 screen with its draft intact; direct links fall back to `/runs/new` in a fresh session.
-Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`,
+Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`, `privacy`,
 `run-titles`, `run-images`, `appearance`, `keyboard` and `desktop`. A removed or unknown
 section path opens T3 connection; removed paths have no redirects.
 Studio destinations open at `/studio/flows`, `/studio/agents` and `/studio/triggers` with their nested editor routes.

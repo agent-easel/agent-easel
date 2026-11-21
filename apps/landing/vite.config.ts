@@ -13,9 +13,8 @@ const version =
     : "";
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Unexpected product version "${version}".`);
 
-// Canonical and social URLs must be absolute. The Pages workflow passes the site's base URL.
 const siteUrl = new URL(
-  process.env.FACTORY_SITE_URL?.trim() || "https://alimek.github.io/t3-factory/",
+  process.env.FACTORY_SITE_URL?.trim() || "https://t3factory.app/",
 ).href.replace(/\/?$/, "/");
 
 const placeholders: Record<string, string> = {
@@ -45,7 +44,6 @@ const sitePlaceholders = (): Plugin => ({
 });
 
 export default defineConfig({
-  // Relative asset URLs work both at a project Pages path and at a custom domain root.
   base: "./",
   plugins: [tailwindcss(), sitePlaceholders()],
 });

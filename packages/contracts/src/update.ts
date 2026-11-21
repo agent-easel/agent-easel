@@ -38,6 +38,11 @@ export type ServerUpdateAction = "check" | "download" | "install";
 
 /** Server update operations are answered by the server, not the Factory facade. */
 export const serverUpdateOperations = {
+  reportClientUpdate: operation<InstalledUpdateReceipt, null>()({
+    method: "POST",
+    path: "/api/client-update/installed",
+    body: "json",
+  }),
   getServerUpdate: operation<never, ServerUpdate>()({ method: "GET", path: "/api/server-update" }),
   checkServerUpdate: operation<never, ServerUpdate>()({
     method: "POST",
@@ -52,3 +57,27 @@ export const serverUpdateOperations = {
     path: "/api/server-update/install",
   }),
 };
+
+export interface InstalledUpdateReceipt {
+  readonly receiptId: string;
+  readonly fromVersion: string;
+  readonly toVersion: string;
+}
+
+export const releaseVersionPattern = /^\d{1,10}\.\d{1,10}\.\d{1,10}(?:-beta\.[1-9]\d{0,9})?$/;
+
+export function isInstalledUpdateReceipt(value: unknown): value is InstalledUpdateReceipt {
+  if (typeof value !== "object" || value === null || Object.keys(value).length !== 3) return false;
+  return (
+    "receiptId" in value &&
+    typeof value.receiptId === "string" &&
+    /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.receiptId) &&
+    "fromVersion" in value &&
+    typeof value.fromVersion === "string" &&
+    releaseVersionPattern.test(value.fromVersion) &&
+    "toVersion" in value &&
+    typeof value.toVersion === "string" &&
+    releaseVersionPattern.test(value.toVersion) &&
+    value.fromVersion !== value.toVersion
+  );
+}

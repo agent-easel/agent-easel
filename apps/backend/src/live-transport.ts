@@ -40,6 +40,7 @@ export async function startLiveTransport(live: LiveStreams) {
     serve(
       request: HttpServerRequest.HttpServerRequest,
       authenticate: Effect.Effect<Result<string | null>>,
+      connected: (clientId: string | null) => Effect.Effect<void>,
     ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
       return Effect.scoped(
         Effect.gen(function* () {
@@ -67,6 +68,7 @@ export async function startLiveTransport(live: LiveStreams) {
             const registered = yield* authenticate;
             if (!registered.ok) return resultResponse(registered);
           }
+          yield* connected(clientId);
           return yield* rpc.pipe(
             Effect.provideService(HttpServerRequest.HttpServerRequest, request),
           );

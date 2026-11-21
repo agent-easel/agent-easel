@@ -216,56 +216,96 @@ jobs:
           diff -u local.txt published.txt
           jq -r '"Published release: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
 
-  pages:
-    name: Deploy landing page
+  landing:
+    name: Deploy landing page to Vercel
     needs: [source, publish]
-    # The page links the Release's DMG, so it changes only after those assets are public.
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' &&
+      (needs.publish.result == 'success' ||
+      (github.event_name == 'push' && needs.publish.result == 'skipped' && needs.source.result == 'skipped'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      name: landing-production
+      url: https://t3factory.app/
     concurrency:
-      group: pages
-      cancel-in-progress: false
+      group: landing-production
+      queue: max
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
-      pages: write
-      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.source.outputs.sha }}
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Select a build with a public Release download
+        id: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+          PUBLISHED_TAG: ${{ needs.source.outputs.tag }}
+        run: |
+          if [[ -z "$PUBLISHED_TAG" ]]; then
+            before_version=$(git show "$BEFORE:package.json" | jq -er .version)
+            push_version=$(git show "$PUSH_SHA:package.json" | jq -er .version)
+            changes=$(git diff --name-only "$BEFORE" "$PUSH_SHA" -- apps/landing)
+            if [[ "$before_version" == "$push_version" && -z "$changes" ]]; then
+              exit 0
+            fi
+          fi
+
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
+          tag=$(jq -er '.tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' <<<"$release")
+          if [[ -n "$PUBLISHED_TAG" && "$PUBLISHED_TAG" != "$tag" ]]; then
+            echo "Skipping $PUBLISHED_TAG because $tag is now the latest Release."
+            exit 0
+          fi
+
+          version=${tag#v}
+          if [[ "$(jq -er .version package.json)" != "$version" ]]; then
+            if [[ -z "$PUBLISHED_TAG" ]]; then
+              echo "Landing changes will deploy after the Release for the current main version is published."
+              exit 0
+            fi
+            git checkout --detach "$tag"
+            git merge-base --is-ancestor HEAD origin/main
+            test "$(jq -er .version package.json)" = "$version"
+          fi
+
+          for name in "T3.Factory-$version-arm64.dmg" SHA256SUMS.txt; do
+            download="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
+            jq -e --arg url "$download" 'any(.assets[]; .state == "uploaded" and .browser_download_url == $url)' <<<"$release" > /dev/null
+            curl --fail --silent --show-error --head --location --retry 3 "$download" > /dev/null
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - if: steps.site.outputs.tag != ''
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: steps.site.outputs.tag != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: pnpm
-      - name: Check this is still the latest Release
-        # A re-run for an older Release must not replace the page of a newer one.
+      - name: Build and deploy the verified landing page
+        if: steps.site.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          RELEASE_TAG: ${{ steps.site.outputs.tag }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          : "${VERCEL_ORG_ID:?}" "${VERCEL_PROJECT_ID:?}" "${VERCEL_TOKEN:?}"
+          npx --yes vercel@66.6.0 pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx --yes vercel@66.6.0 build --prod --token "$VERCEL_TOKEN"
+          index=.vercel/output/static/index.html
+          grep -Fq 'rel="canonical" href="https://t3factory.app/"' "$index"
+          grep -Fq "/releases/download/$RELEASE_TAG/T3.Factory-${RELEASE_TAG#v}-arm64.dmg" "$index"
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          if [[ "$latest" != "$RELEASE_TAG" ]]; then
-            echo "::error::$RELEASE_TAG is not the latest Release ($latest); the page is not deployed."
-            exit 1
+          if [[ "$latest" == "$RELEASE_TAG" ]]; then
+            npx --yes vercel@66.6.0 deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
           fi
-      - id: pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - run: pnpm install --frozen-lockfile
-      - name: Build
-        env:
-          FACTORY_SITE_URL: ${{ steps.pages.outputs.base_url }}
-          RELEASE_VERSION: ${{ needs.source.outputs.version }}
-        run: |
-          pnpm --filter @t3-factory/landing build
-          grep -q "T3.Factory-$RELEASE_VERSION-arm64.dmg" apps/landing/dist/index.html
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: apps/landing/dist
-      - id: deploy
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

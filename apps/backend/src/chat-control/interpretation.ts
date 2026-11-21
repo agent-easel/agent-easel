@@ -1,3 +1,4 @@
+import type { Telemetry } from "../telemetry.ts";
 import { generateText, type JSONValue, type ModelMessage, type ToolResultPart } from "ai";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -102,6 +103,7 @@ export interface InterpreterSession {
   readonly sql: SqlClient.SqlClient;
   readonly applicationId: string;
   readonly generations: ConversationGenerations;
+  readonly telemetry: Telemetry;
   readonly model: ConversationalModelAccess;
   readonly tools: readonly ChatTool[];
   /** Whether this session still operates: Chat control On and the session not released. */
@@ -660,20 +662,35 @@ export const makeInterpreter = (session: InterpreterSession) =>
           notice === null ? text : `${CONTEXT_NOTICES[notice]}\n\n${text}`,
           deadline(state),
           state.configuration.revision,
-          generations.record(
-            invocation.conversation,
-            invocation.generation,
-            {
-              messageId: invocation.messageId,
-              authorId: invocation.requesterId,
-              input: invocation.text,
-              selectedReply:
-                invocation.replyTarget.kind === "selected" ? invocation.replyTarget.reply : null,
-              facts: retainedFacts(state.facts),
-              reply: text,
-            },
-            state.evicted > 0 ? history.turns[state.evicted - 1]!.turn : undefined,
-          ),
+          generations
+            .record(
+              invocation.conversation,
+              invocation.generation,
+              {
+                messageId: invocation.messageId,
+                authorId: invocation.requesterId,
+                input: invocation.text,
+                selectedReply:
+                  invocation.replyTarget.kind === "selected" ? invocation.replyTarget.reply : null,
+                facts: retainedFacts(state.facts),
+                reply: text,
+              },
+              state.evicted > 0 ? history.turns[state.evicted - 1]!.turn : undefined,
+            )
+            .pipe(
+              Effect.andThen(
+                state.facts.some(({ tool }) => tool === "find_runs" || tool === "read_run") &&
+                  !state.facts.some(({ tool }) => {
+                    const handler = registry.get(tool);
+                    return handler && isMutation(handler);
+                  })
+                  ? session.telemetry.record("chat_control.used", {
+                      platform: "discord",
+                      command: "status",
+                    })
+                  : Effect.void,
+              ),
+            ),
         );
         return stop ? stopped(stop) : settled;
       });

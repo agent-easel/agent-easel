@@ -15,6 +15,7 @@ import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts
 import type { LiveStreams } from "../../src/live-streams.ts";
 import type { ControlledGitHub, ControlledIssue, GitHubCall } from "./controlled-github.ts";
 import { START_INSPECTIONS } from "./controlled-t3.ts";
+import type { ServerOptions } from "../../src/server.ts";
 import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
@@ -41,8 +42,12 @@ export const movedRepository: GitHubRepository = {
  * The prepared Project and ready Flow, with the Project's folder naming `repository` on GitHub,
  * and the least a client sends to create a GitHub Issues Trigger for them.
  */
-export async function triggerWorld(c: TestContext, repository = atlasRepository) {
-  const fixture = await prepared(c);
+export async function triggerWorld(
+  c: TestContext,
+  repository = atlasRepository,
+  telemetry?: ServerOptions["telemetry"],
+) {
+  const fixture = await prepared(c, undefined, telemetry ? { telemetry } : undefined);
   return { ...fixture, triggerInput: watching(fixture, repository) };
 }
 

@@ -11,14 +11,17 @@ import { clearSnooze } from "./presentation.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
+type ArchiveTransition = "unchanged" | "settled" | "active" | "closing";
+
 /** An Archive of a Run already archived: no change, unless it is another request's Archive. */
 function alreadyArchived(sql: SqlClient.SqlClient, id: string, requestId: string | undefined) {
-  if (requestId === undefined) return Effect.succeed({ ok: true as const, value: false });
+  if (requestId === undefined)
+    return Effect.succeed({ ok: true as const, value: "unchanged" as const });
   return Effect.map(
     sql<{ archive_request_id: string | null }>`SELECT archive_request_id FROM runs WHERE id=${id}`,
-    ([run]): Result<boolean> =>
+    ([run]): Result<ArchiveTransition> =>
       run?.archive_request_id === requestId
-        ? { ok: true, value: false }
+        ? { ok: true, value: "unchanged" as const }
         : failure("conflict", "This Run was already archived elsewhere."),
   );
 }
@@ -28,8 +31,11 @@ export function openRunArchive(database: RunnerDatabase) {
    * owns the database. It closes the gate and advances the generation once. Answers whether the
    * Run changed. An attributed Archive (`requestId`) records its request in the same transaction;
    * a Run already archived is acknowledged only for that request and conflicts for any other. */
-  function archive(id: string, requestId?: string): Effect.Effect<Result<boolean>, unknown> {
-    return withLifecycle<boolean>(database, id, (sql, run) =>
+  function archive(
+    id: string,
+    requestId?: string,
+  ): Effect.Effect<Result<ArchiveTransition>, unknown> {
+    return withLifecycle<ArchiveTransition>(database, id, (sql, run) =>
       Effect.gen(function* () {
         if (run.archived_at) return yield* alreadyArchived(sql, id, requestId);
         if (!(yield* guardsHold(sql, database.owner.token, id, { owner: true })))
@@ -41,7 +47,10 @@ export function openRunArchive(database: RunnerDatabase) {
         yield* cancelWorkerTitleSync(sql, id);
         yield* clearSnooze(sql, id);
         yield* appendTimelineEvent(sql, { kind: "run-archived", runId: id, observedAt: time });
-        return { ok: true as const, value: true };
+        return {
+          ok: true as const,
+          value: run.settled_at ? "settled" : run.gate_open ? "active" : "closing",
+        };
       }),
     );
   }

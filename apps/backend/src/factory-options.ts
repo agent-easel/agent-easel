@@ -2,6 +2,7 @@ import type * as Clock from "effect/Clock";
 import type { GitAdapter } from "./adapters/git.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
 import type { T3Modules } from "./t3/modules.ts";
+import type { TelemetryOptions } from "./telemetry.ts";
 
 /** Everything a caller may choose when opening a Factory; defaults live where each is consumed. */
 export interface FactoryOptions {
@@ -16,6 +17,7 @@ export interface FactoryOptions {
   readonly connectionRetryMs?: number;
   /** The release this installation runs; source runs omit it. */
   readonly applicationVersion?: string;
+  readonly telemetry?: TelemetryOptions;
   /** Discord's REST API base for Chat control's Gateway connection; tests use a controlled Discord. */
   readonly discordApiUrl?: string;
 }

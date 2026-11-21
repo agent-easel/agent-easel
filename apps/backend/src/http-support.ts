@@ -223,4 +223,5 @@ export interface RouteTrust {
   /** Host setup that changes the host's T3, reporting or installation-wide settings; remote
    * clients get `host_only`. */
   readonly hostOnly?: true;
+  readonly desktopOnly?: true;
 }

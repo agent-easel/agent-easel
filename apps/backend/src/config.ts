@@ -21,6 +21,7 @@ export interface Configuration {
   readonly port: number;
   readonly allowedHosts?: readonly string[];
   readonly remoteAccess?: RemoteAccessConfiguration;
+  readonly telemetryEnabled: boolean;
 }
 
 export const defaultRemotePort = 4312;
@@ -92,6 +93,10 @@ async function savedConfiguration(home: string): Promise<SavedConfiguration> {
   } catch (error) {
     if (!hasErrorCode(error, "EEXIST")) throw error;
   }
+  return readSavedConfiguration(configPath);
+}
+
+async function readSavedConfiguration(configPath: string): Promise<SavedConfiguration> {
   const saved: unknown = JSON.parse(await readFile(configPath, "utf8"));
   if (typeof saved !== "object" || saved === null || !("host" in saved) || !("port" in saved)) {
     throw new Error("config.json must contain host and port.");
@@ -190,16 +195,20 @@ function remoteAccess(
   };
 }
 
-/** Persists only the host owner's remote-access choice; other saved settings are preserved. */
-export async function saveRemoteAccessEnabled(home: string, enabled: boolean): Promise<void> {
+export function configurationWriter(home: string) {
   const configPath = join(home, "config.json");
-  const saved = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
-  const current =
-    typeof saved.remoteAccess === "object" && saved.remoteAccess !== null ? saved.remoteAccess : {};
-  const next = { ...saved, remoteAccess: { ...current, enabled } };
   const temporary = `${configPath}.next`;
-  await writeFile(temporary, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
-  await rename(temporary, configPath);
+  let pending: Promise<unknown> = Promise.resolve();
+  return <A>(edit: (saved: Record<string, unknown>) => object, apply: () => A | Promise<A>) => {
+    const next = pending.then(async () => {
+      const saved = await readSavedConfiguration(configPath);
+      await writeFile(temporary, JSON.stringify(edit(saved), null, 2) + "\n", { mode: 0o600 });
+      await rename(temporary, configPath);
+      return apply();
+    });
+    pending = next.catch(() => undefined);
+    return next;
+  };
 }
 
 /** Environment binding overrides are process-local; config never contains OAuth secrets. */
@@ -210,9 +219,13 @@ export async function loadConfiguration(
   const credentialsDirectory = await privateCredentialsDirectory(home);
   const saved = await savedConfiguration(home);
   const { host, port } = binding(env, saved);
+  const telemetryEnabled = "telemetryEnabled" in saved ? saved.telemetryEnabled : true;
+  if (typeof telemetryEnabled !== "boolean")
+    throw new Error("config.json telemetryEnabled must be a boolean.");
   return {
     allowedHosts: allowedHosts(env, saved),
     remoteAccess: remoteAccess(env, saved),
+    telemetryEnabled,
     home: resolve(home),
     databasePath: join(home, "factory.sqlite"),
     credentialsDirectory,

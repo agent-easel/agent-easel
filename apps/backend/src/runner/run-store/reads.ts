@@ -49,6 +49,24 @@ export function openRunReads(database: RunnerDatabase) {
       ),
     definitionsAtBlock: (run: Parameters<typeof definitionsAtBlock>[1], blockId: string) =>
       transaction((sql) => definitionsAtBlock(sql, run, blockId)),
+    executedBlockCount: (runId: string) =>
+      transaction((sql) =>
+        Effect.map(
+          sql<{ count: number }>`SELECT COUNT(*) AS count FROM (
+            SELECT block_id FROM run_activations WHERE run_id=${runId}
+            UNION SELECT block_id FROM human_occurrences WHERE run_id=${runId}
+            UNION SELECT block_id FROM wait_arrivals WHERE run_id=${runId}
+            UNION SELECT block_id FROM continuation_visits WHERE run_id=${runId}
+            UNION SELECT block_id FROM condition_counters WHERE run_id=${runId} AND arrivals>0
+            UNION SELECT i.placement_block_id FROM subflow_invocations i WHERE i.run_id=${runId}
+              AND EXISTS(SELECT 1 FROM run_blocks b WHERE b.run_id=i.run_id AND b.invocation_id=i.id)
+            UNION SELECT b.block_id FROM subflow_results r JOIN run_blocks b
+              ON b.invocation_id=r.invocation_id AND b.template_block_id IS NULL
+              WHERE b.run_id=${runId}
+          )`,
+          ([row]) => row!.count,
+        ),
+      ),
     acceptedStart: (requestId: string) =>
       run(
         Effect.gen(function* () {

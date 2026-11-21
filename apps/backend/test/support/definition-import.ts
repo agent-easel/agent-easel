@@ -9,6 +9,7 @@ import type {
   RawBody,
 } from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
+import type { FactoryOptions } from "../../src/index.ts";
 import historicalFlowImport from "../fixtures/historical-flow-import-receipts.json" with { type: "json" };
 import { ControlledT3 } from "./controlled-t3.ts";
 import { assertOk, openFactoryWithApprovedT3, sampleAgentInput } from "./domain-setup.ts";
@@ -256,7 +257,11 @@ export async function factoryWithVersion1Receipt(context: TestContext) {
  * A Factory that cannot insert rows into `table`, so a commit fails after it created earlier
  * definitions in the same transaction.
  */
-export async function factoryFailingInserts(context: TestContext, table: string) {
+export async function factoryFailingInserts(
+  context: TestContext,
+  table: string,
+  options: Pick<FactoryOptions, "telemetry"> = {},
+) {
   const harness = await factoryHarness(context);
   const first = await harness.open({ t3: new ControlledT3() });
   await first.close();
@@ -265,7 +270,7 @@ export async function factoryFailingInserts(context: TestContext, table: string)
     `CREATE TRIGGER failing_insert BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'storage failed'); END`,
   );
   database.close();
-  return harness.open({ t3: new ControlledT3() });
+  return harness.open({ t3: new ControlledT3(), ...options });
 }
 
 export function bundledFlow(

@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+
+await test("Git deployment is limited to main and ingest routes use PostHog EU", () => {
+  // Arrange
+  const file = new URL("../vercel.json", import.meta.url);
+
+  // Act
+  const config = JSON.parse(readFileSync(file, "utf8"));
+
+  // Assert
+  assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false, "**": false });
+  assert.deepEqual(config.rewrites, [
+    {
+      source: "/ingest/static/:path*",
+      destination: "https://eu-assets.i.posthog.com/static/:path*",
+    },
+    { source: "/ingest/batch/", destination: "https://eu.i.posthog.com/batch/" },
+    { source: "/ingest/:path*", destination: "https://eu.i.posthog.com/:path*" },
+  ]);
+});
+
+function buildLanding(context, env) {
+  const output = mkdtempSync(join(tmpdir(), "factory-landing-"));
+  context.after(() => rmSync(output, { recursive: true, force: true }));
+  execFileSync("pnpm", ["build", "--outDir", output, "--emptyOutDir"], {
+    cwd: new URL("../", import.meta.url),
+    env: { ...process.env, ...env },
+  });
+  return output;
+}
+
+await test("the production canonical URL and root Release download appear in built assets", (context) => {
+  // Arrange
+  const { version } = JSON.parse(
+    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+  );
+
+  // Act
+  const output = buildLanding(context, { FACTORY_SITE_URL: "https://t3factory.app/" });
+
+  // Assert
+  const html = readFileSync(join(output, "index.html"), "utf8");
+  assert.ok(html.includes('<link rel="canonical" href="https://t3factory.app/"'));
+  assert.ok(html.includes('<meta property="og:url" content="https://t3factory.app/"'));
+  assert.ok(
+    html.includes('<meta property="og:image" content="https://t3factory.app/og-image.png"'),
+  );
+  assert.ok(
+    html.includes('<meta name="twitter:image" content="https://t3factory.app/og-image.png"'),
+  );
+  assert.ok(html.includes(`/releases/download/v${version}/T3.Factory-${version}-arm64.dmg`));
+  assert.ok(
+    readFileSync(join(output, "robots.txt"), "utf8").includes(
+      "Sitemap: https://t3factory.app/sitemap.xml",
+    ),
+  );
+  assert.ok(
+    readFileSync(join(output, "sitemap.xml"), "utf8").includes("<loc>https://t3factory.app/</loc>"),
+  );
+});
+
+await test("a build without a site URL uses the production domain", (context) => {
+  // Arrange
+  const env = { FACTORY_SITE_URL: "" };
+
+  // Act
+  const output = buildLanding(context, env);
+
+  // Assert
+  assert.ok(
+    readFileSync(join(output, "index.html"), "utf8").includes(
+      '<link rel="canonical" href="https://t3factory.app/"',
+    ),
+  );
+});

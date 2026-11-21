@@ -1,3 +1,4 @@
+import type { Telemetry } from "../telemetry.ts";
 import * as Effect from "effect/Effect";
 import { makeOperationLanes } from "../operation-lanes.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
@@ -51,6 +52,7 @@ type TriggerStart = (
 ) => Effect.Effect<Result<RunDetail>, unknown>;
 
 export interface TriggerCheckDeps {
+  readonly telemetry: Telemetry;
   readonly sql: SqlClient.SqlClient;
   readonly github: GitHubAdapter;
   readonly getFlow: EffectOperations<FactoryOperations>["getFlow"];
@@ -577,6 +579,10 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
               return { stored, recorded };
             }),
           );
+          yield* deps.telemetry.record("trigger.fired", {
+            kind: trigger.kind,
+            outcome: outcome.started > 0 ? "started_run" : outcome.problem ? "failed" : "skipped",
+          });
           const checked = current.stored?.revision === trigger.revision ? current.stored : trigger;
           return {
             ok: true as const,

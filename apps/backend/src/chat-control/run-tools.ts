@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { attentionPresentation, type Result, type RunDetail } from "@t3-factory/contracts";
 import { effectiveExits } from "@t3-factory/domain-validation";
-import type { ChatTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";
+import type { ReadTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";
 import { conversationHandles, type ConversationHandles } from "./conversation-handles.ts";
 import { conversationGenerations } from "./conversations.ts";
 import {
@@ -78,7 +78,7 @@ export const runReference = (run: Pick<RunIdentity, "id" | "number">) =>
 
 const unavailable = failed("unavailable", "Factory could not read this Run right now.");
 
-const findRuns = (search: RunSearch, handles: ConversationHandles): ChatTool => {
+const findRuns = (search: RunSearch, handles: ConversationHandles): ReadTool => {
   const searchPage = (
     scope: ChatToolScope,
     query: RunQuery,
@@ -372,7 +372,7 @@ const readRun = (
   search: RunSearch,
   handles: ConversationHandles,
   operations: RunReadOperations,
-): ChatTool => {
+): ReadTool => {
   /** The permitted Run and its current detail, freshly read and authorized. */
   const permittedRun = (scope: ChatToolScope, reference: { id: string } | { number: number }) =>
     Effect.gen(function* () {
@@ -499,7 +499,7 @@ const readRun = (
 export const runTools = (
   sql: SqlClient.SqlClient,
   operations: RunReadOperations,
-): readonly ChatTool[] => {
+): readonly ReadTool[] => {
   const search = runSearch(sql);
   const handles = conversationHandles(sql, conversationGenerations(sql));
   return [findRuns(search, handles), readRun(search, handles, operations)];

@@ -68,7 +68,12 @@ const children = new Set();
 function launch(userData, debugPort, env = {}) {
   const log = openSync(join(work, `app-${debugPort}.log`), "a");
   const child = spawn(executable, ["--use-mock-keychain", `--remote-debugging-port=${debugPort}`], {
-    env: { ...clean, FACTORY_DESKTOP_USER_DATA: userData, ...env },
+    env: {
+      ...clean,
+      FACTORY_DESKTOP_USER_DATA: userData,
+      ...env,
+      FACTORY_TELEMETRY_ENABLED: "false",
+    },
     stdio: ["ignore", log, log],
   });
   children.add(child);

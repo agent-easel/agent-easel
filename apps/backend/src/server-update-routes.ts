@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
 import {
   serverUpdateOperations,
+  isInstalledUpdateReceipt,
   type Result,
   type ServerUpdate,
   type ServerUpdateAction,
 } from "@t3-factory/contracts";
-import { resultResponse } from "./http-support.ts";
+import { resultResponse, standardBody } from "./http-support.ts";
 import type { RouteEntries } from "./route-table.ts";
 import type { Factory } from "./open-factory.ts";
 import { failure } from "./result.ts";
@@ -74,6 +75,17 @@ export function serverUpdateRoutes(
       ),
   });
   return {
+    reportClientUpdate: {
+      surface: "remote",
+      desktopOnly: true,
+      body: standardBody,
+      handle: ({ input }) =>
+        isInstalledUpdateReceipt(input)
+          ? Effect.promise(async () => resultResponse(await factory.recordClientUpdate(input)))
+          : Effect.succeed(
+              resultResponse(failure("validation", "Invalid installed update receipt.")),
+            ),
+    },
     getServerUpdate: {
       handle: () => Effect.map(Effect.promise(read), (result) => resultResponse(result)),
     },
