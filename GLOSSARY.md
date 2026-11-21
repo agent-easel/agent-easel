@@ -408,10 +408,11 @@ started any other way have none, and reading or acting on a Run never adds one. 
 _Avoid_: Run owner; assigning an originating thread to a Run read or acted on from chat; Run origin, which records a Trigger Start.
 
 **Status card**:
-The one Discord message Factory maintains in a chat-started Run's originating thread and edits from the
-Run's committed facts: identity, state, Flow, active Blocks, pending Waits, Needs input and Problems.
-It is an accepted chat Start's only message, and Block activity and lifecycle changes edit it rather than
-posting; it never carries results, report bodies or prompts. See
+The one maintained Discord message Factory posts in a chat-started Run's originating thread.
+It shows the Run's identity, lifecycle and Flow, then the captured Flow's Blocks in graph order
+with their current or final state on each row. Large Flows summarize not-started Blocks first
+and then finished Blocks to fit one message. Factory edits the card as Blocks and the Run change.
+The card mentions nobody and omits results, report bodies and prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
