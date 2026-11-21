@@ -43,31 +43,48 @@ function lineAndColumn(lineStarts, offset) {
   return { line: low, character: offset - lineStarts[low] };
 }
 
-function inventory(path, content) {
-  const { comments } = parseSync(path, content);
+class CommentParseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "CommentParseError";
+  }
+}
+
+export function inventory(path, content) {
+  const { comments, errors } = parseSync(path, content);
   const lineStarts = lineStartsOf(content);
-  return comments.map(({ start, end }) => {
-    const text = content.slice(start, end);
-    const first = lineAndColumn(lineStarts, start);
-    const last = lineAndColumn(lineStarts, end);
-    const before = content.slice(lineStarts[first.line], start);
-    const after = content.slice(end, lineStarts[last.line + 1] ?? content.length);
-    const testLabel =
-      testFile.test(path) &&
-      before.trim() === "" &&
-      /^\/\/ (Arrange|Act|Assert)$/.test(text.trimEnd());
-    const license = text.startsWith("/*!") || /^\s*\*\s+@license\b/m.test(text);
-    return {
-      path,
-      line: first.line + 1,
-      column: first.character + 1,
-      start,
-      end,
-      text,
-      standalone: before.trim() === "" && after.trim() === "",
-      exception: testLabel ? "test label" : license ? "license" : null,
-    };
-  });
+  if (errors.length > 0) {
+    const first = errors[0];
+    const offset = first.labels?.[0]?.start ?? 0;
+    const position = lineAndColumn(lineStarts, offset);
+    throw new CommentParseError(
+      `${path}:${position.line + 1}:${position.character + 1} [parse-error] ${first.message}`,
+    );
+  }
+  return comments
+    .filter(({ start, end }) => !content.slice(start, end).startsWith("#!"))
+    .map(({ start, end }) => {
+      const text = content.slice(start, end);
+      const first = lineAndColumn(lineStarts, start);
+      const last = lineAndColumn(lineStarts, end);
+      const before = content.slice(lineStarts[first.line], start);
+      const after = content.slice(end, lineStarts[last.line + 1] ?? content.length);
+      const testLabel =
+        testFile.test(path) &&
+        before.trim() === "" &&
+        /^\/\/ (Arrange|Act|Assert)$/.test(text.trimEnd());
+      const license = text.startsWith("/*!") || /^\s*\*\s+@license\b/m.test(text);
+      return {
+        path,
+        line: first.line + 1,
+        column: first.character + 1,
+        start,
+        end,
+        text,
+        standalone: before.trim() === "" && after.trim() === "",
+        exception: testLabel ? "test label" : license ? "license" : null,
+      };
+    });
 }
 
 function additions(previous, current) {
@@ -98,10 +115,32 @@ function showInventory(paths) {
   const deleted = new Set(files("ls-files", "--deleted", "-z"));
   for (const path of new Set(selected)) {
     if (!deleted.has(path)) {
-      for (const comment of inventory(path, read(path))) {
-        console.log(JSON.stringify(comment));
+      try {
+        for (const comment of inventory(path, read(path))) {
+          console.log(JSON.stringify(comment));
+        }
+      } catch (error) {
+        if (!(error instanceof CommentParseError)) throw error;
+        console.error(error.message);
+        process.exitCode = 1;
       }
     }
+  }
+}
+
+function checkFile(base, path, existed) {
+  try {
+    const previous = existed ? inventory(path, git("show", `${base}:${path}`)) : [];
+    for (const { line, column } of additions(previous, inventory(path, read(path)))) {
+      console.error(
+        `${path}:${line}:${column} [no-new-comments] Express intent in code or record the decision in an ADR.`,
+      );
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    if (!(error instanceof CommentParseError)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
   }
 }
 
@@ -128,30 +167,26 @@ function check(base) {
   }
 
   for (const [path, existed] of tracked) {
-    const previous = existed ? inventory(path, git("show", `${base}:${path}`)) : [];
-    for (const { line, column } of additions(previous, inventory(path, read(path)))) {
-      console.error(
-        `${path}:${line}:${column} [no-new-comments] Express intent in code or record the decision in an ADR.`,
-      );
-      process.exitCode = 1;
-    }
+    checkFile(base, path, existed);
   }
 }
 
-const [mode, ...args] = process.argv.slice(2);
-if (mode === "--inventory") {
-  showInventory(
-    args
-      .map((path) => path.split(sep).join("/").replace(/^\.\//, "").replace(/\/$/, ""))
-      .filter((path) => path !== "." && path !== ""),
-  );
-} else if (mode === undefined || (mode === "--base" && args.length === 1)) {
-  const ref = args[0] ?? process.env.FACTORY_COMMENT_BASE;
-  const base = ref
-    ? git("rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`).trim()
-    : git("merge-base", "HEAD", "origin/main").trim();
-  check(base);
-} else {
-  console.error("Usage: node scripts/check-comments.mjs [--base <ref> | --inventory [path ...]]");
-  process.exitCode = 2;
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [mode, ...args] = process.argv.slice(2);
+  if (mode === "--inventory") {
+    showInventory(
+      args
+        .map((path) => path.split(sep).join("/").replace(/^\.\//, "").replace(/\/$/, ""))
+        .filter((path) => path !== "." && path !== ""),
+    );
+  } else if (mode === undefined || (mode === "--base" && args.length === 1)) {
+    const ref = args[0] ?? process.env.FACTORY_COMMENT_BASE;
+    const base = ref
+      ? git("rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`).trim()
+      : git("merge-base", "HEAD", "origin/main").trim();
+    check(base);
+  } else {
+    console.error("Usage: node scripts/check-comments.mjs [--base <ref> | --inventory [path ...]]");
+    process.exitCode = 2;
+  }
 }
