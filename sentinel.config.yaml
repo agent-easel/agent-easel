@@ -4,12 +4,10 @@ version: 1.0
 issues: false
 
 user_settings:
+  # Wait until a draft PR is marked ready for review (matches docs/quality-gates.md).
+  review_drafts: false
   min_severity: minor
+  # Report blockers, majors, minors corroborated by two reviewers or a repo rule,
+  # and nits only when they cite a repo rule.
+  report_floor: corroborated-minor
   skeptic_pass: true
-
-  # One deeper review per push instead of findings trickling in over several pushes.
-  max_rounds: 2
-  # The deployment plans 600s per review: max_rounds × (timeout_ms + closing_ms) must fit.
-  timeout_ms: 240000
-  closing_ms: 60000
-  default_thinking_level: medium

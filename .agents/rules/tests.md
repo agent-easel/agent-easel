@@ -1,5 +1,5 @@
 ---
-globs: ['apps/*/test/**', 'tests/*.e2e.ts']
+globs: ['apps/*/test/**', 'scripts/**/*.test.*', 'tests/*.e2e.ts']
 ---
 
 Each test names a business expectation and exercises one behavior with explicit Arrange, Act and Assert blocks and observable assertions.
