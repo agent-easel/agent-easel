@@ -87,6 +87,29 @@ function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedH
   };
 }
 
+async function antigravityConfigDirectory(stateDirectory: string, instanceId: string) {
+  const state = await realpath(stateDirectory);
+  const key = createHash("sha256").update(instanceId).digest("hex");
+  const profile = join(state, "providers", "antigravity", key);
+  const runtime = await lstat(join(profile, "antigravity-acp")).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw Error(
+        "Install and sign in to Antigravity in T3 Code → Settings → Providers, then check again.",
+      );
+    }
+    throw error;
+  });
+  if (!runtime.isDirectory() || (await realpath(profile)) !== profile)
+    throw Error("The T3 Antigravity profile must be a local directory.");
+  const directory = join(profile, "config");
+  const config = await lstat(directory).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (config && !config.isDirectory()) throw Error("The Antigravity config must be a directory.");
+  return directory;
+}
+
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 
@@ -163,6 +186,7 @@ export async function reportingDriversOffInT3(stateDirectory: string): Promise<s
 }
 
 const targetFor = Effect.fn(function* (
+  stateDirectory: string,
   id: string,
   raw: unknown,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation, never> {
@@ -190,11 +214,29 @@ const targetFor = Effect.fn(function* (
     launchSkill: null,
     runtimeEvidence: "UNVERIFIED" as const,
   };
+  const targetAt = (directory: string, message: string) => {
+    const path = join(directory, profile.config.file);
+    return withReportingInstallationActions({
+      ...base,
+      id: createHash("sha256").update(path).digest("hex"),
+      path,
+      skillsPath: profile.skillsFolder(directory),
+      status: "not-installed",
+      message,
+    });
+  };
   return yield* Effect.gen(function* (): Generator<
     Effect.Effect<unknown, unknown>,
     ReportingInstallation,
     never
   > {
+    if (profile.home.kind === "antigravity-profile") {
+      const directory = yield* boundary(() => antigravityConfigDirectory(stateDirectory, id));
+      return targetAt(
+        directory,
+        "Installs in this provider's T3 profile. T3 disables its built-in text generation for Antigravity profiles with user MCP servers.",
+      );
+    }
     if (profile.home.kind === "fixed") {
       const directory = join(homedir(), profile.home.directory);
       const resolved = yield* boundary(() => realpath(directory)).pipe(
@@ -204,31 +246,18 @@ const targetFor = Effect.fn(function* (
             : Effect.fail(error),
         ),
       );
-      const path = join(resolved, profile.config.file);
-      return withReportingInstallationActions({
-        ...base,
-        id: createHash("sha256").update(path).digest("hex"),
-        path,
-        skillsPath: profile.skillsFolder(resolved),
-        status: "not-installed",
-        message: profile.home.message,
-      });
+      return targetAt(resolved, profile.home.message);
     }
     const resolved = resolveReportingHome(instance, profile.home);
     const directory = yield* boundary(() => realpath(resolved.directory));
     if (!(yield* boundary(() => stat(directory))).isDirectory())
       throw Error("Harness home is not a directory.");
-    const path = join(directory, profile.config.file);
-    return withReportingInstallationActions({
-      ...base,
-      id: createHash("sha256").update(path).digest("hex"),
-      path,
-      skillsPath: profile.skillsFolder(directory),
-      status: "not-installed",
-      message: resolved.assumedDefault
+    return targetAt(
+      directory,
+      resolved.assumedDefault
         ? "Using the standard home for this OS user. If T3 inherits a custom configuration directory at launch, verify that directory manually before installing."
         : "Install once for all projects and Agents using this home.",
-    });
+    );
   }).pipe(
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);
@@ -309,7 +338,7 @@ export const discoverReporting = Effect.fn(function* (
     const disabled = disabledInstances(settings);
     const targets = yield* Effect.forEach(
       Object.entries(record(settings.providerInstances)).filter(([id]) => !disabled.has(id)),
-      ([id, value]) => targetFor(id, value),
+      ([id, value]) => targetFor(stateDirectory, id, value),
       { concurrency: "unbounded" },
     );
     const grouped = new Map<string, ReportingInstallation>();

@@ -33,10 +33,6 @@ function harnessProfile(target: ReportingInstallation): HarnessProfile {
 const harnessSkillPath = (profile: HarnessProfile, configPath: string, skill: string) =>
   join(profile.skillsFolder(dirname(configPath)), skill, "SKILL.md");
 
-const sameKeys = (saved: Record<string, unknown>, entry: Record<string, string>) =>
-  Object.keys(saved).length === Object.keys(entry).length &&
-  Object.entries(entry).every(([key, value]) => key === "url" || saved[key] === value);
-
 const tomlEntry = (url: string) =>
   `\n[mcp_servers.factory-runtime]\nurl = ${JSON.stringify(url)}\n`;
 
@@ -205,17 +201,23 @@ function configChange(profile: HarnessProfile, before: string, url: string, repa
   const existing = record(config[toml ? "mcp_servers" : "mcpServers"] ?? {})["factory-runtime"];
   if (existing === undefined) return registered(profile, before, config, url);
   const saved = record(existing);
-  const entry = profile.entry(url);
-  if (!sameKeys(saved, entry) || typeof saved.url !== "string")
+  const urlKey = profile.config.urlKey ?? "url";
+  const savedUrl = saved[urlKey];
+  const entry = profile.entry(typeof savedUrl === "string" ? savedUrl : url);
+  if (
+    typeof savedUrl !== "string" ||
+    Object.keys(saved).length !== Object.keys(entry).length ||
+    !Object.entries(entry).every(([key, value]) => saved[key] === value)
+  )
     throw Error(
       "Conflicting factory-runtime MCP entry. Remove it from this file and install again; Factory does not overwrite another definition.",
     );
-  if (saved.url === url) return before;
+  if (savedUrl === url) return before;
   if (!repair)
     throw new RepairableInstallationError(
       "Factory MCP is registered for another backend address. Repair the installation.",
     );
-  return registered(profile, before, config, url, saved.url);
+  return registered(profile, before, config, url, savedUrl);
 }
 
 const openReportingInstallation = Effect.fn(function* (
