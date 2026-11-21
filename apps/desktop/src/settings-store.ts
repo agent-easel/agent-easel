@@ -5,7 +5,7 @@ import type {
   AppearancePreference,
   DesktopAlertSettings,
 } from "@t3-factory/contracts/desktop-bridge";
-import { isWindowBounds, type WindowBounds } from "./window-bounds.ts";
+import { parseWindowBounds, type WindowBounds } from "./window-bounds.ts";
 
 /** How this client trusts its server: a pinned Factory authority, or the system's trust store. */
 export type ServerTrust =
@@ -93,7 +93,7 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
     notifications: value.notifications !== false,
     dockBadge: value.dockBadge !== false,
     showRunDetails: value.showRunDetails === true,
-    windowBounds: isWindowBounds(value.windowBounds) ? value.windowBounds : null,
+    windowBounds: parseWindowBounds(value.windowBounds),
   };
 }
 

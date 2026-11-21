@@ -5,17 +5,14 @@ export interface WindowBounds {
   readonly height: number;
 }
 
-export function isWindowBounds(value: unknown): value is WindowBounds {
-  if (typeof value !== "object" || value === null) return false;
-  const bounds = value as Record<string, unknown>;
-  return (
-    Number.isInteger(bounds.x) &&
-    Number.isInteger(bounds.y) &&
-    Number.isInteger(bounds.width) &&
-    Number.isInteger(bounds.height) &&
-    (bounds.width as number) > 0 &&
-    (bounds.height as number) > 0
-  );
+const isInteger = (value: unknown): value is number => Number.isInteger(value);
+
+export function parseWindowBounds(value: unknown): WindowBounds | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  if (!isInteger(x) || !isInteger(y) || !isInteger(width) || !isInteger(height)) return null;
+  if (width <= 0 || height <= 0) return null;
+  return { x, y, width, height };
 }
 
 const overlaps = (a: WindowBounds, b: WindowBounds) =>

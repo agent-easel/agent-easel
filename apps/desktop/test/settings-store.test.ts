@@ -91,3 +91,21 @@ it("the window size and position the user left are restored when the installatio
   // Assert
   expect(reopened.get().windowBounds).toStrictEqual({ x: 120, y: 80, width: 1111, height: 777 });
 });
+
+it("a stored window position keeps only its size and position, never other window options", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  await writeFile(
+    join(directory, "desktop-settings.json"),
+    JSON.stringify({
+      version: 1,
+      windowBounds: { x: 10, y: 20, width: 1000, height: 700, webPreferences: { sandbox: false } },
+    }),
+  );
+
+  // Act
+  const store = await SettingsStore.open(directory);
+
+  // Assert
+  expect(store.get().windowBounds).toStrictEqual({ x: 10, y: 20, width: 1000, height: 700 });
+});

@@ -54,7 +54,7 @@ import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
-import { restorableBounds } from "./window-bounds.ts";
+import { restorableBounds, type WindowBounds } from "./window-bounds.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
 if (process.env.FACTORY_DESKTOP_USER_DATA)
@@ -89,6 +89,7 @@ let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
+let windowBounds: WindowBounds | null = null;
 /** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
 let routeReceiver: WebContents | null = null;
 let pendingRoute: DesktopRoute | null = null;
@@ -277,7 +278,7 @@ function openWindow() {
     return;
   }
   const saved = restorableBounds(
-    store.get().windowBounds,
+    windowBounds,
     screen.getAllDisplays().map((display) => display.workArea),
   );
   const created = new BrowserWindow({
@@ -314,14 +315,13 @@ function openWindow() {
   created.webContents.on("did-navigate", () => {
     routeReceiver = null;
   });
-  const rememberBounds = () =>
-    void store.update({ windowBounds: created.getNormalBounds() }).catch(() => undefined);
+  const rememberBounds = () => void saveWindowBounds();
   created.on("resized", rememberBounds);
   created.on("moved", rememberBounds);
   created.on("close", () => {
     const url = created.webContents.getURL();
     if (url.startsWith(`${appOrigin}/`)) lastView = url;
-    rememberBounds();
+    if (!quitting) rememberBounds();
   });
   created.on("minimize", broadcast);
   created.on("restore", broadcast);
@@ -334,6 +334,11 @@ function openWindow() {
   });
   window = created;
   void created.loadURL(lastView);
+}
+
+function saveWindowBounds(): Promise<unknown> {
+  if (window) windowBounds = window.getNormalBounds();
+  return store.update({ windowBounds }).catch(() => undefined);
 }
 
 function trayImage() {
@@ -492,6 +497,7 @@ async function installUpdate(): Promise<DesktopResult> {
     await backend.stop();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
+    await saveWindowBounds();
     quitting = true;
     updates.install();
     return { ok: true };
@@ -688,12 +694,13 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", (event) => {
     if (quitting) return;
     event.preventDefault();
-    const finish = () => {
-      stopAttention();
-      approvedClient.close();
-      quitting = true;
-      app.quit();
-    };
+    const finish = () =>
+      void saveWindowBounds().then(() => {
+        stopAttention();
+        approvedClient.close();
+        quitting = true;
+        app.quit();
+      });
     // Cancel keeps Factory running; a failed orderly stop still exits, which releases the
     // OS lock with the process, rather than leaving a half-quit application.
     void stopBackendFor("quit").then((stopped) => stopped && finish(), finish);
@@ -713,6 +720,7 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
+  windowBounds = store.get().windowBounds;
   applyNativeAppearance(store.get().appearance);
   nativeTheme.on("updated", updateWindowBackground);
   // A newly issued credential replaces the attention subscription at once.
@@ -753,6 +761,7 @@ async function start() {
     void backend
       .stop()
       .catch(() => undefined)
+      .then(saveWindowBounds)
       .finally(() => {
         stopAttention();
         approvedClient.close();
