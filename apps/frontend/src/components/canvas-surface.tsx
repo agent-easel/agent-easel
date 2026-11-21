@@ -7,7 +7,9 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type PointerEvent,
   type ReactNode,
@@ -22,6 +24,7 @@ import {
   mergeGraphBounds,
   type GraphBounds,
 } from "../canvas-fit.ts";
+import { drawWindow, reaches, shownRect, windowFits, type Rect } from "../canvas-culling.ts";
 import { clampGraphPosition, clientToGraphPoint, type CanvasView } from "../canvas-viewport.ts";
 import { createCanvasGeometry } from "../flow-geometry.ts";
 import {
@@ -543,6 +546,7 @@ type CanvasSurfaceProps = {
   flowInput: CanvasFlowInputContent;
   finish?: CanvasFinishContent;
   block: (block: CanvasBlock) => CanvasBlockContent;
+  blockFooters?: (block: CanvasBlock) => number;
   wires: WirePresentation;
   /** Space floating badges cover at the top; fit frames the graph below them. */
   covered: { readonly top: number };
@@ -592,36 +596,53 @@ function useSurfaceGraph({
   flowInput,
   finish,
   block: blockContent,
+  blockFooters,
   wires,
   emptyGraphSize,
   arrangement,
   gesture = null,
 }: CanvasSurfaceProps) {
-  // Block content does not depend on positions, so the arranged and gesture graphs reuse it.
-  const source = canvasGraph(sourceGraph, agents);
-  const contents = new Map(source.blocks.map((item) => [item.id, blockContent(item)]));
-  const content = (item: CanvasBlock) => contents.get(item.id)!;
-  const facts = {
-    prompt: flowInput.prompt.kind,
-    flowInputStatus: flowInput.status !== undefined,
-    footerCount: (item: CanvasBlock) => content(item).footers.length,
-    reservedFooterCount: reservedFooters,
-    emptyGraphSize,
-    finish: finish !== undefined,
-  };
+  const source = useMemo(() => canvasGraph(sourceGraph, agents), [sourceGraph, agents]);
+  const promptKind = flowInput.prompt.kind;
+  const hasFlowInputStatus = flowInput.status !== undefined;
+  const hasFinish = finish !== undefined;
+  const facts = useMemo(
+    () => ({
+      prompt: promptKind,
+      flowInputStatus: hasFlowInputStatus,
+      ...(blockFooters ? { footerCount: blockFooters } : {}),
+      reservedFooterCount: reservedFooters,
+      emptyGraphSize,
+      finish: hasFinish,
+    }),
+    [promptKind, hasFlowInputStatus, blockFooters, reservedFooters, emptyGraphSize, hasFinish],
+  );
   const layout = useFlowLayoutSession({
     scope,
     graph: sourceGraph,
     agents,
-    dimensions: createFlowLayoutDimensions(source, dimensions, facts, wires.kind === "curved"),
+    getDimensions: () =>
+      createFlowLayoutDimensions(source, dimensions, facts, wires.kind === "curved"),
     authoring: arrangement && {
       busy: arrangement.busy,
       savedGraph: arrangement.saved,
       change: arrangement.commit,
     },
   });
-  const arranged = canvasGraph(layout.graph, agents);
-  const shown = gestureGraph(arranged, gesture);
+  const arranged = useMemo(
+    () => (layout.graph === sourceGraph ? source : canvasGraph(layout.graph, agents)),
+    [layout.graph, sourceGraph, source, agents],
+  );
+  const shown = useMemo(() => gestureGraph(arranged, gesture), [arranged, gesture]);
+  const geometry = useMemo(
+    () => createCanvasGeometry(arranged, dimensions, facts),
+    [arranged, dimensions, facts],
+  );
+  const drawn = useMemo(
+    () =>
+      shown.graph === arranged ? geometry : createCanvasGeometry(shown.graph, dimensions, facts),
+    [shown.graph, arranged, geometry, dimensions, facts],
+  );
   const gesturing = gesture !== null;
   const { cancel, pending: arranging } = layout;
   useLayoutEffect(() => {
@@ -633,12 +654,12 @@ function useSurfaceGraph({
   }, [arranging, onArranging]);
   return {
     layout,
-    content,
+    content: blockContent,
     arranged,
     /** Fit, focus and the arrangement use the graph without the gesture. */
-    geometry: createCanvasGeometry(arranged, dimensions, facts),
+    geometry,
     graph: shown.graph,
-    drawn: createCanvasGeometry(shown.graph, dimensions, facts),
+    drawn,
     pending: shown.pending,
     /** Arranged routes are drawn only while no gesture changes the graph. */
     routes: gesture?.kind === "move" || shown.pending ? null : layout.wireRoutes,
@@ -647,14 +668,57 @@ function useSurfaceGraph({
 
 type SurfaceGraph = ReturnType<typeof useSurfaceGraph>;
 
-/**
- * The transformed layer: wires, the connection being drawn, adapter content and every block.
- * Orthogonal wires are read-only, so hovering or focusing a card previews its outgoing wires.
- */
+function useSurfaceSize(surface: RefObject<HTMLElement | null>) {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const element = surface.current;
+    if (!element) return;
+    const measure = () =>
+      setSize((previous) =>
+        previous?.width === element.clientWidth && previous.height === element.clientHeight
+          ? previous
+          : { width: element.clientWidth, height: element.clientHeight },
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [surface]);
+  return size;
+}
+
+function useDrawWindow(view: CanvasView, size: { width: number; height: number } | null) {
+  const [kept, setKept] = useState<Rect | null>(null);
+  if (!size) return null;
+  const shown = shownRect(view, size);
+  if (kept && windowFits(kept, shown)) return kept;
+  const next = drawWindow(shown);
+  setKept(next);
+  return next;
+}
+
+function blockOf(target: EventTarget | null) {
+  return target instanceof Element
+    ? (target.closest<HTMLElement>("[data-block-id]")?.dataset.blockId ?? null)
+    : null;
+}
+
+function pinnedBlockIds(gesture: CanvasGesture | null, focused: string | null) {
+  const ids: string[] = [];
+  if (focused !== null) ids.push(focused);
+  if (gesture?.kind === "move" && gesture.node.kind === "block") ids.push(gesture.node.blockId);
+  if (gesture?.kind === "connect") {
+    if (gesture.source.kind === "exit") ids.push(gesture.source.sourceBlockId);
+    if (gesture.target) ids.push(gesture.target.targetBlockId);
+  }
+  return ids;
+}
+
 function SurfaceLayer({
   scope,
   shown,
   view,
+  area,
   surfaceGraph,
   dimensions,
   wires,
@@ -665,6 +729,7 @@ function SurfaceLayer({
   children,
 }: {
   view: CanvasView;
+  area: Rect | null;
   surfaceGraph: SurfaceGraph;
   dimensions: Dimensions;
   wires: WirePresentation;
@@ -679,15 +744,27 @@ function SurfaceLayer({
   const { geometry, graph, drawn, pending, routes, content } = surfaceGraph;
   // Kept here rather than in the surface, so a preview does not recompute every block's content.
   const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
+  const [focused, setFocused] = useState<string | null>(null);
+  const pinned = pinnedBlockIds(gesture, focused).join("\n");
+  const layer = useMemo(() => layerSize([geometry, drawn]), [geometry, drawn]);
+  const blocks = useMemo(() => {
+    const held = pinned ? new Set(pinned.split("\n")) : null;
+    return graph.blocks.filter(
+      (item) =>
+        (held?.has(item.id) ?? false) || (area !== null && reaches(area, drawn.blockBox(item))),
+    );
+  }, [graph, drawn, area, pinned]);
   return (
     <div
       data-canvas-pan
       className="absolute top-0 left-0 origin-top-left"
       style={{
         transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-        ...layerSize([geometry, drawn]),
+        ...layer,
       }}
       onPointerDown={startPan}
+      onFocusCapture={(event) => setFocused(blockOf(event.target))}
+      onBlurCapture={(event) => setFocused(blockOf(event.relatedTarget))}
       {...preview.handlers}
     >
       <FlowWires
@@ -698,6 +775,7 @@ function SurfaceLayer({
         pendingWire={pending}
         emphasized={preview.source}
         finish={finish !== undefined}
+        area={area}
       />
       <GesturePreview graph={graph} geometry={drawn} gesture={gesture} />
       {children}
@@ -716,7 +794,7 @@ function SurfaceLayer({
           pendingEnding={pending?.targetEndingId ?? null}
         />
       )}
-      {graph.blocks.map((item) => (
+      {blocks.map((item) => (
         <SurfaceBlock
           key={item.id}
           block={item}
@@ -832,6 +910,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     onTap: props.onTap,
   });
   const { view, reveal } = viewport;
+  const area = useDrawWindow(view, useSurfaceSize(surface));
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
   const revealBounds = props.reveal?.length ? geometry.focusBounds(props.reveal) : null;
   const revealKey = revealBounds && JSON.stringify(revealBounds);
@@ -861,6 +940,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         scope={scope}
         shown={shown}
         view={view}
+        area={area}
         surfaceGraph={surfaceGraph}
         dimensions={dimensions}
         wires={props.wires}
