@@ -11,7 +11,7 @@ import {
   type startingWorld,
 } from "./chat-actions.ts";
 import { discordSettingsWhen } from "./chat-control.ts";
-import type { ControlledDiscord, CreatedMessage } from "./controlled-discord.ts";
+import { unproven, type ControlledDiscord, type CreatedMessage } from "./controlled-discord.ts";
 import { launchedWorkers } from "./scenarios.ts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
@@ -63,3 +63,11 @@ export const cardProblem = (
       (problem) => problem.purpose === "status-card" && problem.state === state,
     ),
   );
+
+export async function unknownStatusCard(world: World) {
+  const button = await proposedStart(world, "600000000000000001", 2);
+  world.discord.faultMessages(...unproven("lost"));
+  await clicked(world.discord, button, "610000000000000001", 1);
+  const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
+  return problem!;
+}

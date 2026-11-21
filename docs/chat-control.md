@@ -705,9 +705,9 @@ the same application can still edit them.
 An Access save that stops the thread's channel granting the Run's Project cancels the card's owed
 update and nothing accrues while it stays revoked. After a regrant, Factory corrects a card it already
 posted to the Run's current state without a new message, and posts a card it never managed to post only
-if the Run is Active or Snoozed or has pending Needs input or Problems. A create still sending when
-the grant is revoked becomes unknown unless Discord confirms it with a message ID. Unknown creates
-keep their warning through revocation and regrant. Retry requires both the restored grant and the
+if the Run is Active or Snoozed or has pending Needs input or Problems. Revocation stops further
+create attempts. Factory records a message ID or definitive refusal from the request already sent.
+An unproven create keeps its warning through revocation and regrant. Retry requires the restored grant and the
 host's acceptance of the duplicate risk. Removing the requester from Access
 does not stop the card: it depends on the channel's grant and the bot's access.
 

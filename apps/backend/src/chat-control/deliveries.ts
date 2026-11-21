@@ -189,7 +189,7 @@ export const nonceOf = (...intent: readonly string[]) =>
 /** How one create intent ended: Discord's message ID, or what its failure proves. */
 type Created =
   | { readonly messageId: string }
-  | { readonly withdrawn: true }
+  | { readonly withdrawn: true; readonly unproven: boolean }
   | { readonly failure: SendFailure; readonly cause: unknown };
 
 function createRefusal(failure: SendFailure, unproven: boolean): SendFailure | undefined {
@@ -221,7 +221,7 @@ export const createDeduplicated = (
     let unproven = false;
     for (let requests = 1; ; requests++) {
       const access = yield* createAccess;
-      if (access === false) return { withdrawn: true };
+      if (access === false) return { withdrawn: true, unproven };
       const sent = yield* Effect.result(
         bounded(() => sender.create(destination, text, { ...options, ...access })),
       );
@@ -257,7 +257,8 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
       JOIN chat_proposals p ON p.id=a.proposal_id
       JOIN chat_access_users u ON u.user_id=p.requester_id
       WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
-    ) AS user_id FROM chat_deliveries d WHERE d.id=${deliveryId} AND d.state='sending'`,
+    ) AS user_id FROM chat_deliveries d
+      WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${UNKNOWN_CREATE_PROBLEM}`,
     ([access]) => {
       if (!access) return false as const;
       return access.user_id === null ? {} : { requesterId: access.user_id };
@@ -357,7 +358,10 @@ const problemOf = (row: DeliveryRow): ChatDeliveryProblem => ({
  * the host's warned Retry sends it again, one attempt at a time. Delivery is attempted only while a
  * verified session operates, and never changes the action it reports.
  */
-export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
+export const makeChatDeliveries = (
+  sql: SqlClient.SqlClient,
+  cardChanged: (runId: string) => void,
+) =>
   Effect.gen(function* () {
     /** The serving session's dispatcher, while one serves. */
     const dispatcher = wakeableLoop();
@@ -374,6 +378,17 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
         const problem = fields.problem ?? null;
         yield* sql`UPDATE chat_deliveries SET state=${fields.state},next_attempt_at=${fields.next_attempt_at ?? null},
           problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id} AND state='sending'`;
+      });
+
+    const cancelUnpostedCard = (id: string) =>
+      Effect.gen(function* () {
+        const [card] = yield* sql<{ run_id: string }>`UPDATE chat_deliveries
+          SET state='cancelled',next_attempt_at=NULL,problem=NULL,problem_at=NULL
+          WHERE id=${id} AND state='sending' AND problem=${UNKNOWN_CREATE_PROBLEM}
+          RETURNING run_id`;
+        if (!card) return false;
+        cardChanged(card.run_id);
+        return true;
       });
 
     /** Owed again after a wait: 1 s doubling to five minutes over consecutive attempts. */
@@ -518,7 +533,17 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );
         if ("messageId" in sent) return yield* delivered(row, sent.messageId, sender.applicationId);
-        if ("withdrawn" in sent) return;
+        if ("withdrawn" in sent) {
+          if (sent.unproven) yield* record(row.id, { state: "unknown", problem: PROBLEMS.unknown });
+          else yield* cancelUnpostedCard(row.id);
+          return;
+        }
+        if (
+          row.purpose === "status-card" &&
+          sent.failure !== "unknown" &&
+          (yield* cancelUnpostedCard(row.id))
+        )
+          return;
         if (sent.failure === "transient")
           return yield* later(row.id, row.attempts, PROBLEMS.transient);
         yield* record(row.id, {

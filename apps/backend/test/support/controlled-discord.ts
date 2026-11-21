@@ -66,7 +66,7 @@ type Answer = {
   /** No answer arrives until the server closes. */
   readonly held?: boolean;
   /** No answer arrives until `releaseMessages`; then Discord handles the request normally. */
-  readonly paused?: "deliver" | "fail" | "lose";
+  readonly paused?: "deliver" | "fail" | "refuse" | "lose";
 };
 
 /**
@@ -86,6 +86,7 @@ export type MessageFault =
   | "held"
   | "paused"
   | "paused-failure"
+  | "paused-refusal"
   | "paused-lost";
 
 /**
@@ -498,6 +499,7 @@ export async function startControlledDiscord() {
         const fault = resumed ? undefined : messageFaults.shift();
         if (fault === "paused") return { status: 0, paused: "deliver" };
         if (fault === "paused-failure") return { status: 0, paused: "fail" };
+        if (fault === "paused-refusal") return { status: 0, paused: "refuse" };
         const faulted = faultAnswer(fault);
         if (faulted) return faulted;
         if (deletedThreads.has(match[1]!)) return unknownChannel;
@@ -794,7 +796,9 @@ export async function startControlledDiscord() {
         respond(
           answer.paused === "fail"
             ? faultAnswer("failed")!
-            : route(request.method ?? "", path, token, body, true),
+            : answer.paused === "refuse"
+              ? faultAnswer("refused")!
+              : route(request.method ?? "", path, token, body, true),
         ),
       );
       changed.notify();

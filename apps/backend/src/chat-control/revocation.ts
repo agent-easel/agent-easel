@@ -56,11 +56,11 @@ export const applyAccessRevocation = (
     if (cancelled.length > 0) {
       const ids = sql.in(cancelled.map((row) => row.id));
       const at = yield* now;
-      yield* sql`UPDATE chat_deliveries SET state='unknown',next_attempt_at=NULL,
+      yield* sql`UPDATE chat_deliveries SET next_attempt_at=NULL,
           problem=${UNKNOWN_CREATE_PROBLEM},problem_at=${at}
         WHERE id IN ${ids} AND purpose='status-card' AND state='sending'`;
       yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL
-        WHERE id IN ${ids} AND NOT (purpose='status-card' AND state='unknown')`;
+        WHERE id IN ${ids} AND NOT (purpose='status-card' AND state IN ('sending','unknown'))`;
     }
     // A chat-started Run whose originating channel loses its Project accrues no notices; after a
     // regrant its notices start from its state then, without narrating the revoked interval.

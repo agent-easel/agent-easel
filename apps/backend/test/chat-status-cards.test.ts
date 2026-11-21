@@ -46,7 +46,12 @@ import {
   statusCardFlow,
   workingReportedIdle,
 } from "./support/scenarios.ts";
-import { cardProblem, messageShows, chatStartedRun } from "./support/status-cards.ts";
+import {
+  cardProblem,
+  messageShows,
+  chatStartedRun,
+  unknownStatusCard,
+} from "./support/status-cards.ts";
 
 const NOTICE =
   "_Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card._";
@@ -811,37 +816,84 @@ it("a Status card accepted before revocation stays unknown when its response is 
   expect(statusCardsIn(world.discord)).toHaveLength(2);
 });
 
-it("after revocation and regrant, warned Retry of an unknown card posts the current state without starting another Run", async (c) => {
+it("an Active Run gets its card after revocation and regrant when Discord refused its first POST", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
-  world.discord.faultMessages(...unproven("lost"));
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  world.discord.faultMessages("paused-refusal");
   await clicked(world.discord, button, "610000000000000001", 1);
-  const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
+  await world.discord.request("POST", MESSAGES, posts + 1);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await world.discord.createdWhere(isStatusCard, 1);
+  expect(statusCardsIn(world.discord)).toHaveLength(1);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([]);
+});
+
+it("Retry of an unknown card refuses a revoked destination and preserves the warning", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: true,
+  });
+
+  // Assert
+  assert(!retried.ok);
+  expect(retried.error.message).toBe("Access no longer permits this destination.");
+  const settings = await cardProblem(world.factory, "unknown");
+  expect(settings.delivery.problems).toContainEqual(problem);
+});
+
+it("after regrant, Retry of an unknown card still requires duplicate-risk acceptance", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: false,
+  });
+
+  // Assert
+  assert(!retried.ok);
+  expect(retried.error.code).toBe("validation");
+});
+
+it("after revocation and regrant, warned Retry of an unknown card posts the current state without starting another Run", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
   world.discord.nonceWindowPassed();
   const navigation = await world.factory.listRunNavigation();
   assert(navigation.ok);
   assert((await world.factory.snoozeRun(navigation.value[0]!.id)).ok);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
-  const revokedRetry = await world.factory.retryChatDelivery({
-    deliveryId: problem!.id,
-    duplicateRiskAccepted: true,
-  });
-  assert(!revokedRetry.ok);
-  expect(revokedRetry.error.message).toBe("Access no longer permits this destination.");
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
-  const unwarnedRetry = await world.factory.retryChatDelivery({
-    deliveryId: problem!.id,
-    duplicateRiskAccepted: false,
-  });
-  assert(!unwarnedRetry.ok);
-  expect(unwarnedRetry.error.code).toBe("validation");
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 
   // Act
   const retried = await world.factory.retryChatDelivery({
-    deliveryId: problem!.id,
+    deliveryId: problem.id,
     duplicateRiskAccepted: true,
   });
 
