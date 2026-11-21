@@ -4,7 +4,7 @@ import {
   type ConditionSummary,
   type RunDefinitions,
 } from "@t3-factory/contracts";
-import { conditionStartReady } from "@t3-factory/domain-validation";
+import { conditionStartReady, handoffRecipients } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { intactPayload } from "../../fingerprint.ts";
@@ -129,13 +129,11 @@ function numberPendingArrivals(
       yield* sql`UPDATE condition_arrivals SET state='selected',arrival_number=${number},rule_id=${rule?.id ?? null},message=${message},accepted_at=${time} WHERE id=${head.id}`;
       yield* sql`UPDATE condition_counters SET arrivals=${number} WHERE run_id=${runRow.id} AND block_id=${blockId}`;
       yield* sql`UPDATE operation_intents SET state='acknowledged',payload_json=NULL,problem=NULL,reconciled_at=${time} WHERE id=${delivery.id}`;
-      const recipients = [
-        ...new Set(
-          runRow.definitions.flow.graph.connections
-            .filter((edge) => edge.sourceBlockId === blockId && edge.exitId === outputId)
-            .map((edge) => edge.targetBlockId),
-        ),
-      ];
+      const recipients = handoffRecipients(
+        runRow.definitions.flow.graph.connections,
+        blockId,
+        outputId,
+      );
       yield* createHandoffs(sql, runRow, {
         kind: "condition",
         id: head.id,

@@ -6,13 +6,17 @@ import type {
   BlockExit,
   CreateAgentInput,
   CreateTriggerInput,
+  EndingOutput,
   FactoryOperations,
+  FlowEnding,
   FlowBlock,
   FlowGraph,
+  FlowGraphInput,
   FlowWorkspace,
   Result,
   RunDetail,
 } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
 import type { ThreadFacts } from "./controlled-t3-threads.ts";
 import { START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 
@@ -619,7 +623,7 @@ async function workerAgent(
 async function saveFlow(
   world: ScenarioWorld,
   name: string,
-  graph: FlowGraph,
+  graph: FlowGraphInput,
   workspace: FlowWorkspace = { mode: "checkout" },
   projectId: OwningProject = null,
 ) {
@@ -689,7 +693,7 @@ const WORKTREE: FlowWorkspace = { mode: "worktree", base: { kind: "default" } };
 async function workerShape(
   world: ScenarioWorld,
   name: string,
-  graph: (agentId: string) => FlowGraph,
+  graph: (agentId: string) => FlowGraphInput,
   workspace?: FlowWorkspace,
 ): Promise<ReadyFlow> {
   const agent = await workerAgent(world, `create the ${name} Agent`);
@@ -797,6 +801,38 @@ export const handoffFlow: ReadyFlowShape = (world) =>
     flowInput: flowInput("worker"),
     blocks: [entryWorker(agentId), parallelWork(agentId)],
     connections: [connection("worker", "done", "parallel-block")],
+  }));
+
+const SHIPPED_ENDING = (output: EndingOutput): FlowEnding => ({
+  id: "shipped",
+  name: "Shipped",
+  description: "The work is merged.",
+  output,
+  outputDescription: "The merge commit.",
+});
+const shippedWire = (sourceBlockId: string, exitId: string): FlowGraph["connections"][number] => ({
+  sourceBlockId,
+  exitId,
+  targetBlockId: FINISH_BLOCK_ID,
+  targetEndingId: "shipped",
+});
+
+export const endingFlow =
+  (output: EndingOutput): ReadyFlowShape =>
+  (world) =>
+    workerShape(world, `Ending ${output}`, (agentId) => ({
+      flowInput: flowInput("worker"),
+      blocks: [entryWorker(agentId)],
+      connections: [shippedWire("worker", "done")],
+      finish: { endings: [SHIPPED_ENDING(output)] },
+    }));
+
+export const continuationEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Continuation ending", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), specStep],
+    connections: [connection("worker", "done", "spec"), shippedWire("spec", "output")],
+    finish: { endings: [SHIPPED_ENDING("required")] },
   }));
 
 /** Entry worker's "Done" goes to a Human Review whose Approve hands to Parallel work. */
@@ -1015,23 +1051,25 @@ export const conditionFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
   }));
 
+const terminalConditionGraph = (agentId: string) => ({
+  flowInput: flowInput("worker"),
+  blocks: [
+    entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
+    gate(),
+    followUp(agentId),
+  ],
+  connections: [
+    connection("worker", "done", "gate"),
+    connection("worker", "revise", "gate"),
+    connection("gate", OTHERWISE, "follow-up"),
+  ],
+});
+
 /** Entry worker's "Done" and Flow-local "Revise" both go to the Gate, whose Otherwise hands to
  * Follow-up. A Condition output cannot end a branch at Start; tests that need one unwire it from
  * the captured revision with `capturedConditionOutputUnwired`, as a Run captured earlier keeps it. */
 export const terminalConditionFlow: ReadyFlowShape = (world) =>
-  workerShape(world, "Terminal condition", (agentId) => ({
-    flowInput: flowInput("worker"),
-    blocks: [
-      entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
-      gate(),
-      followUp(agentId),
-    ],
-    connections: [
-      connection("worker", "done", "gate"),
-      connection("worker", "revise", "gate"),
-      connection("gate", OTHERWISE, "follow-up"),
-    ],
-  }));
+  workerShape(world, "Terminal condition", terminalConditionGraph);
 
 /** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, which
  * escalates to a Human Review from arrival 2 and otherwise hands to Follow-up. */
@@ -1142,6 +1180,118 @@ export const selfLoopConditionFlow: ReadyFlowShape = (world) =>
     blocks: [entryWorker(agentId), gate()],
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "worker")],
   }));
+
+const ending = (id: string, name: string, output: EndingOutput) => ({
+  id,
+  name,
+  description: "",
+  output,
+  outputDescription: output === "none" ? "" : "URL of the PR opened",
+});
+const finishWith = (...endings: ReturnType<typeof ending>[]) => ({
+  position: { x: 1200, y: 0 },
+  endings,
+});
+const endingConnection = (
+  sourceBlockId: string,
+  exitId: string,
+  endingId: string,
+): FlowGraph["connections"][number] => ({
+  sourceBlockId,
+  exitId,
+  targetBlockId: FINISH_BLOCK_ID,
+  targetEndingId: endingId,
+});
+
+const singleEndingFlow =
+  (output: EndingOutput): ReadyFlowShape =>
+  (world) =>
+    workerShape(world, `Delivered ${output}`, (agentId) => ({
+      flowInput: flowInput("worker"),
+      blocks: [entryWorker(agentId)],
+      connections: [endingConnection("worker", "done", "delivered")],
+      finish: finishWith(ending("delivered", "Delivered", output)),
+    }));
+export const optionalEndingFlow = singleEndingFlow("optional");
+export const silentEndingFlow = singleEndingFlow("none");
+
+export const racingEndingsFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Racing endings", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [entryWorker(agentId), agentBlock("second", "Second entry", agentId)],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      endingConnection("second", "done", "gave-up"),
+    ],
+    finish: finishWith(
+      ending("delivered", "Delivered", "optional"),
+      ending("gave-up", "Could not complete", "none"),
+    ),
+  }));
+
+export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending beside review", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [entryWorker(agentId), agentBlock("second", "Second entry", agentId), reviewStep],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      connection("second", "done", "review"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
+  }));
+
+export const endingBesidePendingWorkFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending beside pending work", (agentId) => ({
+    flowInput: flowInput("worker", "second", "parallel-block"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      parallelWork(agentId),
+      coolDown(),
+      gate(),
+      specStep,
+      followUp(agentId),
+    ],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      connection("second", "done", "cool-down"),
+      connection("second", "done", "gate"),
+      connection("second", "done", "spec"),
+      connection("parallel-block", "done", "spec"),
+      connection("cool-down", WAIT_OUTPUT, "follow-up"),
+      connection("gate", OTHERWISE, "follow-up"),
+      connection("spec", "output", "follow-up"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
+  }));
+
+export const endingAfterGateFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending after the Gate", (agentId) => {
+    const graph = terminalConditionGraph(agentId);
+    return {
+      ...graph,
+      connections: [...graph.connections, endingConnection("follow-up", "done", "delivered")],
+      finish: finishWith(ending("delivered", "Delivered", "optional")),
+    };
+  });
+
+export const reviewedEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Reviewed ending", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), reviewStep, gate()],
+    connections: [
+      connection("worker", "done", "review"),
+      connection("review", "approve", "gate"),
+      endingConnection("gate", OTHERWISE, "delivered"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "required")),
+  }));
+
+export function endingReached(world: ScenarioWorld, runId: string) {
+  return reach("ending reached", () =>
+    observeFor("observe the Run result", world, runId, (run) => run.result !== null),
+  );
+}
 
 /** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" goes to
  * Follow-up. */

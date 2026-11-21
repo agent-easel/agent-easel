@@ -1,6 +1,6 @@
 import type { ELK, ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
-import { isCanvasPosition } from "@t3-factory/domain-validation";
+import { CANVAS_COORD_MAX, isCanvasPosition } from "@t3-factory/domain-validation";
 import { exitRows, incomingIndex, wireRouteKey, type IncomingIndex } from "./graph.ts";
 
 export type LayoutBlock = FlowBlock & {
@@ -11,6 +11,7 @@ export type LayoutGraph<B extends LayoutBlock = LayoutBlock> = Omit<FlowGraph, "
 };
 export type FlowLayoutPositions = {
   readonly flowInput: { x: number; y: number };
+  readonly finish: { x: number; y: number };
   readonly blocks: ReadonlyMap<string, { x: number; y: number }>;
 };
 
@@ -19,10 +20,12 @@ function elkInputPortId(targetBlockId: string, index: number) {
 }
 
 const FLOW_INPUT_NODE_ID = "flow-input";
+const FINISH_NODE_ID = "finish";
 const BLOCK_NODE_PREFIX = "block:";
 
 export type FlowLayoutDimensions<B extends LayoutBlock = LayoutBlock> = {
   readonly flowInput: { readonly width: number; readonly height: number; readonly outputY: number };
+  readonly finish: { readonly firstEndingY: number };
   readonly blockWidth: number;
   readonly blockHeight: (block: B) => number;
   readonly ports: {
@@ -50,11 +53,51 @@ const ROOT_LAYOUT = {
 } as const;
 
 function exitPortId(blockId: string, exitId: string) {
-  return `out:${blockId}:${exitId}`;
+  return `out:${JSON.stringify([blockId, exitId])}`;
 }
 
 function flowInputPortId() {
   return "out:flow-input";
+}
+
+function finishPortId(endingIndex: number) {
+  return `ending:${endingIndex}`;
+}
+
+function finishNode<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayoutDimensions<B>) {
+  const { ports } = dims;
+  const { firstEndingY } = dims.finish;
+  const rows = Math.max(1, graph.finish.endings.length);
+  return {
+    id: FINISH_NODE_ID,
+    width: dims.blockWidth,
+    height: firstEndingY + rows * ports.exitRow,
+    layoutOptions: {
+      "org.eclipse.elk.portConstraints": "FIXED_POS",
+      "org.eclipse.elk.layered.layering.layerConstraint": "LAST_SEPARATE",
+    },
+    ports: graph.finish.endings.map((_ending, index) => ({
+      id: finishPortId(index),
+      width: 0,
+      height: 0,
+      x: 0,
+      y: firstEndingY + index * ports.exitRow,
+      layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
+    })),
+  } satisfies ElkNode;
+}
+
+const LAYER_GAP = 80;
+
+export function defaultFinishPosition(
+  graph: Pick<FlowGraph, "blocks" | "flowInput">,
+  dimensions: { readonly flowInputWidth: number; readonly blockWidth: number },
+) {
+  const right = Math.max(
+    graph.flowInput.position.x + dimensions.flowInputWidth,
+    ...graph.blocks.map((block) => block.position.x + dimensions.blockWidth),
+  );
+  return { x: Math.min(CANVAS_COORD_MAX, right + LAYER_GAP), y: graph.flowInput.position.y };
 }
 
 function blockPorts<B extends LayoutBlock>(
@@ -101,6 +144,7 @@ function orderedBlocks<B extends LayoutBlock>(graph: LayoutGraph<B>): B[] {
   const byId = new Map(graph.blocks.map((block) => [block.id, block]));
   const successors = new Map<string, string[]>();
   for (const connection of graph.connections) {
+    if (connection.targetEndingId !== undefined) continue;
     const targets = successors.get(connection.sourceBlockId) ?? [];
     targets.push(connection.targetBlockId);
     successors.set(connection.sourceBlockId, targets);
@@ -175,13 +219,17 @@ function edgeLabeller<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLa
   const blocks = new Map<string, B>();
   for (const block of graph.blocks) if (!blocks.has(block.id)) blocks.set(block.id, block);
   const rows = exitRows(graph.blocks);
+  const endings = new Map(graph.finish.endings.map((ending) => [ending.id, ending.name]));
   return (connection: FlowGraph["connections"][number]) => {
     const source = blocks.get(connection.sourceBlockId);
     if (!dims.labels || source?.kind === "continuation") return [];
-    const target = blocks.get(connection.targetBlockId);
+    const target =
+      connection.targetEndingId !== undefined
+        ? `Finish · ${endings.get(connection.targetEndingId ?? "") || "Unnamed ending"}`
+        : blocks.get(connection.targetBlockId)?.name || "Unnamed block";
     const row = rows(connection.sourceBlockId, connection.exitId);
     const exit = (row === undefined ? undefined : source?.exits[row]?.name) || "exit";
-    const text = `${exit} → ${target?.name || "Unnamed block"}`;
+    const text = `${exit} → ${target}`;
     return [{ text, ...dims.labelSize(text) }];
   };
 }
@@ -203,14 +251,18 @@ function buildEdges<B extends LayoutBlock>(
       ],
     });
   }
+  const endingPorts = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
   for (const connection of graph.connections) {
-    const { sourceBlockId, exitId, targetBlockId } = connection;
-    const id = wireRouteKey({ kind: "exit", sourceBlockId, exitId }, targetBlockId);
-    const index = incoming.portIndex(targetBlockId, { kind: "exit", sourceBlockId, exitId });
+    const { sourceBlockId, exitId, targetBlockId, targetEndingId } = connection;
+    const source = { kind: "exit", sourceBlockId, exitId } as const;
+    const target =
+      targetEndingId !== undefined
+        ? finishPortId(endingPorts.get(connection.targetEndingId ?? "") ?? 0)
+        : elkInputPortId(targetBlockId, incoming.portIndex(targetBlockId, source));
     edges.push({
-      id,
-      sources: [exitPortId(connection.sourceBlockId, connection.exitId)],
-      targets: [elkInputPortId(connection.targetBlockId, index)],
+      id: wireRouteKey(source, targetBlockId, connection.targetEndingId),
+      sources: [exitPortId(sourceBlockId, exitId)],
+      targets: [target],
       labels: edgeLabels(connection),
     });
   }
@@ -228,6 +280,7 @@ export function buildElkGraph<B extends LayoutBlock>(
     children: [
       flowInputNode(dims),
       ...orderedBlocks(graph).map((block) => blockNode(block, incoming, dims)),
+      finishNode(graph, dims),
     ],
     edges: buildEdges(graph, incoming, dims),
   };
@@ -247,12 +300,15 @@ export function parseLayoutPositions(graph: FlowGraph, laidOut: ElkNode): FlowLa
     if (child.id.startsWith(BLOCK_NODE_PREFIX))
       blocks.set(child.id.slice(BLOCK_NODE_PREFIX.length), position);
   }
-  const flowInputChild = laidOut.children?.find((c) => c.id === FLOW_INPUT_NODE_ID);
-  const flowInput =
-    flowInputChild?.x !== undefined && flowInputChild.y !== undefined
-      ? { x: flowInputChild.x, y: flowInputChild.y }
-      : graph.flowInput.position;
-  return { flowInput, blocks };
+  const placed = (id: string, fallback: { x: number; y: number }) => {
+    const child = laidOut.children?.find((c) => c.id === id);
+    return child?.x !== undefined && child.y !== undefined ? { x: child.x, y: child.y } : fallback;
+  };
+  return {
+    flowInput: placed(FLOW_INPUT_NODE_ID, graph.flowInput.position),
+    finish: placed(FINISH_NODE_ID, graph.finish.position),
+    blocks,
+  };
 }
 
 export async function arrangeFlow<B extends LayoutBlock>(

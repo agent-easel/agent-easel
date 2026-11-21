@@ -26,7 +26,12 @@ type ArrivalRow = {
   origin_thread_id: string | null;
 };
 
-type RecipientRow = { condition_arrival_id: string; block_id: string; state: DeliveryState };
+type RecipientRow = {
+  condition_arrival_id: string;
+  block_id: string;
+  target_ending_id: string | null;
+  state: DeliveryState;
+};
 
 /** The window a cursor continues: its Run and Condition, high-water and last arrival number. */
 type Cursor = readonly [runId: string, blockId: string, highWater: number, after: number];
@@ -146,7 +151,7 @@ export function openConditionEvidence(database: RunnerDatabase) {
           ORDER BY a.arrival_number LIMIT ${pageSize + 1}`;
         const page = rows.slice(0, pageSize);
         const recipients = page.length
-          ? yield* sql<RecipientRow>`SELECT condition_arrival_id,block_id,state FROM operation_intents WHERE run_id=${runId} AND condition_arrival_id IN ${sql.in(page.map((row) => row.id))} ORDER BY rowid`
+          ? yield* sql<RecipientRow>`SELECT condition_arrival_id,block_id,json_extract(target_json,'$.endingId') AS target_ending_id,state FROM operation_intents WHERE run_id=${runId} AND condition_arrival_id IN ${sql.in(page.map((row) => row.id))} ORDER BY rowid`
           : [];
         const last = page.at(-1);
         return {
@@ -165,6 +170,7 @@ export function openConditionEvidence(database: RunnerDatabase) {
                 .filter((recipient) => recipient.condition_arrival_id === row.id)
                 .map((recipient) => ({
                   blockId: recipient.block_id,
+                  targetEndingId: recipient.target_ending_id,
                   disposition: DISPOSITIONS[recipient.state],
                 })),
             })),

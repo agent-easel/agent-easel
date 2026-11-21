@@ -140,6 +140,8 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       const runRow = yield* row(id);
       if (!runRow || runRow.archived_at) return;
       yield* driveBlockWork(runRow, yield* freshSnapshot(), phase);
+      if (phase !== "observe" && (yield* store.awaitingEndingSettlement(id)))
+        yield* actions.stopAndSettle(id, { authorization: "flow", reason: "finish" });
     });
   }
   function driveBlockWork(

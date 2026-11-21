@@ -299,6 +299,7 @@ const UNCONNECTED: FlowGraph = {
   blocks: [],
   connections: [],
   flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+  finish: { position: { x: 800, y: 0 }, endings: [] },
 };
 
 /** A compact, non-interactive preview of the block a library drag would add. */

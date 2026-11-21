@@ -1,5 +1,5 @@
 import type { WaitArrival } from "@t3-factory/contracts";
-import { WAIT_OUTPUT, waitDurationMs } from "@t3-factory/domain-validation";
+import { handoffRecipients, WAIT_OUTPUT, waitDurationMs } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
@@ -165,16 +165,11 @@ export function openRunWaits(database: RunnerDatabase) {
           if (!held || !runRow) return "closed";
           const time = yield* now;
           if (forwardedBy === "timer" && arrival.deadline_at > time) return "not-due";
-          const recipients = [
-            ...new Set(
-              runRow.definitions.flow.graph.connections
-                .filter(
-                  (edge) =>
-                    edge.sourceBlockId === arrival.block_id && edge.exitId === WAIT_OUTPUT.id,
-                )
-                .map((edge) => edge.targetBlockId),
-            ),
-          ];
+          const recipients = handoffRecipients(
+            runRow.definitions.flow.graph.connections,
+            arrival.block_id,
+            WAIT_OUTPUT.id,
+          );
           // Only cancellation by Archive or manual settlement clears a pending arrival's message.
           if (arrival.message === null)
             return yield* Effect.fail(Error("A pending Wait arrival has no message"));

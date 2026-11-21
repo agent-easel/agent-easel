@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type FocusEvent,
   type ReactNode,
   type RefObject,
@@ -24,6 +25,7 @@ import type {
 import {
   CircleAlert,
   Copy,
+  Flag,
   FolderGit2,
   MoreHorizontal,
   RefreshCw,
@@ -54,6 +56,7 @@ import { BlockConfiguration, type BlockAgents } from "../components/block-inspec
 import { PanelHeading, TargetSelect } from "../components/block-exit-configuration.tsx";
 import { BlockLibrary, NewAgentLink } from "../components/block-library.tsx";
 import { FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
+import { FinishSettings } from "../components/finish-settings.tsx";
 import {
   IssueLink,
   ReadinessPanel,
@@ -76,12 +79,17 @@ import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
+  addEnding,
   addWire,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
   hasWire,
   newBlock,
   removeBlock,
+  removeEnding,
   removeWire,
   replaceBlock,
+  replaceEnding,
   undoRemoval,
   type BlockPosition,
   type FlowWire,
@@ -297,7 +305,7 @@ function useCanvasSelection(
   registerEscape: (handler: () => void) => () => void,
 ) {
   const { graph } = draft;
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<CanvasBlockSelection | null>(null);
   const [selectedWire, setSelectedWire] = useState<FlowWire | null>(null);
   const wire = selectedWire && hasWire(graph, selectedWire) ? selectedWire : null;
   if (selectedWire && !wire) setSelectedWire(null);
@@ -305,11 +313,12 @@ function useCanvasSelection(
   if (
     selected !== null &&
     selected !== FLOW_INPUT &&
+    selected !== FINISH_SELECTION &&
     !graph.blocks.some((block) => block.id === selected)
   )
     setSelected(null);
   /** Selects a block or the Flow input, or with null clears every selection. */
-  const select = useCallback((blockId: string | null) => {
+  const select = useCallback((blockId: CanvasBlockSelection | null) => {
     setSelected(blockId);
     setSelectedWire(null);
   }, []);
@@ -336,7 +345,7 @@ function useCanvasSelection(
     draft.remove(removeBlock(graph, blockId));
     select(null);
   }
-  return { selected, wire, select, selectWire, deleteWire, deleteBlock };
+  return { selected, wire, select, selectWire, deleteWire, deleteBlock } as const;
 }
 
 const noAgents: readonly AgentDefinition[] = [];
@@ -439,23 +448,23 @@ function useLiveReadiness(draft: FlowDraftModel, due: number | null) {
 
 const READINESS_DEBOUNCE_MS = 400;
 
-/**
- * Selecting a block or a readiness issue; an issue about a Condition rule also focuses that rule
- * in the block's configuration.
- */
 function useRuleFocus(
-  select: (blockId: string | null) => void,
+  select: (blockId: CanvasBlockSelection | null) => void,
   thresholds: ReturnType<typeof useThresholdEntries>,
 ) {
   const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
-  const selectIssue: IssueSelect = (blockId, rule) => {
+  const [endingFocus, setEndingFocus] = useState<{ endingId: string } | null>(null);
+  const selectIssue: IssueSelect = (blockId, rule, ending) => {
     select(blockId);
-    setRuleFocus(blockId && rule ? { blockId, rule } : null);
+    setRuleFocus(typeof blockId === "string" && rule ? { blockId, rule } : null);
+    setEndingFocus(ending ? { endingId: ending } : null);
   };
   return {
     selectIssue,
-    selectBlock(blockId: string | null) {
+    endingFocus,
+    selectBlock(blockId: CanvasBlockSelection | null) {
       setRuleFocus(null);
+      setEndingFocus(null);
       select(blockId);
     },
     conditionEditing: (blockId: string): ConditionEditing => ({
@@ -467,9 +476,15 @@ function useRuleFocus(
 }
 
 /** The selected Block and the next one it connects to, which the canvas keeps in view. */
-function revealed(graph: FlowGraph, selected: string | null): readonly string[] {
+function revealed(
+  graph: FlowGraph,
+  selected: CanvasBlockSelection | null,
+): readonly CanvasBlockSelection[] {
   if (selected === null || selected === FLOW_INPUT) return [];
-  const next = graph.connections.find((c) => c.sourceBlockId === selected)?.targetBlockId;
+  if (selected === FINISH_SELECTION) return [FINISH_SELECTION];
+  const connection = graph.connections.find((c) => c.sourceBlockId === selected);
+  const next =
+    connection?.targetEndingId === undefined ? connection?.targetBlockId : FINISH_SELECTION;
   return next && next !== selected ? [selected, next] : [selected];
 }
 
@@ -514,7 +529,10 @@ export function FlowDetail({
   );
   const thresholds = useThresholdEntries(graph);
   useFlowDraftGuard(draft, id, reportDraft, thresholds.invalid);
-  const { selectBlock, selectIssue, conditionEditing } = useRuleFocus(select, thresholds);
+  const { selectBlock, selectIssue, conditionEditing, endingFocus } = useRuleFocus(
+    select,
+    thresholds,
+  );
   const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
   // A Project that left T3 leaves its Flow read-only until it is moved or removed.
   const readOnly = owner.gone;
@@ -592,6 +610,16 @@ export function FlowDetail({
           marks={marks}
           flowId={id}
           condition={conditionEditing}
+          finish={{
+            focus: endingFocus,
+            onAdd: () => {
+              const next = addEnding(graph);
+              change(next);
+              return next.finish.endings.at(-1)!.id;
+            },
+            onEdit: (ending) => change(replaceEnding(graph, ending)),
+            onRemove: (endingId) => remove(removeEnding(graph, endingId)),
+          }}
           onClose={select}
           onEdit={editBlock}
           onWireChange={(wire, connected) => {
@@ -699,17 +727,19 @@ function EditorSettings({
   marks,
   flowId,
   condition,
+  finish,
   onClose,
   onEdit,
   onWireChange,
   onRemove,
 }: {
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   graph: FlowGraph;
   agents: BlockAgents;
   marks: ReturnType<typeof readinessMarks>;
   flowId: string;
   condition: (blockId: string) => ConditionEditing;
+  finish: Omit<ComponentProps<typeof FinishSettings>, "graph" | "agents" | "issues">;
   /** Called with null to close the settings. */
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
@@ -734,6 +764,18 @@ function EditorSettings({
             onWireChange={onWireChange}
           />
         </section>
+      </SettingsPanel>
+    );
+  if (selected === FINISH_SELECTION)
+    return (
+      <SettingsPanel
+        label="Finish settings"
+        title="Finish"
+        icon={Flag}
+        iconClassName="text-muted-foreground"
+        onClose={close}
+      >
+        <FinishSettings graph={graph} agents={agents.all} issues={marks.finish} {...finish} />
       </SettingsPanel>
     );
   const block = graph.blocks.find((b) => b.id === selected);
@@ -774,14 +816,15 @@ function SettingsPanel({
   label,
   title,
   icon: Icon,
+  iconClassName = "text-link",
   onClose,
   footer,
   children,
 }: {
-  /** The panel's accessible name: Block settings, or Flow input settings. */
   label: string;
   title: string;
   icon: typeof X;
+  iconClassName?: string;
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
@@ -789,7 +832,7 @@ function SettingsPanel({
   return (
     <aside aria-label={label} className="flex w-90 shrink-0 flex-col border-l bg-card">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-        <Icon aria-hidden className="size-4 text-link" />
+        <Icon aria-hidden className={cn("size-4", iconClassName)} />
         <h2 className="text-sm font-semibold">{title}</h2>
         <span className="flex-1" />
         <KeyChip>Esc</KeyChip>

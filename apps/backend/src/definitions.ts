@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   arrangeFlow,
+  defaultFinishPosition,
   AUTHORING_DIMENSIONS,
   canvasGraph,
   createFlowLayoutDimensions,
@@ -37,6 +38,7 @@ import {
   duplicateTreatment,
   executionForProject,
   flowAgentRevisions,
+  flowEditSizeRefusal,
   flowReadiness,
   mayPlaceAgent,
   parsePortableFile,
@@ -84,6 +86,11 @@ import {
 import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
+const unplacedFinishPosition = (graph: Pick<FlowGraph, "blocks" | "flowInput">) =>
+  defaultFinishPosition(graph, {
+    flowInputWidth: AUTHORING_DIMENSIONS.flowInput.width,
+    blockWidth: AUTHORING_DIMENSIONS.block.width,
+  });
 
 const toDraft = (flow: CurrentFlow, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
@@ -284,8 +291,7 @@ export const makeDefinitions = (
     });
     const positionGraph = (input: FlowGraphInput) =>
       Effect.gen(function* () {
-        const graph: FlowGraph = {
-          ...input,
+        const placed = {
           flowInput: { ...input.flowInput, position: input.flowInput.position ?? { x: 0, y: 0 } },
           blocks: input.blocks.map((block): FlowBlock => {
             const position = block.position ?? { x: 0, y: 0 };
@@ -294,9 +300,18 @@ export const makeDefinitions = (
               : { ...block, position };
           }),
         };
+        const graph: FlowGraph = {
+          ...input,
+          ...placed,
+          finish: {
+            endings: input.finish?.endings ?? [],
+            position: input.finish?.position ?? unplacedFinishPosition(placed),
+          },
+        };
         if (
           input.flowInput.position !== undefined &&
-          input.blocks.every((block) => block.position !== undefined)
+          input.blocks.every((block) => block.position !== undefined) &&
+          (input.finish === undefined || input.finish.position !== undefined)
         )
           return { ok: true as const, value: graph };
         const resolved = canvasGraph(graph, yield* readinessAgents);
@@ -316,6 +331,7 @@ export const makeDefinitions = (
               value: {
                 ...graph,
                 flowInput: { ...graph.flowInput, position: positions.flowInput },
+                finish: { ...graph.finish, position: positions.finish },
                 blocks,
               },
             };
@@ -522,7 +538,14 @@ export const makeDefinitions = (
         id,
         revision: 1,
         name: flow.name,
-        graph: { ...flow.graph, blocks },
+        graph: {
+          ...flow.graph,
+          blocks,
+          finish: flow.graph.finish ?? {
+            endings: [],
+            position: unplacedFinishPosition({ ...flow.graph, blocks }),
+          },
+        },
         workspace: flow.workspace,
         savedAt: now,
       });
@@ -580,8 +603,10 @@ export const makeDefinitions = (
             Effect.gen(function* () {
               // Readiness depends on the owner, so an answer judged under another one is stale.
               if (flow.projectId !== validated.value.expectedProjectId) return staleOwner("Flow");
-              const agents = yield* readinessAgents;
               const { graph } = validated.value;
+              const sizeRefusal = flowEditSizeRefusal(graph, flow.graph);
+              if (sizeRefusal) return sizeRefusal;
+              const agents = yield* readinessAgents;
               return {
                 ok: true as const,
                 value: {
@@ -605,6 +630,8 @@ export const makeDefinitions = (
             // Refuse a missing or stale Flow before any layout, so the refusal names the real cause.
             const current = yield* savedFlowFor(id, expected);
             if (!current.ok) return current;
+            const sizeRefusal = flowEditSizeRefusal(validated.value.graph, current.value.graph);
+            if (sizeRefusal) return sizeRefusal;
             const positioned = yield* positionGraph(validated.value.graph);
             if (!positioned.ok) return positioned;
             return yield* sql.withTransaction(

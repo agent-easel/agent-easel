@@ -1,13 +1,16 @@
 import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
 import {
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type AgentDefinition,
   type FlowBlock,
   type FlowConnection,
+  type FlowEnding,
   type FlowGraph,
   type RunDefinitions,
 } from "@t3-factory/contracts";
 import {
+  connectionKey,
   continuationSources,
   effectiveExits,
   type EffectiveExit,
@@ -92,57 +95,92 @@ export function replaceBlock(graph: FlowGraph, next: FlowBlock): FlowGraph {
  * A wire on the canvas: an exit's connection, or the Flow input reaching one of its
  * targets. Wires have no id; a source reaching a target is the identity.
  */
-export type FlowWire = { readonly source: WireSource; readonly targetBlockId: string };
+export type FlowWire = {
+  readonly source: WireSource;
+  readonly targetBlockId: string;
+  readonly targetEndingId?: string;
+};
 
 export function connectionWire(connection: FlowConnection): FlowWire {
-  const { sourceBlockId, exitId, targetBlockId } = connection;
-  return { source: { kind: "exit", sourceBlockId, exitId }, targetBlockId };
+  const { sourceBlockId, exitId, targetBlockId, targetEndingId } = connection;
+  return {
+    source: { kind: "exit", sourceBlockId, exitId },
+    targetBlockId,
+    ...(targetEndingId ? { targetEndingId } : {}),
+  };
+}
+
+function wireConnection(
+  source: { readonly sourceBlockId: string; readonly exitId: string },
+  { targetBlockId, targetEndingId }: FlowWire,
+): Parameters<typeof connectionKey>[0] {
+  return {
+    sourceBlockId: source.sourceBlockId,
+    exitId: source.exitId,
+    targetBlockId,
+    targetEndingId,
+  };
 }
 
 export function sameWire(a: FlowWire, b: FlowWire) {
-  if (a.targetBlockId !== b.targetBlockId || a.source.kind !== b.source.kind) return false;
-  if (a.source.kind === "flow-input" || b.source.kind === "flow-input") return true;
-  return a.source.sourceBlockId === b.source.sourceBlockId && a.source.exitId === b.source.exitId;
+  if (a.source.kind === "flow-input" || b.source.kind === "flow-input")
+    return (
+      a.source.kind === b.source.kind &&
+      a.targetBlockId === b.targetBlockId &&
+      a.targetEndingId === b.targetEndingId
+    );
+  return connectionKey(wireConnection(a.source, a)) === connectionKey(wireConnection(b.source, b));
 }
 
-/** A node on the canvas: one block, or the Flow input block. */
 export type CanvasNode =
   | { readonly kind: "block"; readonly blockId: string }
-  | { readonly kind: "flow-input" };
+  | { readonly kind: "flow-input" }
+  | { readonly kind: "finish" };
 
 export function sameNode(a: CanvasNode | null, b: CanvasNode | null) {
   if (a?.kind === "block" && b?.kind === "block") return a.blockId === b.blockId;
   return a?.kind === b?.kind;
 }
 
-/** Whether a wire leaves the node: from any of a block's exits, or from the Flow input. */
 export function leavesNode(wire: FlowWire, node: CanvasNode) {
+  if (node.kind === "finish") return false;
   if (node.kind === "flow-input") return wire.source.kind === "flow-input";
   return wire.source.kind === "exit" && wire.source.sourceBlockId === node.blockId;
 }
 
 export function hasWire(graph: FlowGraph, wire: FlowWire) {
   if (wire.source.kind === "flow-input")
-    return graph.flowInput.targetBlockIds.includes(wire.targetBlockId);
+    return (
+      wire.targetEndingId === undefined &&
+      graph.flowInput.targetBlockIds.includes(wire.targetBlockId)
+    );
   return graph.connections.some((c) => sameWire(connectionWire(c), wire));
 }
 
-/**
- * Whether `source` may gain a wire to the block: any block for an exit, only Agent blocks
- * for the Flow input (never a Human step or a Continuation), and never a target the source
- * already reaches.
- */
-export function canConnect(graph: FlowGraph, source: WireSource, targetBlockId: string) {
-  const target = graph.blocks.find((b) => b.id === targetBlockId);
-  if (!target || hasWire(graph, { source, targetBlockId })) return false;
-  return source.kind === "exit" || target.kind === "agent";
+export const FINISH_SELECTION = Symbol("Finish block");
+export type CanvasBlockSelection = string | typeof FINISH_SELECTION;
+
+export type WireTarget = Pick<FlowWire, "targetBlockId" | "targetEndingId">;
+
+export function canConnect(graph: FlowGraph, source: WireSource, target: WireTarget) {
+  if (hasWire(graph, { source, ...target })) return false;
+  if (target.targetEndingId !== undefined)
+    return (
+      source.kind === "exit" &&
+      target.targetBlockId === FINISH_BLOCK_ID &&
+      graph.finish.endings.some((ending) => ending.id === target.targetEndingId)
+    );
+  const block = graph.blocks.find((b) => b.id === target.targetBlockId);
+  if (!block) return false;
+  return source.kind === "exit" || block.kind === "agent";
 }
 
 export function addWire<G extends FlowGraph | CanvasGraph>(
   graph: G,
-  { source, targetBlockId }: FlowWire,
+  { source, targetBlockId, targetEndingId }: FlowWire,
 ): G {
-  if (source.kind === "flow-input")
+  if (source.kind === "flow-input") {
+    if (targetEndingId !== undefined) return graph;
     return {
       ...graph,
       flowInput: {
@@ -150,15 +188,20 @@ export function addWire<G extends FlowGraph | CanvasGraph>(
         targetBlockIds: [...graph.flowInput.targetBlockIds, targetBlockId],
       },
     };
+  }
   const { sourceBlockId, exitId } = source;
   return {
     ...graph,
-    connections: [...graph.connections, { sourceBlockId, exitId, targetBlockId }],
+    connections: [
+      ...graph.connections,
+      { sourceBlockId, exitId, targetBlockId, ...(targetEndingId ? { targetEndingId } : {}) },
+    ],
   };
 }
 
 export function removeWire(graph: FlowGraph, wire: FlowWire): FlowGraph {
-  if (wire.source.kind === "flow-input")
+  if (wire.source.kind === "flow-input") {
+    if (wire.targetEndingId !== undefined) return graph;
     return {
       ...graph,
       flowInput: {
@@ -166,6 +209,7 @@ export function removeWire(graph: FlowGraph, wire: FlowWire): FlowGraph {
         targetBlockIds: graph.flowInput.targetBlockIds.filter((id) => id !== wire.targetBlockId),
       },
     };
+  }
   return {
     ...graph,
     connections: graph.connections.filter((c) => !sameWire(connectionWire(c), wire)),
@@ -177,13 +221,65 @@ export function removeBlock(graph: FlowGraph, blockId: string): FlowGraph {
     ...graph,
     blocks: graph.blocks.filter((b) => b.id !== blockId),
     connections: graph.connections.filter(
-      (c) => c.sourceBlockId !== blockId && c.targetBlockId !== blockId,
+      (c) =>
+        c.sourceBlockId !== blockId &&
+        (c.targetEndingId !== undefined || c.targetBlockId !== blockId),
     ),
     flowInput: {
       ...graph.flowInput,
       targetBlockIds: graph.flowInput.targetBlockIds.filter((id) => id !== blockId),
     },
   };
+}
+
+export function addEnding(graph: FlowGraph): FlowGraph {
+  const ending: FlowEnding = {
+    id: uid(),
+    name: "",
+    description: "",
+    output: "none",
+    outputDescription: "",
+  };
+  return { ...graph, finish: { ...graph.finish, endings: [...graph.finish.endings, ending] } };
+}
+
+export function replaceEnding(graph: FlowGraph, next: FlowEnding): FlowGraph {
+  return {
+    ...graph,
+    finish: {
+      ...graph.finish,
+      endings: graph.finish.endings.map((ending) => (ending.id === next.id ? next : ending)),
+    },
+  };
+}
+
+export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
+  return {
+    ...graph,
+    finish: {
+      ...graph.finish,
+      endings: graph.finish.endings.filter((ending) => ending.id !== endingId),
+    },
+    connections: graph.connections.filter(
+      (c) => c.targetBlockId !== FINISH_BLOCK_ID || c.targetEndingId !== endingId,
+    ),
+  };
+}
+
+function restoredEndings(
+  current: readonly FlowEnding[],
+  before: readonly FlowEnding[],
+  after: readonly FlowEnding[],
+) {
+  const endings = [...current];
+  const has = (list: readonly FlowEnding[], id: string) => list.some((e) => e.id === id);
+  before.forEach((ending, index) => {
+    if (has(after, ending.id) || has(endings, ending.id)) return;
+    const previous = before.slice(0, index).findLast((candidate) => has(endings, candidate.id));
+    const at = previous ? endings.findIndex((e) => e.id === previous.id) + 1 : 0;
+    endings.splice(at, 0, ending);
+  });
+  return endings;
 }
 
 /**
@@ -197,54 +293,63 @@ export function continuedThread(graph: FlowGraph, blockId: string): string | nul
   return agent ? `${agent.name || "Unnamed block"}'s thread` : null;
 }
 
-/**
- * The names of the blocks each exit's connections reach, in graph order, indexed once per graph
- * since a canvas asks for every exit row; undefined for a target the graph lacks.
- */
-export function exitRecipients(graph: FlowGraph) {
+function recipientNames(graph: FlowGraph) {
   const names = new Map<string, string>();
   for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
+  const endings = new Map<string, string>();
+  for (const ending of graph.finish.endings)
+    if (!endings.has(ending.id)) endings.set(ending.id, ending.name);
+  return ({ targetBlockId, targetEndingId }: FlowConnection) => {
+    if (targetEndingId === undefined) return names.get(targetBlockId);
+    const ending = endings.get(targetEndingId);
+    return ending === undefined ? undefined : `Finish · ${ending || "Unnamed ending"}`;
+  };
+}
+
+export function exitRecipients(graph: FlowGraph) {
+  const name = recipientNames(graph);
   const recipients = new Map<string, (string | undefined)[]>();
-  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
-    const key = JSON.stringify([sourceBlockId, exitId]);
+  for (const connection of graph.connections) {
+    const key = JSON.stringify([connection.sourceBlockId, connection.exitId]);
     const list = recipients.get(key) ?? [];
-    list.push(names.get(targetBlockId));
+    list.push(name(connection));
     recipients.set(key, list);
   }
   return (blockId: string, exitId: string): readonly (string | undefined)[] =>
     recipients.get(JSON.stringify([blockId, exitId])) ?? [];
 }
 
-/**
- * The names of the blocks each of one block's exits reaches, in graph order: a single pass that
- * keeps only that block's connections, for views that show one block rather than the whole canvas.
- */
 export function blockExitRecipients(graph: FlowGraph, blockId: string) {
+  const name = recipientNames(graph);
   const recipients = new Map<string, (string | undefined)[]>();
-  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
-    if (sourceBlockId !== blockId) continue;
-    const list = recipients.get(exitId) ?? [];
-    list.push(graph.blocks.find((block) => block.id === targetBlockId)?.name);
-    recipients.set(exitId, list);
+  for (const connection of graph.connections) {
+    if (connection.sourceBlockId !== blockId) continue;
+    const list = recipients.get(connection.exitId) ?? [];
+    list.push(name(connection));
+    recipients.set(connection.exitId, list);
   }
   return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
 }
 
-/**
- * Undoes a removal that turned `before` into `after` on the current graph: blocks and wires the
- * removal took come back, edits made since are kept, and a wire returns only while both its ends
- * exist.
- */
 export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
   const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
   const blocks = [
     ...current.blocks,
     ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
   ];
+  const endings = restoredEndings(
+    current.finish.endings,
+    before.finish.endings,
+    after.finish.endings,
+  );
   const exists = (id: string) => blocks.some((b) => b.id === id);
+  const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
+    targetEndingId !== undefined
+      ? endings.some((ending) => ending.id === targetEndingId)
+      : exists(targetBlockId);
   const restored = (graph: FlowGraph, wire: FlowWire) =>
-    !hasWire(after, wire) && !hasWire(graph, wire) && exists(wire.targetBlockId);
-  let next: FlowGraph = { ...current, blocks };
+    !hasWire(after, wire) && !hasWire(graph, wire) && targetExists(wire);
+  let next: FlowGraph = { ...current, blocks, finish: { ...current.finish, endings } };
   for (const targetBlockId of before.flowInput.targetBlockIds) {
     const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
     if (restored(next, wire)) next = addWire(next, wire);

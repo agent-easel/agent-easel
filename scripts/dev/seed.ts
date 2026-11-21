@@ -12,6 +12,7 @@ import {
   repliesDiscussed,
   archived,
   arrivalsNumbered,
+  endingReached,
   blockWorkerLaunched,
   changesRequested,
   controlledTitleModel,
@@ -251,6 +252,13 @@ export async function seedScenario(
     );
     return first.runId;
   }
+  if (scenario.state === "ending reached") {
+    const [first] = await twoWorkersStarted(context, start);
+    await resultReported(context, first, scenario.result);
+    await endingReached(context, first.runId);
+    await settled(context, first);
+    return first.runId;
+  }
   if (scenario.state === "Run worktree bound") return (await worktreeBound(context, start)).runId;
   if (scenario.state === "generated title applied")
     return generatedTitleRun(context, start, `${namespace.titlePrefix}${scenario.generatedTitle}`);
@@ -322,6 +330,7 @@ async function finishScenario(
         | "Run worktree bound"
         | "results released to a Wait"
         | "results released to a Condition"
+        | "ending reached"
         | "progress overdue"
         | "settlement unresolved"
         | "generated title applied";
