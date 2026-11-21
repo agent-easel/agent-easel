@@ -9,6 +9,7 @@ export function attentionRows(sql: SqlClient.SqlClient, runId?: string) {
     const rows = yield* sql<{
       id: string;
       binding_id: string | null;
+      invocation_id: string | null;
       run_id: string;
       title: string;
       block_id: string | null;
@@ -24,13 +25,14 @@ export function attentionRows(sql: SqlClient.SqlClient, runId?: string) {
       settlement_reason: string | null;
       message: string | null;
     }>`
-      SELECT a.*,t.title,b.name,CASE WHEN a.binding_id IS NOT NULL THEN binding.link ELSE b.link END AS link,
+      SELECT a.*,CASE WHEN a.kind='subflow-stop-unresolved' THEN a.execution_id ELSE b.invocation_id END AS invocation_id,t.title,b.name,CASE WHEN a.binding_id IS NOT NULL THEN binding.link ELSE b.link END AS link,
       CASE WHEN a.block_id IS NULL THEN 'fresh' ELSE b.freshness END AS freshness FROM run_attention a JOIN runs r ON r.id=a.run_id
       JOIN tasks t ON t.id=r.task_id LEFT JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
       LEFT JOIN run_thread_bindings binding ON binding.id=a.binding_id
       WHERE (${runId ?? null} IS NULL OR a.run_id=${runId ?? null}) ORDER BY a.appeared_at DESC,a.rowid DESC`;
     return rows.map((attentionEntry) => ({
       id: attentionEntry.id,
+      ...(attentionEntry.invocation_id ? { invocationId: attentionEntry.invocation_id } : {}),
       ...(attentionEntry.binding_id ? { bindingId: attentionEntry.binding_id } : {}),
       runId: attentionEntry.run_id,
       taskTitle: attentionEntry.title,

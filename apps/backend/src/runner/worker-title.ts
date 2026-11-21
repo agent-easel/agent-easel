@@ -81,10 +81,15 @@ export function workerThreadTitle(
   run: { readonly number: number | null; readonly title: string },
   blocks: readonly TitleBlock[],
   blockId: string,
+  suffix = "",
 ): string {
   const label = blockLabels(blocks).get(blockId);
   if (label === undefined) throw Error("Title target is not an Agent Block");
   const prefix = run.number === null ? "F" : `F#${run.number}`;
   const heading = prefix + labelHeading(label);
-  return heading + clip(singleLine(run.title), threadTitleLimit - Array.from(heading).length);
+  return (
+    heading +
+    clip(singleLine(run.title), threadTitleLimit - Array.from(heading).length - suffix.length) +
+    suffix
+  );
 }

@@ -8,16 +8,16 @@ import { failure } from "../result.ts";
 import { threadHref } from "../thread-link.ts";
 import type { BoundWorker, RunStore, SettlementWorkerRecord } from "./run-store/run-store.ts";
 import { runTarget, type RunnerLifecycle, type RunRow } from "./runner-types.ts";
-import { recoverOperation } from "./runner-effects.ts";
+import { recoverOperation, requestThreadStop } from "./runner-effects.ts";
 import { fingerprint } from "../fingerprint.ts";
 import { readWorkerThread, type WorkerThread } from "./worker-thread.ts";
 import type { OwnedThreads } from "./owned-thread.ts";
 
 /** How long a worker whose Stop T3 acknowledged may stay unfinished before it is unresolved. */
-const STOP_CONFIRMATION_MS = 30_000;
+export const STOP_CONFIRMATION_MS = 30_000;
 
 /** A fresh, correctly scoped read of a bound worker thread for manual settlement. */
-type SettlementRead =
+export type SettlementRead =
   | {
       readonly finished: true;
       readonly latest: WorkerThread["latest"];
@@ -256,15 +256,7 @@ export function openRunnerSettle(
         const key = fingerprint(`${run.id}:settle:${attempt}:${worker.thread_id}`);
         const executionId = reads.get(worker.thread_id)?.latest?.runId ?? null;
         if (!(yield* store.claimWorkerStop(run, attempt, worker, { key, executionId }))) continue;
-        const sent = yield* recoverOperation(
-          Effect.as(
-            Effect.tryPromise(() =>
-              t3.stopThread(runTarget(run), { threadId: worker.thread_id, clientRequestId: key }),
-            ),
-            true,
-          ),
-          () => Effect.succeed(false),
-        );
+        const sent = yield* requestThreadStop(t3, runTarget(run), worker.thread_id, key);
         yield* store.recordStopOutcome(
           run,
           attempt,
@@ -456,6 +448,7 @@ export function openRunnerSettle(
     settleIfFinished,
     currentOutcome,
     advanceSettlement,
+    readForSettlement,
     settleWhenDone,
     settleFinishedBlockThreads,
   };

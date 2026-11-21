@@ -53,6 +53,7 @@ export function openRunRequestReport(database: RunnerDatabase) {
         const eligible =
           yield* sql`SELECT r.id FROM runs r JOIN run_blocks b ON b.run_id=r.id JOIN run_executions e ON e.run_id=r.id AND e.block_id=b.block_id AND e.execution_id=b.execution_id
         WHERE r.id=${current.id} AND b.block_id=${blockId} AND b.execution_id=${executionId} AND e.engine_status='completed' AND e.thread_id=${threadId}
+        AND NOT EXISTS(SELECT 1 FROM subflow_invocations i WHERE i.id=b.invocation_id AND i.state<>'active')
         AND ${request.activationId}=(SELECT id FROM run_activations WHERE run_id=r.id AND block_id=b.block_id ORDER BY rowid DESC LIMIT 1)
         AND NOT EXISTS(SELECT 1 FROM runtime_reports WHERE activation_id=${request.activationId})`;
         if (!eligible.length || (yield* blockHasUnresolvedWork(sql, current.id, blockId)))

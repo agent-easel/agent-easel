@@ -276,6 +276,12 @@ affected data. An accepted removal still needs a migration and an upgrade test p
 both the deletion and preservation of unaffected data. Record retained/lost data and any
 operator action in the PR and update support limits.
 
+A Run captures its root revision and references each placed Flow revision once. Invocation
+records own serial placement ordering and link their inner Block identities to the captured graph.
+Runtime records continue to reference the Run and its Block IDs. The scoped runtime migration
+keeps existing Blocks in the root scope with their existing public identifiers, operation keys,
+Condition numbers and revision references.
+
 A reset must be explicit, never a fallback after upgrade failure. The application reads
 only the current shape; old-shape readers and dual-write paths do not replace migrations.
 When rewriting immutable history, temporarily remove its guard and restore the identical

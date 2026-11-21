@@ -42,6 +42,18 @@ const REJECTIONS: Readonly<Record<string, readonly [string, string]>> = {
     "This cursor does not continue this Condition's arrivals in your Block's Run.",
     "Omit cursor to read the first page again, then pass only the nextCursor it returns.",
   ],
+  UNKNOWN_SUBFLOW: [
+    "Your Block’s Run has no Subflow placement with this id.",
+    "Pass placementBlockId from factory_get_run or a parent invocation’s Blocks.",
+  ],
+  INVALID_SUBFLOW_CURSOR: [
+    "This cursor belongs to a different Subflow placement or backend lifetime.",
+    "Omit cursor to read the first page again.",
+  ],
+  INVALID_SUBFLOW_LIMIT: [
+    "limit must be a whole number from 1 to 100.",
+    "Omit limit for 50 invocations per page.",
+  ],
   INVALID_ARGUMENT: [
     "The call has an unexpected argument or argument type.",
     "Read the tool's input schema and send only its documented arguments.",

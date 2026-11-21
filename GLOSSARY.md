@@ -66,7 +66,7 @@ A Flow block that places another saved Flow by its `flowId` (`kind: "subflow"`).
 _Avoid_: nested workflow, macro, inline copy (a Subflow references a saved Flow by ID rather than copying its graph).
 
 **Subflow invocation**:
-One execution of a placed Subflow block when a Run delivers a message to it (runtime execution arrives in S2; S1 authors, saves and validates Subflow compositions while refusing Start).
+One execution of a placed Subflow block in the parent Run and workspace. Each placement queues its arrivals in order within its parent invocation. Each invocation uses the captured Flow revision with its own workers and Block state. Its first Finish ending closes the invocation, and the matching parent exit fires after Factory verifies its workers stopped or finished.
 
 **Nothing returned**:
 When a Subflow invocation completes without reaching any of its Finish endings, so no outgoing exit wire fires on the parent Subflow block.
@@ -111,7 +111,7 @@ _Avoid_: Timer or delay as the block name; manual resume (not a Wait mode).
 One accepted delivery to a Wait within a Run, with its retained message, worker provenance, absolute deadline counted from the delivery's release, and outcome: pending, forwarded (at its deadline, or early by the user with **Continue now**) or cancelled by Archive or manual settlement. Arrivals never join or reset one another.
 
 **Continuation**:
-A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in a Run sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of the Run, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits, Conditions and other Continuations pass the worker on.
+A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in the root Flow or its Subflow invocation sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of that execution, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits, Conditions and other Continuations pass the worker on.
 _Avoid_: continuity, follow-up block, reusing a worker by copying its conversation.
 
 **Condition**:
@@ -171,7 +171,7 @@ The execution canvas keeping its view on the active Blocks (or the error-state B
 _Avoid_: auto-scroll, tracking mode.
 
 **Block id**:
-The identifier Factory mints for an Agent Block or Continuation when a Run starts and states in every launch, visit, Continuation prompt and Request report message to the worker that works the task. Factory MCP tools take it to read the Block and its Run and to update the Block; a report naming it applies to the Block's current activation. It is stable across visits and is not the Flow block's id.
+The identifier Factory mints for an Agent Block or Continuation when its Run or invocation starts and states in every launch, visit, Continuation prompt and Request report message to the worker that works the task. Factory MCP tools take it to read the Block and its Run and to update the Block; a report naming it applies to the Block's current activation. It is stable across visits and is not the Flow block's id.
 _Avoid_: tool ref, caller correlation.
 
 **Factory MCP**:
@@ -240,7 +240,7 @@ shortened. The first valid one while the Run's title provenance is still automat
 makes the provenance generated and is final; it is not Run activity.
 
 **Captured definitions**:
-The Flow revision a Run started with and the Agent revision of every Agent that Flow references, frozen at Start. Every read and later activation of the Run uses them; later saves and removals affect only future Runs.
+The root and placed Flow revisions and the Agent revisions they reference, frozen at Start. Every read and later activation of the Run uses them; later saves and removals affect only future Runs.
 _Avoid_: Run snapshot.
 
 **Run timeline**:

@@ -53,12 +53,14 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - `working`: Demo · Working · Improve the project picker
 - `overdue`: Demo · Needs input · Search indexing has gone quiet
 - `generated-title`: Demo · Generated title · Rank exact project-name matches above partial matches when someone searches Atlas
+- `subflow-closing`: Demo · Subflow · Waiting for the second reviewer to stop
+- `subflow-returned`: Demo · Subflow · Review returned to release notes
 
 <!-- scenario-catalog:end -->
 
 ## Simulator support limits
 
-- The simulator retains execution states but generates no code changes and finishes no work on its own. Seeded Runs launch top-level Block workers that report through `factory_update_block`; the
+- The simulator retains execution states but generates no code changes and finishes no work on its own. Seeded Runs launch Run-owned Block workers that report through `factory_update_block`; the
   persistent demo does not model T3 reply turns.
 - Native T3 links, thread settlement, delegated waits and repository branch/PR facts in simulated Runs are fixture state. They do not prove real threads, T3 list organization, native settlement or reopen,
   real delegated-work settlement, Git changes or live GitHub state. A seeded Problem is deliberate; reset restores it.
@@ -66,7 +68,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
   seeded Runs and new demo Runs. Its title thread is simulated and the seed submits the generated title through
   `factory_set_run_title` itself; it proves no title model or live T3 launch.
 - The `ending-reached` Run starts two workers in a Flow whose Finish block has the endings Shipped and Dropped. The first worker's result enters Shipped, so the Run records its result, stops the second worker
-  (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once; it proves no real T3 Stop or worker settlement.
+  (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once in that scenario. The Subflow demo also keeps one invocation stopping after T3 acknowledges Stop and advances another through verified release to the release-notes worker. These scenarios use controlled Stop behavior.
 - No seeded Run shows a Condition integrity Problem. Only missing or inconsistent stored Condition state records one, and public operations cannot produce that state.
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
 - A repository registered through the project API gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed. The composer does not add repositories.

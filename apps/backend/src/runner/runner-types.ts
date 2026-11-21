@@ -13,6 +13,10 @@ import type { T3ContractSnapshot } from "../t3/contract.ts";
 import type { T3Target } from "../t3/connection.ts";
 import type { RunWorkspace } from "./run-workspace.ts";
 
+export type ExecutionDefinitions = RunDefinitions & {
+  readonly invocation?: { id: string; revisionId: string; finishBlockId: string };
+};
+
 /** A Run's row with the definitions it captured at Start. */
 export type RunRow = {
   id: string;
@@ -24,7 +28,7 @@ export type RunRow = {
   input: string;
   request_fingerprint: string;
   flow_revision_id: string;
-  definitions: RunDefinitions;
+  definitions: ExecutionDefinitions;
   context_id: string;
   /** The project root: the Run's T3 project identity, also for worktree Runs. */
   workspace_root: string;
@@ -43,6 +47,8 @@ export type RunRow = {
 export type BlockRow = {
   run_id: string;
   block_id: string;
+  invocation_id: string | null;
+  template_block_id: string | null;
   /** The Block id Agents name in Factory MCP calls; null for Human steps. */
   public_id: string | null;
   name: string;
@@ -130,6 +136,8 @@ export function runTarget(
 export type StoredTarget = T3Target & {
   threadId?: string;
   endingId?: string;
+  flowInput?: true;
+  carriesStart?: boolean;
 };
 
 /** A dispatch precondition either holds with its value or names the operation's problem. */

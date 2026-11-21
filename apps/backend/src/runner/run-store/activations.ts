@@ -33,7 +33,7 @@ function createActivation(
 ) {
   return Effect.gen(function* () {
     // An Agent block runs with the revision its Run froze at Start, never the current one.
-    yield* sql`INSERT INTO run_activations(id,run_id,block_id,cause,created_at,agent_revision_id) VALUES(${plan.activationId},${runId},${blockId},${cause},${time},(SELECT f.agent_revision_id FROM runs r JOIN flow_revision_blocks b ON b.flow_revision_id=r.flow_revision_id AND b.block_id=${blockId} JOIN run_agent_revisions f ON f.run_id=r.id AND f.agent_id=b.agent_id WHERE r.id=${runId}))`;
+    yield* sql`INSERT INTO run_activations(id,run_id,block_id,cause,created_at,agent_revision_id) VALUES(${plan.activationId},${runId},${blockId},${cause},${time},(SELECT f.agent_revision_id FROM runs r JOIN flow_revision_blocks b ON b.flow_revision_id=COALESCE((SELECT c.flow_revision_id FROM run_blocks rb JOIN subflow_invocations i ON i.id=rb.invocation_id JOIN run_subflow_revisions c ON c.run_id=i.run_id AND c.flow_id=i.flow_id WHERE rb.run_id=r.id AND rb.block_id=${blockId}),r.flow_revision_id) AND b.block_id=COALESCE((SELECT rb.template_block_id FROM run_blocks rb WHERE rb.run_id=r.id AND rb.block_id=${blockId}),${blockId}) JOIN run_agent_revisions f ON f.run_id=r.id AND f.agent_id=b.agent_id WHERE r.id=${runId}))`;
     yield* sql`INSERT INTO activation_messages(activation_id,request_key,input_fingerprint) VALUES(${plan.activationId},${plan.requestKey},${plan.inputFingerprint})`;
   });
 }
@@ -165,6 +165,9 @@ export function openRunActivations(database: RunnerDatabase) {
           number: number | null;
           title: string;
         }>`SELECT b.public_id,r.number,r.title FROM run_blocks b JOIN runs r ON r.id=b.run_id WHERE b.run_id=${current.id} AND b.block_id=${handoff.block_id}`;
+        const images = target.carriesStart
+          ? yield* sql<LaunchImage>`SELECT ordinal,sha256,name,mime_type AS "mimeType",size_bytes AS "sizeBytes" FROM run_images WHERE run_id=${current.id} ORDER BY ordinal`
+          : [];
         const launched = workerLaunchPayload(
           current.definitions,
           handoff.block_id,
@@ -173,6 +176,9 @@ export function openRunActivations(database: RunnerDatabase) {
           block!,
           block!.public_id,
           strategy,
+          images,
+          current.definitions.subflows?.length ? message : undefined,
+          current.definitions.invocation ? " · " + handoff.block_id : "",
         );
         const plan = {
           activationId,

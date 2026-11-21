@@ -276,6 +276,59 @@ function recordContinuations(
   });
 }
 
+function recordWorkerAttention(
+  sql: SqlClient.SqlClient,
+  context: {
+    runId: string;
+    blockId: string;
+    bindingId: string;
+    ownsBlock: boolean;
+    latestOwner: string;
+    decidingOwner: string;
+  },
+  worker: WorkerThread,
+  deciding: ExecutionRead | null,
+  time: string,
+) {
+  return Effect.gen(function* () {
+    const ownerScope = { block_id: deciding ? context.decidingOwner : context.blockId };
+    const ownsCurrentWork = context.ownsBlock || ownerScope.block_id !== context.blockId;
+    if (ownsCurrentWork)
+      yield* observeAttention(
+        sql,
+        context.runId,
+        {
+          bindingId: context.bindingId,
+          block_id: context.ownsBlock ? context.blockId : context.latestOwner,
+        },
+        worker.latest?.runId ?? "",
+        "native-request",
+        worker.thread.pendingRequestCount > 0,
+        time,
+      );
+    if (ownsCurrentWork && deciding && failedRun(deciding.status))
+      yield* observeAttention(
+        sql,
+        context.runId,
+        ownerScope,
+        deciding.runId,
+        "execution-failed",
+        true,
+        time,
+      );
+    // A later run of the thread that completes recovers earlier execution failures.
+    if (deciding?.status === "completed")
+      yield* settlePendingAttention(
+        sql,
+        context.runId,
+        ownerScope.block_id,
+        "execution-failed",
+        "completed",
+        time,
+      );
+  });
+}
+
 function recordWorkerThread(
   sql: SqlClient.SqlClient,
   run: RunRow,
@@ -291,16 +344,10 @@ function recordWorkerThread(
     if (!binding) throw Error("Worker binding is missing.");
     yield* recordWorkerRepository(sql, binding.id, thread.repository, time);
     yield* refreshWorkerLink(sql, binding.id, thread.link);
-    const scope = { block_id: block.block_id, bindingId: binding.id };
-    yield* observeAttention(
-      sql,
-      run.id,
-      scope,
-      latest?.runId ?? "",
-      "native-request",
-      thread.pendingRequestCount > 0,
-      time,
-    );
+    const [ownedHere] =
+      yield* sql`SELECT 1 FROM run_blocks b WHERE b.run_id=${run.id} AND b.block_id=${block.block_id}
+      AND NOT EXISTS(SELECT 1 FROM subflow_invocations i WHERE i.id=b.invocation_id AND i.state<>'active')`;
+
     // A run queued for a Continuation's prompt belongs to that Continuation, not to the worker's
     // Block: its failure is the Continuation's. A run not recorded yet is recorded as the Block's.
     const recorded = yield* sql<{
@@ -357,29 +404,22 @@ function recordWorkerThread(
       (runId) => recordOf(runId)?.engine_status === "cancelled",
       time,
     );
-    const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
-    if (deciding && failedRun(deciding.status))
-      yield* observeAttention(
-        sql,
-        run.id,
-        ownerScope,
-        deciding.runId,
-        "execution-failed",
-        true,
-        time,
-      );
-    // A later run of the thread that completes recovers earlier execution failures.
-    if (deciding?.status === "completed")
-      yield* settlePendingAttention(
-        sql,
-        run.id,
-        ownerScope.block_id,
-        "execution-failed",
-        "completed",
-        time,
-      );
-    yield* recordActivation(sql, run, block, worker, time);
     const latestOwner = latest ? ownerOf(latest.runId) : block.block_id;
+    yield* recordWorkerAttention(
+      sql,
+      {
+        runId: run.id,
+        blockId: block.block_id,
+        bindingId: binding.id,
+        ownsBlock: Boolean(ownedHere),
+        latestOwner,
+        decidingOwner: deciding ? ownerOf(deciding.runId) : block.block_id,
+      },
+      worker,
+      deciding,
+      time,
+    );
+    if (ownedHere) yield* recordActivation(sql, run, block, worker, time);
     yield* recordContinuations(sql, run, binding.id, worker, latestOwner, time);
     yield* advanceGeneration(sql, run.id);
   });
@@ -411,7 +451,7 @@ export function openRunObservation(database: RunnerDatabase) {
     database.mutate(run.id, (sql) =>
       Effect.gen(function* () {
         if (!(yield* database.runHeldUnderContext(sql, run))) return;
-        yield* sql`UPDATE run_blocks SET freshness='stale',problem='Worker thread observation unavailable.' WHERE run_id=${run.id} AND block_id=${blockId}`;
+        yield* sql`UPDATE run_blocks SET freshness='stale',problem='Worker thread observation unavailable.' WHERE run_id=${run.id} AND block_id=${blockId} AND NOT EXISTS(SELECT 1 FROM subflow_invocations i WHERE i.id=run_blocks.invocation_id AND i.state<>'active')`;
         yield* advanceGeneration(sql, run.id);
       }),
     );

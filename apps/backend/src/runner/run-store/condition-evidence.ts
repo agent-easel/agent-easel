@@ -7,7 +7,7 @@ import {
   type ConditionRecipientDisposition,
   type Result,
 } from "@t3-factory/contracts";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { decodeCursor, encodeCursor } from "./read-cursor.ts";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { RunnerDatabase } from "./database.ts";
@@ -41,28 +41,6 @@ type Cursor = readonly [runId: string, blockId: string, highWater: number, after
  * after a later arrival. The key lives only in this process: a cursor issued before a restart is
  * refused, and the reader opens a new window from arrival 1.
  */
-const cursorKey = randomBytes(32);
-
-const cursorSignature = (payload: string) =>
-  createHmac("sha256", cursorKey).update(payload).digest();
-
-const encodeCursor = (cursor: Cursor) => {
-  const payload = Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
-  return `${payload}.${cursorSignature(payload).toString("base64url")}`;
-};
-
-/** The cursor `text` encodes, exactly as this process issued it; undefined for anything else. */
-function decodeCursor(text: string): Cursor | undefined {
-  const [payload, signature, ...rest] = text.split(".");
-  if (payload === undefined || signature === undefined || rest.length) return undefined;
-  const expected = cursorSignature(payload);
-  const actual = Buffer.from(signature, "base64url");
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
-  if (actual.toString("base64url") !== signature) return undefined;
-  // Signed by this process, so the payload is a cursor it encoded.
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Cursor;
-}
-
 const DISPOSITIONS: Readonly<Record<DeliveryState, ConditionRecipientDisposition>> = {
   pending: "pending",
   reserved: "pending",
@@ -126,7 +104,7 @@ export function openConditionEvidence(database: RunnerDatabase) {
         const [scope] = yield* sql<{
           condition: number;
           committed: number | null;
-        }>`SELECT EXISTS(SELECT 1 FROM flow_revision_blocks b WHERE b.flow_revision_id=r.flow_revision_id AND b.block_id=${blockId} AND b.kind='condition') AS condition,
+        }>`SELECT EXISTS(SELECT 1 FROM condition_counters c WHERE c.run_id=r.id AND c.block_id=${blockId}) AS condition,
           (SELECT MAX(a.arrival_number) FROM condition_arrivals a WHERE a.run_id=r.id AND a.block_id=${blockId}) AS committed
           FROM runs r WHERE r.id=${runId}`;
         if (!scope) return failure("not_found", "This Run does not exist.");
@@ -134,7 +112,7 @@ export function openConditionEvidence(database: RunnerDatabase) {
         const committed = scope.committed ?? 0;
         let window = { highWater: committed, after: 0 };
         if (cursorText !== undefined) {
-          const cursor = decodeCursor(cursorText);
+          const cursor = decodeCursor<Cursor>(cursorText);
           if (!cursor) return invalidCursor;
           const [cursorRun, cursorBlock, highWater, after] = cursor;
           if (cursorRun !== runId || cursorBlock !== blockId) return invalidCursor;
@@ -145,7 +123,7 @@ export function openConditionEvidence(database: RunnerDatabase) {
           yield* sql<ArrivalRow>`SELECT a.id,a.run_id,a.arrival_number,a.accepted_at,a.rule_id,r.name AS rule_name,i.source_block_id,a.origin_activation_id,t.thread_id AS origin_thread_id
           FROM condition_arrivals a
           JOIN operation_intents i ON i.id=a.incoming_intent_id
-          LEFT JOIN flow_revision_condition_rules r ON r.flow_revision_id=a.flow_revision_id AND r.block_id=a.block_id AND r.rule_id=a.rule_id
+          LEFT JOIN flow_revision_condition_rules r ON r.flow_revision_id=a.flow_revision_id AND r.block_id=a.template_block_id AND r.rule_id=a.rule_id
           LEFT JOIN run_thread_bindings t ON t.id=a.binding_id
           WHERE a.run_id=${runId} AND a.block_id=${blockId} AND a.arrival_number>${window.after} AND a.arrival_number<=${window.highWater}
           ORDER BY a.arrival_number LIMIT ${pageSize + 1}`;

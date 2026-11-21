@@ -4,7 +4,11 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/server";
-import { CONDITION_ARRIVAL_PAGE_DEFAULT, CONDITION_ARRIVAL_PAGE_MAX } from "@t3-factory/contracts";
+import {
+  CONDITION_ARRIVAL_PAGE_DEFAULT,
+  CONDITION_ARRIVAL_PAGE_MAX,
+  SUBFLOW_INVOCATION_PAGE_MAX,
+} from "@t3-factory/contracts";
 import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
 import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
@@ -110,6 +114,22 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "factory_get_subflow_invocations",
+    description:
+      "Read a Subflow placement’s invocation history in your Run, newest first. Use its placement Block id from factory_get_run or an invocation’s inner Blocks. A cursor continues the same placement and first page’s high-water mark.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        blockId: blockIdProperty,
+        placementBlockId: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: SUBFLOW_INVOCATION_PAGE_MAX },
+        cursor: { type: "string" },
+      },
+      required: ["blockId", "placementBlockId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "factory_set_run_title",
     description:
       "Submit the Run title your Factory title message asks for. Only the title thread that received the titleGenerationId calls this; it takes no Block id. Factory trims surrounding whitespace and accepts one non-empty line of at most 120 characters (Unicode code points) without control characters; it never shortens a title. A rejected title can be corrected and submitted again while the generation is pending. The first accepted title is final; repeating it returns the same acknowledgement.",
@@ -133,6 +153,7 @@ const operations = {
   factory_get_block: "block",
   factory_get_run: "run",
   factory_get_run_image: "image",
+  factory_get_subflow_invocations: "subflowInvocations",
   factory_get_condition_arrivals: "conditionArrivals",
   factory_set_run_title: "title",
 } as const;
@@ -143,6 +164,7 @@ export interface RuntimeTools {
   block(input: unknown): Promise<RuntimeReply>;
   run(input: unknown): Promise<RuntimeReply>;
   image(input: unknown): Promise<RuntimeReply>;
+  subflowInvocations(input: unknown): Promise<RuntimeReply>;
   conditionArrivals(input: unknown): Promise<RuntimeReply>;
   title(input: unknown): Promise<RuntimeReply>;
 }

@@ -263,6 +263,9 @@ export const makeFactoryService = (
       installReporting: (input) => reporting.installReporting(input),
       answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),
       continueWaitArrival: (id) => runner.continueWaitArrival(id),
+      listSubflowInvocations: (runId, blockId, limit, cursor) =>
+        runner.listSubflowInvocations(runId, blockId, limit, cursor),
+      retrySubflowStop: (runId, invocationId) => runner.retrySubflowStop(runId, invocationId),
       listConditionArrivals: (runId, blockId, limit, cursor) =>
         runner.listConditionArrivals(runId, blockId, limit, cursor),
       listAttention: () => runner.listAttention(),

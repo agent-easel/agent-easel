@@ -8,7 +8,7 @@ import {
   reportFingerprint,
   reportRoute,
 } from "../report-rules.ts";
-import { readRunDefinitions } from "./run-definitions.ts";
+import { definitionsAtBlock, readRunDefinitions } from "./run-definitions.ts";
 import type { ReportRunRow } from "../runner-types.ts";
 import { resolveBlock, writeBlockState } from "./blocks.ts";
 import {
@@ -65,7 +65,11 @@ function reportTarget(sql: SqlClient.SqlClient, ownerToken: string, publicId: st
       id: string;
     }>`SELECT id FROM run_activations WHERE run_id=${block.run_id} AND block_id=${block.block_id} ORDER BY rowid DESC LIMIT 1`;
     if (!activation) return rejected("UNKNOWN_BLOCK");
-    const runRow: ReportRunRow = { ...saved, definitions: yield* readRunDefinitions(sql, saved) };
+    const definitions = yield* readRunDefinitions(sql, saved);
+    const runRow: ReportRunRow = {
+      ...saved,
+      definitions: yield* definitionsAtBlock(sql, { id: saved.id, definitions }, block.block_id),
+    };
     return { ok: true as const, target: { runRow, block, activationId: activation.id } };
   });
 }
@@ -148,6 +152,27 @@ function decide(
 ) {
   return Effect.gen(function* (): Effect.fn.Return<RuntimeReply, unknown> {
     const { runRow, block } = target;
+    if (runRow.definitions.invocation) {
+      const [scope] = yield* sql<{
+        state: string;
+      }>`SELECT state FROM subflow_invocations WHERE id=${runRow.definitions.invocation.id}`;
+      if (scope?.state !== "active") {
+        const time = yield* now;
+        yield* appendTimelineEvent(sql, {
+          kind: "subflow-report-ignored",
+          runId: runRow.id,
+          blockId: block.block_id,
+          invocationId: runRow.definitions.invocation.id,
+          observedAt: time,
+        });
+        yield* advanceGeneration(sql, runRow.id);
+        return {
+          code: "INVOCATION_CLOSED",
+          allowedTransitions: [],
+          next: "This invocation is closed. End work on this Block.",
+        };
+      }
+    }
     if (runRow.archived_at) return RUN_ARCHIVED;
     if (!runRow.gate_open) return runRow.settled_at ? RUN_SETTLED : RUN_SETTLING;
     const protocol = nonFinalRejection(report);

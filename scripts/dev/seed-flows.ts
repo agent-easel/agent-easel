@@ -140,12 +140,13 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     ],
   });
   await createExitReadinessScenarios(factory, agents.reviewer, agents.worker);
-  await createSubflowCompositionFlows(factory, agents);
+  const subflowReview = await createSubflowCompositionFlows(factory, agents);
   return {
     simple,
     review,
     parallel,
     parallelStart,
+    subflowReview,
     worktree,
     continuation,
     ...(await createWaitFlows(factory, agents)),
@@ -512,7 +513,7 @@ async function createSubflowCompositionFlows(factory: Factory, agents: DemoAgent
       ],
     },
   });
-  await saveFlow(factory, "Demo · Release with review", {
+  return saveFlow(factory, "Demo · Release with review", {
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),
     blocks: [
       agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 }),

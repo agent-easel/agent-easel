@@ -171,6 +171,8 @@ export function matterCopy(item: RunAttention): { title: string; next: string | 
     case "missing-report":
       return reportCopy(block, undefined, "missing");
     case "human":
+    case "subflow-stop-unresolved":
+      return { title: block + " could not stop its workers", next: item.message };
     case "settlement-unresolved":
       return { title: block, next: null };
   }

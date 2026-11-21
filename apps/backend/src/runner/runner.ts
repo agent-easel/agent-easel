@@ -16,6 +16,7 @@ import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
 import { openRunStore, queryPageLimit } from "./run-store/run-store.ts";
 import { openRunnerDispatch } from "./runner-dispatch.ts";
+import { advanceInvocations } from "./runner-invocations.ts";
 import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
 import { openRunActions } from "./run-actions.ts";
@@ -162,11 +163,31 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       yield* forwardDueWaits(id);
       yield* releaseContinuationResults(store, t3, (yield* row(id)) ?? runRow);
       const observed = (yield* row(id)) ?? runRow;
-      yield* dispatchIntents(observed, snapshot);
+      const attempted = new Set<string>();
+      yield* dispatchIntents(observed, snapshot, attempted);
       // Binding the Run worktree during dispatch records the launches that join it.
       const current = yield* row(id);
       if (preparing(observed) && current && !preparing(current))
-        yield* dispatchIntents(current, snapshot);
+        yield* dispatchIntents(current, snapshot, attempted);
+      if (observed.definitions.subflows?.length) yield* driveInvocations(id, snapshot, attempted);
+    });
+  }
+  function driveInvocations(id: string, snapshot: T3ContractSnapshot, attempted: Set<string>) {
+    return Effect.gen(function* () {
+      for (;;) {
+        const run = yield* row(id);
+        if (!run?.gate_open) return;
+        yield* advanceInvocations(
+          store,
+          t3,
+          run,
+          snapshot,
+          settlement.readForSettlement,
+          freshSnapshot,
+        );
+        yield* dispatchIntents(run, snapshot, attempted);
+        if ((yield* row(id))?.generation === run.generation) return;
+      }
     });
   }
   /** Forwards every arrival whose deadline passed, before the pass dispatches its Handoffs. */
@@ -176,10 +197,12 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         yield* store.forwardWaitArrival(runId, arrival.id, "timer");
     });
   }
-  function dispatchIntents(runRow: RunRow, snapshot: T3ContractSnapshot) {
+  function dispatchIntents(runRow: RunRow, snapshot: T3ContractSnapshot, attempted: Set<string>) {
     return Effect.gen(function* () {
       for (const work of yield* store.dispatchable(runRow)) {
         if (closed) break;
+        if (work.state !== "pending" && attempted.has(work.id)) continue;
+        attempted.add(work.id);
         yield* dispatchIntent(runRow, work, snapshot);
       }
     });
@@ -255,6 +278,20 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     markRunWokeSeen: store.markRunWokeSeen,
     getRun,
     /** The HTTP Condition evidence read, whose empty query parameters are absent. */
+    listSubflowInvocations: (runId: string, blockId: string, limit: string, cursor: string) =>
+      store.listSubflowInvocations(runId, blockId, queryPageLimit(limit), cursor || undefined),
+    retrySubflowStop: (runId: string, invocationId: string) =>
+      Effect.gen(function* () {
+        const snapshot = yield* freshSnapshot();
+        const run = yield* row(runId);
+        if (!run) return failure("not_found", "This Run does not exist.");
+        if (closed || snapshot.contextId !== run.context_id)
+          return failure("conflict", "The Runner or this Run’s T3 authorization is unavailable.");
+        const attempted = yield* store.retryInvocation(runId, invocationId, run.context_id);
+        if (!attempted.ok) return attempted;
+        yield* fork(drive(runId, "dispatch"));
+        return yield* getRun(runId);
+      }),
     listConditionArrivals: (runId: string, blockId: string, limit: string, cursor: string) =>
       store.listConditionArrivals(runId, blockId, queryPageLimit(limit), cursor || undefined),
     listAttention,

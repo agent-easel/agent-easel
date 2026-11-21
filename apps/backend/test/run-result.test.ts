@@ -26,10 +26,12 @@ it("two racing deliveries into endings record exactly one Run result and cancel 
   // Arrange
   const f = await prepared(c, racingEndingsFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
-  await resultReported(f.world, first, { message: "https://example.test/pull/42" });
-  await resultReported(f.world, second, { message: "Could not reproduce." });
+  await resultHeld(f.world, first, { message: "https://example.test/pull/42" });
+  await resultHeld(f.world, second, { message: "Could not reproduce." });
 
   // Act
+  allTurnsEnd(f.world, first);
+  allTurnsEnd(f.world, second);
   const run = await endingReached(f.world, first.runId);
 
   // Assert

@@ -37,7 +37,6 @@ import {
   type UpdateFlowInput,
 } from "@t3-factory/contracts";
 import {
-  agentCaptureBytes,
   CANVAS_COORD_MESSAGE,
   compositionReadiness,
   duplicateTreatment,
@@ -49,7 +48,6 @@ import {
   mayPlaceFlow,
   parsePortableFile,
   placementIssues,
-  readinessAgent,
   type CompositionDefinitions,
   type OwningProject,
   type ReadinessFlow,
@@ -80,7 +78,8 @@ import {
   readCurrentFlows,
   type CurrentFlow,
 } from "./flow-revisions.ts";
-import { appendAgentRevision, readCurrentAgents, readFormerExitNames } from "./agent-revisions.ts";
+import { readCompositionDefinitions } from "./composition-definitions.ts";
+import { appendAgentRevision, readCurrentAgents } from "./agent-revisions.ts";
 import {
   definitionExport,
   importReview,
@@ -332,26 +331,7 @@ export const makeDefinitions = (
       operation.pipe(Effect.provideService(SqlClient.SqlClient, sql));
     const transaction = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
       provideSql(sql.withTransaction(operation));
-    const readinessDefinitions = Effect.gen(function* () {
-      const agents = yield* readCurrentAgents(sql);
-      const formerExitNames = yield* readFormerExitNames(sql);
-      const flows = yield* readCurrentFlows(sql);
-      const saved = new Map(agents.map((agent) => [agent.id, agent]));
-      const bytes = new Map<string, number>();
-      return {
-        agents: agents.map((agent) =>
-          readinessAgent(agent, formerExitNames.get(agent.id) ?? new Map()),
-        ),
-        flows: new Map(flows.map((flow) => [flow.id, flow])),
-        agentBytes: (agentId: string) => {
-          const known = bytes.get(agentId);
-          if (known !== undefined) return known;
-          const counted = agentCaptureBytes(saved.get(agentId)!);
-          bytes.set(agentId, counted);
-          return counted;
-        },
-      } satisfies CompositionDefinitions;
-    });
+    const readinessDefinitions = readCompositionDefinitions(sql);
     const positionGraph = (input: FlowGraphInput) =>
       Effect.gen(function* () {
         const placed = {

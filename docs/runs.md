@@ -336,7 +336,7 @@ The Flow's [workspace setting](studio.md#workspace-setting) applies to every Run
 workspace or base override. To start from another base, change the Flow's **Base** (or save a copy of the Flow with it)
 before Start.
 
-- **Creation.** For a worktree Flow, the first Flow-input worker's T3 launch creates one worktree from the resolved base,
+- **Creation.** For a worktree Flow, the first Agent in depth-first Flow-input order launches the worker that creates one worktree from the resolved base,
   on a new branch named `factory/run-<Run number>-<first 8 characters of the Run id>`. The name is fixed and not
   configurable; T3 rejects the launch if that branch already exists. Details are in the [Runner](runner.md#run-workspace).
 - **Sharing.** Every other worker of the Run joins that worktree on its first visit, so parallel Blocks of one Run edit
@@ -676,6 +676,24 @@ On every desktop installation a Snoozed Run is silent: it leaves the Dock badge,
 matters that are pending or appear while it is Snoozed never notify, also after Snooze ends. **Restore** returns it to the badge
 without a notification; Woke notifies for the new matter as usual. See
 [Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
+
+## Subflow evidence
+
+A Run uses the Flows and Agents captured at Start. Its Subflow placement summaries include
+the oldest unfinished invocation, or the newest completed invocation when its queue drains.
+The Run read exposes the invocation's input, inner Block identities, queue count and one
+ending record. Ending evidence shows held, released or cancelled delivery separately from
+each recipient's disposition. The Run keeps one attention surface. A nested matter names its
+invocation and its Block so a client can open the corresponding history.
+
+The invocation history read is
+`GET /api/runs/:runId/subflows/:blockId/invocations`.
+Pages contain 50 invocations by default and accept a limit of 1–100. The first page fixes
+the high-water mark and pages newest first. A cursor continues the same Run and placement in
+the same parent invocation. The Condition evidence read uses the invocation-specific
+Condition Block ID for its own cursor window. Restarting the backend opens a new window.
+An unresolved Stop can be retried on its invocation through
+`POST /api/runs/:runId/invocations/:invocationId/retry-stop`.
 
 ## Reports and attention
 

@@ -10,6 +10,7 @@ import {
   exitsWithEndings,
   type ExitWithEndings,
 } from "@t3-factory/domain-validation";
+import type { BlockRow, ExecutionDefinitions } from "./runner-types.ts";
 import type { RunStore } from "./run-store/run-store.ts";
 import { OPEN_TRANSITIONS, type RuntimeReply } from "../runtime-types.ts";
 import { reportDiagnostic } from "../runtime-report-diagnostic.ts";
@@ -39,13 +40,17 @@ const READ_FIELDS = {
   run: [],
   image: ["imageId"],
   conditionArrivals: ["conditionBlockId", "limit", "cursor"],
+  subflowInvocations: ["placementBlockId", "limit", "cursor"],
 } as const satisfies Record<string, readonly string[]>;
 
 /** Block, Run, image and Condition evidence reads addressed by the Block id from the worker's
  * message; a Condition evidence read names a Condition of that Block's Run. */
 export function openBlockTools(
   store: RunStore,
-  getRun: (id: string) => Effect.Effect<{ ok: true; value: RunDetail } | { ok: false }, unknown>,
+  getRun: (
+    id: string,
+    focusInvocationId?: string,
+  ) => Effect.Effect<{ ok: true; value: RunDetail } | { ok: false }, unknown>,
   images: RunImages,
 ) {
   return (kind: keyof typeof READ_FIELDS, input: unknown): Effect.Effect<RuntimeReply, unknown> =>
@@ -62,16 +67,73 @@ export function openBlockTools(
       }
       const block = yield* store.locateBlock(publicId);
       if (!block) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
+      if (kind === "subflowInvocations")
+        return yield* readSubflowInvocations(store, block.run_id, fields);
       if (kind === "image")
         return yield* readImage(store, images, block.run_id, fields.imageId as string);
-      const detail = yield* getRun(block.run_id);
+      const detail = yield* getRun(
+        block.run_id,
+        kind === "block" ? (block.invocation_id ?? undefined) : undefined,
+      );
       if (!detail.ok) return { code: "RUNTIME_UNAVAILABLE" };
       if (kind === "run") return runView(detail.value);
-      const manifest = yield* store.blockImages(block.run_id);
-      const routedId = conditionArrivalId(visitCause(detail.value, block.block_id));
-      const routed = routedId ? yield* store.conditionArrivalMessage(block.run_id, routedId) : null;
-      return blockView(detail.value, block.block_id, manifest.map(imageIdentity), routed);
+      return yield* readBlockView(store, detail.value, block);
     }).pipe(Effect.catchCause(() => Effect.succeed<RuntimeReply>({ code: "RUNTIME_UNAVAILABLE" })));
+}
+
+function readSubflowInvocations(
+  store: RunStore,
+  runId: string,
+  fields: Readonly<Record<string, unknown>>,
+) {
+  return Effect.gen(function* (): Effect.fn.Return<RuntimeReply, unknown> {
+    const { placementBlockId, limit, cursor } = fields;
+    if (typeof placementBlockId !== "string" || ("cursor" in fields && typeof cursor !== "string"))
+      return reportDiagnostic({ code: "INVALID_ARGUMENT" });
+    const size =
+      "limit" in fields && typeof limit !== "number" ? Number.NaN : (limit as number | undefined);
+    const page = yield* store.listSubflowInvocations(
+      runId,
+      placementBlockId,
+      size,
+      cursor as string | undefined,
+    );
+    if (page.ok) return { code: "SUBFLOW_INVOCATIONS", ...page.value };
+    return reportDiagnostic({
+      code:
+        page.error.code === "not_found"
+          ? "UNKNOWN_SUBFLOW"
+          : page.error.issues[0]?.path === "limit"
+            ? "INVALID_SUBFLOW_LIMIT"
+            : "INVALID_SUBFLOW_CURSOR",
+    });
+  });
+}
+
+function readBlockView(store: RunStore, detail: RunDetail, block: BlockRow) {
+  return Effect.gen(function* () {
+    const manifest = yield* store.blockImages(block.run_id);
+    const definitions = yield* store.definitionsAtBlock(detail, block.block_id);
+    const cause = visitCause(detail, block.block_id);
+    const routedId = conditionArrivalId(cause);
+    const returned = /^subflow:([^/]+)/.exec(cause)?.[1];
+    const routed = routedId
+      ? yield* store.conditionArrivalMessage(block.run_id, routedId)
+      : returned
+        ? yield* store.subflowReturnMessage(block.run_id, returned)
+        : null;
+    const invocation = block.invocation_id
+      ? yield* store.invocationInput(block.invocation_id)
+      : undefined;
+    return blockView(
+      detail,
+      definitions,
+      block.block_id,
+      manifest.map(imageIdentity),
+      routed,
+      invocation,
+    );
+  });
 }
 
 function readImage(store: RunStore, images: RunImages, runId: string, imageId: string) {
@@ -144,12 +206,14 @@ const conditionArrivalId = (cause: string) => /^condition:([^/]+)/.exec(cause)?.
 /** `routed` is the message of the Condition arrival that started the current visit, if one did. */
 function blockView(
   detail: RunDetail,
+  definitions: ExecutionDefinitions,
   blockId: string,
   images: NonNullable<RuntimeReply["inputs"]>["images"],
   routed: string | null,
+  invocation?: { input: string; state: string },
 ): RuntimeReply {
   const block = detail.blocks.find((entry) => entry.blockId === blockId);
-  const graphBlock = detail.definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
+  const graphBlock = definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
   if (!block || !graphBlock) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
   const visits = detail.activations.filter((activation) => activation.blockId === blockId);
   const current = visits[visits.length - 1];
@@ -159,11 +223,7 @@ function blockView(
   // A later visit can re-read the Revisit instruction its message carried, e.g. after compaction.
   const revisitInstruction =
     graphBlock.kind === "agent" && visits.length > 1 ? graphBlock.revisitInstruction : "";
-  const exits = exitsWithEndings(
-    graphBlock,
-    detail.definitions.flow.graph,
-    detail.definitions.agents,
-  );
+  const exits = exitsWithEndings(graphBlock, definitions.flow.graph, definitions.agents);
   return {
     code: "BLOCK",
     state: block.state,
@@ -176,13 +236,22 @@ function blockView(
       ? { output: { messageRequired: exits[0]!.messageRequired, endings: exits[0]!.endings } }
       : {}),
     inputs: {
-      input: detail.input,
+      input: invocation?.input ?? detail.input,
       images,
       results: incomingResults(detail, cause),
-      feedback: conditionArrivalId(cause) ? routed : visitFeedback(detail, cause),
+      feedback: arrivalFeedback(detail, cause, routed),
     },
-    allowedTransitions: current && detail.gateOpen ? OPEN_TRANSITIONS : [],
+    allowedTransitions:
+      current && detail.gateOpen && (!invocation || invocation.state === "active")
+        ? OPEN_TRANSITIONS
+        : [],
   };
+}
+
+function arrivalFeedback(detail: RunDetail, cause: string, routed: string | null) {
+  return conditionArrivalId(cause) || cause.startsWith("subflow:")
+    ? routed
+    : visitFeedback(detail, cause);
 }
 
 function workerExit(exit: ExitWithEndings) {
@@ -219,17 +288,24 @@ function incomingResults(detail: RunDetail, cause: string) {
   const reportId = /^report:([^/]+)/.exec(cause)?.[1];
   const report = detail.reports.find((entry) => entry.id === reportId);
   if (!report) return [];
-  const source = detail.definitions.flow.graph.blocks.find((entry) => entry.id === report.blockId)!;
+  const block = detail.blocks.find((entry) => entry.blockId === report.blockId);
+  const source = [detail.definitions.flow, ...(detail.definitions.subflows ?? [])]
+    .flatMap((flow) => flow.graph.blocks)
+    .find((entry) => entry.id === (block?.templateBlockId ?? report.blockId));
   return [
     {
       reportId: report.id,
       blockId: report.blockId,
-      blockName: source.name,
-      exitName: effectiveExits(source, detail.definitions.agents).find(
-        (exit) => exit.id === report.exitId,
-      )!.name,
+      blockName: block?.name ?? report.blockId,
+      exitName:
+        (source &&
+          effectiveExits(source, detail.definitions.agents).find(
+            (exit) => exit.id === report.exitId,
+          )?.name) ||
+        report.exitId ||
+        "",
       message: report.resultMessage ?? null,
-      threadLink: detail.blocks.find((block) => block.blockId === report.blockId)!.link,
+      threadLink: block?.link ?? null,
     },
   ];
 }
@@ -244,6 +320,7 @@ function runView(detail: RunDetail): RuntimeReply {
     state: detail.lifecycle,
     startedAt: detail.startedAt,
     conditions: detail.conditions,
+    ...(detail.subflows ? { definitions: detail.definitions, subflows: detail.subflows } : {}),
     result: detail.result,
     blocks: detail.blocks.map((block) => ({
       blockId: block.blockId,

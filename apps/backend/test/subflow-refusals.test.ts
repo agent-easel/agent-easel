@@ -16,25 +16,6 @@ async function readyComposition(c: Parameters<typeof prepared>[0]) {
   return { ...setup, parent };
 }
 
-it("Start refuses a ready Flow that places a Subflow and creates no Run", async (c) => {
-  // Arrange
-  const { f, input, parent } = await readyComposition(c);
-
-  // Act
-  const started = await f.startRun({ ...input, flowId: parent.id });
-
-  // Assert
-  assert(!started.ok);
-  expect(started.error.issues).toStrictEqual([
-    {
-      code: "subflow_start_unavailable",
-      path: "flowId",
-      message: "Start a Flow without Subflow blocks.",
-    },
-  ]);
-  expect(await f.listRunNavigation()).toStrictEqual({ ok: true, value: [] });
-});
-
 it("Export refuses a Flow that places a Subflow", async (c) => {
   // Arrange
   const { f, parent } = await readyComposition(c);

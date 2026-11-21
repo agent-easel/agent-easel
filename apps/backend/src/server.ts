@@ -182,6 +182,21 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
     continueWaitArrival: {
       handle: ({ parameters }) => answer(() => factory.continueWaitArrival(parameters.id)),
     },
+    listSubflowInvocations: {
+      handle: ({ parameters }) =>
+        answer(() =>
+          factory.listSubflowInvocations(
+            parameters.runId,
+            parameters.blockId,
+            parameters.limit,
+            parameters.cursor,
+          ),
+        ),
+    },
+    retrySubflowStop: {
+      handle: ({ parameters }) =>
+        answer(() => factory.retrySubflowStop(parameters.runId, parameters.invocationId)),
+    },
     listConditionArrivals: {
       handle: ({ parameters }) =>
         answer(() =>
