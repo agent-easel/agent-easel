@@ -254,6 +254,47 @@ test("saving a Run's Flow after Start shows the revision badge on the open Run",
 
 const CROSSING_WIRE = "Connection exit from Filler 0 to Filler 100";
 
+test("panning keeps focus on an unselected wire that leaves the view", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlow({ app, screen, browser });
+  const wire = screen.getByRole("button", "Connection exit from Filler 0 to Filler 1", {
+    exact: true,
+  });
+  await wire.focus();
+  await expect(wire).toBeFocused();
+  await expect(wire).toHaveAttribute("aria-pressed", "false");
+
+  // Act
+  await panFlowCanvas(browser, PAN_INTO_FILLERS);
+
+  // Assert
+  await expect(screen.getByRole("article", "Block Filler 1", { exact: true })).toHaveCount(0);
+  await expect(wire).toBeFocused();
+});
+
+test("panning keeps focus on a Block with a multiline ID that leaves the view", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlow({ app, screen, browser });
+  const block = screen.getByRole("button", "Wait Filler 0", { exact: true });
+  await block.focus();
+  await expect(block).toBeFocused();
+
+  // Act
+  await panFlowCanvas(browser, PAN_INTO_FILLERS);
+
+  // Assert
+  await expect(screen.getByRole("article", "Block Filler 1", { exact: true })).toHaveCount(0);
+  await expect(block).toBeFocused();
+});
+
 test("a large Flow panned into its filler rows draws only the Blocks near the view and the wires crossing it", async ({
   app,
   screen,

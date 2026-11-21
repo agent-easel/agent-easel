@@ -15,10 +15,12 @@ const NEIGHBOUR_REACHES = [1, 2, 3, 24, 25, 26, 50, 100, 200, -1, -25];
 
 const FAR_REVIEWER = { x: 6400, y: 2800 };
 
+const fillerId = (index: number) => (index === 0 ? "filler\n0" : `filler-${index}`);
+
 const fillerWire = (from: number, reach: number, fillers: number) => ({
-  sourceBlockId: `filler-${from}`,
+  sourceBlockId: fillerId(from),
   exitId: "output",
-  targetBlockId: `filler-${(from + reach + fillers) % fillers}`,
+  targetBlockId: fillerId((from + reach + fillers) % fillers),
 });
 
 export async function saveLargeFlow(
@@ -42,7 +44,7 @@ export async function saveLargeFlow(
         block.id === "reviewer" ? { ...block, position: FAR_REVIEWER } : block,
       ),
       ...Array.from({ length: fillers }, (_, index) => ({
-        id: `filler-${index}`,
+        id: fillerId(index),
         kind: "wait" as const,
         name: `Filler ${index}`,
         duration: { amount: 10, unit: "minutes" as const },
@@ -54,7 +56,7 @@ export async function saveLargeFlow(
     ],
     connections: [
       ...seeded.graph.connections,
-      { sourceBlockId: "decision", exitId: "approve", targetBlockId: "filler-0" },
+      { sourceBlockId: "decision", exitId: "approve", targetBlockId: fillerId(0) },
       ...Array.from({ length: wires }, (_, index) =>
         fillerWire(
           index % fillers,
