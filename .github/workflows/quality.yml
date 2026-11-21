@@ -20,33 +20,116 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Quality gate
+  static:
+    name: Static checks
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        if: env.RUN_CODE == 'true'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-          cache: ${{ env.RUN_CODE == 'true' && 'pnpm' || '' }}
+          cache: pnpm
+      - name: Check Git attribution and squash input
+        if: github.event_name == 'push'
+        run: node scripts/check-git-attribution.mjs --event "$GITHUB_EVENT_PATH"
+      - run: pnpm install --frozen-lockfile
+      - name: Run static checks
+        env:
+          FACTORY_COMMENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pnpm check:static
+
+  build-and-unit:
+    name: Build and fast suites
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compute UI build signature
+        id: ui_sig
+        run: echo "sig=$(node --input-type=module -e 'import { uiBuildSignature } from "./scripts/ui-build.ts"; console.log(uiBuildSignature(process.cwd()))')" >> "$GITHUB_OUTPUT"
+      - name: Cache UI build for journeys
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/frontend/dist
+            packages/*/dist
+          key: ui-build-v2-${{ steps.ui_sig.outputs.sig }}
+      - name: Build and run frontend, desktop and script suites
+        run: |
+          pnpm build
+          pnpm exec vp run --concurrency-limit 8 --filter @t3-factory/frontend --filter @t3-factory/desktop test
+          pnpm test:scripts
+
+  backend-tests:
+    name: Backend tests (${{ matrix.shard }}/3)
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run backend test shard
+        run: pnpm --filter @t3-factory/backend exec vp test run --shard=${{ matrix.shard }}/3
+
+  check:
+    name: Quality gate
+    needs: [static, build-and-unit, backend-tests]
+    if: always() && !cancelled()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN_CODE != 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.RUN_CODE != 'true'
+        with:
+          node-version-file: .node-version
       - name: Reuse existing code validation
         if: env.RUN_CODE != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/reuse-quality-gate.mjs
-      - name: Check Git attribution and squash input
-        if: github.event_name == 'push'
-        run: node scripts/check-git-attribution.mjs --event "$GITHUB_EVENT_PATH"
       - name: "Full code gate for PR ${{ github.event.pull_request.number || 0 }}: ${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.event.pull_request.head.sha || github.sha }}"
         if: env.RUN_CODE == 'true'
         env:
-          FACTORY_COMMENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          BUILD_UNIT_RESULT: ${{ needs.build-and-unit.result }}
+          BACKEND_RESULT: ${{ needs.backend-tests.result }}
         run: |
-          pnpm install --frozen-lockfile
-          pnpm check
+          if [[ "$STATIC_RESULT" == success && "$BUILD_UNIT_RESULT" == success && "$BACKEND_RESULT" == success ]]; then
+            echo "Quality gate passed: static=$STATIC_RESULT, build-and-unit=$BUILD_UNIT_RESULT, backend-tests=$BACKEND_RESULT"
+          else
+            echo "::error::Quality gate failed: static=$STATIC_RESULT, build-and-unit=$BUILD_UNIT_RESULT, backend-tests=$BACKEND_RESULT"
+            exit 1
+          fi
+      - name: Full quality gate passed on ${{ github.sha }}
+        if: env.RUN_CODE == 'true'
+        run: echo 'All quality gate checks passed.'

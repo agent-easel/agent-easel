@@ -2,6 +2,7 @@ import type { RunTitleGenerationState } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
+import type { SettlementReason } from "./settlement.ts";
 
 /** A decision made from an earlier read of the Run is refused once its generation moves. */
 export function advanceGeneration(sql: SqlClient.SqlClient, runId: string) {
@@ -11,9 +12,10 @@ export function advanceGeneration(sql: SqlClient.SqlClient, runId: string) {
 /** A Run timeline event by kind; its stored source key (the idempotency key) is derived here. */
 export type TimelineEvent = { readonly runId: string; readonly observedAt: string } & (
   | { readonly kind: "started" }
-  | { readonly kind: "run-settled"; readonly cause: "automatic" | "manual" }
+  | { readonly kind: "run-settled"; readonly reason: SettlementReason }
   | { readonly kind: "run-activated"; readonly blockId: string; readonly reportId?: string }
   | { readonly kind: "run-archived" }
+  | { readonly kind: "ending-reached"; readonly endingId: string }
   /** The user confirmed manual settlement (attempt 1) or retried it. */
   | { readonly kind: "settlement-requested"; readonly attempt: number }
   | {
@@ -205,7 +207,7 @@ function storedLifecycleEvent(event: LifecycleEvent) {
           blockId: null,
           executionId: null,
           sourceKey: "settled:" + (yield* newId),
-          causeId: event.cause,
+          causeId: event.reason,
         };
       case "run-activated":
         return {
@@ -267,6 +269,13 @@ function stored(event: Exclude<TimelineEvent, WaitEvent>) {
     switch (event.kind) {
       case "started":
         return { blockId: null, executionId: null, sourceKey: "start", causeId: null };
+      case "ending-reached":
+        return {
+          blockId: null,
+          executionId: null,
+          sourceKey: "ending-reached",
+          causeId: event.endingId,
+        };
       case "execution-observed":
         return {
           blockId: event.blockId,

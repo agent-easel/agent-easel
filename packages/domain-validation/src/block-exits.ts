@@ -1,8 +1,11 @@
 import {
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type AgentDefinition,
   type BlockExit,
   type FlowBlockInput,
+  type FlowEnding,
+  type FlowGraphInput,
   type Result,
   type ValidationIssue,
 } from "@t3-factory/contracts";
@@ -104,6 +107,38 @@ export function effectiveExits(
       .map((exit) => ({ ...exit, source: "agent" as const })),
     ...block.localExits.map((exit) => ({ ...exit, source: "local" as const })),
   ];
+}
+
+export interface ExitWithEndings extends EffectiveExit {
+  readonly endings: readonly FlowEnding[];
+}
+
+export function exitsWithEndings(
+  block: FlowBlockInput,
+  graph: Pick<FlowGraphInput, "connections" | "finish">,
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+): ExitWithEndings[] {
+  return effectiveExits(block, agents).map((exit) => {
+    const wired = new Set(
+      graph.connections.flatMap((edge) =>
+        edge.sourceBlockId === block.id &&
+        edge.exitId === exit.id &&
+        edge.targetBlockId === FINISH_BLOCK_ID &&
+        edge.targetEndingId !== undefined
+          ? [edge.targetEndingId]
+          : [],
+      ),
+    );
+    const endings = (graph.finish?.endings ?? []).filter((ending) => wired.has(ending.id));
+    return {
+      ...exit,
+      messageRequired:
+        exit.messageRequired ||
+        ((block.kind === "agent" || block.kind === "continuation") &&
+          endings.some((ending) => ending.output === "required")),
+      endings,
+    };
+  });
 }
 
 const EXIT_FIELDS = ["id", "name", "description", "messageRequired"];

@@ -86,6 +86,7 @@ export function runDetail(): RunDetail {
     segments: [{ type: "text", text: "Task" }],
     images: [],
     gateOpen: true,
+    result: null,
     settlement: null,
     generation: 1,
     definitions: {
@@ -99,6 +100,7 @@ export function runDetail(): RunDetail {
           blocks: [],
           connections: [],
           flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+          finish: { position: { x: 800, y: 0 }, endings: [] },
         },
         workspace: { mode: "checkout" },
       },

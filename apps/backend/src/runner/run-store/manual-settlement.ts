@@ -13,7 +13,7 @@ import { writeBlockState } from "./blocks.ts";
 import { currentReports } from "./current-report.ts";
 import { cancelOwedWork } from "./owed-work.ts";
 import type { BlockState } from "./states.ts";
-import { markSettled } from "./settlement.ts";
+import { markSettled, type SettlementReason } from "./settlement.ts";
 import type { WorkerThread } from "../worker-thread.ts";
 import { recordExecution } from "./observation.ts";
 import { raiseSettlementAttention } from "./attention.ts";
@@ -48,6 +48,13 @@ const authorizationReplaced = (sql: SqlClient.SqlClient, runId: string) =>
     (rows) => rows.length > 0,
   );
 
+const refusedForReplacedAuthorization = (sql: SqlClient.SqlClient, runId: string, retry: boolean) =>
+  Effect.gen(function* () {
+    if (!retry && (yield* sql`SELECT 1 FROM run_results WHERE run_id=${runId}`).length)
+      return false;
+    return yield* authorizationReplaced(sql, runId);
+  });
+
 /** A bound worker thread of a Run, which manual settlement reads and Archive interrupts. */
 export type BoundWorker = {
   readonly block_id: string;
@@ -56,7 +63,10 @@ export type BoundWorker = {
   readonly link: string | null;
 };
 
+export type StopSettlementReason = Exclude<SettlementReason, "automatic">;
+
 type SettlementRow = {
+  readonly reason: StopSettlementReason;
   readonly requested_at: string;
   readonly attempt: number;
   readonly attempt_owner: string;
@@ -310,34 +320,31 @@ export function openRunManualSettlement(database: RunnerDatabase) {
       }),
     );
 
-  /** The user confirms stopping the Run's workers to settle it. Guards: the Run exists, is not
-   * Archived, this backend owns the database and no known authorization context replaced the
-   * Run's, also while T3 is unavailable: such a settlement could never complete. A Settled Run
-   * is left unchanged. The first
-   * confirmation closes the handoff gate, cancelling a pending Run title generation, and starts attempt 1; a later one starts the next
-   * attempt only while the current attempt has an unresolved worker or launch. Both record this
-   * backend as the attempt's owner, the bound workers as stopping and "settlement requested", and advance the
-   * generation. Answers whether an attempt started. */
-  function acceptSettlement(id: string): Effect.Effect<Result<boolean>, unknown> {
+  function acceptSettlement(
+    id: string,
+    reason: StopSettlementReason,
+  ): Effect.Effect<Result<boolean>, unknown> {
     return withLifecycle<boolean>(database, id, (sql, run) =>
       Effect.gen(function* () {
         if (run.archived_at) return failure("conflict", "An archived Run cannot be settled.");
         if (run.settled_at) return { ok: true as const, value: false };
         if (!(yield* guardsHold(sql, ownerToken, id, { owner: true })))
           return failure("conflict", "Runner ownership changed.");
-        if (yield* authorizationReplaced(sql, id))
-          return failure("conflict", REPLACED_AUTHORIZATION);
         const [current] =
           yield* sql<SettlementRow>`SELECT * FROM run_settlements WHERE run_id=${id}`;
+        if (yield* refusedForReplacedAuthorization(sql, id, !!current))
+          return failure("conflict", REPLACED_AUTHORIZATION);
         const time = yield* now;
         if (current) {
           const settlement = yield* readRunSettlement(sql, { id, ...run });
           if (settlement?.state !== "unresolved") return { ok: true as const, value: false };
           yield* sql`UPDATE run_settlements SET attempt=attempt+1,attempt_owner=${ownerToken},attempted_at=${time},stop_pass_at=NULL WHERE run_id=${id}`;
         } else {
+          const [result] = yield* sql`SELECT 1 FROM run_results WHERE run_id=${id}`;
+          const recorded: StopSettlementReason = result ? "finish" : reason;
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
-          yield* cancelTitleGeneration(sql, id, time, "settle");
-          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at) VALUES(${id},${time},1,${ownerToken},${time})`;
+          yield* cancelTitleGeneration(sql, id, time, recorded === "finish" ? "finish" : "settle");
+          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${recorded})`;
         }
         const attempt = (current?.attempt ?? 0) + 1;
         for (const worker of yield* boundWorkerRows(sql, id))
@@ -447,14 +454,6 @@ export function openRunManualSettlement(database: RunnerDatabase) {
       }),
     );
 
-  /** Settles `run` manually once the caller's fresh reads, made at `run`'s generation, confirmed
-   * every bound worker finished. Guards: owner, not Archived, not Settled, the generation, no
-   * launch whose outcome is unresolved and, when the Run has workers, its live authorization
-   * context. Closes the gate, cancels owed automatic work with the manual-settlement reason,
-   * leaves each reserved or uncertain send uncertain without its payload, records each worker's
-   * runs as the reads showed them ended, without raising attention or replacing a recorded
-   * Problem, records "worker stopped" for each worker whose Stop T3 acknowledged, settles the Run (clearing Snooze and
-   * Woke) and advances the generation. Answers whether the Run settled. */
   function completeSettlement(run: RunRow, workers: readonly SettledWorker[]) {
     const id = run.id;
     return database.mutate(id, (sql) =>
@@ -470,6 +469,9 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           settled_at: string | null;
         }>`SELECT settled_at FROM runs WHERE id=${id}`;
         if (current?.settled_at) return false;
+        const [recorded] = yield* sql<{
+          reason: StopSettlementReason;
+        }>`SELECT reason FROM run_settlements WHERE run_id=${id}`;
         if ((yield* unresolvedLaunchRows(sql, id)).length) return false;
         const time = yield* now;
         yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
@@ -482,7 +484,8 @@ export function openRunManualSettlement(database: RunnerDatabase) {
               { runId: id, blockId: entry.blockId },
               { keep: NOT_WORKING, otherwise: "finished" },
             );
-        yield* cancelOwedWork(sql, id, time, "settle");
+        const reason = recorded?.reason ?? "manual";
+        yield* cancelOwedWork(sql, id, time, reason === "finish" ? "finish" : "settle");
         // T3 has no read for a send's outcome and only a same-key replay can resolve it, which
         // the closed gate forbids. The send stays uncertain, never cancelled, and its payload,
         // needed for nothing but that replay, is cleared.
@@ -512,7 +515,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
               engineStatus: worker.latest?.status ?? null,
               observedAt: time,
             });
-        yield* markSettled(sql, id, "manual", time);
+        yield* markSettled(sql, id, reason, time);
         yield* sql`UPDATE runtime_reports SET completion_eligible_at=COALESCE(completion_eligible_at,${time}) WHERE run_id=${id}`;
         yield* advanceGeneration(sql, id);
         return true;

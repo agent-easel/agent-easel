@@ -438,10 +438,10 @@ export class ControlledT3Threads implements T3Threads {
 
   /** T3 starts a send it queued once the thread runs no turn: the send's queued run runs and the
    * send shows it running with its delivery started. Until then the send stays queued. */
-  protected startQueuedSend(threadId: string, runId: string) {
+  protected startQueuedSend(threadId: string, runId: string): boolean {
     const thread = this.executionObservations.get(threadId);
     const queued = thread?.recentRuns.find((run) => run.runId === runId)?.status === "queued";
-    if (!thread || !queued || thread.activeRunId) return;
+    if (!thread || !queued || thread.activeRunId) return false;
     this.executionObservations.set(threadId, {
       ...thread,
       activeRunId: runId,
@@ -453,6 +453,7 @@ export class ControlledT3Threads implements T3Threads {
     for (const send of this.sends.values())
       if (send.reference.runId === runId)
         send.reference = { ...send.reference, status: "running", delivery: "started" };
+    return true;
   }
 
   /** T3 cancels a turn queued on the thread: run `runId` shows status cancelled with `start` as its

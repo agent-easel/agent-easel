@@ -112,6 +112,10 @@ function runTransitions(context: Context) {
         exit: exitOf(run),
         ...(message === undefined ? {} : { message }),
       }),
+    "Continuation response reported": async (run: RunDetail, message?: string) => {
+      const worker = workerOf(context, run);
+      await promptAnswered(context, worker, await promptSent(context, worker), message);
+    },
     "result released to a second worker": (run: RunDetail) =>
       resultReleasedToSecondWorker(context, workerOf(context, run)),
     "result released to two workers": (run: RunDetail) =>
@@ -579,6 +583,43 @@ export async function scenariosFixture(host: Host) {
     );
   }
 
+  async function endingWithStop(keyNamespace: string, state: "stopping" | "unresolved") {
+    const key = `ending-${state}`;
+    const [first, second] = await twoWorkersStarted(
+      context,
+      await demoStart(
+        context,
+        flows.endings,
+        key,
+        state === "stopping"
+          ? "UI worker · Shipped while the alternative stops"
+          : "UI worker · Shipped with an unresolved stop",
+        "Ship the Atlas search ranking fix while another worker explores an alternative.",
+        undefined,
+        { titlePrefix: "", keyNamespace },
+      ),
+    );
+    if (state === "stopping") host.t3.threads.holdStops([second.threadId]);
+    const support = host.t3.contract.support;
+    const previousStopSupport = support.stop;
+    support.stop = state === "stopping";
+    try {
+      await resultReported(context, first, {
+        exit: "Done",
+        message: "https://github.com/example/atlas/pull/45",
+      });
+      await observeFor(
+        `observe a ${state} worker after the Run reached an ending`,
+        context,
+        first.runId,
+        (run) => run.result !== null && run.settlement?.state === state,
+      );
+    } finally {
+      support.stop = previousStopSupport;
+    }
+    return first.runId;
+  }
+
   /** Every journey key's latest Run, with the context and attempt it belongs to. */
   const journeyRuns = new Map<
     string,
@@ -725,6 +766,8 @@ export async function scenariosFixture(host: Host) {
         return first.runId;
       },
     ],
+    ["ending-stopping", (keyNamespace) => endingWithStop(keyNamespace, "stopping")],
+    ["ending-unresolved", (keyNamespace) => endingWithStop(keyNamespace, "unresolved")],
     [
       "continuation-relay",
       async (keyNamespace) => {

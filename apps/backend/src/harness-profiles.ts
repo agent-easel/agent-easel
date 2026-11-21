@@ -20,9 +20,16 @@ type FixedHome = {
 
 /** Where one reporting harness reads its user MCP servers and skills, and Factory's entry there. */
 export type HarnessProfile = {
-  readonly home: ResolvedHome | FixedHome;
-  readonly config: { readonly file: string; readonly format: "toml" | "json" };
-  /** Factory's Streamable HTTP entry as the harness's own `mcp add` writes it. */
+  readonly home:
+    | ResolvedHome
+    | FixedHome
+    | { readonly kind: "antigravity-profile" }
+    | { readonly kind: "vibe" };
+  readonly config: {
+    readonly file: string;
+    readonly format: "toml" | "toml-array" | "json";
+    readonly urlKey?: "serverUrl";
+  };
   readonly entry: (url: string) => Record<string, string>;
   readonly skillsFolder: (home: string) => string;
 };
@@ -64,6 +71,18 @@ const profiles = {
     home: { kind: "resolved", envName: "GROK_HOME", defaultDirectory: ".grok" },
     config: { file: "config.toml", format: "toml" },
     entry: urlEntry,
+    skillsFolder: homeSkills,
+  },
+  antigravity: {
+    home: { kind: "antigravity-profile" },
+    config: { file: "mcp_config.json", format: "json", urlKey: "serverUrl" },
+    entry: (serverUrl) => ({ serverUrl }),
+    skillsFolder: homeSkills,
+  },
+  "mistral-vibe": {
+    home: { kind: "vibe" },
+    config: { file: "config.toml", format: "toml-array" },
+    entry: (url) => ({ name: "factory-runtime", transport: "streamable-http", url }),
     skillsFolder: homeSkills,
   },
 } satisfies Record<string, HarnessProfile>;

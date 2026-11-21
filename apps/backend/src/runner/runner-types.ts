@@ -129,6 +129,7 @@ export function runTarget(
 
 export type StoredTarget = T3Target & {
   threadId?: string;
+  endingId?: string;
 };
 
 /** A dispatch precondition either holds with its value or names the operation's problem. */

@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -140,6 +141,315 @@ it("a configured Claude config directory keeps its config and skills directly in
     SETUP_FACTORY_SKILL,
   );
   expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
+});
+
+it("installing Antigravity reporting registers MCP and skills in the selected T3 profile", async (context) => {
+  // Arrange
+  const { factory, state, home } = await driverHomes(context, {
+    "agy-work": { driver: "antigravity", config: {} },
+    "agy-other": { driver: "antigravity", config: {} },
+  });
+  const profiles = join(await realpath(state), "providers", "antigravity");
+  const selected = join(profiles, createHash("sha256").update("agy-work").digest("hex"));
+  const other = join(profiles, createHash("sha256").update("agy-other").digest("hex"));
+  await mkdir(join(selected, "antigravity-acp"), { recursive: true });
+  await mkdir(join(other, "antigravity-acp"), { recursive: true });
+  await mkdir(join(selected, "config"), { recursive: true });
+  const config = join(selected, "config", "mcp_config.json");
+  await writeFile(config, JSON.stringify({ mcpServers: { other: { command: "keep" } } }));
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+  const target = targets.value.find((target) => target.instances.includes("agy-work"));
+  assert(target);
+  expect(target.status).toBe("not-installed");
+
+  // Act
+  const result = await factory.installReporting({ targetId: target.id });
+
+  // Assert
+  assert(result.ok);
+  const skills = join(selected, "config", "skills");
+  expect(result.value).toMatchObject({
+    status: "installed",
+    launchSkill: "current",
+    path: config,
+    skillsPath: skills,
+    instances: ["agy-work"],
+  });
+  expect(JSON.parse(await readFile(config, "utf8"))).toStrictEqual({
+    mcpServers: { other: { command: "keep" }, "factory-runtime": { serverUrl: MCP_URL } },
+  });
+  expect(await readFile(join(skills, "factory-block", "SKILL.md"), "utf8")).toBe(
+    FACTORY_BLOCK_SKILL,
+  );
+  expect(existsSync(join(other, "config"))).toBe(false);
+  expect(existsSync(join(home, ".gemini", "config", "mcp_config.json"))).toBe(false);
+});
+
+it("Antigravity with no T3 profile points the user to provider setup", async (context) => {
+  // Arrange
+  const { factory } = await driverHomes(context, {
+    antigravity: { driver: "antigravity", config: {} },
+  });
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      provider: "antigravity",
+      status: "needs-attention",
+      path: null,
+      message:
+        "Install and sign in to Antigravity in T3 Code → Settings → Providers, then check again.",
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
+it("Antigravity identifies the runtime folder when a file occupies its path", async (context) => {
+  // Arrange
+  const { factory, state } = await driverHomes(context, {
+    antigravity: { driver: "antigravity", config: {} },
+  });
+  const key = createHash("sha256").update("antigravity").digest("hex");
+  const profile = join(state, "providers", "antigravity", key);
+  await mkdir(profile, { recursive: true });
+  await writeFile(join(profile, "antigravity-acp"), "");
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      status: "needs-attention",
+      message: "The antigravity-acp folder inside the T3 profile must be a local directory.",
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
+it("installs Mistral Vibe into its configured home and preserves its own MCP entries", async (context) => {
+  // Arrange
+  const { factory, home, t3 } = await driverHomes(context, {
+    "vibe-work": {
+      driver: "acpRegistry",
+      config: { agentId: "mistral-vibe" },
+      environment: [{ name: "VIBE_HOME", value: "~/vibe-work" }],
+    },
+    "mistral-vibe": { driver: "acpRegistry", config: { agentId: "another-agent" } },
+  });
+  const provider = { ...t3.projects.controlledProviders[0]!, driverKind: "acpRegistry" };
+  t3.projects.controlledProviders.push(
+    { ...provider, providerInstanceId: "vibe-work" },
+    { ...provider, providerInstanceId: "mistral-vibe" },
+  );
+  const directory = join(home, "vibe-work");
+  await mkdir(directory);
+  const config = join(await realpath(directory), "config.toml");
+  const before = '# keep\n[[mcp_servers]]\nname = "other"\ntransport = "stdio"\ncommand = "keep"\n';
+  await writeFile(config, before);
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+  const target = targets.value.find(({ provider }) => provider === "mistral-vibe");
+  assert(target);
+
+  // Act
+  const result = await factory.installReporting({ targetId: target.id });
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject({
+    provider: "mistral-vibe",
+    instances: ["vibe-work"],
+    status: "installed",
+    launchSkill: "current",
+    path: config,
+  });
+  expect(await readFile(config, "utf8")).toBe(
+    `${before}\n[[mcp_servers]]\nname = "factory-runtime"\ntransport = "streamable-http"\nurl = "${MCP_URL}"\n`,
+  );
+  expect(await readFile(join(directory, "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
+    FACTORY_BLOCK_SKILL,
+  );
+  const capabilities = await factory.getAgentCapabilities();
+  assert(capabilities.ok);
+  expect(capabilities.value.providers).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        providerInstanceId: "vibe-work",
+        reporting: expect.objectContaining({ supported: true }),
+      }),
+      expect.objectContaining({
+        providerInstanceId: "mistral-vibe",
+        reporting: expect.objectContaining({ supported: false }),
+      }),
+    ]),
+  );
+});
+
+it("Vibe reporting cannot install into a home occupied by a file", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": {
+      driver: "acpRegistry",
+      config: { agentId: "mistral-vibe" },
+      environment: [{ name: "VIBE_HOME", value: "~/vibe-work" }],
+    },
+  });
+  await writeFile(join(home, "vibe-work"), "keep");
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      provider: "mistral-vibe",
+      status: "needs-attention",
+      path: null,
+      message: expect.stringContaining("Vibe's configured home must be a directory."),
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
+it.for([
+  { kind: "empty", servers: "", tail: "", prefix: "" },
+  {
+    kind: "populated",
+    servers: '{ name = "other", transport = "stdio", command = "keep" }',
+    tail: ', { name = "other", transport = "stdio", command = "keep" }',
+    prefix: "",
+  },
+  {
+    kind: "populated after a multiline string",
+    servers: '{ name = "other", transport = "stdio", command = "keep" }',
+    tail: ', { name = "other", transport = "stdio", command = "keep" }',
+    prefix: 'example = """\nmcp_servers = [\n"""\n',
+  },
+])(
+  "installs Vibe reporting into a $kind inline MCP array",
+  async ({ servers, tail, prefix }, context) => {
+    // Arrange
+    const { factory, home } = await driverHomes(context, {
+      "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+    });
+    const directory = join(home, ".vibe");
+    await mkdir(directory);
+    const config = join(directory, "config.toml");
+    await writeFile(
+      config,
+      prefix + 'active_model = "sample"\nmcp_servers = [' + servers + "] # keep\n",
+    );
+    const targets = await factory.getReportingInstallations();
+    assert(targets.ok);
+    const target = targets.value[0]!;
+
+    // Act
+    const result = await factory.installReporting({ targetId: target.id });
+
+    // Assert
+    assert(result.ok);
+    expect(result.value.status).toBe("installed");
+    expect(await readFile(config, "utf8")).toBe(
+      prefix +
+        'active_model = "sample"\nmcp_servers = [{ name = "factory-runtime", transport = "streamable-http", url = "' +
+        MCP_URL +
+        '" }' +
+        tail +
+        "] # keep\n",
+    );
+  },
+);
+
+it("Agent capabilities explain why unreadable T3 settings block ACP reporting", async (context) => {
+  // Arrange
+  const { factory, state, t3 } = await driverHomes(context, {
+    "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
+    providerInstanceId: "vibe-work",
+    driverKind: "acpRegistry",
+  });
+  await writeFile(join(state, "settings.json"), "{ malformed");
+
+  // Act
+  const result = await factory.getAgentCapabilities();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.providers).toMatchObject([
+    { providerInstanceId: "codex-main", reporting: { supported: true } },
+    {
+      providerInstanceId: "vibe-work",
+      reporting: {
+        supported: false,
+        explanation: expect.stringContaining("Check the T3 state directory on the Factory host"),
+      },
+    },
+  ]);
+});
+
+it("repairing Vibe's inline MCP entry keeps dollar signs in the new address", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  const directory = join(home, ".vibe");
+  await mkdir(directory);
+  const config = join(directory, "config.toml");
+  const before =
+    'mcp_servers = [{ name = "factory-runtime", transport = "streamable-http", url = "' +
+    MCP_URL +
+    '" }] # keep\n';
+  await writeFile(config, before);
+  const backend = "http://127.0.0.1:4999/$&/$$";
+  factory.setRuntimeBackendUrl(backend);
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+
+  // Act
+  const result = await factory.installReporting({ targetId: targets.value[0]!.id });
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.status).toBe("installed");
+  expect(await readFile(config, "utf8")).toBe(before.replace(MCP_URL, () => backend + "/mcp"));
+});
+
+it("Vibe repair identifies an edited MCP entry and preserves its formatting", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  const directory = join(home, ".vibe");
+  await mkdir(directory);
+  const config = join(directory, "config.toml");
+  const edited =
+    'mcp_servers = [{ name="factory-runtime", transport="streamable-http", url="' +
+    MCP_URL +
+    '" }]\n';
+  await writeFile(config, edited);
+  factory.setRuntimeBackendUrl("http://127.0.0.1:4999");
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+
+  // Act
+  const result = await factory.installReporting({ targetId: targets.value[0]!.id });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.message).toBe(
+    "The Factory registration was edited. Review the factory-runtime entry manually.",
+  );
+  expect(await readFile(config, "utf8")).toBe(edited);
 });
 
 it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
@@ -553,7 +863,10 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   assert(targets.ok);
   assert((await factory.installReporting({ targetId: targets.value[0]!.id })).ok);
   await factory.close();
-  const moved = await harness.open({ ...options, runtimeBackendUrl: "http://127.0.0.1:4999" });
+  const moved = await harness.open({
+    ...options,
+    runtimeBackendUrl: "http://127.0.0.1:4999/$&/$$",
+  });
 
   // Act
   const result = await moved.installReporting({ targetId: targets.value[0]!.id });
@@ -563,7 +876,7 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   expect(result.value.status).toBe("installed");
   const saved = await readFile(config, "utf8");
   expect(saved).toBe(
-    '# keep this comment\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "http://127.0.0.1:4999/mcp"\n',
+    '# keep this comment\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "http://127.0.0.1:4999/$&/$$/mcp"\n',
   );
 });
 

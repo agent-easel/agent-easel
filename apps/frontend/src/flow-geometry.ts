@@ -6,7 +6,12 @@ import {
   type GeometryFacts,
 } from "@t3-factory/flow-layout";
 import type { FlowBlock } from "@t3-factory/contracts";
-import type { CanvasBlock, CanvasGraph } from "./flow-graph.ts";
+import {
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
+  type CanvasBlock,
+  type CanvasGraph,
+} from "./flow-graph.ts";
 import { EXECUTION_DIMENSIONS } from "./components/canvas-dimensions.ts";
 import { mergeGraphBounds } from "./canvas-fit.ts";
 
@@ -18,8 +23,17 @@ export function createCanvasGeometry(
 ) {
   const rows = dimensions.block;
   const input = dimensions.flowInput;
-  const { ports, incoming, flowInputBox, blockHeight, reservedHeight, incomingGrowth } =
-    createNodeGeometry(graph, dimensions, facts);
+  const {
+    ports,
+    incoming,
+    flowInputBox,
+    finishBox,
+    finishEndingY,
+    blockHeight,
+    reservedHeight,
+    incomingGrowth,
+  } = createNodeGeometry(graph, dimensions, facts);
+  const finishBoxes = facts.finish ? [finishBox] : [];
   const rowOf = exitRows(graph.blocks);
   const blockBox = (block: CanvasBlock) => ({
     ...block.position,
@@ -27,7 +41,7 @@ export function createCanvasGeometry(
     height: blockHeight(block),
   });
   const bounds = () => {
-    const box = mergeGraphBounds(flowInputBox, graph.blocks.map(blockBox));
+    const box = mergeGraphBounds(flowInputBox, [...graph.blocks.map(blockBox), ...finishBoxes]);
     return graph.blocks.length || !facts.emptyGraphSize
       ? box
       : {
@@ -45,16 +59,24 @@ export function createCanvasGeometry(
       source,
       ...inputPoint(block, index),
     }));
-  const focusBounds = (targetIds: readonly string[]) => {
+  const focusBounds = (targetIds: readonly CanvasBlockSelection[]) => {
     const ids = new Set(targetIds);
-    const [first, ...rest] = graph.blocks.filter((block) => ids.has(block.id)).map(blockBox);
+    const [first, ...rest] = [
+      ...graph.blocks.filter((block) => ids.has(block.id)).map(blockBox),
+      ...(ids.has(FINISH_SELECTION) ? finishBoxes : []),
+    ];
     return first ? mergeGraphBounds(first, rest) : bounds();
   };
   return {
     ports,
     flowInputBox,
     /** The Flow input and every block, in graph coordinates. */
-    boxes: () => [flowInputBox, ...graph.blocks.map(blockBox)],
+    boxes: () => [flowInputBox, ...graph.blocks.map(blockBox), ...finishBoxes],
+    finishBox,
+    endingPoint: (index: number): Point => ({
+      x: finishBox.x,
+      y: finishBox.y + finishEndingY + index * ports.exitRow,
+    }),
     blockHeight,
     bounds,
     incomingPorts,

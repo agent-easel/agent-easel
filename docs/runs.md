@@ -437,6 +437,10 @@ fixed Human exits their old exits were mapped to.
   finished block reads its taken exit as an outcome, **→ *exit* · time**. Several blocks can be active at once; the canvas
   marks no "current step", percentage or taken path. Repeated visits update the same block; the timeline and executions keep
   the sequence. At rest, connections use one neutral style, including never-run branches.
+- The Finish block lists the captured endings, each with its incoming wires. They stay neutral while the Run can still
+  reach one; then the reached ending reads **Reached · *time*** in primary text and the others a muted **Not reached**,
+  and a Run that ended without one reads **No ending reached**. A captured Flow without endings, including every Run
+  started before endings existed, shows the Finish block's header only. Selecting it opens the Finish inspector below.
 - Hovering a block or Flow input with a mouse or trackpad, or giving one of its controls keyboard focus, temporarily draws
   that source's direct outgoing connections, including fan-out, unvisited branches and return connections, heavier and in
   higher contrast above the other connections. One source previews at a time: the most recent pointer or keyboard
@@ -482,7 +486,7 @@ fixed Human exits their old exits were mapped to.
   shortcuts with their current bindings and a link to the cheat sheet. The Flow editor keeps its labelled controls and
   keyboard hint.
 - One docked **inspector** beside the canvas shows the **Run overview** until a block is selected or the Run title is
-  inspected: **Attention** while something is pending, **Progress** with each started block and its status on a second line
+  inspected: **Attention** while something is pending, the Run's **Result** (below), **Progress** with each started block and its status on a second line
   that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**; a Problem row shows the error
   glyph and a plain line such as **Failed in T3 · 22:16**), a worktree Run's **Branch** (its branch name and **Own worktree
   from *base***, or **Preparing worktree** and **From *base*** until T3 reports it), worker branches (wrapping only at
@@ -498,6 +502,21 @@ fixed Human exits their old exits were mapped to.
   consequence (**ends branch** or **→ *Block***), and its T3 thread, execution, pending Problem reasons and observation under a
   closed **Technical details** section at the bottom. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.
+- The overview's **Result** section names the ending the Run reached with the flag icon, then its output (none for an
+  ending whose output is None), and **From** (the source block, its exit and visit), **By** when the author differs from
+  the worker, **Worker** with **Open in T3** when the worker is known, and **At**. A forwarded Human answer names the Human
+  step as its author and keeps the originating worker. A Required ending reached with blank text shows the
+  **Output missing** tag and which block sent no message. While the Run stops its other workers after the ending, the
+  section shows **Stopping** and the meta line **Reached *ending* *time* · Stopping**. If a stop is unresolved, the meta
+  line says **Stop unresolved** and the existing settlement Problem provides the next action. Before a result it reads **No result
+  yet** while the Run can still reach an ending, and **No result** once it was settled or archived without one. A Run whose
+  captured Flow has no endings, including every Run started before endings existed, shows no Result section. The sidebar
+  Run row, the Run list and Chat control do not show the result. Selecting the Finish block shows **Finish** with
+  **Reached · *ending* · *time*** and the **Reached** tag, the result under **Result · ending *name***, which workers reaching
+  it stopped (**Ended the Run**), each captured ending with **Reached *time*** or **Not reached** (neutral before any
+  ending is reached) and its output, the incoming wires, and the Finish block id, Flow revision and delivery under
+  **Technical details**. The timeline shows the Run's **reached ending *name*** and a Settled Run's
+  **settled · reached ending *name***.
   **Esc** or the **Overview** breadcrumb returns from the block or the Run title to the overview. Selecting never answers
   or clears attention, and there is no editing here.
 - The inspector toggle in the top bar (default **Mod+.**, see [Keyboard shortcuts](keyboard-shortcuts.md)) shows or hides the
@@ -757,7 +776,7 @@ Each delivery released to a Wait becomes its own arrival: Factory keeps its mess
 moment the incoming handoff was released, after the source worker's thread finished, not from the report. Parallel arrivals
 and repeated visits keep their own messages and deadlines and never join. At its deadline Factory forwards the arrival on its
 own, with no open window and no worker: every recipient of the Wait's output gets the unchanged message, and an unconnected
-output ends the branch. Timing is best effort; the [Runner](runner.md#wait-arrivals) defines how deadlines survive restart and
+output stops the branch. Timing is best effort; the [Runner](runner.md#wait-arrivals) defines how deadlines survive restart and
 downtime and how repeated deliveries and competing forwards resolve.
 
 **Continue now** forwards one selected pending arrival immediately, without confirmation, exactly as its deadline would, and
@@ -806,12 +825,14 @@ A first page fixes its window at the highest arrival number committed at that re
 only that window, so arrivals numbered later never shift a page; reading without a cursor opens a new window that includes them.
 A cursor is opaque, signed by the running server and bound to its Run and Condition: one for another Run or Condition, one
 whose content was changed in any way (including a validly re-encoded window), one issued before the server restarted or one
-beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
-selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
+beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, one per Block or
+ending the selected output is wired to. An ending recipient includes its captured ending ID. Deliveries still waiting at the
+Condition for their number are not listed; the summary counts them.
 
 Selecting a Condition shows this evidence in the inspector: the latest selection, then its arrivals in ascending number,
 each with acceptance time, source block and producing worker, the matched rule or **No rule matched** (Otherwise), the
-selected output, and each recipient with its delivery's disposition when that page was read; an arrival whose output is
+selected output, and each recipient with its delivery's disposition when that page was read. Ending recipients are labelled
+**Finish · *ending name*** here and in Agent report delivery details. An arrival whose output is
 not connected says it ends there. A selection is only the route, so the list never shows a recipient as having received
 it until its delivery is acknowledged. The first page opens once the Condition has an arrival; **Load more** continues
 that window and **Refresh** opens a new one. When live Run updates count arrivals after the window, the list says so and
@@ -847,7 +868,8 @@ once. Otherwise nothing changes until you confirm stopping every worker and endi
 confirmation changes nothing and sends no Stop. An ordinary Settle request never interrupts a worker: the server answers that
 confirmation is needed. A Run with workers, started under a T3 authorization Factory knows was since replaced, for example by
 reauthorizing or connecting another endpoint, cannot be settled: **Settle** is refused with or without confirmation, also while
-T3 is unavailable, and nothing changes; **Archive** remains available. A Settle confirmed while reauthorization is still
+T3 is unavailable, and nothing changes; **Archive** remains available. A Run that already reached an ending still starts
+stopping, and its workers end unresolved with **Settle could not stop workers**. A Settle confirmed while reauthorization is still
 pending is accepted, but if the new authorization is not the Run's, it ends unresolved and only **Archive** remains.
 
 Confirming holds the Run at once: nothing new is launched, sent, released or delivered, no Wait forwards (at its deadline or

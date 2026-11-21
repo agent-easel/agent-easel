@@ -53,7 +53,7 @@ export function createDelivery(
 /** Whether a Block still has a Handoff or delivery that is neither acknowledged nor cancelled. */
 export function blockHasUnresolvedWork(sql: SqlClient.SqlClient, runId: string, blockId: string) {
   return Effect.map(
-    sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND block_id=${blockId} AND state NOT IN ('acknowledged','cancelled')`,
+    sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND block_id=${blockId} AND json_extract(target_json,'$.endingId') IS NULL AND state NOT IN ('acknowledged','cancelled')`,
     (rows) => rows.length > 0,
   );
 }
@@ -96,7 +96,7 @@ export function openRunDeliveries(database: RunnerDatabase) {
       (sql) =>
         sql<
           Handoff | Delivery
-        >`SELECT * FROM operation_intents i WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') AND NOT EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=i.run_id AND a.block_id=i.block_id AND a.kind='condition-integrity' AND a.settled_at IS NULL) ORDER BY rowid`,
+        >`SELECT * FROM operation_intents i WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') AND (json_extract(i.target_json,'$.endingId') IS NOT NULL OR NOT EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=i.run_id AND a.block_id=i.block_id AND a.kind='condition-integrity' AND a.settled_at IS NULL)) ORDER BY rowid`,
     );
 
   /** Notes a Handoff or delivery unresolved with `message`; a reserved delivery becomes

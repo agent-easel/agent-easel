@@ -4,7 +4,7 @@ import { schemaSnapshot } from "./support/schema-snapshot.ts";
 
 it("the current-schema snapshot matches the schema produced by Factory migrations", async (context) => {
   // Arrange
-  const harness = await factoryHarness(context);
+  const harness = await factoryHarness(context, { freshDatabase: true });
 
   // Act
   const factory = await harness.open();

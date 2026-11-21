@@ -8,6 +8,7 @@ import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import type { ControlledGitHub } from "../../../apps/backend/test/support/controlled-github.ts";
 import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
 import { ControlledT3Connection } from "../../../apps/backend/test/support/controlled-t3-connection.ts";
+import { seedTemplateDatabase } from "../../../apps/backend/test/support/factory.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
 import { requireCurrentUiBuild } from "../../../scripts/ui-build.ts";
@@ -36,10 +37,11 @@ export async function startHost(
     FACTORY_REMOTE_HOST: "127.0.0.1",
     FACTORY_REMOTE_PORT: "0",
   });
-  const t3 = new PersistentT3(home, false);
+  const t3 = new PersistentT3(home, false, false);
   // Use the real pending-approval simulation for remote connection journeys.
   t3.connection.authorize = ControlledT3Connection.prototype.authorize.bind(t3.connection);
   const time = advancingSeedClock();
+  await seedTemplateDatabase(config.databasePath);
   const server = await startServer(
     { ...config, port: 0 },
     {

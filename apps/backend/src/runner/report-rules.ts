@@ -1,5 +1,5 @@
 import type { RunBlock, RunDefinitions } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import { exitsWithEndings, handoffRecipients } from "@t3-factory/domain-validation";
 import { fingerprint } from "../fingerprint.ts";
 import type { RuntimeReport } from "../runtime-types.ts";
 
@@ -12,7 +12,7 @@ export const rejected = (code: string) => ({ ok: false as const, reply: { code }
 export function reportRoute(definitions: RunDefinitions, blockId: string, report: RuntimeReport) {
   const block = definitions.flow.graph.blocks.find((block) => block.id === blockId);
   if (!block || block.kind === "human") return rejected("UNKNOWN_BLOCK");
-  const exits = effectiveExits(block, definitions.agents);
+  const exits = exitsWithEndings(block, definitions.flow.graph, definitions.agents);
   // A Continuation has one unnamed output: its worker finishes without naming it.
   const matches = exits.filter(
     (candidate) =>
@@ -31,9 +31,7 @@ export function reportRoute(definitions: RunDefinitions, blockId: string, report
     };
   if (exit?.messageRequired && !report.message?.trim()) return rejected("FEEDBACK_REQUIRED");
   const recipients = exit
-    ? definitions.flow.graph.connections
-        .filter((edge) => edge.sourceBlockId === block.id && edge.exitId === exit.id)
-        .map((edge) => edge.targetBlockId)
+    ? handoffRecipients(definitions.flow.graph.connections, block.id, exit.id)
     : [];
   if (recipients.some((id) => !definitions.flow.graph.blocks.some((block) => block.id === id)))
     return rejected("INVALID_RECIPIENT");

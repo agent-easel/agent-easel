@@ -1,17 +1,17 @@
-import type {
-  AgentCapabilities,
-  AgentDefinition,
-  AgentExecutionSettings,
-  FlowAgentRevisions,
-  FlowBlockInput,
-  FlowGraphInput,
-  FlowReadiness,
-  ProjectIcon,
-  ProjectIconColor,
-  StartTitleProvenance,
-  ValidationIssue,
-  WaitDuration,
-  WaitUnit,
+import {
+  type AgentCapabilities,
+  type AgentDefinition,
+  type AgentExecutionSettings,
+  type FlowAgentRevisions,
+  type FlowBlockInput,
+  type FlowGraphInput,
+  type FlowReadiness,
+  type ProjectIcon,
+  type ProjectIconColor,
+  type StartTitleProvenance,
+  type ValidationIssue,
+  type WaitDuration,
+  type WaitUnit,
 } from "@t3-factory/contracts";
 import {
   CONDITION_OTHERWISE,
@@ -346,6 +346,19 @@ function blockReadiness(
   });
 }
 
+function targetLabel(
+  graph: FlowGraphInput,
+  blocks: ReadonlyMap<string, FlowBlockInput>,
+  edge: FlowGraphInput["connections"][number],
+) {
+  if (edge.targetEndingId === undefined) {
+    const target = blocks.get(edge.targetBlockId);
+    return target ? blockLabel(target) : edge.targetBlockId;
+  }
+  const ending = graph.finish?.endings.find((candidate) => candidate.id === edge.targetEndingId);
+  return `Finish · ${ending?.name.trim() || edge.targetEndingId}`;
+}
+
 /** Wires from an Agent block must leave one of its effective exits. */
 function connectionReadiness(
   graph: FlowGraphInput,
@@ -358,8 +371,7 @@ function connectionReadiness(
     if (source?.kind !== "agent") return;
     const agent = agents.find((candidate) => candidate.id === source.agentId);
     if (!agent || effectiveExits(source, agents).some((exit) => exit.id === edge.exitId)) return;
-    const target = blocks.get(edge.targetBlockId);
-    const toTarget = `its connection to ${target ? blockLabel(target) : edge.targetBlockId}`;
+    const toTarget = `its connection to ${targetLabel(graph, blocks, edge)}`;
     const inherited = agent.exits.find((exit) => exit.id === edge.exitId);
     if (inherited)
       add(
@@ -405,6 +417,30 @@ function conditionOutputReadiness(graph: FlowGraphInput, add: IssueReporter) {
   });
 }
 
+function finishReadiness(graph: FlowGraphInput, add: IssueReporter) {
+  const wired = new Set(
+    graph.connections.flatMap((edge) =>
+      edge.targetEndingId === undefined ? [] : [edge.targetEndingId],
+    ),
+  );
+  const names = new Set<string>();
+  graph.finish?.endings.forEach((ending, i) => {
+    const path = `graph.finish.endings.${i}`;
+    const name = ending.name.trim();
+    const row = `Finish: ending ${i + 1}${name ? ` "${name}"` : ""}`;
+    if (!name) add("ending_name_required", `${path}.name`, `${row} needs a name.`);
+    else if (names.has(name))
+      add(
+        "ending_name_duplicate",
+        `${path}.name`,
+        `${row} has the same name as another ending. Rename it.`,
+      );
+    names.add(name);
+    if (!wired.has(ending.id))
+      add("ending_unconnected", path, `${row}: connect an exit or output to this ending.`);
+  });
+}
+
 /** Every block must be reachable from a Flow input target. */
 function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
   const reached = new Set(graph.flowInput.targetBlockIds);
@@ -412,7 +448,11 @@ function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
   while (changed) {
     changed = false;
     for (const edge of graph.connections)
-      if (reached.has(edge.sourceBlockId) && !reached.has(edge.targetBlockId)) {
+      if (
+        edge.targetEndingId === undefined &&
+        reached.has(edge.sourceBlockId) &&
+        !reached.has(edge.targetBlockId)
+      ) {
         reached.add(edge.targetBlockId);
         changed = true;
       }
@@ -442,7 +482,11 @@ function conditionCycleReadiness(graph: FlowGraphInput, add: IssueReporter) {
   );
   const next = new Map<string, string[]>();
   for (const edge of graph.connections)
-    if (passThrough.has(edge.sourceBlockId) && passThrough.has(edge.targetBlockId))
+    if (
+      edge.targetEndingId === undefined &&
+      passThrough.has(edge.sourceBlockId) &&
+      passThrough.has(edge.targetBlockId)
+    )
       next.set(edge.sourceBlockId, [...(next.get(edge.sourceBlockId) ?? []), edge.targetBlockId]);
   graph.blocks.forEach((block, i) => {
     if (block.kind !== "condition") return;
@@ -491,7 +535,7 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
   while (pending.length) {
     const target = pending.pop()!;
     for (const edge of graph.connections) {
-      if (edge.targetBlockId !== target) continue;
+      if (edge.targetEndingId !== undefined || edge.targetBlockId !== target) continue;
       const source = blocks.get(edge.sourceBlockId);
       if (source?.kind === "agent") sources.add(source.id);
       else if (source && !visited.has(source.id)) {
@@ -501,6 +545,42 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
     }
   }
   return graph.blocks.flatMap((block) => (sources.has(block.id) ? [block.id] : []));
+}
+
+export function handoffRecipients(
+  connections: FlowGraphInput["connections"],
+  sourceBlockId: string,
+  exitId: string,
+): string[] {
+  return [
+    ...new Set(
+      connections.flatMap((edge) =>
+        edge.sourceBlockId === sourceBlockId &&
+        edge.exitId === exitId &&
+        edge.targetEndingId === undefined
+          ? [edge.targetBlockId]
+          : [],
+      ),
+    ),
+  ];
+}
+
+export function handoffEndings(
+  connections: FlowGraphInput["connections"],
+  sourceBlockId: string,
+  exitId: string,
+): string[] {
+  return [
+    ...new Set(
+      connections.flatMap((edge) =>
+        edge.sourceBlockId === sourceBlockId &&
+        edge.exitId === exitId &&
+        edge.targetEndingId !== undefined
+          ? [edge.targetEndingId]
+          : [],
+      ),
+    ),
+  ];
 }
 
 /**
@@ -536,6 +616,7 @@ export function flowReadiness(
   connectionReadiness(graph, agents, add);
   conditionOutputReadiness(graph, add);
   conditionCycleReadiness(graph, add);
+  finishReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
   return { ready: issues.length === 0, issues };
 }
@@ -587,6 +668,7 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
+export { connectionKey } from "./flow.ts";
 export {
   duplicateTreatment,
   mayPlaceAgent,
@@ -598,11 +680,13 @@ export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
   effectiveExits,
+  exitsWithEndings,
   inheritedExits,
   HUMAN_EXITS,
   WAIT_OUTPUT,
   type EffectiveExit,
   type ExitSource,
+  type ExitWithEndings,
 } from "./block-exits.ts";
 export {
   CLIENT_LABEL_LIMIT,
@@ -631,7 +715,9 @@ export {
   CANVAS_COORD_MAX,
   CANVAS_COORD_MESSAGE,
   CANVAS_COORD_MIN,
+  flowEditSizeRefusal,
   isCanvasPosition,
+  portableFlowSizeIssue,
   validateCreateFlow,
   validateDuplicateFlow,
   validatePreviewFlowDuplicate,

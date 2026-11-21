@@ -14,6 +14,7 @@ import {
 } from "../condition-arrivals.ts";
 import { ExecutionStateBadge } from "./execution-state.tsx";
 import { ProblemCard } from "./problem-card.tsx";
+import { blockName, deliveryRecipientName, deliveryWorker } from "../run-evidence.ts";
 import { clockTime, dayAndTime } from "../time-format.ts";
 import { sectionLabelClass } from "./page.tsx";
 
@@ -49,16 +50,11 @@ function useArrivalWindow(runId: string, blockId: string, arrivals: number) {
   return { arrivalWindow, read };
 }
 
-function blockName(run: RunDetail, blockId: string) {
-  return run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name || blockId;
-}
-
 /** Where the arrival came from: the delivering block and the worker whose message it carries. */
 function provenance(run: RunDetail, arrival: ConditionArrivalEvidence) {
   const source = arrival.sourceBlockId ? blockName(run, arrival.sourceBlockId) : "unknown block";
-  const activation = run.activations.find((item) => item.id === arrival.origin?.activationId);
-  const worker = activation ? blockName(run, activation.blockId) : "unknown";
-  return `From ${source} · worker ${worker}`;
+  const worker = arrival.origin && deliveryWorker(run, arrival.origin);
+  return `From ${source} · worker ${worker ? blockName(run, worker.blockId) : "unknown"}`;
 }
 
 const monoClass = "font-mono text-foreground";
@@ -106,9 +102,12 @@ function ArrivalItem({
         ) : (
           <ul aria-label={`Arrival ${number} recipients`} className="flex flex-col gap-1">
             {arrival.recipients.map((recipient) => (
-              <li key={recipient.blockId} className="flex items-center gap-2 text-xs">
-                <span className="min-w-0 flex-1 truncate text-foreground">
-                  → {blockName(run, recipient.blockId)}
+              <li
+                key={JSON.stringify([recipient.blockId, recipient.targetEndingId])}
+                className="flex items-center gap-2 text-xs"
+              >
+                <span className="min-w-0 flex-1 break-words text-foreground">
+                  → {deliveryRecipientName(run, recipient)}
                 </span>
                 <ExecutionStateBadge state={recipient.disposition} />
               </li>

@@ -96,6 +96,30 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Resolve cache versions
+        id: versions
+        run: |
+          {
+            echo "playwright=$(node -p "require('./node_modules/@e2e-dev/web/package.json').dependencies['playwright-core']")"
+            echo "electron=$(node -p "const p = require('./apps/desktop/package.json'); p.devDependencies.electron + '-' + p.devDependencies['electron-builder']")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Chromium cache
+        id: pw_cache
+        if: inputs.run-checks || inputs.channel == 'beta'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.versions.outputs.playwright }}
+      - name: Install Chromium
+        if: (inputs.run-checks || inputs.channel == 'beta') && steps.pw_cache.outputs.cache-hit != 'true'
+        run: pnpm exec e2e-web install chromium
+      - name: Restore Electron download cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.versions.outputs.electron }}
       - if: inputs.run-checks
         env:
           FACTORY_COMMENT_BASE: HEAD~1
@@ -103,13 +127,11 @@ jobs:
       - name: Check controlled UI journeys
         if: inputs.run-checks
         run: |
-          pnpm exec e2e-web install chromium
-          pnpm exec e2e run --trace on --output .e2e/release/journeys
+          pnpm e2e:prepare
+          pnpm exec e2e run --trace retain-on-failure --output .e2e/release/journeys
       - name: Check macOS keyboard shortcuts
         if: inputs.channel == 'beta'
-        run: |
-          pnpm exec e2e-web install chromium
-          pnpm test:e2e tests/keyboard-shortcuts.e2e.ts --retries 0 --trace on --output .e2e/release/macos-shortcuts
+        run: pnpm test:e2e tests/keyboard-shortcuts.e2e.ts --retries 0 --trace retain-on-failure --output .e2e/release/macos-shortcuts
       - name: Build, sign and notarize
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}

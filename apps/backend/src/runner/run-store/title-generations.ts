@@ -177,13 +177,9 @@ export function dropTitleGeneration(sql: SqlClient.SqlClient, runId: string) {
 const CANCELLED = {
   archive: "The Run was archived before a generated title arrived.",
   settle: "The Run was settled manually before a generated title arrived.",
+  finish: "The Run reached an ending before a generated title arrived.",
 } as const;
 
-/**
- * Archive and manual settlement end a pending generation in the transaction that closes the Run's
- * handoff gate, including a launch not sent yet. One whose deadline already passed records the
- * timeout, with its diagnostic, that its wake-up had not recorded yet.
- */
 export function cancelTitleGeneration(
   sql: SqlClient.SqlClient,
   runId: string,

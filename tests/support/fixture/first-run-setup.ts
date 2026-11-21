@@ -7,6 +7,7 @@ import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
+import { seedTemplateDatabase } from "../../../apps/backend/test/support/factory.ts";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 import type { remoteAccessFixture } from "./remote-access.ts";
@@ -97,6 +98,7 @@ async function startFreshHost({
     FACTORY_REMOTE_HOST: "127.0.0.1",
     FACTORY_REMOTE_PORT: "0",
   });
+  await seedTemplateDatabase(config.databasePath);
   // Rechecks come from the fixture's T3 actions, so a journey sees each state until it changes.
   const server = await startServer(config, {
     t3,

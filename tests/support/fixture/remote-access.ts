@@ -15,6 +15,7 @@ import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
+import { seedTemplateDatabase } from "../../../apps/backend/test/support/factory.ts";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import { proxyFixture, proxyFixtureUpgrade } from "../proxy.ts";
 import type { Host } from "./host.ts";
@@ -56,6 +57,7 @@ async function remoteFactory(protocol: { protocol: number; minimumPeerProtocol: 
     FACTORY_REMOTE_HOST: "127.0.0.1",
     FACTORY_REMOTE_PORT: "0",
   });
+  await seedTemplateDatabase(config.databasePath);
   // Host-side rechecks land quickly so the waiting screen can observe approval on its own.
   const server = await startServer(config, {
     t3: new ControlledT3(),
@@ -103,12 +105,16 @@ export async function remoteAccessFixture(
 ) {
   const { factory, t3 } = host;
   const current = { server: host.server, anchor: host.server.remoteAccess.trustAnchor()! };
-  const older = await remoteFactory({ protocol: 1, minimumPeerProtocol: 1 });
+  type RemoteFixtureServer = Awaited<ReturnType<typeof remoteFactory>>;
+  let older: Promise<RemoteFixtureServer> | undefined;
+  let newer: Promise<RemoteFixtureServer> | undefined;
+  const ensureOlder = () => (older ??= remoteFactory({ protocol: 1, minimumPeerProtocol: 1 }));
   // A server a release ahead that no longer accepts this client's protocol.
-  const newer = await remoteFactory({
-    protocol: FACTORY_PROTOCOL + 1,
-    minimumPeerProtocol: FACTORY_PROTOCOL + 1,
-  });
+  const ensureNewer = () =>
+    (newer ??= remoteFactory({
+      protocol: FACTORY_PROTOCOL + 1,
+      minimumPeerProtocol: FACTORY_PROTOCOL + 1,
+    }));
 
   let offline = false;
   let dropAccessRequest = false;
@@ -183,8 +189,8 @@ export async function remoteAccessFixture(
         dropAccessRequest = true;
       },
       compatible: () => retarget(current),
-      olderServer: () => retarget(older),
-      incompatible: () => retarget(newer),
+      olderServer: async () => retarget(await ensureOlder()),
+      incompatible: async () => retarget(await ensureNewer()),
       /** The owner saved a T3 endpoint on the host; T3 approval happens in the host's browser. */
       async t3Endpoint() {
         t3.connection.authorized = false;
@@ -307,7 +313,10 @@ export async function remoteAccessFixture(
       return true;
     },
     async close() {
-      await Promise.all([older.close(), newer.close()]);
+      await Promise.all([
+        older?.then((server) => server.close()),
+        newer?.then((server) => server.close()),
+      ]);
     },
   };
 }

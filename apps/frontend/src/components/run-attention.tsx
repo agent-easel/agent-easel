@@ -1,3 +1,4 @@
+import { targetsBlock } from "../run-evidence.ts";
 import { AgentMarkdown, AgentTextPreview, WorkingReport } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -664,7 +665,12 @@ function receivedMessage(run: RunDetail, intent: Delivery) {
     item.origin?.activationId === intent.origin?.activationId &&
     item.origin?.threadId === intent.origin?.threadId;
   if (intent.conditionArrivalId)
-    return run.intents.filter((item) => item.blockId === intent.sourceBlockId && forwarded(item));
+    return run.intents.filter(
+      (item) =>
+        targetsBlock(item, intent.sourceBlockId) &&
+        item.state === "acknowledged" &&
+        forwarded(item),
+    );
   if (intent.reportId) return null;
   const passed = new Set(
     run.continuationVisits

@@ -60,20 +60,19 @@ function assertDirectHomeSupported(instance: Record<string, unknown>) {
     );
 }
 
+function providerEnvironmentValue(instance: Record<string, unknown>, name: string) {
+  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
+  const value = variables.findLast((item) => item.name === name)?.value;
+  return typeof value === "string" ? value : undefined;
+}
+
 function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedHome) {
   assertDirectHomeSupported(instance);
   const config = record(instance.config ?? {});
-  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
   const configuredHome = typeof config.homePath === "string" ? config.homePath.trim() : "";
-  const environmentHome = variables.findLast((item) => item.name === home.envName)?.value;
-  const rawHome =
-    configuredHome.length > 0
-      ? configuredHome
-      : typeof environmentHome === "string"
-        ? environmentHome.trim()
-        : "";
+  const rawHome = configuredHome || providerEnvironmentValue(instance, home.envName)?.trim();
   const userHome = homedir();
-  if (rawHome.length > 0) {
+  if (rawHome) {
     const expanded = expandHomePath(rawHome, userHome);
     if (!isAbsolute(expanded))
       throw Error(
@@ -87,8 +86,84 @@ function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedH
   };
 }
 
+async function vibeReportingDirectory(instance: Record<string, unknown>) {
+  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
+  if (
+    variables.some(
+      ({ name, valueRedacted }) =>
+        valueRedacted === true && ["VIBE_HOME", "HOME", "VIBE_MCP_SERVERS"].includes(String(name)),
+    )
+  )
+    throw Error(
+      "Vibe's effective configuration depends on redacted T3 settings. Use manual setup.",
+    );
+  if (providerEnvironmentValue(instance, "VIBE_MCP_SERVERS"))
+    throw Error(
+      "VIBE_MCP_SERVERS can override Vibe's configuration. Review it before manual setup.",
+    );
+  const userHome = providerEnvironmentValue(instance, "HOME") || homedir();
+  const home = expandHomePath(
+    providerEnvironmentValue(instance, "VIBE_HOME") || "~/.vibe",
+    userHome,
+  );
+  if (!isAbsolute(home) || !isAbsolute(userHome))
+    throw Error("Set an absolute VIBE_HOME and HOME in this T3 provider's environment.");
+  const info = await stat(home).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (info && !info.isDirectory()) throw Error("Vibe's configured home must be a directory.");
+  return info ? realpath(home) : home;
+}
+
+const realpathIfPresent = (directory: string) =>
+  realpath(directory).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return directory;
+    throw error;
+  });
+
+async function antigravityConfigDirectory(stateDirectory: string, instanceId: string) {
+  const state = await realpath(stateDirectory);
+  const key = createHash("sha256").update(instanceId).digest("hex");
+  const profile = join(state, "providers", "antigravity", key);
+  const runtime = await lstat(join(profile, "antigravity-acp")).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw Error(
+        "Install and sign in to Antigravity in T3 Code → Settings → Providers, then check again.",
+      );
+    }
+    throw error;
+  });
+  if ((await realpath(profile)) !== profile)
+    throw Error("The T3 Antigravity profile must be a local directory.");
+  if (!runtime.isDirectory())
+    throw Error("The antigravity-acp folder inside the T3 profile must be a local directory.");
+  const directory = join(profile, "config");
+  const config = await lstat(directory).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (config && !config.isDirectory()) throw Error("The Antigravity config must be a directory.");
+  return directory;
+}
+
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+
+function reportingHarness(instance: unknown): unknown {
+  const driver = field(instance, "driver");
+  if (driver !== "acpRegistry") return driver;
+  const config = field(instance, "config");
+  const id = field(config, "agentId");
+  const source = field(config, "source");
+  const command = field(config, "commandPath");
+  return typeof id === "string" &&
+    id.trim() === "mistral-vibe" &&
+    (source === undefined || source === "registry") &&
+    (command === undefined || (typeof command === "string" && command.trim() === ""))
+    ? "mistral-vibe"
+    : driver;
+}
 
 /**
  * Drivers T3 leaves off until the user turns them on. T3 holds this default in its code, not in
@@ -148,12 +223,12 @@ export async function reportingDriversOffInT3(stateDirectory: string): Promise<s
     const on = new Set(
       instances
         .filter(([id]) => !disabled.has(id))
-        .map(([, instance]) => field(instance, "driver")),
+        .map(([, instance]) => reportingHarness(instance)),
     );
     return [
       ...new Set(
         instances
-          .map(([, instance]) => field(instance, "driver"))
+          .map(([, instance]) => reportingHarness(instance))
           .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
       ),
     ].map(String);
@@ -163,11 +238,12 @@ export async function reportingDriversOffInT3(stateDirectory: string): Promise<s
 }
 
 const targetFor = Effect.fn(function* (
+  stateDirectory: string,
   id: string,
   raw: unknown,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation, never> {
   const instance = record(raw);
-  const driver = instance.driver;
+  const driver = reportingHarness(instance);
   if (!isReportingDriver(driver))
     return withReportingInstallationActions({
       id,
@@ -190,34 +266,7 @@ const targetFor = Effect.fn(function* (
     launchSkill: null,
     runtimeEvidence: "UNVERIFIED" as const,
   };
-  return yield* Effect.gen(function* (): Generator<
-    Effect.Effect<unknown, unknown>,
-    ReportingInstallation,
-    never
-  > {
-    if (profile.home.kind === "fixed") {
-      const directory = join(homedir(), profile.home.directory);
-      const resolved = yield* boundary(() => realpath(directory)).pipe(
-        Effect.catch((error) =>
-          (error as NodeJS.ErrnoException).code === "ENOENT"
-            ? Effect.succeed(directory)
-            : Effect.fail(error),
-        ),
-      );
-      const path = join(resolved, profile.config.file);
-      return withReportingInstallationActions({
-        ...base,
-        id: createHash("sha256").update(path).digest("hex"),
-        path,
-        skillsPath: profile.skillsFolder(resolved),
-        status: "not-installed",
-        message: profile.home.message,
-      });
-    }
-    const resolved = resolveReportingHome(instance, profile.home);
-    const directory = yield* boundary(() => realpath(resolved.directory));
-    if (!(yield* boundary(() => stat(directory))).isDirectory())
-      throw Error("Harness home is not a directory.");
+  const targetAt = (directory: string, message: string) => {
     const path = join(directory, profile.config.file);
     return withReportingInstallationActions({
       ...base,
@@ -225,20 +274,54 @@ const targetFor = Effect.fn(function* (
       path,
       skillsPath: profile.skillsFolder(directory),
       status: "not-installed",
-      message: resolved.assumedDefault
+      message,
+    });
+  };
+  return yield* Effect.gen(function* (): Generator<
+    Effect.Effect<unknown, unknown>,
+    ReportingInstallation,
+    never
+  > {
+    if (profile.home.kind === "antigravity-profile") {
+      const directory = yield* boundary(() => antigravityConfigDirectory(stateDirectory, id));
+      return targetAt(
+        directory,
+        "Installs in this provider's T3 profile. T3 disables its built-in text generation for Antigravity profiles with user MCP servers.",
+      );
+    }
+    if (profile.home.kind === "fixed") {
+      const directory = join(homedir(), profile.home.directory);
+      const resolved = yield* boundary(() => realpathIfPresent(directory));
+      return targetAt(resolved, profile.home.message);
+    }
+    if (profile.home.kind === "vibe") {
+      const directory = yield* boundary(() => vibeReportingDirectory(instance));
+      return targetAt(directory, "Install once for all Vibe instances using this home.");
+    }
+    const resolved = resolveReportingHome(instance, profile.home);
+    const directory = yield* boundary(() => realpath(resolved.directory));
+    if (!(yield* boundary(() => stat(directory))).isDirectory())
+      throw Error("Harness home is not a directory.");
+    return targetAt(
+      directory,
+      resolved.assumedDefault
         ? "Using the standard home for this OS user. If T3 inherits a custom configuration directory at launch, verify that directory manually before installing."
         : "Install once for all projects and Agents using this home.",
-    });
+    );
   }).pipe(
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);
+      const message = error instanceof Error ? error.message : "Configuration unavailable.";
       return Effect.succeed(
         withReportingInstallationActions({
           ...base,
           path: null,
           skillsPath: null,
           status: "needs-attention" as const,
-          message: `Restore the accessible harness home or use manual setup. ${error instanceof Error ? error.message : "Configuration unavailable."}`,
+          message:
+            profile.home.kind === "antigravity-profile"
+              ? message
+              : `Restore the accessible harness home or use manual setup. ${message}`,
         }),
       );
     }),
@@ -263,53 +346,85 @@ const managedHost = Effect.fn(function* () {
   );
   return present.some(Boolean);
 });
+const enabledLocalReportingInstances = Effect.fn(function* (
+  stateDirectory: string,
+  connection: T3Connection,
+) {
+  const context = connection.authorizationContext;
+  if (connection.state !== "ready" || !context)
+    return {
+      problem: "Connect and authorize T3 before discovering installation targets.",
+    } as const;
+  if (!isLocalEndpoint(context.endpoint))
+    return {
+      problem:
+        "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
+    } as const;
+  if (process.platform === "win32" || (yield* managedHost()))
+    return {
+      problem:
+        "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
+    } as const;
+  const environment = (yield* boundary(() =>
+    readFile(join(stateDirectory, "environment-id"), "utf8"),
+  )).trim();
+  if (environment !== context.environmentId)
+    return {
+      problem:
+        "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
+    } as const;
+  return yield* boundary(async () => {
+    const settings = record(
+      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
+    );
+    const disabled = disabledInstances(settings);
+    return {
+      instances: Object.entries(record(settings.providerInstances)).filter(
+        ([id]) => !disabled.has(id),
+      ),
+    } as const;
+  });
+});
+
+export type VibeReportingLookup =
+  | { readonly instances: ReadonlySet<string>; readonly problem?: never }
+  | { readonly problem: string; readonly instances?: never };
+
+export const readVibeReportingInstances = (stateDirectory: string, connection: T3Connection) =>
+  enabledLocalReportingInstances(stateDirectory, connection).pipe(
+    Effect.map((result): VibeReportingLookup =>
+      "problem" in result
+        ? { problem: result.problem }
+        : {
+            instances: new Set(
+              result.instances
+                .filter(([, instance]) => reportingHarness(instance) === "mistral-vibe")
+                .map(([id]) => id),
+            ),
+          },
+    ),
+    Effect.catch(() =>
+      Effect.succeed({
+        problem:
+          "Cannot read the local T3 configuration to identify ACP Registry providers. Check the T3 state directory on the Factory host.",
+      }),
+    ),
+  );
+
 export const discoverReporting = Effect.fn(function* (
   stateDirectory: string,
   connection: T3Connection,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation[], never> {
-  if (connection.state !== "ready" || !connection.authorizationContext)
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Connect and authorize T3 before discovering installation targets.",
-      ),
-    ];
-  if (!isLocalEndpoint(connection.authorizationContext.endpoint))
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
-      ),
-    ];
-  if (process.platform === "win32" || (yield* managedHost()))
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
-      ),
-    ];
   return yield* Effect.gen(function* (): Generator<
     Effect.Effect<unknown, unknown>,
     ReportingInstallation[],
     never
   > {
-    const environment = (yield* boundary(() =>
-      readFile(join(stateDirectory, "environment-id"), "utf8"),
-    )).trim();
-    if (environment !== connection.authorizationContext!.environmentId)
-      return [
-        discoveryResult(
-          "discovery-refused",
-          "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
-        ),
-      ];
-    const settings = record(
-      JSON.parse(yield* boundary(() => readFile(join(stateDirectory, "settings.json"), "utf8"))),
-    );
-    const disabled = disabledInstances(settings);
+    const result = yield* enabledLocalReportingInstances(stateDirectory, connection);
+    if ("problem" in result) return [discoveryResult("discovery-refused", result.problem)];
     const targets = yield* Effect.forEach(
-      Object.entries(record(settings.providerInstances)).filter(([id]) => !disabled.has(id)),
-      ([id, value]) => targetFor(id, value),
+      result.instances,
+      ([id, value]) => targetFor(stateDirectory, id, value),
       { concurrency: "unbounded" },
     );
     const grouped = new Map<string, ReportingInstallation>();

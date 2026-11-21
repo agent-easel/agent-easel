@@ -310,7 +310,10 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const harness = yield* Effect.promise(() => factoryHarness(c));
-      const factory = yield* harness.service({ t3: new ControlledT3() });
+      const factory = yield* harness.service({
+        t3: new ControlledT3(),
+        connectionRetryMs: 48 * HOUR,
+      });
       const red = sha256Hex(screenshots.red.data);
       assert((yield* factory.stageRunImage(red, upload(screenshots.red))).ok);
       yield* TestClock.adjust(23 * HOUR);
@@ -332,7 +335,7 @@ it.effect(
 it.effect("an image a Run retains is never swept as staging", (c) =>
   Effect.gen(function* () {
     // Arrange
-    const f = yield* preparedService(c);
+    const f = yield* preparedService(c, undefined, { connectionRetryMs: 48 * HOUR });
     yield* stageImageEffects(f.factory, allScreenshots);
     assert((yield* f.factory.startRun(imageStart(f.input))).ok);
     yield* TestClock.adjust(25 * HOUR);

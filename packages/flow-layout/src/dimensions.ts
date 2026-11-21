@@ -25,6 +25,9 @@ export type CanvasDimensions = {
     readonly promptImages: number;
     readonly statusLine: number;
   };
+  readonly finish: {
+    readonly title: number;
+  };
   readonly port: {
     readonly size: number;
     readonly handle: number;
@@ -51,6 +54,7 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly footerCount?: (block: B) => number;
   readonly reservedFooterCount?: number;
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
+  readonly finish?: boolean;
 };
 
 export const AUTHORING_DIMENSIONS: CanvasDimensions = {
@@ -76,6 +80,7 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
     promptImages: 0,
     statusLine: 0,
   },
+  finish: { title: 44 },
   port: { size: 12, handle: 20, highlight: 16 },
 };
 
@@ -87,6 +92,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
   const rows = dimensions.block;
   const input = dimensions.flowInput;
   const ports = dimensionPorts(dimensions);
+  const finishTitle = dimensions.finish.title;
   const baseHeight = (block: B) =>
     rows.border * 2 +
     rows.header +
@@ -114,6 +120,19 @@ export function createNodeGeometry<B extends LayoutBlock>(
           : 0) +
       (facts.flowInputStatus ? input.statusLine : 0),
   };
+  const finishEndingY = ports.firstExitY - rows.title + finishTitle;
+  const finishBox = {
+    ...graph.finish.position,
+    width: rows.width,
+    height:
+      rows.border * 2 +
+      rows.header +
+      finishTitle +
+      rows.divider +
+      rows.exitPaddingTop +
+      rows.exitPaddingBottom +
+      Math.max(1, graph.finish.endings.length) * rows.exitRow,
+  };
   const reservedHeight = (block: B) =>
     Math.max(
       blockHeight(block),
@@ -123,6 +142,8 @@ export function createNodeGeometry<B extends LayoutBlock>(
     ports,
     incoming,
     flowInputBox,
+    finishBox,
+    finishEndingY,
     blockHeight,
     reservedHeight,
     incomingGrowth: (block: B) => bodyHeight(block) - baseHeight(block),
@@ -142,6 +163,7 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
       height: geometry.flowInputBox.height,
       outputY: dimensions.flowInput.outputY,
     },
+    finish: { firstEndingY: geometry.finishEndingY },
     blockWidth: dimensions.block.width,
     blockHeight: geometry.reservedHeight,
     ports: { ...geometry.ports, inputSpacing: INCOMING_PORT_SPACING },

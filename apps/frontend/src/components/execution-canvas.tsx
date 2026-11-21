@@ -1,6 +1,11 @@
-import { stoppedVisitAt } from "../run-status.ts";
+import { runResultState, stoppedVisitAt } from "../run-status.ts";
 import type { ReactNode } from "react";
-import type { FlowBlock, RunAttention, RunBlock, RunDetail } from "@t3-factory/contracts";
+import {
+  type FlowBlock,
+  type RunAttention,
+  type RunBlock,
+  type RunDetail,
+} from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,15 +17,19 @@ import {
   capturedExits,
   exitRecipients,
   type CanvasBlock,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
 } from "../flow-graph.ts";
 import { blockStateKind, chosenExitIds } from "../run-block-state.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
 import {
   CanvasSurface,
   type CanvasBlockContent,
+  type CanvasFinishContent,
   type CanvasFlowInputContent,
   type CanvasPort,
 } from "./canvas-surface.tsx";
+import type { FinishBlockState } from "./finish-block.tsx";
 import { conditionRoutes, exitDisplayName } from "./flow-block.tsx";
 import { pendingArrivals } from "../wait-display.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
@@ -551,6 +560,43 @@ function executionBlock(
   };
 }
 
+function finishState(run: RunDetail): FinishBlockState {
+  const { result } = run;
+  if (result)
+    return { kind: "reached", endingId: result.endingId, time: clockTime(result.acceptedAt) };
+  return runResultState(run) === "not-yet" ? { kind: "pending" } : { kind: "none-reached" };
+}
+
+const reachedPort: CanvasPort = { className: "border-[1.5px] border-foreground bg-background" };
+
+function executionFinish(
+  run: RunDetail,
+  selected: boolean,
+  onSelect: () => void,
+): CanvasFinishContent {
+  const state = finishState(run);
+  return {
+    state,
+    className: cn(
+      "border-border",
+      selected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+    ),
+    press: (rows) => (
+      <button
+        type="button"
+        className={pressClass}
+        aria-label={run.result ? `Finish, reached ${run.result.endingName}` : "Finish"}
+        aria-pressed={selected}
+        onClick={onSelect}
+      >
+        {rows}
+      </button>
+    ),
+    endingPort: (ending) =>
+      state.kind === "reached" && state.endingId === ending.id ? reachedPort : port,
+  };
+}
+
 /** Space the top-left badges cover above the graph. */
 const BADGES_HEIGHT = 64;
 
@@ -568,10 +614,10 @@ export function ExecutionCanvas({
   overlay,
 }: {
   run: RunDetail;
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   observationUnavailable: boolean;
   shown: boolean;
-  onSelect: (blockId: string | null) => void;
+  onSelect: (blockId: CanvasBlockSelection | null) => void;
   /** The Run title line; inspecting it selects no Block and leaves following unchanged. */
   title: TitleInspection;
   /** Top-left badges and notices (Figma "Overlay · top-left"); they never block panning. */
@@ -593,6 +639,7 @@ export function ExecutionCanvas({
           onSelect(block.id),
         )
       }
+      finish={executionFinish(run, selected === FINISH_SELECTION, () => onSelect(FINISH_SELECTION))}
       wires={{ kind: "orthogonal", label: "Configured connections" }}
       covered={{ top: BADGES_HEIGHT }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}

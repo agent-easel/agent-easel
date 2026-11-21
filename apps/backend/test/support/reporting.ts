@@ -58,7 +58,14 @@ export async function reportingFixture(
 
 export async function driverHomes(
   context: TestContext,
-  instances: Record<string, { driver: string; config: Record<string, unknown> }>,
+  instances: Record<
+    string,
+    {
+      driver: string;
+      config: Record<string, unknown>;
+      environment?: readonly { name: string; value: string }[];
+    }
+  >,
 ) {
   const userHome = await isolatedUserHome(context);
   const fixture = await reportingFixture(context);

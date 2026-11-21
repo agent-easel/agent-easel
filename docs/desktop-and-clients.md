@@ -415,10 +415,17 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **21**. A server accepts clients from protocol **21**, and the current
-client requires a protocol **21** server, so only protocol 21 peers interoperate.
+The current protocol is **22**. A server accepts clients from protocol **22**, and the current
+client requires a protocol **22** server, so only protocol 22 peers interoperate.
 
-Protocol 21 adds the [First-run setup](t3-integration.md#first-run-setup) status read
+Protocol 22 adds the [Finish block](studio.md#finish-block) with its endings to Flows and captured
+Run definitions, connections that enter an ending and the Run's `result` in Run detail. Older clients can neither read nor save such
+a Flow, so the server refuses them at the handshake before product screens mount and they must
+update; their credentials and stored data are kept. A current client likewise refuses a protocol 21
+or older server, which rejects or lacks the Finish block, and shows the update gate naming the
+server. This is an intentional transport break; the stored Flows are migrated separately.
+
+Protocol 21 added the [First-run setup](t3-integration.md#first-run-setup) status read
 (`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the
 status before it opens the application and waits on the setup screen until the host completes it.
 A protocol 20 or older server lacks the read, so a current client shows the server update gate

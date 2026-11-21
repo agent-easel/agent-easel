@@ -4,14 +4,13 @@
  * environment, server ids, revisions, definition timestamps or Runs.
  */
 import type { AgentCapabilities, AgentExecutionSettings, AgentModelOptionValue } from "./agent.ts";
-import type { BlockExit, FlowBlock, FlowGraph, FlowWorkspace } from "./flow.ts";
+import type { BlockExit, FlowBlock, FlowFinishBlock, FlowGraph, FlowWorkspace } from "./flow.ts";
 import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
 /** The version every export writes. */
-export const PORTABLE_DOCUMENT_VERSION = 2;
-/** The versions an import reads. Version 1 is version 2 without Condition blocks. */
-export type PortableFormatVersion = 1 | typeof PORTABLE_DOCUMENT_VERSION;
+export const PORTABLE_DOCUMENT_VERSION = 3;
+export type PortableFormatVersion = 1 | 2 | typeof PORTABLE_DOCUMENT_VERSION;
 
 /**
  * The exporter's model choice, which a receiving installation may match against its own catalog.
@@ -60,10 +59,12 @@ export type PortableFlowBlock =
   | (Omit<Extract<FlowBlock, { kind: "agent" }>, "agentId"> & { readonly agentKey: string | null })
   | Exclude<FlowBlock, { kind: "agent" }>;
 
-/** The Flow of a Flow document: its name, positioned graph and workspace setting. */
 export interface PortableFlow {
   readonly name: string;
-  readonly graph: Omit<FlowGraph, "blocks"> & { readonly blocks: readonly PortableFlowBlock[] };
+  readonly graph: Omit<FlowGraph, "blocks" | "finish"> & {
+    readonly blocks: readonly PortableFlowBlock[];
+    readonly finish?: FlowFinishBlock;
+  };
   readonly workspace: FlowWorkspace;
 }
 

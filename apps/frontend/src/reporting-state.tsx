@@ -231,11 +231,13 @@ export function reportingSummary(reads: ReportingReads): ReportingStatus {
       };
 }
 
-const providerNames: Record<string, string> = {
+export const providerNames: Readonly<Record<string, string>> = {
+  antigravity: "Antigravity",
   claudeAgent: "Claude",
   codex: "Codex",
   cursor: "Cursor",
   grok: "Grok",
+  "mistral-vibe": "Mistral Vibe",
 };
 
 /** A harness's name in Factory, from its T3 provider driver. */

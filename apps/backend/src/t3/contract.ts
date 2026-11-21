@@ -1,5 +1,4 @@
 import type { ConnectionState, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
-import { isReportingDriver } from "../reporting-drivers.ts";
 import type { T3ConnectionReason, T3Endpoint } from "./connection.ts";
 
 export interface T3ContractReader {
@@ -363,9 +362,8 @@ export function attachmentSupport(support: T3Support, count: number): ReportSupp
   };
 }
 
-/** Whether T3's public reads can retrieve reporting activity for this harness. */
-export function reportSupport(support: T3Support, driverKind: string): ReportSupport {
-  const supported = support.reportReads && isReportingDriver(driverKind);
+export function reportSupport(support: T3Support): ReportSupport {
+  const supported = support.reportReads;
   return {
     supported,
     explanation: supported

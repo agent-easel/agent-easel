@@ -104,11 +104,18 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
         revisitInstruction: "",
       };
 
-/** A released Flow as current Factory reads it: the same revision in the project checkout, its
- * block exits Flow-local. */
+const upgradedFinishPosition = ({ flowInput, blocks }: ReleasedFlow["graph"]) => ({
+  x: Math.max(flowInput.position.x + 200, ...blocks.map((block) => block.position.x + 240)) + 80,
+  y: flowInput.position.y,
+});
+
 export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) => ({
   ...flow,
-  graph: { ...flow.graph, blocks: flow.graph.blocks.map(currentBlock) },
+  graph: {
+    ...flow.graph,
+    blocks: flow.graph.blocks.map(currentBlock),
+    finish: { position: upgradedFinishPosition(flow.graph), endings: [] },
+  },
   workspace: { mode: "checkout" as const },
 });
 
@@ -169,6 +176,7 @@ export function currentRun(
     gateOpen: lifecycle === "settled",
     // Upgrading starts no manual settlement: a released Settled Run keeps its open gate.
     settlement: null,
+    result: null,
     definitions: capturedDefinitions(snapshot),
     currentFlowRevision,
     // Released Runs worked in the project checkout.
@@ -184,6 +192,7 @@ export function currentRun(
     // Released deliveries came from no Final result, so they carry no origin.
     intents: run.intents.map((intent) => ({
       ...intent,
+      targetEndingId: null,
       waitArrivalId: null,
       conditionArrivalId: null,
       origin: null,

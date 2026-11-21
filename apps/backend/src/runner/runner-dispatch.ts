@@ -63,10 +63,9 @@ function storedTarget(
   return verified(target);
 }
 const targetKind = (runRow: RunRow, handoff: Handoff) =>
-  runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
-/** Accepting a Handoff at a Condition sends nothing to T3 and commits atomically: a failed attempt,
- * such as unavailable storage, committed nothing, so the Handoff stays pending for the next pass.
- * It is never noted as uncertain T3 work. */
+  (JSON.parse(handoff.target_json) as StoredTarget).endingId !== undefined
+    ? "finish"
+    : runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
 const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>
   attempt.pipe(
     Effect.asVoid,
@@ -83,10 +82,6 @@ export function openRunnerDispatch(
   images: RunImages,
   scheduleWait: (wait: ScheduledWait) => Effect.Effect<void, unknown>,
 ) {
-  /** A released Handoff to an Agent becomes a worker launch or a revisit send, a Continuation
-   * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, a Wait Handoff an
-   * arrival whose wake-up is scheduled, and a Condition Handoff a numbered, routed arrival. A held
-   * Handoff stays a Handoff; reservation asks again. */
   function prepareHandoff(
     runRow: RunRow,
     handoff: Handoff,
@@ -95,9 +90,11 @@ export function openRunnerDispatch(
       const release = yield* releaseAtPreparation(store, t3, runRow, handoff);
       if (release.state === "held") return;
       const current = release.run;
-      const kind = current.definitions.flow.graph.blocks.find(
-        (block) => block.id === handoff.block_id,
-      )?.kind;
+      const kind = targetKind(current, handoff);
+      if (kind === "finish") {
+        yield* store.reachEnding(current, handoff, arrivalGeneration(release));
+        return;
+      }
       if (kind === "continuation") return yield* prepareContinuationHandoff(current, handoff);
       if (kind === "human") {
         yield* store.handoffToHumanOccurrence(current, handoff, arrivalGeneration(release));
@@ -178,7 +175,8 @@ export function openRunnerDispatch(
           yield* observe(runRow, block, contextId);
         return;
       }
-      if (saved.kind === "handoff" && targetKind(runRow, saved) === "condition")
+      const target = saved.kind === "handoff" ? targetKind(runRow, saved) : undefined;
+      if (saved.kind === "handoff" && (target === "condition" || target === "finish"))
         return yield* retriedNextPass(prepareHandoff(runRow, saved));
       let intent: Handoff | Delivery = saved;
       return yield* recoverOperation(
