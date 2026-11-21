@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import { factoryHarness } from "./support/factory.ts";
 import { mockIngest } from "./support/telemetry.ts";
@@ -315,6 +317,25 @@ it.live(
     }),
 );
 
+it.live("shutdown sends queued analytics while deferred enrichment is stalled", (context) =>
+  Effect.gen(function* () {
+    // Arrange
+    const ingest = yield* Effect.promise(() => mockIngest(context));
+    const harness = yield* Effect.promise(() => factoryHarness(context));
+    const scope = yield* Scope.make();
+    const { telemetry } = yield* harness
+      .service({ telemetry: { env: ingest.env } })
+      .pipe(Scope.provide(scope));
+    yield* telemetry.recordLater(Effect.never);
+
+    // Act
+    yield* Scope.close(scope, Exit.void);
+
+    // Assert
+    expect(ingest.events("app.started")).toHaveLength(1);
+  }),
+);
+
 it.effect("a stalled batch is disconnected at the ten-second send timeout", (context) =>
   Effect.gen(function* () {
     // Arrange
@@ -336,24 +357,40 @@ it.effect("a stalled batch is disconnected at the ten-second send timeout", (con
   }),
 );
 
-it.live("feature usage sends only catalogued actions without extra properties", (context) =>
+it.live("telemetry sends the catalogued Run title action", (context) =>
   Effect.gen(function* () {
     // Arrange
     const ingest = yield* Effect.promise(() => mockIngest(context));
     const harness = yield* Effect.promise(() => factoryHarness(context));
     const { telemetry } = yield* harness.service({ telemetry: { env: ingest.env } });
+
     // Act
     yield* telemetry.record("feature.used", { feature: "run_title_generated" });
-    yield* telemetry.record("feature.used", { feature: "private title" } as never);
-    yield* telemetry.record("feature.used", {
-      feature: "run_title_generated",
-      title: "private title",
-    } as never);
     yield* telemetry.flush();
+
     // Assert
-    const payload = JSON.stringify(ingest.requests);
-    expect(payload.match(/feature\.used/g)).toHaveLength(1);
-    expect(payload).toContain('"feature":"run_title_generated"');
-    expect(payload).not.toContain("private title");
+    expect(ingest.events("feature.used")).toMatchObject([
+      { properties: { feature: "run_title_generated" } },
+    ]);
+  }),
+);
+
+it.effect.each([
+  { feature: "private title" },
+  { feature: "run_title_generated", title: "private title" },
+])("telemetry discards uncatalogued feature properties %j", (properties, context) =>
+  Effect.gen(function* () {
+    // Arrange
+    const ingest = yield* Effect.promise(() => mockIngest(context));
+    const harness = yield* Effect.promise(() => factoryHarness(context));
+    const { telemetry } = yield* harness.service({ telemetry: { env: ingest.env } });
+
+    // Act
+    yield* telemetry.record("feature.used", properties as never);
+    yield* telemetry.flush();
+
+    // Assert
+    expect(ingest.events("feature.used")).toHaveLength(0);
+    expect(JSON.stringify(ingest.requests)).not.toContain("private title");
   }),
 );

@@ -460,7 +460,8 @@ export const makeTelemetry = (
 
     const background = yield* FiberSet.make<void>();
     yield* Effect.addFinalizer(() =>
-      FiberSet.awaitEmpty(background).pipe(
+      flush().pipe(
+        Effect.andThen(FiberSet.awaitEmpty(background)),
         Effect.andThen(flush()),
         Effect.interruptible,
         Effect.timeoutOption(1000),

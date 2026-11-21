@@ -185,7 +185,7 @@ it("only launching the downloaded version emits the anonymous update and consume
   expect(payload).not.toContain(updateReceipt);
 });
 
-it("the feature report accepts an allowlisted action and rejects an arbitrary label", async (context) => {
+it("the feature report records an allowlisted action", async (context) => {
   // Arrange
   const ingest = await mockIngest(context);
   const world = await remoteServer(context, {
@@ -194,17 +194,32 @@ it("the feature report accepts an allowlisted action and rejects an arbitrary la
   });
 
   // Act
-  const valid = await world.host("POST", "/api/feature-usage", "auto_arrange");
-  const invalid = await world.host("POST", "/api/feature-usage", "Private Project Name");
+  const result = await world.host("POST", "/api/feature-usage", "auto_arrange");
   await world.server.close();
 
-  expect(valid.status).toBe(200);
-  expect(invalid.status).toBe(400);
   // Assert
-  const payload = JSON.stringify(ingest.requests);
-  expect(payload.match(/"event":"feature\.used"/g)).toHaveLength(1);
-  expect(payload).toContain('"feature":"auto_arrange"');
-  expect(payload).not.toContain("Private Project Name");
+  expect(result.status).toBe(200);
+  expect(ingest.events("feature.used")).toMatchObject([
+    { properties: { feature: "auto_arrange" } },
+  ]);
+});
+
+it("the feature report rejects an arbitrary label without sending it", async (context) => {
+  // Arrange
+  const ingest = await mockIngest(context);
+  const world = await remoteServer(context, {
+    remoteDisabled: true,
+    telemetry: { env: ingest.env },
+  });
+
+  // Act
+  const result = await world.host("POST", "/api/feature-usage", "Private Project Name");
+  await world.server.close();
+
+  // Assert
+  expect(result.status).toBe(400);
+  expect(ingest.events("feature.used")).toHaveLength(0);
+  expect(JSON.stringify(ingest.requests)).not.toContain("Private Project Name");
 });
 
 it("an approved desktop's retried installed receipt counts once across a host restart", async (context) => {
@@ -258,23 +273,34 @@ it("a host opt-out consumes the desktop receipt even if the client retries after
   expect(ingest.events("update.installed")).toHaveLength(0);
 });
 
-it("the installed receipt endpoint requires an approved desktop", async (context) => {
+const stableUpdateReceipt = {
+  receiptId: "ae611bbb-a1c7-4004-8000-04def5e621b9",
+  fromVersion: "1.0.0",
+  toVersion: "1.0.1",
+};
+
+it("the installed receipt endpoint rejects an unapproved desktop", async (context) => {
   // Arrange
   const world = await remoteServer(context);
   const desktop = world.client();
-  const browser = await world.approved("Browser", "browser");
-  const receipt = {
-    receiptId: "ae611bbb-a1c7-4004-8000-04def5e621b9",
-    fromVersion: "1.0.0",
-    toVersion: "1.0.1",
-  };
 
   // Act
-  const unapproved = await desktop.send("POST", "/api/client-update/installed", receipt);
-  const wrongSurface = await browser.send("POST", "/api/client-update/installed", receipt);
+  const response = await desktop.send("POST", "/api/client-update/installed", stableUpdateReceipt);
 
   // Assert
-  expect([unapproved.status, wrongSurface.status]).toEqual([401, 401]);
+  expect(response.status).toBe(401);
+});
+
+it("the installed receipt endpoint rejects an approved browser", async (context) => {
+  // Arrange
+  const world = await remoteServer(context);
+  const browser = await world.approved("Browser", "browser");
+
+  // Act
+  const response = await browser.send("POST", "/api/client-update/installed", stableUpdateReceipt);
+
+  // Assert
+  expect(response.status).toBe(401);
 });
 
 it("an approved desktop cannot attach arbitrary data to an update", async (context) => {
@@ -285,9 +311,7 @@ it("an approved desktop cannot attach arbitrary data to an update", async (conte
 
   // Act
   const rejected = await client.send("POST", "/api/client-update/installed", {
-    receiptId: "ae611bbb-a1c7-4004-8000-04def5e621b9",
-    fromVersion: "1.0.0",
-    toVersion: "1.0.1",
+    ...stableUpdateReceipt,
     url: "private source",
   });
   await world.server.close();
