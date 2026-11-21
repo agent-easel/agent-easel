@@ -51,7 +51,7 @@ encryption and embedded asar integrity are on, and the app loads only from asar.
 
 ## Release and update flow
 
-The **Release** workflow (`.github/workflows/release.yml`) chains `release-please` → `source` → `build-macos` → `publish` → `pages` through job dependencies (`needs`). On every push to `main`, release-please opens or updates the Release PR, titled like `chore(main): release X.Y.Z`. It passes normal checks and main branch protection like any other PR. Merging that PR is the human decision to cut a Release.
+The **Release** workflow (`.github/workflows/release.yml`) chains `release-please` → `source` → `build-macos` → `publish` → `landing` through job dependencies (`needs`). On every push to `main`, release-please opens or updates the Release PR, titled like `chore(main): release X.Y.Z`. It passes normal checks and main branch protection like any other PR. Merging that PR is the human decision to cut a Release.
 
 After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit and an empty draft GitHub release with generated notes. It uses `draft: true`, `force-tag-creation` and no component in the tag. Job dependencies start the build in the same workflow run: GitHub does not deliver draft-creation events to Actions, and events caused by `GITHUB_TOKEN` do not start workflows.
 
@@ -65,11 +65,21 @@ After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit 
 
 ### Landing page
 
-The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @t3-factory/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to the project's GitHub Pages address.
+The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @t3-factory/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://t3factory.app/`.
 
-After `publish` succeeds, `pages` builds the page from the release commit with the Pages base URL and deploys it to GitHub Pages, so the page never links a DMG before its assets are public. Beta builds do not change the page. When only `pages` failed, **Re-run failed jobs** deploys again without touching the Release. `pages` deploys only while its tag is the latest published Release, so re-running an older Release never replaces a newer page.
+GitHub Actions owns the production deployment at `https://t3factory.app/`. The `landing` job runs after a successful `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. Beta builds leave the site unchanged. Use **Re-run failed jobs** when only the landing job failed.
+
+The same deployment proxies `/ingest/static/*` to PostHog Cloud EU's asset host and `/ingest/*` to its ingestion host. The website is static and the ingestion rules need no Vercel Functions.
 
 The page's layout and copy follow the Figma frame "Landing · Feature tour — Nov 2026". That frame uses only instances of the Marketing screen components M07–M12, so the product screenshots are exports of those components, at twice their rendered width on the page. The social card is an export of the Landing page's "Social card · 1200×630" frame. When those components or that frame change, export them again and replace the files in `apps/landing/public`.
+
+#### Vercel setup
+
+1. Create a Vercel project with Root Directory `apps/landing`, the Vite preset, and access to source files outside the Root Directory for the pnpm workspace and root version manifest. Match the repository's Node.js major and let `vercel.json` supply the build command and output directory.
+2. In Production Environment Variables, set `FACTORY_SITE_URL=https://t3factory.app/`. Bind `t3factory.app` as the production domain and configure its DNS using the records shown by Vercel.
+3. Disconnect Git in the Vercel project so the Release workflow is the sole deployment trigger. If Git is connected during setup, set **Ignored Build Step** to a custom command of `exit 0` before enabling any deployment. Git-triggered builds must always be skipped, including on `main`, since Vercel's Git integration cannot verify Release publication. The branch rules in `vercel.json` allow only `main`; the workflow applies the landing path and version filter and uploads a prebuilt deployment. Disable the old GitHub Pages deployment source when switching over. See [Vercel's Git settings](https://vercel.com/docs/project-configuration/git-configuration), [Ignored Build Step](https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel), and [GitHub Actions guide](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel).
+4. Set up the GitHub Actions environment `landing-production` for `main`. Add `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as environment variables and `VERCEL_TOKEN` as an environment secret scoped to the Vercel project’s owning account or team. The workflow pulls production settings, builds locally in CI, and deploys the prebuilt output to production.
+5. Create a PostHog Cloud EU project, set its billing limit, and set its public project token (`phc_…`) in the Actions repository variable `FACTORY_POSTHOG_PUBLIC_KEY` for Release and Beta packaging. A Factory host can override the packaged token with `FACTORY_POSTHOG_KEY`. The Vercel proxy needs no project token. See [PostHog's reverse proxy guide](https://posthog.com/docs/advanced/proxy).
 
 ### Retry and failed qualification
 
@@ -100,7 +110,6 @@ Also configure:
 - Squash as the only merge method (repository settings and the main ruleset), with the PR title as commit title and a blank commit message. The default **commit or PR title** would use a single commit's message instead, and a PR body in the commit could add unintended changelog entries: release-please also reads Conventional Commit lines and footers in the commit body.
 - **Allow GitHub Actions to create and approve pull requests** in Actions settings, so release-please can open the Release PR with `GITHUB_TOKEN`. `pull_request` runs for PRs opened or updated by `GITHUB_TOKEN` require a maintainer's manual **Approve and run** before the required **Quality gate** runs. A GitHub App token would avoid that approval but is not configured.
 - **PR title** as a required check in the main ruleset, alongside the normal required checks.
-- **Pages** with **GitHub Actions** as the build and deployment source, for the landing page. The `pages` job uses the default **github-pages** environment; if that environment restricts deployment branches, allow `main`, because the job runs in the Release workflow on `main`.
 - **Immutable releases**, required for the guarantee that published files are never overwritten; see the [publication boundary](#publication-boundary).
 
 A tag ruleset protecting `v*` from update and deletion is recommended so tags stay fixed while a Release is still a draft.

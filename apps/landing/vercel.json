@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "*": false,
+      "**": false
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/ingest/static/:path*",
+      "destination": "https://eu-assets.i.posthog.com/static/:path*"
+    },
+    {
+      "source": "/ingest/batch/",
+      "destination": "https://eu.i.posthog.com/batch/"
+    },
+    {
+      "source": "/ingest/:path*",
+      "destination": "https://eu.i.posthog.com/:path*"
+    }
+  ]
+}

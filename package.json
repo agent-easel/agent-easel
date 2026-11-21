@@ -8,7 +8,7 @@
     "build": "vp run -r build",
     "typecheck:root": "tsc -p tsconfig.json",
     "typecheck": "vp run --concurrency-limit 8 gate:typecheck",
-    "test": "vp run --filter @t3-factory/backend --filter @t3-factory/desktop --filter @t3-factory/frontend test && vp run test:scripts",
+    "test": "vp run --filter @t3-factory/backend --filter @t3-factory/desktop --filter @t3-factory/frontend --filter @t3-factory/landing test && vp run test:scripts",
     "test:scripts": "node --conditions=factory-source --test scripts/*.test.mjs scripts/dev/scenario-catalog.test.ts",
     "start": "pnpm --filter @t3-factory/backend start",
     "dev": "node scripts/dev.mjs",
