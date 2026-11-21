@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "vite-plus";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sourceFile = /\.(?:[cm]?[jt]s|[jt]sx)$/;
@@ -18,46 +18,38 @@ function files(...args) {
     .filter((path) => sourceFile.test(path));
 }
 
-function commentRanges(source) {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, source.languageVariant);
-  const ranges = [];
-  let end = 0;
-
-  function scanGap(start) {
-    scanner.setText(source.text, end, start - end);
-    for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
-      if (
-        kind === ts.SyntaxKind.SingleLineCommentTrivia ||
-        kind === ts.SyntaxKind.MultiLineCommentTrivia
-      ) {
-        ranges.push({ start: scanner.getTokenStart(), end: scanner.getTokenEnd() });
-      }
+function lineStartsOf(content) {
+  const starts = [0];
+  for (let index = 0; index < content.length; index++) {
+    const ch = content.charCodeAt(index);
+    if (ch === 13) {
+      if (content.charCodeAt(index + 1) === 10) index++;
+      starts.push(index + 1);
+    } else if (ch === 10 || ch === 0x2028 || ch === 0x2029) {
+      starts.push(index + 1);
     }
   }
+  return starts;
+}
 
-  function visit(node) {
-    const children = node.getChildren(source).filter((child) => !ts.isJSDoc(child));
-    if (children.length > 0) {
-      children.forEach(visit);
-      return;
-    }
-    const start = ts.isJsxText(node) ? node.pos : node.getStart(source);
-    if (start < end) return;
-    scanGap(start);
-    end = node.end;
+function lineAndColumn(lineStarts, offset) {
+  let low = 0;
+  let high = lineStarts.length - 1;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if (lineStarts[mid] <= offset) low = mid;
+    else high = mid - 1;
   }
-
-  visit(source);
-  return ranges;
+  return { line: low, character: offset - lineStarts[low] };
 }
 
 function inventory(path, content) {
-  const source = ts.createSourceFile(path, content, ts.ScriptTarget.Latest);
-  const lineStarts = source.getLineStarts();
-  return commentRanges(source).map(({ start, end }) => {
+  const { comments } = parseSync(path, content);
+  const lineStarts = lineStartsOf(content);
+  return comments.map(({ start, end }) => {
     const text = content.slice(start, end);
-    const first = source.getLineAndCharacterOfPosition(start);
-    const last = source.getLineAndCharacterOfPosition(end);
+    const first = lineAndColumn(lineStarts, start);
+    const last = lineAndColumn(lineStarts, end);
     const before = content.slice(lineStarts[first.line], start);
     const after = content.slice(end, lineStarts[last.line + 1] ?? content.length);
     const testLabel =

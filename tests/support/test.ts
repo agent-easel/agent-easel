@@ -6,10 +6,13 @@ import { fixtureHandles, resetFixture, type Fixture } from "./fixture/handle.ts"
  * journey's hooks run, and `fixture` holds its typed handles.
  */
 export const test = web.extend<{ fixture: Fixture }>({
-  fixture: async ({ app }, use) => {
-    await resetFixture(app);
-    await use(fixtureHandles(app));
-  },
+  fixture: [
+    async ({ app }, use) => {
+      await resetFixture(app);
+      await use(fixtureHandles(app));
+    },
+    { auto: true },
+  ],
 });
 
 export const { beforeEach, afterEach } = test;
