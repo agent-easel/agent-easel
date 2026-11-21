@@ -30,6 +30,7 @@ import {
   placingGraph,
   reviewPanelGraph,
   savedFlow,
+  subflowBlock,
   toEnding,
 } from "./support/subflow.ts";
 
@@ -915,6 +916,64 @@ it("refuses an over-budget shared diamond through public Start", async (c) => {
   });
   expect(assertOk(await factory.listRunNavigation())).toEqual([]);
   expect(t3.threads.launches.size).toBe(0);
+});
+
+it.for([
+  {
+    label: "starts at the 2,000-block limit without Finish",
+    finish: undefined,
+    ready: true,
+    outcome: { ok: true },
+  },
+  {
+    label: "refuses 2,001 blocks when the root adds an empty Finish",
+    finish: { position: { x: 500, y: 0 }, endings: [] },
+    ready: false,
+    outcome: {
+      ok: false,
+      error: { issues: [{ code: "subflow_expanded_blocks_exceeded", budget: { total: "2001" } }] },
+    },
+  },
+] as const)("$label", async ({ finish, ready, outcome }, c) => {
+  // Arrange
+  const { f, input, agent } = await prepared(c);
+  const child = await savedFlow(f, {
+    name: "Large child",
+    graph: {
+      blocks: Array.from({ length: 497 }, (_, i) => agentBlock(`work-${i}`, `Work ${i}`, agent.id)),
+      flowInput: flowInput("work-0"),
+      connections: [
+        ...Array.from({ length: 496 }, (_, i) => connection(`work-${i}`, "done", `work-${i + 1}`)),
+        toEnding("work-496", "done", "done"),
+      ],
+      finish: { position: { x: 500, y: 0 }, endings: [ending("done", "Done")] },
+    },
+  });
+  const placements = Array.from({ length: 4 }, (_, i) =>
+    subflowBlock(`child-${i}`, `Child ${i}`, child.id),
+  );
+  const root = await savedFlow(f, {
+    name: "At the expansion limit",
+    graph: {
+      blocks: [
+        ...Array.from({ length: 4 }, (_, i) => agentBlock(`root-${i}`, `Root ${i}`, agent.id)),
+        ...placements,
+      ],
+      flowInput: flowInput("root-0"),
+      connections: [
+        ...Array.from({ length: 3 }, (_, i) => connection(`root-${i}`, "done", `root-${i + 1}`)),
+        ...placements.map((placement) => connection("root-3", "done", placement.id)),
+      ],
+      finish,
+    },
+  });
+
+  // Act
+  const started = await f.startRun({ ...input, flowId: root.id });
+
+  // Assert
+  expect(root.readiness.ready).toBe(ready);
+  expect(started).toMatchObject(outcome);
 });
 
 it("retains the standalone Start contract beyond the composition capture budget", async (c) => {
