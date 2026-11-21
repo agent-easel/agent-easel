@@ -1,3 +1,4 @@
+import type { Telemetry } from "./telemetry.ts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -105,6 +106,7 @@ export const makeRunTitles = (
   ops: EligibilityOperations,
   snapshots: ContractSnapshots,
   changes: LiveChanges,
+  telemetry: Telemetry,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -451,7 +453,10 @@ export const makeRunTitles = (
             return { reply: titleApplied(title), appliedTo: generation.run_id };
           }),
         );
-        if (outcome.appliedTo) changes.runChanged(outcome.appliedTo);
+        if (outcome.appliedTo) {
+          changes.runChanged(outcome.appliedTo);
+          yield* telemetry.record("feature.used", { feature: "run_title_generated" });
+        }
         return outcome.reply;
       }).pipe(Effect.catchCause(() => Effect.succeed(titleRejection("RUNTIME_UNAVAILABLE"))));
 

@@ -1,3 +1,4 @@
+import { reportFeature } from "./api.ts";
 import { buildElkGraph } from "@t3-factory/flow-layout";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
@@ -206,7 +207,10 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
         routes: result.routes,
         restored: restoreOnly,
       });
-      if (!restoreOnly) current.options.authoring?.change(acceptedGraph);
+      if (!restoreOnly) {
+        current.options.authoring?.change(acceptedGraph);
+        reportFeature("auto_arrange");
+      }
     },
     [compute],
   );

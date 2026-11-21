@@ -15,6 +15,7 @@ import {
 import type { FacadeOperations } from "./operation.ts";
 import type { Result } from "./result.ts";
 import { serverUpdateOperations } from "./update.ts";
+import { featureUsageOperations } from "./feature-usage.ts";
 import { triggerOperations } from "./trigger.ts";
 
 /** Every HTTP operation, including those answered by the server around the facade. */
@@ -31,6 +32,7 @@ export const httpOperations = {
   ...clientAccessOperations,
   ...clientAccessServerOperations,
   ...serverUpdateOperations,
+  ...featureUsageOperations,
 };
 
 /** The Factory facade: derived from the operation definitions, plus operations HTTP does not reach. */

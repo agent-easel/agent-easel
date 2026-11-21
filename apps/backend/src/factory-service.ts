@@ -141,6 +141,7 @@ export const makeFactoryService = (
         startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
       },
       changes,
+      telemetry,
     );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
@@ -178,6 +179,7 @@ export const makeFactoryService = (
       },
       connection.snapshots,
       changes,
+      telemetry,
     );
     const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
     const discordGateway = yield* makeDiscordGateway(options.discordApiUrl ?? DISCORD_API_URL);
@@ -213,6 +215,7 @@ export const makeFactoryService = (
       chatDeliveries,
       reportCapture.changed,
       changes.runChanged,
+      telemetry,
     );
     const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
       model: conversationalModel(sql, chatCredentials),
@@ -221,7 +224,7 @@ export const makeFactoryService = (
           listProjects: projects.listProjects,
           listFlows: definitions.listFlows,
         }),
-        ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }),
+        ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }, telemetry),
         chatStart.tool,
         chatHumanAnswer.tool,
         chatArchive.tool,

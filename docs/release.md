@@ -43,6 +43,8 @@ These are deployment prerequisites, not repository content:
 | `FACTORY_UPDATE_URL` | Generic update feed (`latest-mac.yml`, `beta-mac.yml`, zip, blockmap) readable without credentials; a Release also rewrites `beta-mac.yml` so beta installations receive it |
 | `FACTORY_UPDATE_GITHUB_OWNER`, `FACTORY_UPDATE_GITHUB_REPO` | GitHub Releases feed, only for a repository whose releases are public |
 
+Set the Actions repository variable `FACTORY_POSTHOG_PUBLIC_KEY` under **Settings → Secrets and variables → Actions → Variables** to the PostHog EU project’s public ingestion token. The shared desktop build embeds it in Release and Beta packages.
+
 Local packaging without signing credentials is **ad-hoc signed** without the hardened runtime (Apple Silicon kills unsigned binaries and Electron's fuse changes void its linker signature): it runs locally for probes but
 is not a release and Gatekeeper rejects it on another Mac. The update location must be anonymously readable (a public release-assets repository or generic HTTPS feed) and no maintainer token may reach clients; the
 updater makes unauthenticated requests, so a browser's GitHub login grants no access to private release assets. Without a feed the app reports updates as **unsupported**. Preparing a build neither publishes a release

@@ -11,7 +11,7 @@ import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import type { Factory } from "../../src/index.ts";
 import { loadConfiguration } from "../../src/config.ts";
-import { startServer } from "../../src/server.ts";
+import { startServer, type ServerOptions } from "../../src/server.ts";
 import { writeReportingState } from "./reporting-home.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -73,7 +73,10 @@ async function readyFlow(
 export async function prepared(
   c: TestContext,
   shape?: SingleWorkerVariant | ReadyFlowShape,
-  { discordApiUrl }: { readonly discordApiUrl?: string } = {},
+  {
+    discordApiUrl,
+    telemetry,
+  }: { discordApiUrl?: string; telemetry?: NonNullable<ServerOptions["telemetry"]> } = {},
 ) {
   const h = await factoryHarness(c);
   const { root, t3, github, reportingStateDirectory } = await preparedHomes(h.processHome);
@@ -83,6 +86,7 @@ export async function prepared(
     reportingStateDirectory,
     connectionRetryMs: 60_000,
     ...(discordApiUrl ? { discordApiUrl } : {}),
+    ...(telemetry ? { telemetry } : {}),
   };
   const f = await h.open(options);
   c.onTestFinished(() => f.close());

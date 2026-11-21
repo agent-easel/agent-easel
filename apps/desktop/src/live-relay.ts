@@ -43,6 +43,7 @@ export function openLiveSocket(target: ApiTarget, query: string): WebSocket | nu
   if (target.kind === "remote") return target.connection.openSocket(path);
   return new WebSocket(target.base.replace(/^http/, "ws") + path, {
     origin: target.base,
+    headers: { "x-factory-desktop": "1" },
     handshakeTimeout: 10_000,
   });
 }

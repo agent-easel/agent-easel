@@ -335,3 +335,22 @@ it.effect("a stalled batch is disconnected at the ten-second send timeout", (con
     expect(ingest.requests).toHaveLength(1);
   }),
 );
+
+it.live("feature usage sends only catalogued actions without extra properties", (context) =>
+  Effect.gen(function* () {
+    const ingest = yield* Effect.promise(() => mockIngest(context));
+    const harness = yield* Effect.promise(() => factoryHarness(context));
+    const { telemetry } = yield* harness.service({ telemetry: { env: ingest.env } });
+    yield* telemetry.record("feature.used", { feature: "run_title_generated" });
+    yield* telemetry.record("feature.used", { feature: "private title" } as never);
+    yield* telemetry.record("feature.used", {
+      feature: "run_title_generated",
+      title: "private title",
+    } as never);
+    yield* telemetry.flush();
+    const payload = JSON.stringify(ingest.requests);
+    expect(payload.match(/feature\.used/g)).toHaveLength(1);
+    expect(payload).toContain('"feature":"run_title_generated"');
+    expect(payload).not.toContain("private title");
+  }),
+);

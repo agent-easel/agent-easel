@@ -74,7 +74,9 @@ try {
   };
   const channel =
     process.env.FACTORY_DESKTOP_PACKAGED === "true" ? manifest.factoryBuild?.channel : undefined;
+  const updateReceipt = process.env.FACTORY_UPDATE_RECEIPT;
   const server = await startServer(config, {
+    ...(updateReceipt && (channel === "release" || channel === "beta") ? { updateReceipt } : {}),
     uiDirectory: process.env.FACTORY_UI_DIRECTORY ?? null,
     applicationVersion: process.env.FACTORY_APPLICATION_VERSION ?? "desktop",
     applicationUpdates: hostUpdates(),
