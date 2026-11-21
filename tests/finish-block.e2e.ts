@@ -20,7 +20,11 @@ async function addEnding(screen: Screen, name: string) {
   await ending(screen, "Unnamed ending").getByLabel("Name", { exact: true }).fill(name);
 }
 
-async function saveDeliveredFlow(baseUrl: string | undefined, name: string) {
+async function saveDeliveredFlow(
+  baseUrl: string | undefined,
+  name: string,
+  legacyAgentEntry?: "input" | "handoff",
+) {
   const id = await saveSingleAgentFlow(baseUrl, name, "Runtime worker", {
     id: "worker",
     name: "Ship the fix",
@@ -28,9 +32,20 @@ async function saveDeliveredFlow(baseUrl: string | undefined, name: string) {
     y: 60,
   });
   const flow = await readFlow(baseUrl, id);
+  const worker = flow.graph.blocks[0]!;
+  const legacyAgent = {
+    ...worker,
+    id: FINISH_BLOCK_ID,
+    name: "Legacy Agent",
+    position: { x: 320, y: 340 },
+  };
   await saveFlowElsewhere(baseUrl, flow, {
     graph: {
       ...flow.graph,
+      ...(legacyAgentEntry && { blocks: [...flow.graph.blocks, legacyAgent] }),
+      ...(legacyAgentEntry === "input" && {
+        flowInput: { ...flow.graph.flowInput, targetBlockIds: [worker.id, legacyAgent.id] },
+      }),
       finish: {
         ...flow.graph.finish,
         endings: [
@@ -51,6 +66,9 @@ async function saveDeliveredFlow(baseUrl: string | undefined, name: string) {
         ],
       },
       connections: [
+        ...(legacyAgentEntry === "handoff"
+          ? [{ sourceBlockId: worker.id, exitId: "done", targetBlockId: legacyAgent.id }]
+          : []),
         endingWire("worker", "done", "delivered"),
         endingWire("worker", "done", "deferred"),
       ],
@@ -58,6 +76,55 @@ async function saveDeliveredFlow(baseUrl: string | undefined, name: string) {
   });
   return id;
 }
+
+test("the Flow input offers its legacy Agent entry and excludes every ending", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const flowId = await saveDeliveredFlow(app.baseUrl, "Legacy Agent entry", "input");
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Flow input", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", /^Targets of the Flow input:/).tap();
+
+  // Assert
+  await expect(
+    screen.getByRole("menuitemcheckbox", "Legacy Agent", { exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(screen.getByRole("menuitemcheckbox", /^Finish → /)).toHaveCount(0);
+  await app.screenshot("finish-flow-input-targets");
+});
+
+test("the legacy Agent inspector keeps the accepted ending out of its Received results", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const flowId = await saveDeliveredFlow(app.baseUrl, "Legacy Agent with an ending", "handoff");
+  const { id: runId } = await fixture.scenarios.ensure({
+    key: "finish-legacy-recipient",
+    flow: { id: flowId },
+  });
+  await app.open(`/runs/${runId}`);
+  await applyRunState(app, runId, "result reported", "https://github.com/example/atlas/pull/46");
+  await expect(runResult(screen)).toContainText("Delivered");
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", /^Agent Legacy Agent, /).tap();
+
+  // Assert
+  const received = screen.getByRole("region", "Received results", { exact: true });
+  await expect(received.getByRole("article", /Ship the fix/)).toHaveCount(1);
+  await app.screenshot("finish-legacy-agent-inspector");
+});
 
 test("a Block with the stored ID finish keeps its own settings next to Finish", async ({
   app,

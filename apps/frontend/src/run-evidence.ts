@@ -1,5 +1,9 @@
 import type { RunDetail, WorkerProvenance } from "@t3-factory/contracts";
 
+export function targetsBlock(intent: RunDetail["intents"][number], blockId: string | null) {
+  return intent.targetEndingId === null && intent.blockId === blockId;
+}
+
 export function blockName(run: RunDetail, blockId: string) {
   return run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name || blockId;
 }

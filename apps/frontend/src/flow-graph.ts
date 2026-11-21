@@ -150,7 +150,10 @@ export function leavesNode(wire: FlowWire, node: CanvasNode) {
 
 export function hasWire(graph: FlowGraph, wire: FlowWire) {
   if (wire.source.kind === "flow-input")
-    return graph.flowInput.targetBlockIds.includes(wire.targetBlockId);
+    return (
+      wire.targetEndingId === undefined &&
+      graph.flowInput.targetBlockIds.includes(wire.targetBlockId)
+    );
   return graph.connections.some((c) => sameWire(connectionWire(c), wire));
 }
 
@@ -176,7 +179,8 @@ export function addWire<G extends FlowGraph | CanvasGraph>(
   graph: G,
   { source, targetBlockId, targetEndingId }: FlowWire,
 ): G {
-  if (source.kind === "flow-input")
+  if (source.kind === "flow-input") {
+    if (targetEndingId !== undefined) return graph;
     return {
       ...graph,
       flowInput: {
@@ -184,6 +188,7 @@ export function addWire<G extends FlowGraph | CanvasGraph>(
         targetBlockIds: [...graph.flowInput.targetBlockIds, targetBlockId],
       },
     };
+  }
   const { sourceBlockId, exitId } = source;
   return {
     ...graph,
@@ -195,7 +200,8 @@ export function addWire<G extends FlowGraph | CanvasGraph>(
 }
 
 export function removeWire(graph: FlowGraph, wire: FlowWire): FlowGraph {
-  if (wire.source.kind === "flow-input")
+  if (wire.source.kind === "flow-input") {
+    if (wire.targetEndingId !== undefined) return graph;
     return {
       ...graph,
       flowInput: {
@@ -203,6 +209,7 @@ export function removeWire(graph: FlowGraph, wire: FlowWire): FlowGraph {
         targetBlockIds: graph.flowInput.targetBlockIds.filter((id) => id !== wire.targetBlockId),
       },
     };
+  }
   return {
     ...graph,
     connections: graph.connections.filter((c) => !sameWire(connectionWire(c), wire)),

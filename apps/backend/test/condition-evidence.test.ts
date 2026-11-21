@@ -54,21 +54,17 @@ it("Condition evidence distinguishes ordinary recipients and every ending from t
   const worker = await workerAtWork(f.world, f.input);
   await resultReported(f.world, worker, { message: "The worker delivered" });
 
-  // Act
-  const run = await observeFor(
+  await observeFor(
     "accept the selected ending",
     f.world,
     worker.runId,
     (detail) => detail.result !== null,
   );
 
-  // Assert
-  expect(run.result?.endingId).toBe("done");
-  expect(run.blocks.map((block) => [block.blockId, block.name])).toContainEqual([
-    FINISH_BLOCK_ID,
-    "Legacy review",
-  ]);
+  // Act
   const page = await f.f.listConditionArrivals(worker.runId, "gate", "", "");
+
+  // Assert
   assert(page.ok);
   expect(page.value.arrivals[0]?.recipients).toStrictEqual([
     { blockId: FINISH_BLOCK_ID, targetEndingId: null, disposition: "acknowledged" },

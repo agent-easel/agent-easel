@@ -1051,23 +1051,25 @@ export const conditionFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
   }));
 
+const terminalConditionGraph = (agentId: string) => ({
+  flowInput: flowInput("worker"),
+  blocks: [
+    entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
+    gate(),
+    followUp(agentId),
+  ],
+  connections: [
+    connection("worker", "done", "gate"),
+    connection("worker", "revise", "gate"),
+    connection("gate", OTHERWISE, "follow-up"),
+  ],
+});
+
 /** Entry worker's "Done" and Flow-local "Revise" both go to the Gate, whose Otherwise hands to
  * Follow-up. A Condition output cannot end a branch at Start; tests that need one unwire it from
  * the captured revision with `capturedConditionOutputUnwired`, as a Run captured earlier keeps it. */
 export const terminalConditionFlow: ReadyFlowShape = (world) =>
-  workerShape(world, "Terminal condition", (agentId) => ({
-    flowInput: flowInput("worker"),
-    blocks: [
-      entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
-      gate(),
-      followUp(agentId),
-    ],
-    connections: [
-      connection("worker", "done", "gate"),
-      connection("worker", "revise", "gate"),
-      connection("gate", OTHERWISE, "follow-up"),
-    ],
-  }));
+  workerShape(world, "Terminal condition", terminalConditionGraph);
 
 /** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, which
  * escalates to a Human Review from arrival 2 and otherwise hands to Follow-up. */
@@ -1262,6 +1264,16 @@ export const endingBesidePendingWorkFlow: ReadyFlowShape = (world) =>
     ],
     finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
+
+export const endingAfterGateFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending after the Gate", (agentId) => {
+    const graph = terminalConditionGraph(agentId);
+    return {
+      ...graph,
+      connections: [...graph.connections, endingConnection("follow-up", "done", "delivered")],
+      finish: finishWith(ending("delivered", "Delivered", "optional")),
+    };
+  });
 
 export const reviewedEndingFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Reviewed ending", (agentId) => ({

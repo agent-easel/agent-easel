@@ -768,8 +768,9 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
   carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
   missing or removed. There is no fallback to local ids or names.
 
-Export refuses, with the reason, a file another installation could not import: an Agent or Flow whose save request exceeds 2 MB, or a file
-over 16 MiB.
+Export refuses a file another installation could not import. A definition save request is limited to 2 MB, the file to 16 MiB,
+and the version-3 Flow graph to 500 blocks including Finish. A legacy Flow with 500 ordinary blocks can still be saved at that
+size. Export becomes available once the graph has at most 499 ordinary blocks.
 
 **Format versions.** Import reads versions 1, 2 and 3, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
@@ -778,8 +779,8 @@ unknown, and a version-3 Flow file without `finish` is rejected as missing it. F
 Flows arrive with an empty Finish block placed right of every block. A newer version is refused and asks to update Factory. Writing version 3
 for every export is an intentional compatibility break: an installation that reads only versions 1 and 2 refuses every newly exported file,
 even an ordinary Agent or a Flow without endings, and asks to be updated before it can import it; it refuses before creating anything.
-Stored definitions, revisions and Run history are not affected. Import limits and receipts are unchanged: the receipt fingerprint covers the
-document under the file's own version, so retrying an earlier-version commit still replays its receipt.
+Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt fingerprint covers the document under
+the file's own version, so retrying an earlier-version commit still replays its receipt.
 
 ### Import
 
@@ -884,7 +885,7 @@ positions, Flow input targets, dangling or duplicate edges, a Human or Wait conn
 blank or repeated ending ID (`invalid_ending_id`), an ending name over 200 characters after trimming, a description or output
 description over 4,000 characters, an unknown output setting, extra Finish or ending fields, a wire into Finish without one of its
 ending IDs or a `targetEndingId` on a wire into a block (`invalid_connection`), two wires from the same exit into the same ending
-(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks with the Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. A portable definition may retain up to 500 ordinary Blocks, and an already-saved Flow at that size may be edited within its current block count.
+(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks with the Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
 A Condition has no rule or output quota of its own and does not borrow the Agent exit limit: it counts as one block, each actual wire
 from any of its outputs, including fan-out and Otherwise wires, is one connection, unwired outputs cost nothing, and its rule IDs,
 names and thresholds count toward the 2 MB body.

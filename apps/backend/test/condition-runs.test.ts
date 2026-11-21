@@ -14,6 +14,7 @@ import {
   besideConditionFlow,
   conditionFlow,
   conditionSelections,
+  endingAfterGateFlow,
   fanOutConditionFlow,
   finishedReport,
   launchBlockId,
@@ -35,6 +36,7 @@ import {
   turnBegins,
   twoWorkersStarted,
   workerAtWork,
+  workerHandle,
   type ScenarioWorld,
   type WorkerHandle,
 } from "./support/scenarios.ts";
@@ -589,4 +591,38 @@ it("manual Settle settles a Condition integrity Problem and cancels its waiting 
   expect(
     run.value.intents.filter((intent) => intent.blockId === "gate").map((intent) => intent.state),
   ).toStrictEqual(["acknowledged", "cancelled"]);
+});
+
+it("Finish cancels an arrival still waiting at a Condition without numbering it", async (c) => {
+  // Arrange
+  const f = await prepared(c, endingAfterGateFlow);
+  const first = await workerAtWork(f.world, f.input);
+  const pending = await integrityProblemLatched(f.world, f.h.databasePath, first);
+  expect(pending.conditions).toMatchObject([{ arrivals: CONDITION_ARRIVAL_MAX, pending: 1 }]);
+  const ready = await observeFor("observe the result producer", f.world, first.runId, (run) =>
+    run.blocks.some(
+      (block) => block.blockId === "follow-up" && block.threadId && block.executionId,
+    ),
+  );
+  const followUp = workerHandle(f.world, ready, "follow-up");
+  await f.t3.threads.recordLaunchedThread(followUp.threadId);
+  await resultReported(f.world, followUp, { message: "Ready to ship." });
+  f.t3.threads.stopsEndThreads();
+
+  // Act
+  const reconciled = await f.f.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok);
+  const run = await f.f.getRun(first.runId);
+  assert(run.ok);
+  expect(run.value).toMatchObject({ lifecycle: "settled", result: { endingId: "delivered" } });
+  expect(run.value.conditions).toMatchObject([{ arrivals: CONDITION_ARRIVAL_MAX, pending: 0 }]);
+  expect(run.value.attention).toMatchObject([
+    { kind: "condition-integrity", settledAt: expect.any(String), settlementReason: "finish" },
+  ]);
+  expect(run.value.intents.filter((intent) => intent.blockId === "gate")).toMatchObject([
+    { state: "acknowledged" },
+    { state: "cancelled", problem: "cancelled-on-Finish" },
+  ]);
 });

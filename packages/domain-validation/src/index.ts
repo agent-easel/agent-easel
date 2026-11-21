@@ -715,6 +715,7 @@ export {
   CANVAS_COORD_MAX,
   CANVAS_COORD_MESSAGE,
   CANVAS_COORD_MIN,
+  currentFlowSizeIssue,
   flowEditSizeRefusal,
   isCanvasPosition,
   validateCreateFlow,

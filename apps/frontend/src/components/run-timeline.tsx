@@ -216,7 +216,10 @@ function operationCancelled(run: RunDetail, event: RunEvent): EventPhrase {
 }
 
 function operationUnresolved(run: RunDetail, event: RunEvent): EventPhrase {
-  const kind = intentOf(run, event)?.kind ?? "operation";
+  const intent = intentOf(run, event);
+  if (intent?.targetEndingId)
+    return endingStatus(run, intent.targetEndingId, "delivery unresolved");
+  const kind = intent?.kind ?? "operation";
   return { actorId: event.blockId, text: `${kind} outcome in T3 not confirmed yet` };
 }
 
@@ -255,12 +258,14 @@ function said(text: string) {
 function handoffStatus(text: string) {
   return (run: RunDetail, event: RunEvent): EventPhrase => {
     const ending = intentOf(run, event)?.targetEndingId;
-    return ending
-      ? {
-          actorId: FINISH_SELECTION,
-          text: `ending ${capturedEnding(run, ending)?.name ?? ending} · ${text}`,
-        }
-      : { actorId: event.blockId, text };
+    return ending ? endingStatus(run, ending, text) : { actorId: event.blockId, text };
+  };
+}
+
+function endingStatus(run: RunDetail, ending: string, text: string): EventPhrase {
+  return {
+    actorId: FINISH_SELECTION,
+    text: `ending ${capturedEnding(run, ending)?.name ?? ending} · ${text}`,
   };
 }
 

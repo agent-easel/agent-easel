@@ -16,6 +16,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
+  currentFlowSizeIssue,
   definitionSaveFits,
   hintedSelection,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
@@ -111,11 +112,12 @@ export function definitionExport<Document extends PortableDocument>(
       ? []
       : [tooLarge(`agents.${index}`, `Agent "${agent.name}"`)];
   });
-  if (
-    flow &&
-    !definitionSaveFits({ name: flow.name, graph: flow.graph, workspace: flow.workspace })
-  )
-    issues.push(tooLarge("flow", `Flow "${flow.name}"`));
+  if (flow) {
+    const size = currentFlowSizeIssue(flow.graph);
+    if (size) issues.push({ ...size, path: `flow.${size.path}` });
+    if (!definitionSaveFits({ name: flow.name, graph: flow.graph, workspace: flow.workspace }))
+      issues.push(tooLarge("flow", `Flow "${flow.name}"`));
+  }
   if (Buffer.byteLength(portableDocumentText(document)) > PORTABLE_DOCUMENT_LIMIT_BYTES)
     issues.push({
       code: "document_too_large",

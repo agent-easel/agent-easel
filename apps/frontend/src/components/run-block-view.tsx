@@ -1,3 +1,4 @@
+import { targetsBlock } from "../run-evidence.ts";
 import { useEffect, useRef, type ReactNode } from "react";
 import {
   attentionPresentation,
@@ -132,7 +133,7 @@ function ReceivedResults({ run, block }: { run: RunDetail; block: FlowBlock }) {
   if (block.kind !== "agent") return null;
   const received = run.intents.flatMap((intent) => {
     const report =
-      intent.blockId === block.id &&
+      targetsBlock(intent, block.id) &&
       intent.state !== "cancelled" &&
       run.reports.find((item) => item.id === intent.reportId);
     return report ? [{ intent, report }] : [];

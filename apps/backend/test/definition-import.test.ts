@@ -657,18 +657,42 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a version-3 export of a Flow at the former block limit can still be imported", async (context) => {
+it("a version-3 import counts Finish toward the block limit", async (context) => {
   // Arrange
-  const { factory, flow } = await importFullLegacyFlow(context);
-  const { document } = assertOk(await factory.exportFlow(flow.id));
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const legacy = fullLegacyFlowFile();
+  const document = {
+    ...legacy,
+    formatVersion: 3,
+    flow: {
+      ...legacy.flow,
+      graph: {
+        ...legacy.flow.graph,
+        finish: { position: { x: 960, y: 0 }, endings: [] },
+      },
+    },
+  };
 
   // Act
   const copy = await factory.commitImport(reviewedCommit("import-v3", undefined, document));
 
   // Assert
-  assert(copy.ok);
-  const exported = assertOk(await factory.exportFlow(copy.value.flowId!));
-  expect(exported.document).toMatchObject({ formatVersion: 3, flow: document.flow });
+  assert(!copy.ok);
+  expect(copy.error.issues).toMatchObject([{ code: "graph_too_large", path: "flow.graph" }]);
+  expect(assertOk(await factory.listFlows())).toStrictEqual([]);
+});
+
+it("a saved legacy Flow over the version-3 block limit stays intact when export is refused", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+
+  // Act
+  const exported = await factory.exportFlow(flow.id);
+
+  // Assert
+  assert(!exported.ok);
+  expect(exported.error.issues).toMatchObject([{ code: "graph_too_large", path: "flow.graph" }]);
+  expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
 it("newly authored Flows must count the Finish block toward the block limit", async (context) => {

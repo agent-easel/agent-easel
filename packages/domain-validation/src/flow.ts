@@ -438,8 +438,8 @@ function checkConnections(
   });
 }
 
-const PORTABLE_ORDINARY_BLOCK_LIMIT = 500;
-const AUTHORED_ORDINARY_BLOCK_LIMIT = PORTABLE_ORDINARY_BLOCK_LIMIT - 1;
+const LEGACY_ORDINARY_BLOCK_LIMIT = 500;
+const CURRENT_ORDINARY_BLOCK_LIMIT = LEGACY_ORDINARY_BLOCK_LIMIT - 1;
 
 function graphSizeIssue(
   blocks: number,
@@ -450,9 +450,16 @@ function graphSizeIssue(
   return {
     code: "graph_too_large",
     path: "graph",
-    message:
-      "Use at most 500 blocks, the Finish block included, and 5000 connections. Imported and upgraded Flows can retain 500 ordinary blocks.",
+    message: "Use at most 500 blocks, including Finish, and 5000 connections.",
   };
+}
+
+export function currentFlowSizeIssue(graph: Pick<FlowGraphInput, "blocks" | "connections">) {
+  return graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    CURRENT_ORDINARY_BLOCK_LIMIT,
+  );
 }
 
 export function flowEditSizeRefusal(
@@ -462,7 +469,7 @@ export function flowEditSizeRefusal(
   const issue = graphSizeIssue(
     graph.blocks.length,
     graph.connections.length,
-    Math.max(AUTHORED_ORDINARY_BLOCK_LIMIT, saved.blocks.length),
+    Math.max(CURRENT_ORDINARY_BLOCK_LIMIT, saved.blocks.length),
   );
   if (issue)
     return { ok: false, error: { code: "validation", message: issue.message, issues: [issue] } };
@@ -568,12 +575,12 @@ function checkFlowBody(input: unknown, required: boolean, ordinaryBlockLimit: nu
 }
 export function validateCreateFlow(
   input: unknown,
-  source: "authoring" | "portable" = "authoring",
+  source: "current" | "legacy" = "current",
 ): Result<CreateFlowInput> {
   const checked = checkFlowBody(
     input,
     false,
-    source === "authoring" ? AUTHORED_ORDINARY_BLOCK_LIMIT : PORTABLE_ORDINARY_BLOCK_LIMIT,
+    source === "legacy" ? LEGACY_ORDINARY_BLOCK_LIMIT : CURRENT_ORDINARY_BLOCK_LIMIT,
   );
   if (!checked.ok) return checked;
   const projectId = parseOwningProject(input);
@@ -581,7 +588,7 @@ export function validateCreateFlow(
   return { ok: true, value: { ...checked.value, projectId: projectId.value } };
 }
 export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
-  const checked = checkFlowBody(input, true, PORTABLE_ORDINARY_BLOCK_LIMIT);
+  const checked = checkFlowBody(input, true, LEGACY_ORDINARY_BLOCK_LIMIT);
   if (!checked.ok) return checked;
   const expectedProjectId = parseExpectedOwner(input);
   if (!expectedProjectId.ok) return expectedProjectId;

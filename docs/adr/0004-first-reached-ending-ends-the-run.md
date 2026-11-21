@@ -30,10 +30,10 @@ No Subflow field is stored by the Finish block delivery.
 
 ## Implementation constraints
 
-- The Finish block is always present and counts toward the limit for newly authored Flows. Portable definitions and
-  already-saved Flows with 500 ordinary Blocks can keep those Blocks. An ending delivery has its own target identity,
-  so an ordinary Block with the ID `finish` keeps its wires and runtime history. Canvas selection and layout identify
-  the Finish block and its ports separately from ordinary Blocks.
+- The Finish block is always present and counts toward the limit for authored Flows and for version-3 imports and exports.
+  Version-1 and version-2 imports and already-saved Flows can keep up to 500 ordinary Blocks. An ending delivery has its
+  own target identity, so an ordinary Block with the ID `finish` keeps its wires and runtime history. Canvas selection
+  and layout identify the Finish block and its ports separately from ordinary Blocks.
 - Accepting a Handoff into an ending, like one at a Condition, sends nothing to T3 and commits atomically. A failed
   attempt commits nothing and leaves the Handoff pending for the next pass, so it is never noted as uncertain T3 work.
   The acceptance records the result and closes the gate in one transaction; the Runner then starts the stop-and-settle,
