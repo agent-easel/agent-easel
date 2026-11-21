@@ -11,7 +11,48 @@ import type { UpdateChannel } from "@t3-factory/contracts";
 
 const bucket = Schema.Literals(["0", "1", "2-5", "6+"]);
 
+const scope = Schema.Literals(["global", "project"]);
+const definitionKind = Schema.Literals(["flow", "agent"]);
+const flowProperties = Schema.Struct({
+  scope,
+  blockCount: bucket,
+  blockTypes: Schema.Array(
+    Schema.Literals(["agent", "human", "wait", "continuation", "condition", "subflow", "finish"]),
+  ),
+  usesSubflows: Schema.Boolean,
+});
+const builtInDriver = Schema.Literals([
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "grok",
+  "opencode",
+  "antigravity",
+  "pi",
+  "muse",
+  "acpRegistry",
+]);
+const agentProperties = Schema.Struct({
+  scope,
+  driverKind: Schema.optionalKey(builtInDriver),
+  hasProjectOverrides: Schema.Boolean,
+});
+const definitionProperties = Schema.Struct({ kind: definitionKind });
+
 const eventProperties = {
+  "flow.created": flowProperties,
+  "flow.saved": flowProperties,
+  "flow.duplicated": flowProperties,
+  "flow.removed": flowProperties,
+  "agent.created": agentProperties,
+  "agent.saved": agentProperties,
+  "agent.removed": agentProperties,
+  "definition.exported": definitionProperties,
+  "definition.imported": definitionProperties,
+  "owner.changed": Schema.Struct({
+    kind: definitionKind,
+    direction: Schema.Literals(["to_project", "to_global"]),
+  }),
   "app.started": Schema.Struct({
     isFirstRun: Schema.Boolean,
     projectCount: bucket,
@@ -49,6 +90,10 @@ export function telemetryCount(count: number): typeof bucket.Type {
   if (count === 1) return "1";
   if (count <= 5) return "2-5";
   return "6+";
+}
+
+export function telemetryBuiltInDriver(value: unknown): typeof builtInDriver.Type | undefined {
+  return Option.getOrUndefined(Schema.decodeUnknownOption(builtInDriver)(value));
 }
 
 const defaultHost = "https://t3factory.app/ingest";

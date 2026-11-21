@@ -130,6 +130,7 @@ export const makeFactoryService = (
       changes,
       t3StateDirectory,
       options.applicationVersion ?? "source",
+      telemetry,
     );
     let runner: Effect.Success<ReturnType<typeof makeRunner>>;
     const triggers = yield* makeTriggers(
