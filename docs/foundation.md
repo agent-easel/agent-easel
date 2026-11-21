@@ -54,9 +54,13 @@ and restricted OAuth credentials live outside project repositories.
   input or block and level with the Flow input (within the canvas limit), added immutable ending
   rows, and rebuilt the connection table under its restored immutability guards so a connection
   enters exactly one block or one ending of its revision, with every stored wire unchanged.
+  Migration `119` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
+  `kind = 'subflow'` and a nullable `flow_id` (required to be null for all other block kinds and
+  with no foreign key to `flows`, so removed child Flows remain repairable in saved revisions and
+  existing rows stay unchanged).
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created Flow id. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
+  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for version-5 Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
   receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import
@@ -180,6 +184,8 @@ by host and approved clients, with explicit [host-only boundaries](desktop-and-c
 
 The backend validates each analytics event against a closed catalog before buffering it. The catalog accepts only the values declared for that event. The backend supplies the installation hash and build metadata itself. `app.started` records whether First-run setup is still pending and reports only the bucketed totals for Projects, active Flows and active Agents.
 
+Flow authoring events report the saved graph's structure, including whether it contains a Subflow block. Run Start reports the captured root Flow's structure. Run completion counts distinct executed Blocks across the root and all invocations, including activated Subflow placements and reached Finish blocks. Each invocation is part of the same Run. An import reports the definition kind once for a newly committed request, including when a Flow document creates multiple definitions.
+
 The backend creates its random installation identity in `FACTORY_HOME/telemetry-id` with owner-only permissions when analytics is available. The UUID stays on disk and only its SHA-256 hash is sent. A damaged or inaccessible identity disables delivery. Events are held in memory, and retries keep the same event UUID and timestamp so PostHog can deduplicate them. Delivery uses a bounded background queue and a one-second best-effort flush at shutdown.
 
 Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://t3factory.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. Factory disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
@@ -279,6 +285,12 @@ converting them to the current shape unless the user explicitly accepts discardi
 affected data. An accepted removal still needs a migration and an upgrade test proving
 both the deletion and preservation of unaffected data. Record retained/lost data and any
 operator action in the PR and update support limits.
+
+A Run captures its root revision and references each placed Flow revision once. Invocation
+records own serial placement ordering and link their inner Block identities to the captured graph.
+Runtime records continue to reference the Run and its Block IDs. The scoped runtime migration
+keeps existing Blocks in the root scope with their existing public identifiers, operation keys,
+Condition numbers and revision references.
 
 A reset must be explicit, never a fallback after upgrade failure. The application reads
 only the current shape; old-shape readers and dual-write paths do not replace migrations.

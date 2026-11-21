@@ -32,9 +32,12 @@ const held: Release = { state: "held" };
 type Source =
   | { readonly kind: "result"; readonly reportId: string }
   | { readonly kind: "direct" }
+  | { readonly kind: "committed" }
   | { readonly kind: "none" };
 
 function sourceOf(record: Handoff | Delivery): Source {
+  if (record.cause.startsWith("start:") || record.cause.startsWith("subflow:"))
+    return { kind: "committed" };
   if (record.report_id) return { kind: "result", reportId: record.report_id };
   if (
     record.occurrence_id ||
@@ -80,7 +83,7 @@ export function releaseAtPreparation(
 ) {
   return Effect.gen(function* (): Effect.fn.Return<Release, unknown> {
     const current = yield* store.readRun(run.id);
-    if (!current?.gate_open || !record.source_block_id) return held;
+    if (!current?.gate_open) return held;
     const source = sourceOf(record);
     switch (source.kind) {
       case "result":
@@ -91,6 +94,8 @@ export function releaseAtPreparation(
         return (yield* store.directSourceReleased(run.id, record))
           ? { state: "durable", run: current }
           : held;
+      case "committed":
+        return { state: "durable", run: current };
       case "none":
         return held;
     }

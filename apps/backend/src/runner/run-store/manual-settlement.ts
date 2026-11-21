@@ -2,6 +2,7 @@ import type { Result, RunSettlement, RunSettlementWorker } from "@t3-factory/con
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { failure } from "../../result.ts";
+import { cancelInvocationWork, priorInvocationStop } from "./invocation-cutoff.ts";
 import { cancelTitleGeneration } from "./title-generations.ts";
 import { threadHref } from "../../thread-link.ts";
 import { now } from "../../time.ts";
@@ -348,6 +349,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           const recorded: StopSettlementReason = result ? "finish" : reason;
           accepted = recorded;
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
+          yield* cancelInvocationWork(sql, id, null, time);
           yield* cancelTitleGeneration(sql, id, time, recorded === "finish" ? "finish" : "settle");
           yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${recorded})`;
         }
@@ -397,9 +399,13 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           return false;
         const time = yield* now;
         yield* recordWorker(sql, run.id, attempt, worker);
+        const inherited =
+          attempt === 1
+            ? yield* priorInvocationStop(sql, run.id, worker.thread_id, request.executionId)
+            : undefined;
         const rows =
-          yield* sql`UPDATE run_settlement_workers SET stop_key=${request.key},stop_requested_at=${time} WHERE run_id=${run.id} AND attempt=${attempt} AND thread_id=${worker.thread_id} AND stop_key IS NULL AND stop_outcome IS NULL AND EXISTS(SELECT 1 FROM run_settlements WHERE run_id=${run.id} AND attempt=${attempt} AND attempt_owner=${ownerToken}) RETURNING thread_id`;
-        if (!rows.length) return false;
+          yield* sql`UPDATE run_settlement_workers SET stop_key=${inherited?.request_key ?? request.key},stop_requested_at=${inherited?.requested_at ?? time},stop_outcome=${inherited?.outcome ?? null},stop_problem=${inherited?.outcome === "failed" ? "T3 did not accept the Stop request." : null} WHERE run_id=${run.id} AND attempt=${attempt} AND thread_id=${worker.thread_id} AND stop_key IS NULL AND stop_outcome IS NULL AND EXISTS(SELECT 1 FROM run_settlements WHERE run_id=${run.id} AND attempt=${attempt} AND attempt_owner=${ownerToken}) RETURNING thread_id`;
+        if (!rows.length || inherited) return false;
         yield* appendTimelineEvent(sql, {
           kind: "worker-stop-requested",
           runId: run.id,

@@ -46,7 +46,7 @@ import { projectUnavailableIssue } from "../projects.ts";
 import { fingerprint } from "../fingerprint.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { now } from "../time.ts";
-import type { RunImages } from "../run-images.ts";
+import { workerPromptText, type RunImages } from "../run-images.ts";
 import { telemetryCount, type Telemetry } from "../telemetry.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
@@ -236,7 +236,13 @@ function attachmentIssues(snapshot: T3ContractSnapshot, count: number): Validati
 }
 /** The first worker message is checked before the acceptance transaction commits. */
 function prepareStartWork(definitions: RunDefinitions, prompt: StartPrompt) {
-  if (entryMessagesTooLong(definitions, prompt.images))
+  if (
+    entryMessagesTooLong(
+      definitions,
+      prompt.images,
+      workerPromptText(prompt.segments, prompt.images),
+    )
+  )
     return failure("validation", "The Agent prompt exceeds T3's first-message limit.");
   return { ok: true as const };
 }
@@ -269,7 +275,7 @@ export function openRunnerStart(
       );
       yield* telemetry.record("run.started", {
         source,
-        flowScope: flow.projectId ? "project" : "global",
+        flowScope: flow.projectId === null ? "global" : "project",
         blockCount: telemetryCount(blocks.length + 1),
         hasImages: hasImages,
         blockTypes: [...blockTypes, "finish"],
@@ -322,8 +328,7 @@ export function openRunnerStart(
             ]);
       const [checked, titleGeneration] = yield* startChecks(input, prompt.value);
       if (!checked.ok) return checked;
-      const { project, context, flow, agents, retryScope, workspace } = checked.value;
-      const definitions: RunDefinitions = { flow, agents };
+      const { project, context, definitions, closureStamp, retryScope, workspace } = checked.value;
       const ready = prepareStartWork(definitions, prompt.value);
       if (!ready.ok) return ready;
 
@@ -346,6 +351,7 @@ export function openRunnerStart(
         requestFingerprint: content,
         project,
         definitions,
+        closureStamp,
         workspace,
         runId,
         taskId,
@@ -360,7 +366,9 @@ export function openRunnerStart(
       }
       const accepted = yield* store.acceptStart(plan, images.hasFile, authorization?.commit);
       if (!accepted.ok) return accepted;
-      yield* recordStarted(flow, source, prompt.value.images.length > 0);
+      yield* recordStarted(definitions.flow, source, prompt.value.images.length > 0).pipe(
+        Effect.when(Effect.succeed(accepted.value === runId)),
+      );
       // Deliberately detached from the response. The accepted Run survives a lost HTTP reply.
       // The title thread launches beside the Flow and never gates its dispatch.
       if (!isClosed()) {
@@ -475,16 +483,31 @@ export function openRunnerStart(
           ],
         );
       if (!savedFlow.ok) return savedFlow;
-      const flow = savedFlow.value;
+      return yield* flowLaunchPreconditions(savedFlow.value, target, imageCount, snapshot);
+    });
+  }
+
+  function flowLaunchPreconditions(
+    flow: FlowDraft,
+    target: NonNullable<ReturnType<typeof startTarget>>,
+    imageCount: number,
+    snapshot: T3ContractSnapshot,
+  ) {
+    return Effect.gen(function* () {
       if (!flow.readiness.ready)
         return failure("validation", "Fix Flow readiness before starting.", flow.readiness.issues);
-      const agents = yield* readyAgents(flow, target.project.id, snapshot);
+      const closure = flow.readiness.closure;
+      const subflows = yield* store.startSubflows(flow.id, closure?.definitions ?? []);
+      if (!subflows.ok) return subflows;
+      const agents = yield* readyAgents(flow, closure, target.project.id, snapshot);
       const support = snapshot.support.launch[flow.workspace.mode];
       const workspace = yield* resolveStartWorkspace(git, flow, target.project);
       const attachments = attachmentIssues(snapshot, imageCount);
       const freshContextMissing =
-        flow.graph.blocks.some(
-          (block) => block.kind === "agent" && block.revisitContext === "fresh",
+        [flow, ...subflows.value].some((entry) =>
+          entry.graph.blocks.some(
+            (block) => block.kind === "agent" && block.revisitContext === "fresh",
+          ),
         ) && !snapshot.support.freshContextSend;
       const issues: ValidationIssue[] = [
         ...attachments,
@@ -512,13 +535,7 @@ export function openRunnerStart(
             ]
           : []),
       ];
-      if (
-        attachments.length ||
-        !workspace.ok ||
-        !agents.ok ||
-        !support.supported ||
-        freshContextMissing
-      )
+      if (issues.length || !workspace.ok || !agents.ok)
         return failure(
           "validation",
           "Flow execution setup is incomplete. No Run was created.",
@@ -528,8 +545,12 @@ export function openRunnerStart(
         ok: true as const,
         value: {
           ...target,
-          flow,
-          agents: agents.value,
+          definitions: {
+            flow,
+            agents: agents.value,
+            ...(subflows.value.length ? { subflows: subflows.value } : {}),
+          },
+          closureStamp: closure?.stamp,
           retryScope: support.retryScope,
           workspace: workspace.workspace,
         },
@@ -538,6 +559,7 @@ export function openRunnerStart(
   }
   function readyAgents(
     flow: FlowDraft,
+    closure: FlowDraft["readiness"]["closure"],
     projectId: string,
     snapshot: T3ContractSnapshot,
   ): Effect.Effect<Result<CapturedAgent[]>, unknown> {
@@ -546,9 +568,11 @@ export function openRunnerStart(
       const agents: CapturedAgent[] = [];
       const issues: ValidationIssue[] = [];
       const ids = new Set(
-        flow.graph.blocks.flatMap((block) =>
-          block.kind === "agent" && block.agentId ? [block.agentId] : [],
-        ),
+        closure
+          ? closure.definitions.filter((entry) => entry.kind === "agent").map((entry) => entry.id)
+          : flow.graph.blocks.flatMap((block) =>
+              block.kind === "agent" && block.agentId ? [block.agentId] : [],
+            ),
       );
       for (const id of ids) {
         const agent = yield* ops.getAgent(id);
@@ -565,17 +589,26 @@ export function openRunnerStart(
       // Agent stays the single `agent_unavailable` above; its block's "choose a saved Agent"
       // finding would only repeat that.
       const readIds = new Set(read.map((agent) => agent.id));
-      issues.push(
-        ...flowReadiness(
-          flow.graph,
-          read.map((agent) => readinessAgent(agent, new Map())),
-          flow.projectId,
-        ).issues.filter((issue) => !unreadAgentIssue(flow, issue.path, readIds)),
-      );
+      if (!closure)
+        issues.push(
+          ...flowReadiness(
+            flow.graph,
+            read.map((agent) => readinessAgent(agent, new Map())),
+            flow.projectId,
+          ).issues.filter((issue) => !unreadAgentIssue(flow, issue.path, readIds)),
+        );
       for (const saved of read) {
         // A model-less Agent has no settings to check, so it never also reports them unavailable.
         // It has no Project overrides either, so its own null settings decide that.
-        if (saved.execution === null) continue;
+        if (saved.execution === null) {
+          if (closure)
+            issues.push({
+              code: "agent_model_required",
+              path: "agents." + saved.id,
+              message: saved.name + " needs a model.",
+            });
+          continue;
+        }
         const agent = { ...saved, execution: executionForProject(saved, projectId) };
         const check = yield* checkAgent(projectId, agent, snapshot);
         const problems = !check.ok

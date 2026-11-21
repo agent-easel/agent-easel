@@ -198,7 +198,10 @@ export function openRunActions({
             threadId,
             // Only the call whose Archive transition changed the Run interrupts, so that
             // transition is the claim.
-            claim: Effect.succeed(true),
+            claim: Effect.map(
+              store.invocationStopAlreadyRequested(id, threadId),
+              (requested) => !requested,
+            ),
             clientRequestId: fingerprint(`${id}:archive:${threadId}`),
           });
       }),

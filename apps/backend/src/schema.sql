@@ -402,22 +402,17 @@ CREATE TABLE client_grants (
 CREATE INDEX client_grants_status ON client_grants(status, requested_at)
 ;
 
-CREATE TABLE condition_arrivals (
+CREATE TABLE "condition_arrivals" (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
   block_id TEXT NOT NULL,
-  -- The logical delivery: a redelivery of the same Handoff finds its arrival and records nothing.
+  template_block_id TEXT NOT NULL,
   incoming_intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),
-  -- `pending` waits in order for its number; `cancelled`: Archive or manual settlement ended it
-  -- before it was numbered.
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'selected', 'cancelled')),
   arrival_number INTEGER CHECK (arrival_number IS NULL OR
     (typeof(arrival_number) = 'integer' AND arrival_number BETWEEN 1 AND 9007199254740991)),
-  -- The Run's captured Flow revision, so a matched rule names one of its immutable rule rows.
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
-  -- The matched rule, whose output was selected; null when Otherwise was.
   rule_id TEXT,
-  -- The forwarded text, kept only while a recipient still reads it.
   message TEXT,
   binding_id TEXT REFERENCES run_thread_bindings(id),
   origin_activation_id TEXT REFERENCES run_activations(id),
@@ -431,7 +426,7 @@ CREATE TABLE condition_arrivals (
   CHECK (origin_activation_id IS NULL OR binding_id IS NOT NULL),
   UNIQUE (run_id, block_id, arrival_number),
   FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id),
-  FOREIGN KEY (flow_revision_id, block_id, rule_id) REFERENCES flow_revision_condition_rules(flow_revision_id, block_id, rule_id)
+  FOREIGN KEY (flow_revision_id, template_block_id, rule_id) REFERENCES flow_revision_condition_rules(flow_revision_id, block_id, rule_id)
 );
 
 CREATE INDEX condition_arrivals_pending ON condition_arrivals(run_id, block_id) WHERE state = 'pending'
@@ -492,6 +487,19 @@ CREATE TRIGGER immutable_definition_import_receipt_agent_delete BEFORE DELETE ON
 
 CREATE TRIGGER immutable_definition_import_receipt_agent_update BEFORE UPDATE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
+CREATE TABLE definition_import_receipt_flows (
+  request_id TEXT NOT NULL REFERENCES definition_import_receipts(request_id),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  flow_key TEXT NOT NULL,
+  flow_id TEXT NOT NULL UNIQUE REFERENCES flows(id),
+  PRIMARY KEY (request_id, ordinal),
+  UNIQUE (request_id, flow_key)
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_flow_delete BEFORE DELETE ON definition_import_receipt_flows BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_flow_update BEFORE UPDATE ON definition_import_receipt_flows BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
 CREATE TABLE definition_import_receipts (
   request_id TEXT PRIMARY KEY NOT NULL CHECK (length(request_id) BETWEEN 1 AND 256),
   fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
@@ -523,10 +531,12 @@ CREATE TABLE "flow_revision_blocks" (
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
   block_id TEXT NOT NULL,
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition')),
+  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition', 'subflow')),
   name TEXT NOT NULL,
   -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),
+  -- The Flow a Subflow places; unresolved by design like agent_id, null while the draft has none.
+  flow_id TEXT CHECK (kind = 'subflow' OR flow_id IS NULL),
   -- The prompt a Continuation sends once per Run; empty only in a draft.
   prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),
   -- The instruction an Agent block's later visits receive, stored trimmed; empty when unset.
@@ -544,6 +554,9 @@ CREATE TABLE "flow_revision_blocks" (
   PRIMARY KEY (flow_revision_id, block_id),
   UNIQUE (flow_revision_id, ordinal)
 );
+
+CREATE INDEX flow_revision_blocks_by_flow ON flow_revision_blocks(flow_id) WHERE flow_id IS NOT NULL
+;
 
 CREATE TRIGGER immutable_flow_revision_block_delete BEFORE DELETE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
@@ -723,7 +736,7 @@ CREATE TABLE operation_intents (
   reserved_at TEXT,
   result_json TEXT,
   problem TEXT,
-  reconciled_at TEXT, report_id TEXT REFERENCES runtime_reports(id), source_block_id TEXT, exit_id TEXT, occurrence_id TEXT REFERENCES human_occurrences(id), recovery_attempt INTEGER NOT NULL DEFAULT 0, recovery_not_before TEXT, binding_id TEXT REFERENCES run_thread_bindings(id), wait_arrival_id TEXT REFERENCES wait_arrivals(id), origin_activation_id TEXT REFERENCES run_activations(id), condition_arrival_id TEXT REFERENCES condition_arrivals(id),
+  reconciled_at TEXT, report_id TEXT REFERENCES runtime_reports(id), source_block_id TEXT, exit_id TEXT, occurrence_id TEXT REFERENCES human_occurrences(id), recovery_attempt INTEGER NOT NULL DEFAULT 0, recovery_not_before TEXT, binding_id TEXT REFERENCES run_thread_bindings(id), wait_arrival_id TEXT REFERENCES wait_arrivals(id), origin_activation_id TEXT REFERENCES run_activations(id), condition_arrival_id TEXT REFERENCES condition_arrivals(id), subflow_invocation_id TEXT REFERENCES subflow_invocations(id),
   UNIQUE(run_id,cause),
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );
@@ -732,6 +745,10 @@ CREATE UNIQUE INDEX one_reservation_per_run ON operation_intents(run_id) WHERE s
 ;
 
 CREATE INDEX operation_intents_condition_arrival ON operation_intents(condition_arrival_id) WHERE condition_arrival_id IS NOT NULL
+;
+
+CREATE INDEX operation_intents_subflow_return ON operation_intents(subflow_invocation_id)
+WHERE subflow_invocation_id IS NOT NULL
 ;
 
 CREATE TABLE project_selection (
@@ -845,10 +862,14 @@ CREATE TABLE run_blocks (
   report_status TEXT,
   pending_request_count INTEGER,
   observed_at TEXT,
-  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT, worker_finished INTEGER NOT NULL DEFAULT 0 CHECK (worker_finished IN (0,1)),
+  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT, worker_finished INTEGER NOT NULL DEFAULT 0 CHECK (worker_finished IN (0,1)), invocation_id TEXT REFERENCES subflow_invocations(id), template_block_id TEXT,
   PRIMARY KEY(run_id,block_id),
   UNIQUE(run_id,thread_id)
 );
+
+CREATE UNIQUE INDEX run_blocks_in_invocation ON run_blocks(invocation_id, template_block_id)
+WHERE invocation_id IS NOT NULL
+;
 
 CREATE UNIQUE INDEX run_blocks_public_id ON run_blocks(public_id)
 ;
@@ -1064,6 +1085,13 @@ CREATE TABLE run_snooze_attention (
   PRIMARY KEY(run_id,attention_id)
 );
 
+CREATE TABLE run_subflow_revisions (
+  run_id TEXT NOT NULL REFERENCES runs(id),
+  flow_id TEXT NOT NULL REFERENCES flows(id),
+  flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
+  PRIMARY KEY (run_id, flow_id)
+);
+
 CREATE TABLE "run_thread_bindings" (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL,
@@ -1227,7 +1255,7 @@ CREATE TABLE run_workspaces (
   state TEXT NOT NULL DEFAULT 'preparing' CHECK (state IN ('preparing', 'bound', 'failed')),
   worktree_path TEXT,
   branch TEXT,
-  bound_at TEXT,
+  bound_at TEXT, creator_placement_path TEXT,
   FOREIGN KEY (run_id, creator_block_id) REFERENCES run_blocks(run_id, block_id),
   CHECK ((state = 'bound') = (worktree_path IS NOT NULL AND branch IS NOT NULL AND bound_at IS NOT NULL))
 );
@@ -1313,6 +1341,63 @@ CREATE TABLE staged_images (
   size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 10485760),
   staged_at TEXT NOT NULL
 );
+
+CREATE TABLE subflow_invocations (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id),
+  parent_id TEXT REFERENCES subflow_invocations(id),
+  placement_block_id TEXT NOT NULL,
+  flow_id TEXT NOT NULL,
+  number INTEGER NOT NULL CHECK (number >= 1),
+  incoming_intent_id TEXT UNIQUE REFERENCES operation_intents(id),
+  input TEXT NOT NULL,
+  entry_input INTEGER NOT NULL CHECK (entry_input IN (0, 1)),
+  state TEXT NOT NULL CHECK (state IN ('queued', 'active', 'stopping', 'returned', 'nothing-returned', 'cancelled')),
+  arrived_at TEXT NOT NULL,
+  completed_at TEXT, stop_attempt INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (run_id, placement_block_id) REFERENCES run_blocks(run_id, block_id),
+  FOREIGN KEY (run_id, flow_id) REFERENCES run_subflow_revisions(run_id, flow_id),
+  UNIQUE (run_id, placement_block_id, number)
+);
+
+CREATE INDEX subflow_invocations_run_state ON subflow_invocations(run_id, state)
+;
+
+CREATE UNIQUE INDEX subflow_invocations_running ON subflow_invocations(run_id, placement_block_id)
+WHERE state IN ('active', 'stopping')
+;
+
+CREATE TABLE subflow_results (
+  invocation_id TEXT PRIMARY KEY REFERENCES subflow_invocations(id),
+  ending_id TEXT NOT NULL,
+  ending_name TEXT NOT NULL,
+  output TEXT,
+  output_missing INTEGER NOT NULL CHECK (output_missing IN (0,1)),
+  source_block_id TEXT NOT NULL,
+  exit_id TEXT NOT NULL,
+  author_block_id TEXT NOT NULL,
+  binding_id TEXT REFERENCES run_thread_bindings(id),
+  origin_activation_id TEXT REFERENCES run_activations(id),
+  intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),
+  accepted_at TEXT NOT NULL,
+  released_at TEXT,
+  cancelled_at TEXT
+);
+
+CREATE TABLE subflow_worker_stops (
+  invocation_id TEXT NOT NULL REFERENCES subflow_invocations(id),
+  attempt INTEGER NOT NULL,
+  thread_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  execution_id TEXT,
+  request_key TEXT NOT NULL UNIQUE,
+  requested_at TEXT NOT NULL,
+  outcome TEXT CHECK (outcome IN ('acknowledged','failed')),
+  PRIMARY KEY(invocation_id,attempt,thread_id)
+);
+
+CREATE INDEX subflow_worker_stops_by_thread ON subflow_worker_stops(thread_id,execution_id)
+;
 
 CREATE TABLE t3_authorization_contexts (
   id TEXT PRIMARY KEY,

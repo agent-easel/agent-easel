@@ -4,6 +4,7 @@ import { reviewedCommit } from "./support/definition-import.ts";
 import { assertOk, sampleAgentInput } from "./support/domain-setup.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { controlledExecution, flowInput, humanStep } from "./support/scenarios.ts";
+import { placingGraph, resave, savedFlow } from "./support/subflow.ts";
 import { mockIngest } from "./support/telemetry.ts";
 
 it("a committed Flow create sends only anonymous graph structure to the ingest endpoint", async (context) => {
@@ -47,6 +48,26 @@ it("a committed Flow create sends only anonymous graph structure to the ingest e
   expect(JSON.stringify(ingest.requests)).not.toMatch(
     /Private Flow title|Private block name|private-id/,
   );
+});
+
+it("saving a Subflow placement reports its kind without exposing either Flow identity", async (context) => {
+  // Arrange
+  const { ingest, factory } = await connectedStudio(context);
+  const child = await savedFlow(factory, { name: "Private child Flow" });
+  const root = await savedFlow(factory, { name: "Private root Flow" });
+
+  // Act
+  assertOk(await resave(factory, root.id, placingGraph(child.id)));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("flow.saved")).toMatchObject([
+    { properties: { blockCount: "2-5", blockTypes: ["finish", "subflow"], usesSubflows: true } },
+  ]);
+  const payload = JSON.stringify(ingest.events("flow.saved"));
+  expect(payload).not.toContain(child.id);
+  expect(payload).not.toContain(root.id);
+  expect(payload).not.toContain("Private");
 });
 
 async function connectedStudio(context: Parameters<typeof mockIngest>[0]) {
@@ -314,10 +335,14 @@ it("exporting a Flow reports its kind", async (context) => {
   );
 });
 
-it("retrying a Flow import reports its kind once", async (context) => {
+it("concurrent retries of a composed Flow import report its kind once", async (context) => {
   // Arrange
   const { ingest, factory } = await connectedStudio(context);
-  const item = assertOk(await factory.createFlow({ name: "Private exported Flow" }));
+  const child = await savedFlow(factory, { name: "Private child Flow" });
+  const item = await savedFlow(factory, {
+    name: "Private exported Flow",
+    graph: placingGraph(child.id),
+  });
   const { document } = assertOk(await factory.exportFlow(item.id));
   const input = { requestId: "private-flow-import-id", document, selections: {} };
 
@@ -326,10 +351,13 @@ it("retrying a Flow import reports its kind once", async (context) => {
     factory.commitImport(input),
     factory.commitImport(input),
   ]);
-  expect(assertOk(retry)).toEqual(assertOk(first));
   await factory.close();
 
   // Assert
+  const imported = assertOk(first);
+  expect(assertOk(retry)).toStrictEqual(imported);
+  expect(imported.flows).toHaveLength(2);
+  expect(imported.flowId).toBe(imported.flows?.[0]?.id);
   expect(ingest.events("definition.imported")).toMatchObject([{ properties: { kind: "flow" } }]);
   expect(JSON.stringify(ingest.events("definition.imported"))).not.toMatch(
     /Private|private|codex-main/,

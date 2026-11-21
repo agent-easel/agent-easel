@@ -1,7 +1,9 @@
 import { expect, it } from "vite-plus/test";
 import { createFlowDraft } from "../src/flow-draft.ts";
 import {
+  editedComposition,
   editedFlow,
+  reviewPanel,
   held,
   interactingFlow,
   unlistedFlow,
@@ -482,4 +484,68 @@ it("a dirty Flow editor saves expecting the owner it acknowledged after a change
     saved: { revision: 2, name: "Mine", projectId: "northwind" },
     dirty: false,
   });
+});
+
+it("a save of a Flow an unsaved draft's Subflow places clears its readiness check", async () => {
+  // Arrange
+  const { draft, published } = editedComposition();
+  await draft.check();
+  expect(draft.getSnapshot().readiness).toMatchObject({ ready: true });
+
+  // Act
+  published(reviewPanel(2));
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
+});
+
+it("removing a Flow in an unsaved draft's closure clears its readiness check", async () => {
+  // Arrange
+  const { draft, flowRemoved } = editedComposition();
+  await draft.check();
+
+  // Act
+  flowRemoved("review-panel");
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
+});
+
+it("moving a placed Flow's owner without a new revision clears an unsaved draft's readiness check", async () => {
+  // Arrange
+  const { draft, published } = editedComposition();
+  await draft.check();
+
+  // Act
+  published({ ...reviewPanel(1), projectId: "northwind" });
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
+});
+
+it("adding a new Subflow reference to an unsaved draft clears its readiness check", async () => {
+  // Arrange
+  const { draft } = editedComposition();
+  await draft.check();
+  const content = draft.getSnapshot().content;
+
+  // Act
+  draft.edit({
+    graph: {
+      ...content.graph,
+      blocks: [
+        ...content.graph.blocks,
+        {
+          id: "extra-subflow",
+          name: "Extra review",
+          kind: "subflow",
+          flowId: "review-panel",
+          position: { x: 480, y: 0 },
+        },
+      ],
+    },
+  });
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
 });

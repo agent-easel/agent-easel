@@ -17,6 +17,7 @@ type WorktreePlan = {
   readonly baseRef: string;
   readonly plannedBranch: string;
   readonly creatorBlockId: string;
+  readonly creatorPlacementPath?: readonly string[];
 };
 /** Null is T3's project checkout. Any other path must be that checkout. */
 const checkoutWorkspace = (workspaceRoot: string | null, checkout: string) =>

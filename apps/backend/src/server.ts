@@ -202,6 +202,25 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
     continueWaitArrival: {
       handle: ({ parameters }) => answer(() => factory.continueWaitArrival(parameters.id)),
     },
+    listSubflowInvocations: {
+      handle: ({ parameters }) =>
+        answer(() =>
+          factory.listSubflowInvocations(
+            parameters.runId,
+            parameters.blockId,
+            parameters.limit,
+            parameters.cursor,
+          ),
+        ),
+    },
+    getSubflowInvocation: {
+      handle: ({ parameters }) =>
+        answer(() => factory.getSubflowInvocation(parameters.runId, parameters.invocationId)),
+    },
+    retrySubflowStop: {
+      handle: ({ parameters }) =>
+        answer(() => factory.retrySubflowStop(parameters.runId, parameters.invocationId)),
+    },
     listConditionArrivals: {
       handle: ({ parameters }) =>
         answer(() =>
@@ -403,6 +422,11 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
       handle: ({ parameters, input }) => answer(() => factory.validateFlow(parameters.id, input)),
     },
     getFlow: { handle: ({ parameters }) => answer(() => factory.getFlow(parameters.id)) },
+    listFlowFindings: {
+      body: definitionBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.listFlowFindings(parameters.id, input)),
+    },
     removeFlow: { handle: ({ parameters }) => answer(() => factory.removeFlow(parameters.id)) },
     previewFlowDuplicate: {
       body: standardBody,

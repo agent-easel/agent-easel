@@ -4,7 +4,6 @@ import { readRunImages } from "../../run-images.ts";
 import { readTitleGenerations } from "./title-generations.ts";
 import { coordinationRead } from "./runner-coordination.ts";
 import { readRunCoordinator } from "./run-coordinator.ts";
-import { threadHref } from "../../thread-link.ts";
 import { currentFlowRevisionNumber } from "../../flow-revisions.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
 import { readRunOrigins } from "./run-origins.ts";
@@ -12,6 +11,8 @@ import { recoveryRows } from "./recovery-read.ts";
 import { waitArrival, type WaitArrivalRow } from "./waits.ts";
 import { workerProvenance } from "./handoffs.ts";
 import { readConditionSummaries } from "./conditions.ts";
+import { readSubflowSummaries } from "./invocation-reads.ts";
+import { runBlock } from "./run-block-view.ts";
 import { readRunResult } from "./endings.ts";
 import {
   CONDITION_OTHERWISE_ID,
@@ -59,41 +60,6 @@ type RunEventRow = {
 
 const unresolved = ["pending", "reserved", "uncertain"];
 
-function runBlock(
-  block: BlockRow,
-  intents: readonly DeliveryRecord[],
-  progress: { message: string | null; overdue: boolean } | undefined,
-  active: boolean,
-): RunDetail["blocks"][number] {
-  const recovering = intents.some(
-    (intent) =>
-      intent.block_id === block.block_id &&
-      intent.kind === "launch" &&
-      unresolved.includes(intent.state),
-  );
-  return {
-    blockId: block.block_id,
-    name: block.name,
-    state: block.state,
-    threadId: block.thread_id,
-    executionId: block.execution_id,
-    link: threadHref(block.link),
-    engineStatus: block.engine_status,
-    workerFinished: block.worker_finished === 1,
-    reportStatus: block.report_status,
-    workingMessage: progress?.message ?? null,
-    progressOverdue:
-      active &&
-      (block.state === "working" || block.state === "sent") &&
-      (progress?.overdue ?? false),
-    problem: block.problem,
-    pendingRequestCount: block.pending_request_count,
-    observedAt: block.observed_at,
-    freshness: block.freshness,
-    recovery: recovering ? "pending" : null,
-  };
-}
-
 /** The Run workspace. A preparing worktree carries its creator launch's unresolved problem, if any. */
 function runWorkspace(sql: SqlClient.SqlClient, runId: string, intents: readonly DeliveryRecord[]) {
   return Effect.gen(function* () {
@@ -114,6 +80,12 @@ function runWorkspace(sql: SqlClient.SqlClient, runId: string, intents: readonly
     const detail: RunWorkspaceDetail = {
       mode: "worktree",
       baseRef: workspace.baseRef,
+      ...(workspace.creatorPlacementPath
+        ? {
+            creatorBlockId: workspace.creatorBlockId,
+            creatorPlacementPath: workspace.creatorPlacementPath,
+          }
+        : {}),
       state: workspace.state,
       path: workspace.state === "bound" ? workspace.worktreePath : null,
       branch: workspace.state === "bound" ? workspace.branch : null,
@@ -178,6 +150,8 @@ function humanOccurrence(
 type IntentRow = DeliveryRecord & {
   origin_thread_id: string | null;
   target_ending_id: string | null;
+  subflow_ending_id: string | null;
+  subflow_ending_name: string | null;
 };
 
 function runIntent(intent: IntentRow): RunDetail["intents"][number] {
@@ -186,6 +160,15 @@ function runIntent(intent: IntentRow): RunDetail["intents"][number] {
     kind: intent.kind,
     blockId: intent.block_id,
     targetEndingId: intent.target_ending_id,
+    ...(intent.subflow_invocation_id
+      ? {
+          subflowReturn: {
+            invocationId: intent.subflow_invocation_id,
+            endingId: intent.subflow_ending_id!,
+            endingName: intent.subflow_ending_name!,
+          },
+        }
+      : {}),
     reportId: intent.report_id,
     occurrenceId: intent.occurrence_id,
     sourceBlockId: intent.source_block_id,
@@ -270,7 +253,10 @@ function taskSummary(sql: SqlClient.SqlClient, task: TaskRow) {
 
 export function openRunQueries(database: RunnerDatabase) {
   const { run, transaction } = database;
-  function getRun(id: string): Effect.Effect<Result<RunDetail>, unknown> {
+  function getRun(
+    id: string,
+    focusInvocationId?: string,
+  ): Effect.Effect<Result<RunDetail>, unknown> {
     // One read transaction gives UI a coherent frontier of the local state.
     return transaction((sql) =>
       Effect.gen(function* () {
@@ -279,10 +265,21 @@ export function openRunQueries(database: RunnerDatabase) {
         >`SELECT r.*,t.project_id,t.title AS task_title FROM runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=${id}`;
         if (!saved) return failure("not_found", "This Run does not exist.");
         const runRow: RunRow = { ...saved, definitions: yield* readRunDefinitions(sql, saved) };
+        const subflows = runRow.definitions.subflows?.length
+          ? yield* readSubflowSummaries(sql, id)
+          : undefined;
+        const selected =
+          subflows?.flatMap((placement) =>
+            placement.defaultInvocation ? [placement.defaultInvocation.id] : [],
+          ) ?? [];
+        const visible = focusInvocationId ? [...selected, focusInvocationId] : selected;
+        const included = visible.length
+          ? sql`OR b.invocation_id IN ${sql.in(visible)} AND b.template_block_id IS NOT NULL`
+          : sql``;
         const blocks =
-          yield* sql<BlockRow>`SELECT b.* FROM run_blocks b JOIN flow_revision_blocks f ON f.flow_revision_id=${saved.flow_revision_id} AND f.block_id=b.block_id WHERE b.run_id=${id} ORDER BY b.rowid`;
+          yield* sql<BlockRow>`SELECT b.* FROM run_blocks b WHERE b.run_id=${id} AND (EXISTS(SELECT 1 FROM flow_revision_blocks f WHERE f.flow_revision_id=${saved.flow_revision_id} AND f.block_id=b.block_id) ${included}) ORDER BY b.rowid`;
         const intents =
-          yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id,json_extract(i.target_json,'$.endingId') AS target_ending_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
+          yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id,json_extract(i.target_json,'$.endingId') AS target_ending_id,s.ending_id AS subflow_ending_id,s.ending_name AS subflow_ending_name FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id LEFT JOIN subflow_results s ON s.invocation_id=i.subflow_invocation_id WHERE i.run_id=${id} ORDER BY i.rowid`;
         // A Condition's selections grow with every arrival, so a Run read keeps only its latest
         // ones; the bounded evidence page reaches the rest.
         const events =
@@ -334,6 +331,7 @@ export function openRunQueries(database: RunnerDatabase) {
             flowId: definitions.flow.id,
             flowName: definitions.flow.name,
             definitions,
+            ...(subflows ? { subflows } : {}),
             currentFlowRevision:
               (yield* currentFlowRevisionNumber(sql, definitions.flow.id)) ?? null,
             workspace: yield* runWorkspace(sql, id, intents),
@@ -357,7 +355,11 @@ export function openRunQueries(database: RunnerDatabase) {
             executions: executions.map(runExecution),
             humanOccurrences: humans.map(humanOccurrence),
             waitArrivals: waits.map(waitArrival),
-            conditions: yield* readConditionSummaries(sql, id, definitions),
+            conditions: yield* readConditionSummaries(
+              sql,
+              id,
+              new Set(blocks.map((block) => block.block_id)),
+            ),
             continuationVisits: continuationVisits.map((visit) => ({
               id: visit.id,
               blockId: visit.block_id,

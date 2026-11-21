@@ -1,9 +1,19 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
-import { type FlowGraph, type FlowReadiness, type ValidationIssue } from "@t3-factory/contracts";
+import {
+  type FlowDraft,
+  type FlowGraph,
+  type FlowReadiness,
+  type ReadinessIssue,
+  type UpdateFlowInput,
+  type ValidationIssue,
+} from "@t3-factory/contracts";
+import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
+import { api } from "../api.ts";
+import { StudioLink } from "./app-link.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import type { RuleFocus } from "./condition-rules.tsx";
@@ -74,12 +84,21 @@ const ISSUE_TAGS: Readonly<Record<string, string>> = {
   ending_name_required: "No name",
   ending_name_duplicate: "Duplicate name",
   ending_unconnected: "Not connected",
+  subflow_flow_required: "No Flow",
+  subflow_flow_missing: "Missing Flow",
+  flow_scope_mismatch: "Not placeable",
+  subflow_ending_required: "No ending",
+  subflow_exit_missing: "Missing exit",
+  subflow_cycle: "Loop",
+  subflow_capture_bytes_exceeded: "Over capture limit",
+  subflow_expanded_blocks_exceeded: "Over block limit",
+  subflow_expanded_connections_exceeded: "Over wire limit",
 };
 
 export const issueTag = (issue: ValidationIssue) => ISSUE_TAGS[issue.code] ?? "Not ready";
 
 /** One readiness issue of a Block, with the part of the Block its path names (`duration`, `rules.0`). */
-export type BlockIssue = { readonly issue: ValidationIssue; readonly field: string };
+export type BlockIssue = { readonly issue: ReadinessIssue; readonly field: string };
 
 export type ReadinessMarks = {
   readonly blocks: ReadonlyMap<string, readonly BlockIssue[]>;
@@ -187,6 +206,155 @@ export function useShownReadiness(readiness: FlowReadiness | null) {
   return readiness ?? shown;
 }
 
+type PagedFindings = {
+  readonly forCursor: string;
+  readonly issues: readonly ReadinessIssue[];
+  readonly nextCursor: string | undefined;
+  readonly error: string;
+};
+
+async function fetchFindingsPage(
+  flowId: string,
+  rootCursor: string,
+  nextCursor: string,
+  previous: readonly ReadinessIssue[],
+  draftInput: UpdateFlowInput | undefined,
+): Promise<PagedFindings> {
+  try {
+    const page = await api.listFlowFindings(flowId, {
+      cursor: nextCursor,
+      ...(draftInput ? { draft: draftInput } : {}),
+    });
+    return {
+      forCursor: rootCursor,
+      issues: [...previous, ...page.issues],
+      nextCursor: page.cursor,
+      error: "",
+    };
+  } catch (cause) {
+    return {
+      forCursor: rootCursor,
+      issues: previous,
+      nextCursor,
+      error: cause instanceof Error ? cause.message : "Could not load more findings.",
+    };
+  }
+}
+
+function usePagedFindings({
+  flowId,
+  readiness,
+  folderMissing,
+  draftInput,
+}: {
+  flowId: string;
+  readiness: FlowReadiness | null;
+  folderMissing: string | null;
+  draftInput: UpdateFlowInput | undefined;
+}) {
+  const [paged, setPaged] = useState<PagedFindings | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const baseIssues: readonly ReadinessIssue[] = folderMissing
+    ? [{ code: "project_folder_missing", path: "", message: folderMissing }]
+    : (readiness?.issues ?? []);
+  const rootCursor = folderMissing ? undefined : readiness?.cursor;
+  const active = rootCursor && paged?.forCursor === rootCursor ? paged : null;
+  const issues = active ? [...baseIssues, ...active.issues] : baseIssues;
+  const nextCursor = active ? active.nextCursor : rootCursor;
+  const baseOmitted = folderMissing
+    ? 0
+    : (readiness?.omitted?.reduce((sum, entry) => sum + entry.count, 0) ?? 0);
+  const omittedTotal = Math.max(0, baseOmitted - (active?.issues.length ?? 0));
+
+  async function loadMore() {
+    if (!nextCursor || !rootCursor || loadingMore) return;
+    setLoadingMore(true);
+    const next = await fetchFindingsPage(
+      flowId,
+      rootCursor,
+      nextCursor,
+      active?.issues ?? [],
+      draftInput,
+    );
+    setPaged(next);
+    setLoadingMore(false);
+  }
+
+  return { issues, omittedTotal, nextCursor, loadingMore, error: active?.error ?? "", loadMore };
+}
+
+function ReadinessIssueList({
+  issues,
+  folderMissing,
+  graph,
+  flows,
+  onSelect,
+  newAgent,
+  omittedTotal,
+  nextCursor,
+  loadingMore,
+  error,
+  onLoadMore,
+}: {
+  issues: readonly ReadinessIssue[];
+  folderMissing: string | null;
+  graph: FlowGraph;
+  flows: readonly FlowDraft[];
+  onSelect: IssueSelect;
+  newAgent: ReactNode;
+  omittedTotal: number;
+  nextCursor: string | undefined;
+  loadingMore: boolean;
+  error: string;
+  onLoadMore: () => void;
+}) {
+  const flowIds = new Set(flows.map((flow) => flow.id));
+  return (
+    <Surface tone="floating" asChild className="grid max-h-[60vh] overflow-y-auto">
+      <ul id="flow-readiness" aria-label="Readiness issues">
+        {issues.map((issue, index) => (
+          <li key={index} className="flex items-center border-b last:border-b-0">
+            <IssueRow
+              issue={issue}
+              selectable={!folderMissing}
+              onSelect={() => selectIssue(issue, graph, onSelect)}
+            />
+            {issue.nested && flowIds.has(issue.nested.flowId) && (
+              <TextLink asChild className="shrink-0 pr-3 text-xs">
+                <StudioLink selection={{ tab: "flows", flowId: issue.nested.flowId }}>
+                  Open Flow
+                </StudioLink>
+              </TextLink>
+            )}
+            {issue.code === "flow_input_required" && newAgent}
+          </li>
+        ))}
+        {omittedTotal > 0 && nextCursor && (
+          <li className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs text-muted-foreground">
+            <span>
+              {omittedTotal} more {omittedTotal === 1 ? "finding" : "findings"} not shown
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={loadingMore}
+              onClick={onLoadMore}
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </li>
+        )}
+        {error && (
+          <li role="alert" className="px-4 py-2 text-xs text-destructive">
+            {error}
+          </li>
+        )}
+      </ul>
+    </Surface>
+  );
+}
+
 /**
  * The live readiness summary at the canvas's top left: Ready, or Not ready with its issue count
  * opening one row per issue. Each row selects its Block; a missing Project folder is the one
@@ -196,6 +364,9 @@ export function ReadinessPanel({
   readiness,
   folderMissing,
   graph,
+  flowId,
+  flows,
+  draftInput,
   onSelect,
   newAgent,
 }: {
@@ -204,22 +375,23 @@ export function ReadinessPanel({
   /** Why the owning Project's folder can't be used on this machine; null when it can. */
   folderMissing: string | null;
   graph: FlowGraph;
+  flowId: string;
+  flows: readonly FlowDraft[];
+  draftInput?: UpdateFlowInput | undefined;
   onSelect: IssueSelect;
   newAgent: ReactNode;
 }) {
-  const shown = readiness;
-  const issues: readonly ValidationIssue[] = folderMissing
-    ? [{ code: "project_folder_missing", path: "", message: folderMissing }]
-    : (shown?.issues ?? []);
   const [open, setOpen] = useState(false);
-  if (!shown && !folderMissing) return null;
+  const findings = usePagedFindings({ flowId, readiness, folderMissing, draftInput });
+  if (!readiness && !folderMissing) return null;
   const position = "absolute top-4 left-4 z-[5]";
-  if (!issues.length)
+  if (!findings.issues.length)
     return (
       <div className={position}>
         <StatusBadge kind="success">Ready</StatusBadge>
       </div>
     );
+  const totalCount = findings.issues.length + findings.omittedTotal;
   return (
     <div className={cn(position, "grid w-110 max-w-[calc(100%-2rem)] gap-2")}>
       <Surface
@@ -234,25 +406,24 @@ export function ReadinessPanel({
           onClick={() => setOpen(!open)}
         >
           <StatusBadge kind="error">Not ready</StatusBadge>
-          {issues.length} {issues.length === 1 ? "issue" : "issues"}
+          {totalCount} {totalCount === 1 ? "issue" : "issues"}
           <ChevronDown aria-hidden className={cn("size-3.5", open && "rotate-180")} />
         </button>
       </Surface>
       {open && (
-        <Surface tone="floating" asChild className="grid overflow-hidden">
-          <ul id="flow-readiness" aria-label="Readiness issues">
-            {issues.map((issue, index) => (
-              <li key={index} className="flex items-center border-b last:border-b-0">
-                <IssueRow
-                  issue={issue}
-                  selectable={!folderMissing}
-                  onSelect={() => selectIssue(issue, graph, onSelect)}
-                />
-                {issue.code === "flow_input_required" && newAgent}
-              </li>
-            ))}
-          </ul>
-        </Surface>
+        <ReadinessIssueList
+          issues={findings.issues}
+          folderMissing={folderMissing}
+          graph={graph}
+          flows={flows}
+          onSelect={onSelect}
+          newAgent={newAgent}
+          omittedTotal={findings.omittedTotal}
+          nextCursor={findings.nextCursor}
+          loadingMore={findings.loadingMore}
+          error={findings.error}
+          onLoadMore={() => void findings.loadMore()}
+        />
       )}
     </div>
   );

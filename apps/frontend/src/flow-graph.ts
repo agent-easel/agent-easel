@@ -5,6 +5,7 @@ import {
   type AgentDefinition,
   type FlowBlock,
   type FlowConnection,
+  type FlowDraft,
   type FlowEnding,
   type FlowGraph,
   type RunDefinitions,
@@ -28,7 +29,13 @@ export function capturedExits(
   blockId: string,
 ): readonly EffectiveExit[] {
   const block = definitions.flow.graph.blocks.find((item) => item.id === blockId);
-  return block ? effectiveExits(block, definitions.agents) : [];
+  return block
+    ? effectiveExits(
+        block,
+        definitions.agents,
+        definitions.subflows && new Map(definitions.subflows.map((flow) => [flow.id, flow])),
+      )
+    : [];
 }
 
 const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {
@@ -37,6 +44,7 @@ const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {
   wait: "Wait",
   continuation: "Continuation",
   condition: "Condition",
+  subflow: "Subflow",
 };
 
 /** Without a drop position, new blocks fill a three-column grid right of the Flow input. */
@@ -45,10 +53,11 @@ export function newBlock(
   kind: FlowBlock["kind"],
   agent?: AgentDefinition,
   position?: BlockPosition,
+  flow?: Pick<FlowDraft, "id" | "name">,
 ): FlowBlock {
   const base = {
     id: uid(),
-    name: agent?.name ?? DEFAULT_BLOCK_NAMES[kind],
+    name: agent?.name ?? flow?.name ?? DEFAULT_BLOCK_NAMES[kind],
     position: position ?? {
       x: 320 + (graph.blocks.length % 3) * 300,
       y: Math.min(10000, 50 + Math.floor(graph.blocks.length / 3) * 220),
@@ -67,6 +76,7 @@ export function newBlock(
   if (kind === "wait") return { ...base, kind, duration: null };
   if (kind === "condition")
     return { ...base, kind, rules: [], otherwise: { id: CONDITION_OTHERWISE_ID } };
+  if (kind === "subflow") return { ...base, kind, flowId: flow?.id ?? null };
   return kind === "continuation" ? { ...base, kind, prompt: "" } : { ...base, kind };
 }
 
@@ -173,7 +183,7 @@ export function canConnect(graph: FlowGraph, source: WireSource, target: WireTar
     );
   const block = graph.blocks.find((b) => b.id === target.targetBlockId);
   if (!block) return false;
-  return source.kind === "exit" || block.kind === "agent";
+  return source.kind === "exit" || block.kind === "agent" || block.kind === "subflow";
 }
 
 export function addWire<G extends FlowGraph | CanvasGraph>(

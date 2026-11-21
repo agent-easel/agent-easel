@@ -3,7 +3,7 @@ import { Flag } from "lucide-react";
 import type { RunDetail, RunResult } from "@t3-factory/contracts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
-import { blockName, capturedEnding, deliveryWorker } from "../run-evidence.ts";
+import { blockName, capturedEnding, deliveryWorker, resultVisit } from "../run-evidence.ts";
 import { runResultState } from "../run-status.ts";
 import { dayAndTime } from "../time-format.ts";
 import { AgentTextPreview } from "./agent-text.tsx";
@@ -16,15 +16,10 @@ function fromText(run: RunDetail, result: RunResult) {
     (item) => item.id === result.exitId,
   );
   const exitName = exit && isSingleOutput(exit) ? null : (exit?.name ?? result.exitId);
-  const activation = run.activations.find((item) => item.id === result.origin?.activationId);
-  const visit =
-    activation?.blockId === result.sourceBlockId
-      ? run.activations.filter((item) => item.blockId === activation.blockId).indexOf(activation) +
-        1
-      : 0;
+  const visit = resultVisit(run, result);
   return [
     `${blockName(run, result.sourceBlockId)}${exitName ? ` → ${exitName}` : ""}`,
-    visit > 0 && `Visit ${visit}`,
+    visit?.blockId === result.sourceBlockId && `Visit ${visit.number}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -56,6 +51,7 @@ function ResultFacts({ run, result }: { run: RunDetail; result: RunResult }) {
   const kind = authorKind(run, result);
   const author = blockName(run, result.authorBlockId);
   const worker = resultWorker(run, result);
+  const visit = resultVisit(run, result);
   return (
     <dl className="flex min-w-0 flex-col gap-1">
       <Fact label="From">{fromText(run, result)}</Fact>
@@ -64,7 +60,10 @@ function ResultFacts({ run, result }: { run: RunDetail; result: RunResult }) {
       )}
       {worker && (
         <Fact label="Worker">
-          <span className="min-w-0">{blockName(run, worker.blockId)}</span>
+          <span className="min-w-0">
+            {blockName(run, worker.blockId)}
+            {visit && visit.blockId !== result.sourceBlockId && ` · Visit ${visit.number}`}
+          </span>
           {worker.link && <OpenInT3 href={worker.link} className="text-sm" />}
         </Fact>
       )}

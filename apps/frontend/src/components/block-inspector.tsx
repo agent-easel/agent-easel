@@ -19,6 +19,7 @@ import { continuationReference } from "../block-kind.ts";
 import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
+import { SubflowBlockSettings, type BlockFlows } from "./subflow-inspector.tsx";
 import { fieldAria } from "./field-state.ts";
 import { ProblemCard } from "./problem-card.tsx";
 import { fieldProblem, issueTag, type BlockIssue } from "./flow-readiness.tsx";
@@ -42,6 +43,7 @@ export function BlockConfiguration({
   block,
   graph,
   agents,
+  flows,
   issues,
   flowId,
   condition,
@@ -51,6 +53,7 @@ export function BlockConfiguration({
   block: FlowBlock;
   graph: FlowGraph;
   agents: BlockAgents;
+  flows: BlockFlows;
   /** The block's readiness issues; the field each names shows its tag. */
   issues: readonly BlockIssue[];
   /** The Flow an opened Agent returns to. */
@@ -100,6 +103,15 @@ export function BlockConfiguration({
           graph={graph}
           scroller={scroller}
           editing={condition}
+          issues={issues}
+          onEdit={onEdit}
+          onWireChange={onWireChange}
+        />
+      ) : block.kind === "subflow" ? (
+        <SubflowBlockSettings
+          block={block}
+          graph={graph}
+          flows={flows}
           issues={issues}
           onEdit={onEdit}
           onWireChange={onWireChange}

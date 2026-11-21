@@ -109,3 +109,10 @@ T3 accepted the second launch and lost its reply while discovery was unavailable
 The fixture retains the schema, ledger, execution and definition rows, and controlled
 T3 launch references and payloads. Reopening it exercises recovery and the first
 post-upgrade Rename without starting a second copy of either worker.
+
+`run-scope-baseline-upgrade-data.json` captures `main` at
+`573e7bd07ea067dd8ed5cab901e4b718e9f914b6` with migration 119 applied. Public operations in a
+disposable Factory created numbered Condition evidence beside an unanswered Human step and a
+second Run with a lost worker launch acknowledgement. The captured controlled adapter preserves
+its synthetic launch references. The upgrade checks that the Condition's result and outstanding
+work retain their identities and that the original launch recovers by its accepted key.

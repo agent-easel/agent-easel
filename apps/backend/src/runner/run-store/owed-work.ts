@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
+import { cancelInvocationWork } from "./invocation-cutoff.ts";
 import { cancelTitleGeneration } from "./title-generations.ts";
 import type { HumanRow } from "../runner-types.ts";
 import { settleAttention } from "./attention.ts";
@@ -34,6 +35,7 @@ export function cancelOwedWork(
 ) {
   const { intentProblem, attentionReason } = CUTOFFS[cutoff];
   return Effect.gen(function* () {
+    yield* cancelInvocationWork(sql, id, null, time);
     const intents =
       yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE run_id=${id} AND state=${pending}`;
     for (const intent of intents) {

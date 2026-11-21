@@ -5,10 +5,15 @@ import { assert, expect, it } from "@effect/vitest";
 import { factoryHarness } from "./support/factory.ts";
 import { mockIngest } from "./support/telemetry.ts";
 import { prepared } from "./support/prepared-runner.ts";
+import { assertOk } from "./support/domain-setup.ts";
+import { ending, placingGraph, savedFlow, toEnding } from "./support/subflow.ts";
 import {
+  agentBlock,
   allTurnsEnd,
   endingFlow,
   endingReached,
+  flowInput,
+  launchedWorkers,
   racingEndingsFlow,
   twoWorkersStarted,
   turnBegins,
@@ -21,6 +26,29 @@ import {
   workerAtWork,
 } from "./support/scenarios.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
+
+async function nestedEntry(context: Parameters<typeof prepared>[0]) {
+  const ingest = await mockIngest(context);
+  const ready = await prepared(context, undefined, { telemetry: { env: ingest.env } });
+  const leaf = await savedFlow(ready.f, {
+    name: "Private leaf Flow",
+    graph: {
+      flowInput: flowInput("same-worker"),
+      blocks: [agentBlock("same-worker", "Private leaf Block", ready.agent.id)],
+      connections: [toEnding("same-worker", "done", "done")],
+      finish: { endings: [ending("done", "Private leaf ending")] },
+    },
+  });
+  const middle = await savedFlow(ready.f, {
+    name: "Private middle Flow",
+    graph: placingGraph(leaf.id),
+  });
+  const root = await savedFlow(ready.f, {
+    name: "Private root Flow",
+    graph: placingGraph(middle.id),
+  });
+  return { ...ready, ingest, leaf, middle, root };
+}
 
 it("completing setup twice sends one anonymous setup event", async (context) => {
   // Arrange
@@ -72,6 +100,53 @@ it("starting a Run reports graph structure and excludes its content", async (con
   expect(payload).not.toContain(ready.project.title);
   expect(payload).not.toContain(JSON.stringify(ready.flow.name));
   expect(payload).not.toContain(JSON.stringify(ready.agent.name));
+});
+
+it("starting a composed Run reports the captured root graph once", async (context) => {
+  // Arrange
+  const { f, input, ingest, leaf, middle, root } = await nestedEntry(context);
+  const launch = { ...input, flowId: root.id };
+
+  // Act
+  const [first, retry] = await Promise.all([f.startRun(launch), f.startRun(launch)]);
+  await f.close();
+
+  // Assert
+  const started = assertOk(first);
+  expect(assertOk(retry).id).toBe(started.id);
+  expect(started.definitions.subflows?.map(({ id }) => id).sort()).toEqual(
+    [middle.id, leaf.id].sort(),
+  );
+  expect(started.subflows?.[0]?.defaultInvocation).toMatchObject({ state: "active" });
+  expect(ingest.events("run.started")).toMatchObject([
+    { properties: { blockTypes: ["subflow", "finish"], blockCount: "2-5", flowScope: "global" } },
+  ]);
+  const payload = JSON.stringify(ingest.events("run.started"));
+  expect(payload).not.toContain(root.id);
+  expect(payload).not.toContain(leaf.id);
+  expect(payload).not.toContain("Private");
+});
+
+it("a nested Finish counts scoped Blocks toward one root Run completion", async (context) => {
+  // Arrange
+  const { f, world, input, ingest, root } = await nestedEntry(context);
+  const started = assertOk(await f.startRun({ ...input, flowId: root.id }));
+  const { workers } = await launchedWorkers(world, started.id);
+  const [worker] = workers;
+  assert(worker);
+
+  // Act
+  await resultReported(world, worker, { message: "Private leaf result" });
+  await settled(world, worker);
+  const finished = assertOk(await f.getRun(started.id));
+  await f.close();
+
+  // Assert
+  expect(finished.result?.output).toBe("Private leaf result");
+  expect(ingest.events("run.finished")).toMatchObject([
+    { properties: { status: "completed", executedBlockCount: "6+" } },
+  ]);
+  expect(JSON.stringify(ingest.events("run.finished"))).not.toContain("Private leaf result");
 });
 
 it("continuing a waiting arrival records one manual continuation", async (context) => {

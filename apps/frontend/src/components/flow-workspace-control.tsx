@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /** The workspace in one line; a custom ref appears exactly. */
-function workspaceSummary(workspace: FlowWorkspace) {
+export function workspaceSummary(workspace: FlowWorkspace) {
   if (workspace.mode === "checkout") return "Project checkout";
   if (workspace.base.kind === "default") return "New worktree · default branch";
   return `New worktree · ${workspace.base.ref.trim() || "custom ref"}`;

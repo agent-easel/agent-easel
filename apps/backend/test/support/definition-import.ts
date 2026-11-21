@@ -2,8 +2,14 @@ import { assert, type TestContext } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
 import * as Effect from "effect/Effect";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
-import type { PortableAgent, RawBody } from "@t3-factory/contracts";
+import type {
+  PortableAgent,
+  PortableFlowBlock,
+  PortableFlowEntry,
+  RawBody,
+} from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
+import type { FactoryOptions } from "../../src/index.ts";
 import historicalFlowImport from "../fixtures/historical-flow-import-receipts.json" with { type: "json" };
 import { ControlledT3 } from "./controlled-t3.ts";
 import { assertOk, openFactoryWithApprovedT3, sampleAgentInput } from "./domain-setup.ts";
@@ -251,7 +257,11 @@ export async function factoryWithVersion1Receipt(context: TestContext) {
  * A Factory that cannot insert rows into `table`, so a commit fails after it created earlier
  * definitions in the same transaction.
  */
-export async function factoryFailingInserts(context: TestContext, table: string) {
+export async function factoryFailingInserts(
+  context: TestContext,
+  table: string,
+  options: Pick<FactoryOptions, "telemetry"> = {},
+) {
   const harness = await factoryHarness(context);
   const first = await harness.open({ t3: new ControlledT3() });
   await first.close();
@@ -260,5 +270,92 @@ export async function factoryFailingInserts(context: TestContext, table: string)
     `CREATE TRIGGER failing_insert BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'storage failed'); END`,
   );
   database.close();
-  return harness.open({ t3: new ControlledT3() });
+  return harness.open({ t3: new ControlledT3(), ...options });
+}
+
+export function bundledFlow(
+  key: string,
+  name: string,
+  ...blocks: PortableFlowBlock[]
+): PortableFlowEntry {
+  return {
+    key,
+    name,
+    workspace: { mode: "checkout" },
+    graph: {
+      blocks,
+      connections: [],
+      flowInput: flowInput(),
+      finish: { position: { x: 900, y: 0 }, endings: [] },
+    },
+  };
+}
+
+export const portableSubflow = (id: string, name: string, flowKey: string | null) => ({
+  id,
+  name,
+  kind: "subflow" as const,
+  position: { x: 0, y: 0 },
+  flowKey,
+});
+
+export function nestedFlowFile() {
+  const model = exportedAgent({ model: null });
+  const { agentId: _agentId, ...placement } = agentBlock("writer", "Draft", model.key);
+  const writer = { ...placement, agentKey: model.key, revisitInstruction: "Recheck." };
+  const left = bundledFlow(
+    "early",
+    "Checks",
+    writer,
+    portableSubflow("recursive", "Recursive", "release"),
+  );
+  const right = bundledFlow("late", "Checks", {
+    ...writer,
+    name: "Publish",
+    revisitInstruction: "",
+  });
+  const root = bundledFlow(
+    "release",
+    "Release",
+    portableSubflow("left", "Review", "early"),
+    portableSubflow("right", "Verify", "late"),
+  );
+  return {
+    ...agentFile(model),
+    formatVersion: 5,
+    kind: "flow",
+    flows: [left, right, root],
+    rootFlowKey: root.key,
+  };
+}
+
+export function widePortableComposition(count: number) {
+  const flows = Array.from({ length: count - 1 }, (_, index) =>
+    bundledFlow(`stage-${index + 1}`, `Stage ${index + 1}`),
+  );
+  const root = bundledFlow(
+    "release",
+    "Release",
+    ...flows.map(({ key, name }) => portableSubflow(key, name, key)),
+  );
+  return {
+    ...agentFile(),
+    formatVersion: 5,
+    kind: "flow",
+    flows: [root, ...flows],
+    rootFlowKey: root.key,
+    agents: [],
+  };
+}
+
+export async function importedNestedFlow(context: TestContext) {
+  const harness = await factoryHarness(context);
+  const factory = await harness.open({ t3: new ControlledT3() });
+  const request = {
+    requestId: "release-bundle",
+    document: nestedFlowFile(),
+    selections: { "agent-1": null },
+  };
+  const result = assertOk(await factory.commitImport(request));
+  return { harness, factory, request, result };
 }

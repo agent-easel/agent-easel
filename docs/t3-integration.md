@@ -535,6 +535,15 @@ it finished ([cleanup](runner.md#run-title-generations)); neither is confirmed.
 
 ## Reporting authority
 
+For composed Runs, `factory_get_run` includes captured Subflow Flow revisions once each and the
+same placement summaries as the Run API. `factory_get_subflow_invocations` takes the caller's
+`blockId` and a `placementBlockId` in its Run, with optional `limit` and `cursor`.
+Use the Condition's invocation-specific Block ID when reading Condition evidence.
+`factory_get_block` uses the worker's invocation-specific id. A late report from a closed
+invocation returns `INVOCATION_CLOSED` and dispatches no work. The worker responds to a
+parent Continuation using the Continuation's own Block id. Original Run images remain available
+to its workers through `factory_get_run_image`.
+
 The [Runner report contract](runner.md#report-acceptance) defines activation results, non-final working reports, held handoffs and manual Request report. The worker launch invokes the `$factory-block` skill once; its obligations then stay in the thread and apply to every later turn of that worker: it reports `working` when it starts a visit's work, ends a questioning turn with the questions instead of another report, keeps `working` rather than `finished` while questions, CI, review, delegated or background work are pending, puts evidence and artifact references in its result, treats Request report as an assessment of existing work and keeps Factory tools with the Block's own agent. The skill also obliges the worker to claim each tracker issue it starts work on, and to skip the claim when the repository describes none. The claim removes the [ready label](../GLOSSARY.md#ready-label) named in the Run's start data (`factory:ready` when it names none) and adds `factory:in-progress`, or the in-progress label the tracker document names, even when the document's claim operation predates this rule; removing the label is what stops a [Trigger](runs.md#starting-from-a-trigger) from starting the issue again. Factory itself performs no tracker write: the repository's tracker document owns how an issue is claimed, and the worker performs it in its own turn. Any change to these obligations changes the skill text, so earlier installed copies, including a retained development demo home's, are outdated until **Repair** ([installation freshness](#factory-mcp-and-block-ids)). Request report queues a short assessment request on the same worker thread.
 
 Report rejections return `code`, a static `reason` and a safe `next` step. A rejection for a

@@ -6,6 +6,7 @@ import type {
   RunDetail,
   RunNavigationEntry,
   RunSummary,
+  SubflowInvocationPage,
 } from "../../packages/contracts/src/index.ts";
 
 export async function runsTitled(baseUrl: string | undefined, title: string) {
@@ -47,6 +48,12 @@ export async function readHistoryRun(baseUrl: string | undefined, id: string) {
   const saved = (await response.json()) as Result<RunDetail>;
   assert(saved.ok);
   return saved.value;
+}
+
+export function readInvocationHistory(baseUrl: string | undefined, runId: string, blockId: string) {
+  return readJson<SubflowInvocationPage>(
+    new URL(`/api/runs/${runId}/subflows/${blockId}/invocations`, baseUrl),
+  );
 }
 
 /** Archives a Run the journey started, so a later journey in the shard does not list it. */
