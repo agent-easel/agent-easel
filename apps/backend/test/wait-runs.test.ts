@@ -201,6 +201,14 @@ it.effect(
       yield* TestClock.adjust((WAIT_MINUTES - 3) * MINUTE);
 
       // Assert
+      yield* Effect.promise(() =>
+        expect
+          .poll(() => f.world.factory.getRun(first.runId))
+          .toMatchObject({
+            ok: true,
+            value: { waitArrivals: [{ state: "forwarded" }, { state: "pending" }] },
+          }),
+      );
       const run = yield* f.factory.getRun(first.runId);
       assert(run.ok);
       const [early, late] = run.value.waitArrivals;
@@ -337,17 +345,24 @@ it.effect(
       yield* TestClock.adjust(WAIT_MINUTES * MINUTE);
 
       // Assert
-      const run = yield* f.factory.getRun(worker.runId);
-      assert(run.ok);
-      expect(run.value.waitArrivals).toStrictEqual([
-        {
-          ...waiting.arrival,
-          state: "forwarded",
-          forwardedBy: "timer",
-          message: null,
-          settledAt: waiting.arrival.deadlineAt,
-        },
-      ]);
+      yield* Effect.promise(() =>
+        expect
+          .poll(() => f.world.factory.getRun(worker.runId))
+          .toMatchObject({
+            ok: true,
+            value: {
+              waitArrivals: [
+                {
+                  ...waiting.arrival,
+                  state: "forwarded",
+                  forwardedBy: "timer",
+                  message: null,
+                  settledAt: waiting.arrival.deadlineAt,
+                },
+              ],
+            },
+          }),
+      );
     }),
 );
 
