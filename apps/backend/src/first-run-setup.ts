@@ -75,11 +75,15 @@ export const makeFirstRunSetup = (
             : "skipped";
       const targets =
         installations._tag === "Some" && installations.value.ok ? installations.value.value : [];
-      const agentInstallation = targets.some((target) => target.status === "installed")
-        ? "completed"
-        : t3Connection !== "skipped" && targets.some((target) => target.kind !== "none-enabled")
-          ? "incomplete"
-          : "skipped";
+      const listed = targets.filter(
+        (target) => target.kind === "instance" && target.status !== "unsupported",
+      );
+      const agentInstallation =
+        listed.length > 0 && listed.every((target) => target.status === "installed")
+          ? "completed"
+          : t3Connection !== "skipped" && targets.some((target) => target.kind !== "none-enabled")
+            ? "incomplete"
+            : "skipped";
       yield* telemetry.record("setup.completed", {
         duration,
         t3Connection,
@@ -93,7 +97,7 @@ export const makeFirstRunSetup = (
         Effect.gen(function* () {
           const changed =
             yield* sql`UPDATE first_run_setup SET completed = 1 WHERE singleton = 1 AND completed = 0 RETURNING singleton`;
-          if (changed.length) yield* recordCompletion();
+          if (changed.length) yield* telemetry.recordLater(recordCompletion());
           return yield* read;
         }),
     };

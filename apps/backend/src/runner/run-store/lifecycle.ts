@@ -19,7 +19,9 @@ export function runLifecycle(run: Lifecycle): RunLifecycle {
 /** Whether a Run is Settled or Archived, read inside its mutation lane. */
 function readLifecycle(sql: SqlClient.SqlClient, id: string) {
   return Effect.map(
-    sql<Lifecycle>`SELECT archived_at,settled_at FROM runs WHERE id=${id}`,
+    sql<
+      Lifecycle & { gate_open: number }
+    >`SELECT gate_open,archived_at,settled_at FROM runs WHERE id=${id}`,
     ([run]) =>
       run ? { ok: true as const, value: run } : failure("not_found", "This Run does not exist."),
   );
@@ -31,7 +33,7 @@ export function withLifecycle<A>(
   id: string,
   change: (
     sql: SqlClient.SqlClient,
-    run: Lifecycle,
+    run: Lifecycle & { gate_open: number },
   ) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
 ): Effect.Effect<Result<A>, unknown> {
   return database.mutate(id, (sql) =>

@@ -72,6 +72,12 @@ access, updates and specific feature actions. Prompts, code, file paths, user-de
 identities, credentials and chat messages are excluded. Events use a SHA-256 hash of the random
 installation UUID as their identifier, with PostHog person profiles and GeoIP enrichment disabled.
 
+An approved desktop verifies a downloaded update when the new version runs. It sends the installed
+version pair to the Factory host it used for that update over its approved connection. The host
+applies its effective sharing preference and consumes each receipt once, including when sharing is
+off. The per-update receipt key stays between the desktop and its host. The analytics event uses
+the host installation identity and the installed binary’s release channel.
+
 ## Development and production commands
 
 | Command | Runtime | Data home |

@@ -1,3 +1,4 @@
+import { readVibeReportingInstances } from "./reporting-discovery.ts";
 import { telemetryDriverKinds, type Telemetry } from "./telemetry.ts";
 import type { T3Projects } from "./t3/projects.ts";
 import { periodicWorker } from "./periodic.ts";
@@ -85,10 +86,10 @@ export const makeConnection = (
   changes: LiveChanges,
   telemetry: Telemetry,
   projects: T3Projects,
+  stateDirectory: string,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const scope = yield* Effect.scope;
     const mutex = yield* Semaphore.make(1);
     const [savedRow] = yield* sql<{
       endpoint: string;
@@ -141,18 +142,30 @@ export const makeConnection = (
         status.readyGeneration !== before.readyGeneration &&
         status.state === "ready"
       ) {
+        const connected = status;
         yield* Effect.tryPromise(() => projects.orchestratorCapabilities({ endpoint })).pipe(
           Effect.orElseSucceed(() => []),
           Effect.flatMap((providers) =>
-            telemetry.record("t3.connected", {
-              mode: isLocalEndpoint(endpoint) ? "local" : "remote",
-              driverKinds: telemetryDriverKinds.filter((kind) =>
-                providers.some((provider) => provider.driverKind === kind),
-              ),
+            Effect.gen(function* () {
+              const vibe = providers.some((p) => p.driverKind === "acpRegistry")
+                ? yield* readVibeReportingInstances(stateDirectory, connected)
+                : undefined;
+              return yield* telemetry.record("t3.connected", {
+                mode: isLocalEndpoint(endpoint) ? "local" : "remote",
+                driverKinds: telemetryDriverKinds.filter((kind) =>
+                  providers.some((provider) =>
+                    provider.driverKind === "acpRegistry"
+                      ? kind === "mistral-vibe" &&
+                        vibe &&
+                        "instances" in vibe &&
+                        vibe.instances?.has(provider.providerInstanceId)
+                      : provider.driverKind === kind,
+                  ),
+                ),
+              });
             }),
           ),
-          Effect.interruptible,
-          Effect.forkIn(scope),
+          telemetry.recordLater,
         );
       }
     });

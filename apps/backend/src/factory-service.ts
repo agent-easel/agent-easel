@@ -1,3 +1,4 @@
+import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Cause from "effect/Cause";
@@ -56,6 +57,7 @@ export class FactoryService extends Context.Service<
     readonly setRuntimeBackendUrl: (url: string) => void;
     readonly live: LiveStreams;
     readonly telemetry: Telemetry;
+    readonly recordClientUpdate: (receipt: InstalledUpdateReceipt) => Effect.Effect<Result<null>>;
   }
 >()("factory/FactoryService") {}
 
@@ -106,12 +108,17 @@ export const makeFactoryService = (
       options.applicationVersion,
       options.telemetry,
     );
+    const t3StateDirectory =
+      options.reportingStateDirectory ??
+      process.env.FACTORY_T3_STATE_DIRECTORY ??
+      join(homedir(), ".t3", "userdata");
     const connection = yield* makeConnection(
       { connection: t3.connection, contract: t3.contract, close: () => t3.close() },
       intervalMs,
       changes,
       telemetry,
       t3.projects,
+      t3StateDirectory,
     );
     const appearance = yield* makeAppearance(
       t3.appearance,
@@ -121,10 +128,6 @@ export const makeFactoryService = (
     );
     const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
-    const t3StateDirectory =
-      options.reportingStateDirectory ??
-      process.env.FACTORY_T3_STATE_DIRECTORY ??
-      join(homedir(), ".t3", "userdata");
     const definitions = yield* makeDefinitions(
       t3.projects,
       connection,
@@ -226,13 +229,14 @@ export const makeFactoryService = (
       telemetry,
     );
     const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
+      telemetry,
       model: conversationalModel(sql, chatCredentials),
       tools: [
         ...discoveryTools({
           listProjects: projects.listProjects,
           listFlows: definitions.listFlows,
         }),
-        ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }, telemetry),
+        ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }),
         chatStart.tool,
         chatHumanAnswer.tool,
         chatArchive.tool,
@@ -355,6 +359,20 @@ export const makeFactoryService = (
     const guarded = guardOperations(operations);
     const factory: FactoryService["Service"] = {
       ...guarded,
+      recordClientUpdate: ({ receiptId, fromVersion, toVersion }) =>
+        guard(
+          Effect.gen(function* () {
+            const claimed =
+              yield* sql`INSERT INTO installed_update_receipts(receipt_id) VALUES(${receiptId}) ON CONFLICT DO NOTHING RETURNING receipt_id`;
+            if (claimed.length)
+              yield* telemetry.record("update.installed", {
+                fromVersion,
+                toVersion,
+                channel: toVersion.includes("-beta.") ? "beta" : "stable",
+              });
+            return { ok: true as const, value: null };
+          }),
+        ),
       telemetry,
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,

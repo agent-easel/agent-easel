@@ -224,8 +224,9 @@ export function openRunActions({
           if (!archived.ok) return archived;
           if (archived.value === "active") {
             yield* telemetry.record("run.cancelled", {});
-            yield* settlement.recordFinished(id, "cancelled");
           }
+          if (archived.value === "active" || archived.value === "closing")
+            yield* settlement.recordFinished(id, "cancelled");
           if (archived.value !== "unchanged") yield* fork(interruptWorkerThreads(id));
           return yield* getRun(id);
         }),
@@ -272,9 +273,8 @@ export function openRunActions({
       const accepted = yield* store.acceptSettlement(id, request.reason);
       if (!accepted.ok) return accepted;
       const outcome = yield* settlement.currentOutcome(id);
-      if (accepted.value) {
-        if (request.reason === "manual" && outcome.ok && !outcome.value.run.result)
-          yield* telemetry.record("run.cancelled", {});
+      if (accepted.value !== "unchanged") {
+        if (accepted.value === "manual") yield* telemetry.record("run.cancelled", {});
         yield* fork(settlement.advanceSettlement(id));
       }
       return outcome;

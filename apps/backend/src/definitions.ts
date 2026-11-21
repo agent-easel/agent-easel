@@ -1102,7 +1102,7 @@ export const makeDefinitions = (
                       )
                     : undefined;
                   yield* recordAgent("agent.removed", agent, capabilities);
-                })
+                }).pipe(telemetry.recordLater)
               : Effect.void,
           ),
           Effect.map(clearRemovedValue),

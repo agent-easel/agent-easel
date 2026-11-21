@@ -4,10 +4,16 @@ import { link, open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import type { TelemetrySetting, UpdateChannel } from "@t3-factory/contracts";
+import {
+  isInstalledUpdateReceipt,
+  releaseVersionPattern as releaseVersion,
+  type TelemetrySetting,
+  type UpdateChannel,
+} from "@t3-factory/contracts";
 
 const bucket = Schema.Literals(["0", "1", "2-5", "6+"]);
 
@@ -51,7 +57,6 @@ const agentProperties = Schema.Struct({
   hasProjectOverrides: Schema.Boolean,
 });
 const definitionProperties = Schema.Struct({ kind: definitionKind });
-const releaseVersion = /^\d{1,10}\.\d{1,10}\.\d{1,10}(?:-beta\.[1-9]\d{0,9})?$/;
 const version = Schema.String.check(Schema.isPattern(releaseVersion));
 const triggerKind = Schema.Literal("github_issues");
 
@@ -155,6 +160,7 @@ export interface Telemetry {
     event: K,
     properties: EventProperties[K],
   ) => Effect.Effect<void>;
+  readonly recordLater: (work: Effect.Effect<void>) => Effect.Effect<void>;
   readonly flush: () => Effect.Effect<void>;
 }
 
@@ -168,14 +174,14 @@ export async function reportInstalledUpdate(
 ) {
   try {
     const receipt: unknown = JSON.parse(await readFile(path, "utf8"));
-    const decoded = Schema.decodeUnknownOption(eventProperties["update.installed"], {
-      onExcessProperty: "error",
-    })(receipt);
-    if (Option.isNone(decoded)) return;
-    const { fromVersion, toVersion } = decoded.value;
-    if (fromVersion === toVersion || toVersion !== applicationVersion) return;
+    if (!isInstalledUpdateReceipt(receipt) || receipt.toVersion !== applicationVersion) return;
+    const { fromVersion, toVersion } = receipt;
     await unlink(path);
-    await record("update.installed", decoded.value);
+    await record("update.installed", {
+      fromVersion,
+      toVersion,
+      channel: applicationVersion.includes("-beta.") ? "beta" : "stable",
+    });
   } catch {
     return;
   }
@@ -275,6 +281,7 @@ const disabled: Telemetry = {
   disabledReason: "unavailable",
   setPreference: () => Effect.void,
   record: () => Effect.void,
+  recordLater: () => Effect.void,
   flush: () => Effect.void,
 };
 
@@ -451,8 +458,14 @@ export const makeTelemetry = (
         }),
       );
 
+    const background = yield* FiberSet.make<void>();
     yield* Effect.addFinalizer(() =>
-      flush().pipe(Effect.interruptible, Effect.timeoutOption(1000), Effect.asVoid),
+      FiberSet.awaitEmpty(background).pipe(
+        Effect.andThen(flush()),
+        Effect.interruptible,
+        Effect.timeoutOption(1000),
+        Effect.asVoid,
+      ),
     );
     yield* Effect.forkScoped(
       Effect.sleep(flushInterval).pipe(
@@ -482,7 +495,11 @@ export const makeTelemetry = (
           retry = undefined;
           resumeAt = 0;
           sending?.abort();
-        }),
+        }).pipe(Effect.andThen(preference ? Effect.void : FiberSet.clear(background))),
+      recordLater: (work) =>
+        enabled
+          ? FiberSet.run(background, Effect.interruptible(work)).pipe(Effect.asVoid)
+          : Effect.void,
       record,
       flush,
     } satisfies Telemetry;

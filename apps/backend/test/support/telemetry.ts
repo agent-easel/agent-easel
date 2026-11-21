@@ -45,6 +45,13 @@ export async function mockIngest(
       FACTORY_POSTHOG_KEY: "local",
     },
     requests,
+    events: (name: string) =>
+      requests
+        .flatMap(
+          ({ body }) =>
+            (body as { batch: { event: string; properties: Record<string, unknown> }[] }).batch,
+        )
+        .filter((entry) => entry.event === name),
     firstRequest,
     disconnected,
   };

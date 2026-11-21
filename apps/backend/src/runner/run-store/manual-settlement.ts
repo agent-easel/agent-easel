@@ -320,14 +320,16 @@ export function openRunManualSettlement(database: RunnerDatabase) {
       }),
     );
 
+  type AcceptedSettlement = "unchanged" | "retry" | StopSettlementReason;
+
   function acceptSettlement(
     id: string,
     reason: StopSettlementReason,
-  ): Effect.Effect<Result<boolean>, unknown> {
-    return withLifecycle<boolean>(database, id, (sql, run) =>
+  ): Effect.Effect<Result<AcceptedSettlement>, unknown> {
+    return withLifecycle<AcceptedSettlement>(database, id, (sql, run) =>
       Effect.gen(function* () {
         if (run.archived_at) return failure("conflict", "An archived Run cannot be settled.");
-        if (run.settled_at) return { ok: true as const, value: false };
+        if (run.settled_at) return { ok: true as const, value: "unchanged" as const };
         if (!(yield* guardsHold(sql, ownerToken, id, { owner: true })))
           return failure("conflict", "Runner ownership changed.");
         const [current] =
@@ -335,13 +337,16 @@ export function openRunManualSettlement(database: RunnerDatabase) {
         if (yield* refusedForReplacedAuthorization(sql, id, !!current))
           return failure("conflict", REPLACED_AUTHORIZATION);
         const time = yield* now;
+        let accepted: AcceptedSettlement = "retry";
         if (current) {
           const settlement = yield* readRunSettlement(sql, { id, ...run });
-          if (settlement?.state !== "unresolved") return { ok: true as const, value: false };
+          if (settlement?.state !== "unresolved")
+            return { ok: true as const, value: "unchanged" as const };
           yield* sql`UPDATE run_settlements SET attempt=attempt+1,attempt_owner=${ownerToken},attempted_at=${time},stop_pass_at=NULL WHERE run_id=${id}`;
         } else {
           const [result] = yield* sql`SELECT 1 FROM run_results WHERE run_id=${id}`;
           const recorded: StopSettlementReason = result ? "finish" : reason;
+          accepted = recorded;
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
           yield* cancelTitleGeneration(sql, id, time, recorded === "finish" ? "finish" : "settle");
           yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${recorded})`;
@@ -356,7 +361,10 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           observedAt: time,
         });
         yield* advanceGeneration(sql, id);
-        return { ok: true as const, value: true };
+        return {
+          ok: true as const,
+          value: accepted,
+        };
       }),
     );
   }

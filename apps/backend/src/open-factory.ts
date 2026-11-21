@@ -1,3 +1,4 @@
+import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
@@ -26,6 +27,7 @@ export interface Factory extends FactoryOperations {
     event: K,
     properties: EventProperties[K],
   ) => Promise<void>;
+  recordClientUpdate(receipt: InstalledUpdateReceipt): Promise<Result<null>>;
   close(): Promise<void>;
 }
 

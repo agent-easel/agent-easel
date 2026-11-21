@@ -70,18 +70,13 @@ async function connectedStudio(context: Parameters<typeof mockIngest>[0]) {
   return { ingest, factory, t3, project: project! };
 }
 
-it("Flow saves, duplicates, owner changes and removals report the committed operation once", async (context) => {
+it("saving a Flow emits its graph once when the repeated revision is stale", async (context) => {
   // Arrange
-  const { ingest, factory, project } = await connectedStudio(context);
+  const { ingest, factory } = await connectedStudio(context);
   const flow = assertOk(await factory.createFlow({ name: "Private Flow title" }));
-  const graph = {
-    blocks: [humanStep("private-id", "Private block name")],
-    connections: [],
-    flowInput: flowInput(),
-  };
   const update = {
-    name: flow.name,
-    graph,
+    name: "Private edited",
+    graph: flow.graph,
     expectedRevision: flow.revision,
     expectedProjectId: null,
   };
@@ -89,59 +84,90 @@ it("Flow saves, duplicates, owner changes and removals report the committed oper
   // Act
   assertOk(await factory.updateFlow(flow.id, update));
   expect((await factory.updateFlow(flow.id, update)).ok).toBe(false);
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("flow.saved")).toMatchObject([
+    {
+      properties: { blockCount: "1", blockTypes: ["finish"], usesSubflows: false, scope: "global" },
+    },
+  ]);
+  expect(JSON.stringify(ingest.events("flow.saved"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("duplicating a Flow reports the destination scope", async (context) => {
+  // Arrange
+  const { ingest, factory, project } = await connectedStudio(context);
+  const flow = assertOk(await factory.createFlow({ name: "Private Flow title" }));
   const plan = assertOk(await factory.previewFlowDuplicate(flow.id, { projectId: project.id }));
-  const duplicate = assertOk(
+
+  // Act
+  assertOk(
     await factory.duplicateFlow(flow.id, {
       projectId: plan.projectId,
       expectedRevision: plan.revision,
       agents: plan.agents,
     }),
   );
-  assertOk(
-    await factory.changeFlowOwner(duplicate.flow.id, {
-      expectedProjectId: project.id,
-      projectId: null,
-    }),
-  );
-  assertOk(
-    await factory.changeFlowOwner(duplicate.flow.id, { expectedProjectId: null, projectId: null }),
-  );
-  assertOk(await factory.removeFlow(duplicate.flow.id));
-  assertOk(await factory.removeFlow(duplicate.flow.id));
   await factory.close();
 
   // Assert
-  const graphProperties = {
-    blockCount: "2-5",
-    blockTypes: ["finish", "human"],
-    usesSubflows: false,
-  };
-  expect(ingest.requests).toHaveLength(1);
-  expect(ingest.requests[0]?.body).toMatchObject({
-    batch: [
-      { event: "app.started" },
-      {
-        event: "flow.created",
-        properties: {
-          scope: "global",
-          blockCount: "1",
-          blockTypes: ["finish"],
-          usesSubflows: false,
-        },
+  expect(ingest.events("flow.duplicated")).toMatchObject([
+    {
+      properties: {
+        blockCount: "1",
+        blockTypes: ["finish"],
+        usesSubflows: false,
+        scope: "project",
       },
-      { event: "flow.saved", properties: { scope: "global", ...graphProperties } },
-      { event: "flow.duplicated", properties: { scope: "project", ...graphProperties } },
-      { event: "owner.changed", properties: { kind: "flow", direction: "to_global" } },
-      { event: "flow.removed", properties: { scope: "global", ...graphProperties } },
-    ],
-  });
-  expect(JSON.stringify(ingest.requests)).not.toMatch(
-    /Private Flow title|Private block name|private-id|Private Project title|private-project|private\/workspace/,
+    },
+  ]);
+  expect(JSON.stringify(ingest.events("flow.duplicated"))).not.toMatch(
+    /Private|private|codex-main/,
   );
 });
 
-it("Agent authoring reports scope, built-in driver and override presence without execution labels", async (context) => {
+it("moving a Flow to global scope emits one owner change across a repeated move", async (context) => {
   // Arrange
+  const { ingest, factory, project } = await connectedStudio(context);
+  const flow = assertOk(
+    await factory.createFlow({ projectId: project.id, name: "Private Flow title" }),
+  );
+
+  // Act
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: project.id, projectId: null }),
+  );
+  assertOk(await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: null }));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("owner.changed")).toMatchObject([
+    { properties: { kind: "flow", direction: "to_global" } },
+  ]);
+  expect(JSON.stringify(ingest.events("owner.changed"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("removing a Flow twice emits one removal", async (context) => {
+  // Arrange
+  const { ingest, factory } = await connectedStudio(context);
+  const flow = assertOk(await factory.createFlow({ name: "Private Flow title" }));
+
+  // Act
+  assertOk(await factory.removeFlow(flow.id));
+  assertOk(await factory.removeFlow(flow.id));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("flow.removed")).toMatchObject([
+    {
+      properties: { blockCount: "1", blockTypes: ["finish"], usesSubflows: false, scope: "global" },
+    },
+  ]);
+  expect(JSON.stringify(ingest.events("flow.removed"))).not.toMatch(/Private|private|codex-main/);
+});
+
+async function agentDraft(context: Parameters<typeof mockIngest>[0]) {
   const { ingest, factory, t3, project } = await connectedStudio(context);
   const input = {
     ...sampleAgentInput("Private Agent title"),
@@ -157,10 +183,31 @@ it("Agent authoring reports scope, built-in driver and override presence without
     requestId,
     projectOverrides: [{ projectId: project.id, execution: input.execution }],
   };
+  return { ingest, factory, project, input, create };
+}
+
+it("creating an Agent reports only its built-in driver and presence of overrides", async (context) => {
+  // Arrange
+  const { ingest, factory, create } = await agentDraft(context);
 
   // Act
-  const agent = assertOk(await factory.createAgent(create));
+  assertOk(await factory.createAgent(create));
   expect((await factory.createAgent(create)).ok).toBe(false);
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("agent.created")).toMatchObject([
+    { properties: { scope: "global", driverKind: "codex", hasProjectOverrides: true } },
+  ]);
+  expect(JSON.stringify(ingest.events("agent.created"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("saving an Agent reports the committed override state", async (context) => {
+  // Arrange
+  const { ingest, factory, input, create } = await agentDraft(context);
+  const agent = assertOk(await factory.createAgent(create));
+
+  // Act
   assertOk(
     await factory.updateAgent(agent.id, {
       ...input,
@@ -169,75 +216,122 @@ it("Agent authoring reports scope, built-in driver and override presence without
       projectOverrides: [],
     }),
   );
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("agent.saved")).toMatchObject([
+    { properties: { scope: "global", driverKind: "codex", hasProjectOverrides: false } },
+  ]);
+  expect(JSON.stringify(ingest.events("agent.saved"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("moving an Agent into a Project reports only the owner change direction", async (context) => {
+  // Arrange
+  const { ingest, factory, project, create } = await agentDraft(context);
+  const agent = assertOk(await factory.createAgent({ ...create, projectOverrides: [] }));
+
+  // Act
   assertOk(
     await factory.changeAgentOwner(agent.id, { expectedProjectId: null, projectId: project.id }),
   );
-  const provider = t3.projects.controlledProviders[0]!;
-  t3.projects.controlledProviders[0] = { ...provider, driverKind: "private-custom-driver" };
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("owner.changed")).toMatchObject([
+    { properties: { kind: "agent", direction: "to_project" } },
+  ]);
+  expect(JSON.stringify(ingest.events("owner.changed"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("removing an Agent twice emits a single removal with the known driver", async (context) => {
+  // Arrange
+  const { ingest, factory, create } = await agentDraft(context);
+  const agent = assertOk(await factory.createAgent(create));
+
+  // Act
   assertOk(await factory.removeAgent(agent.id));
   assertOk(await factory.removeAgent(agent.id));
   await factory.close();
 
   // Assert
-  expect(ingest.requests).toHaveLength(1);
-  expect(ingest.requests[0]?.body).toMatchObject({
-    batch: [
-      { event: "app.started" },
-      {
-        event: "agent.created",
-        properties: { scope: "global", driverKind: "codex", hasProjectOverrides: true },
-      },
-      {
-        event: "agent.saved",
-        properties: { scope: "global", driverKind: "codex", hasProjectOverrides: false },
-      },
-      { event: "owner.changed", properties: { kind: "agent", direction: "to_project" } },
-      { event: "agent.removed", properties: { scope: "project", hasProjectOverrides: false } },
-    ],
-  });
-  expect(JSON.stringify(ingest.requests)).not.toMatch(
-    /Private Agent title|Private Agent prompt|private-model|codex-main|private-custom-driver|Private Project title/,
+  expect(ingest.events("agent.removed")).toMatchObject([
+    { properties: { scope: "global", driverKind: "codex", hasProjectOverrides: true } },
+  ]);
+  expect(JSON.stringify(ingest.events("agent.removed"))).not.toMatch(/Private|private|codex-main/);
+});
+
+it("exporting an Agent reports its kind", async (context) => {
+  // Arrange
+  const { ingest, factory } = await connectedStudio(context);
+  const item = assertOk(await factory.createAgent(sampleAgentInput("Private exported Agent")));
+
+  // Act
+  assertOk(await factory.exportAgent(item.id));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("definition.exported")).toMatchObject([{ properties: { kind: "agent" } }]);
+  expect(JSON.stringify(ingest.events("definition.exported"))).not.toMatch(
+    /Private|private|codex-main/,
   );
 });
 
-it("portable definitions report their kind on export and on each new import receipt", async (context) => {
+it("retrying an Agent import reports its kind once", async (context) => {
   // Arrange
   const { ingest, factory } = await connectedStudio(context);
-  const agent = assertOk(await factory.createAgent(sampleAgentInput("Private exported Agent")));
-  const flow = assertOk(await factory.createFlow({ name: "Private exported Flow" }));
+  const item = assertOk(await factory.createAgent(sampleAgentInput("Private exported Agent")));
+  const { document } = assertOk(await factory.exportAgent(item.id));
+  const input = reviewedCommit("private-import-id", item.execution!, document);
 
   // Act
-  const agentExport = assertOk(await factory.exportAgent(agent.id));
-  const flowExport = assertOk(await factory.exportFlow(flow.id));
-  const agentImport = reviewedCommit("private-import-id", agent.execution!, agentExport.document);
-  const flowImport = {
-    requestId: "private-flow-import-id",
-    document: flowExport.document,
-    selections: {},
-  };
-  const [first, retried] = await Promise.all([
-    factory.commitImport(agentImport),
-    factory.commitImport(agentImport),
+  const [first, retry] = await Promise.all([
+    factory.commitImport(input),
+    factory.commitImport(input),
   ]);
-  expect(assertOk(retried)).toEqual(assertOk(first));
-  assertOk(await factory.commitImport(flowImport));
-  assertOk(await factory.commitImport(flowImport));
+  expect(assertOk(retry)).toEqual(assertOk(first));
   await factory.close();
 
   // Assert
-  expect(ingest.requests).toHaveLength(1);
-  expect(ingest.requests[0]?.body).toMatchObject({
-    batch: [
-      { event: "app.started" },
-      { event: "agent.created" },
-      { event: "flow.created" },
-      { event: "definition.exported", properties: { kind: "agent" } },
-      { event: "definition.exported", properties: { kind: "flow" } },
-      { event: "definition.imported", properties: { kind: "agent" } },
-      { event: "definition.imported", properties: { kind: "flow" } },
-    ],
-  });
-  expect(JSON.stringify(ingest.requests)).not.toMatch(
-    /Private exported|private-import-id|private-flow-import-id|Improve the empty search state/,
+  expect(ingest.events("definition.imported")).toMatchObject([{ properties: { kind: "agent" } }]);
+  expect(JSON.stringify(ingest.events("definition.imported"))).not.toMatch(
+    /Private|private|codex-main/,
+  );
+});
+
+it("exporting a Flow reports its kind", async (context) => {
+  // Arrange
+  const { ingest, factory } = await connectedStudio(context);
+  const item = assertOk(await factory.createFlow({ name: "Private exported Flow" }));
+
+  // Act
+  assertOk(await factory.exportFlow(item.id));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("definition.exported")).toMatchObject([{ properties: { kind: "flow" } }]);
+  expect(JSON.stringify(ingest.events("definition.exported"))).not.toMatch(
+    /Private|private|codex-main/,
+  );
+});
+
+it("retrying a Flow import reports its kind once", async (context) => {
+  // Arrange
+  const { ingest, factory } = await connectedStudio(context);
+  const item = assertOk(await factory.createFlow({ name: "Private exported Flow" }));
+  const { document } = assertOk(await factory.exportFlow(item.id));
+  const input = { requestId: "private-flow-import-id", document, selections: {} };
+
+  // Act
+  const [first, retry] = await Promise.all([
+    factory.commitImport(input),
+    factory.commitImport(input),
+  ]);
+  expect(assertOk(retry)).toEqual(assertOk(first));
+  await factory.close();
+
+  // Assert
+  expect(ingest.events("definition.imported")).toMatchObject([{ properties: { kind: "flow" } }]);
+  expect(JSON.stringify(ingest.events("definition.imported"))).not.toMatch(
+    /Private|private|codex-main/,
   );
 });

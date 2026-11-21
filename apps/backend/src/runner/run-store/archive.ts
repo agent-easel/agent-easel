@@ -11,7 +11,7 @@ import { clearSnooze } from "./presentation.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
-type ArchiveTransition = "unchanged" | "settled" | "active";
+type ArchiveTransition = "unchanged" | "settled" | "active" | "closing";
 
 /** An Archive of a Run already archived: no change, unless it is another request's Archive. */
 function alreadyArchived(sql: SqlClient.SqlClient, id: string, requestId: string | undefined) {
@@ -47,7 +47,10 @@ export function openRunArchive(database: RunnerDatabase) {
         yield* cancelWorkerTitleSync(sql, id);
         yield* clearSnooze(sql, id);
         yield* appendTimelineEvent(sql, { kind: "run-archived", runId: id, observedAt: time });
-        return { ok: true as const, value: run.settled_at ? "settled" : "active" };
+        return {
+          ok: true as const,
+          value: run.settled_at ? "settled" : run.gate_open ? "active" : "closing",
+        };
       }),
     );
   }

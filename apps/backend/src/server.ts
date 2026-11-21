@@ -542,6 +542,8 @@ function admission(
       binding.factory.authenticateClient(credential ?? ""),
     );
     if (!client.ok) return client;
+    if (route.desktopOnly && client.value.kind !== "desktop")
+      return failure("unauthorized", "An approved desktop is required.");
     if (route.hostOnly)
       return failure("host_only", "This operation is available only on the Factory host.");
     return { ok: true, value: client.value.id };

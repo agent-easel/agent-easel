@@ -99,7 +99,11 @@ export function openRunnerSettle(
         ? "completed"
         : terminal === "cancelled"
           ? "cancelled"
-          : run.attention.some((item) => item.kind === "execution-failed")
+          : run.attention.some(
+                (item) =>
+                  item.kind === "execution-failed" &&
+                  (item.settledAt === null || item.settlementReason === "manual-settlement"),
+              )
             ? "failed"
             : "completed";
       const executed = new Set([
@@ -113,7 +117,7 @@ export function openRunnerSettle(
       yield* telemetry.record("run.finished", {
         status,
         duration: telemetryDuration(finishedAt - Date.parse(run.startedAt)),
-        executedBlockCount: telemetryCount(executed.size),
+        executedBlockCount: telemetryCount(executed.size + Number(run.result !== null)),
         hadHumanWait:
           run.humanOccurrences.length > 0 ||
           run.waitArrivals.some((entry) => entry.forwardedBy === "user"),

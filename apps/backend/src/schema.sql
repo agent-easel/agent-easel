@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: worker_title_dispatch
+-- Newest applied migration: installed_update_receipts
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -693,6 +693,9 @@ CREATE TABLE human_occurrences (
 
 CREATE UNIQUE INDEX human_occurrences_answer_request ON human_occurrences(answer_request_id)
   WHERE answer_request_id IS NOT NULL
+;
+
+CREATE TABLE installed_update_receipts (receipt_id TEXT PRIMARY KEY NOT NULL) WITHOUT ROWID
 ;
 
 CREATE TABLE operation_intents (

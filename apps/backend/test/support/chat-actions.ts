@@ -25,8 +25,12 @@ import {
  * An operating Chat control over a Factory that can start Runs (the prepared ready Flow of
  * `runConversation`). `open` reopens the same home against the same external worlds.
  */
-export async function startingWorld(c: TestContext, shape?: ReadyFlowShape) {
-  const fixture = await runConversation(c, shape);
+export async function startingWorld(
+  c: TestContext,
+  shape?: ReadyFlowShape,
+  telemetry?: Parameters<typeof runConversation>[2],
+) {
+  const fixture = await runConversation(c, shape, telemetry);
   const open = () =>
     fixture.h.open({
       t3: fixture.t3,
@@ -260,8 +264,12 @@ export const HUMAN_CONTEXT = "Review this change.\nCheck the empty state.";
  * An operating Chat control over a Run started in Factory (Run #1) of the Human review Flow, whose
  * Review waits on its pending occurrence with the worker's result `context`.
  */
-export async function answeringWorld(c: TestContext, context = HUMAN_CONTEXT) {
-  const world = await startingWorld(c, humanReviewFlow);
+export async function answeringWorld(
+  c: TestContext,
+  context = HUMAN_CONTEXT,
+  telemetry?: Parameters<typeof runConversation>[2],
+) {
+  const world = await startingWorld(c, humanReviewFlow, telemetry);
   const worker = await workerAtWork(world.world, world.input);
   await resultReported(world.world, worker, { message: context });
   const review = await resultReleasedToHumanReview(world.world, worker);

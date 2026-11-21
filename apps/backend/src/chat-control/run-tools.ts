@@ -1,4 +1,3 @@
-import type { Telemetry } from "../telemetry.ts";
 import { createHash } from "node:crypto";
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
@@ -500,15 +499,8 @@ const readRun = (
 export const runTools = (
   sql: SqlClient.SqlClient,
   operations: RunReadOperations,
-  telemetry: Telemetry,
 ): readonly ReadTool[] => {
   const search = runSearch(sql);
   const handles = conversationHandles(sql, conversationGenerations(sql));
-  return [findRuns(search, handles), readRun(search, handles, operations)].map((entry) => ({
-    ...entry,
-    execute: (input: unknown, scope: ChatToolScope) =>
-      telemetry
-        .record("chat_control.used", { platform: "discord", command: "status" })
-        .pipe(Effect.andThen(entry.execute(input, scope))),
-  }));
+  return [findRuns(search, handles), readRun(search, handles, operations)];
 };
