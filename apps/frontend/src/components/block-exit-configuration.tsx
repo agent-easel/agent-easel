@@ -36,7 +36,7 @@ import { StatusBadge } from "./status-badge.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
 /** A Condition's outputs are its rules, edited in `ConditionOutputs`. */
-type ExitBlock = Exclude<FlowBlock, { kind: "condition" }>;
+type ExitBlock = Exclude<FlowBlock, { kind: "condition" | "subflow" }>;
 
 /** Sentence-case section heading of the settings panel. */
 export function PanelHeading({ children }: { children: string }) {
@@ -144,7 +144,7 @@ function endingExpectation(ending: FlowEnding) {
   return null;
 }
 
-function EndingExpectations({ exit }: { exit: ExitWithEndings | undefined }) {
+export function EndingExpectations({ exit }: { exit: ExitWithEndings | undefined }) {
   const lines = (exit?.endings ?? []).flatMap((ending) => {
     const text = endingExpectation(ending);
     return text ? [{ id: ending.id, text }] : [];

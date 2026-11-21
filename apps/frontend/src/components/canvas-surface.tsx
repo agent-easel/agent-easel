@@ -13,7 +13,12 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { type AgentDefinition, type FlowEnding, type FlowGraph } from "@t3-factory/contracts";
+import {
+  type AgentDefinition,
+  type FlowDraft,
+  type FlowEnding,
+  type FlowGraph,
+} from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
   authoringEntryView,
@@ -40,16 +45,16 @@ import { useConnectionPreview } from "../use-connection-preview.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
 import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
-import { flowInputIdentity } from "./flow-block.tsx";
+import { flowInputIdentity, IdentityRows } from "./flow-block.tsx";
 import {
-  FinishEndingRow,
-  FinishHint,
+  FinishEndingList,
   finishIdentity,
-  finishRowClass,
   finishShowsRows,
   type FinishBlockState,
 } from "./finish-block.tsx";
 import { ConnectionPreview, FlowWires, type WirePresentation } from "./flow-wires.tsx";
+import { SubflowGroup } from "./subflow-group.tsx";
+import { previewBlockFrame, type SubflowPreview } from "../subflow-preview.ts";
 
 /**
  * How an adapter draws one port. The surface sizes it from the port dimensions and places it
@@ -111,6 +116,8 @@ export type CanvasBlockContent = {
   readonly incomingPort: (pending: boolean) => CanvasPort;
   /** The status footers drawn now, in order. */
   readonly footers: readonly ReactNode[];
+  readonly subflowFooter?: ReactNode;
+  readonly subflowBadge?: ReactNode;
 };
 
 /**
@@ -150,28 +157,6 @@ const REVEAL_MARGIN = 24;
 
 /** Fit keeps this margin at the sides and room for the zoom controls at the bottom. */
 const FIT_MARGIN = { x: 48, bottom: 80 };
-
-/** The header and title rows of a block, sized from its dimensions. */
-export function IdentityRows({
-  rows,
-  header,
-  title,
-}: {
-  rows: { readonly header: number; readonly title: number };
-  header: ReactNode;
-  title: ReactNode;
-}) {
-  return (
-    <>
-      <span className="flex flex-col" style={{ height: rows.header }}>
-        {header}
-      </span>
-      <span className="flex flex-col" style={{ height: rows.title }}>
-        {title}
-      </span>
-    </>
-  );
-}
 
 /**
  * A port centred on its wire anchor: `center` below its container's inner top edge, on the
@@ -310,39 +295,21 @@ function SurfaceFinish({
         />,
       )}
       {finishShowsRows(state, endings.length) && (
-        <>
-          <span className="bg-border" style={{ height: rows.divider }} />
-          <ul
-            aria-label="Endings"
-            style={{ paddingTop: rows.exitPaddingTop, paddingBottom: rows.exitPaddingBottom }}
-          >
-            {endings.length === 0 && (
-              <li className="flex items-center px-3" style={{ height: rows.exitRow }}>
-                <FinishHint />
-              </li>
-            )}
-            {endings.map((ending) => (
-              <li
-                key={ending.id}
-                data-ending-id={ending.id}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-3",
-                  finishRowClass(state, ending),
-                )}
-                style={{ height: rows.exitRow }}
-              >
-                <FinishEndingRow ending={ending} state={state} />
-                <SurfacePort
-                  side="left"
-                  center={rows.exitRow / 2}
-                  border={rows.border}
-                  port={dimensions.port}
-                  look={content.endingPort(ending, ending.id === pendingEnding)}
-                />
-              </li>
-            ))}
-          </ul>
-        </>
+        <FinishEndingList
+          endings={endings}
+          state={state}
+          rows={rows}
+          ariaLabel="Endings"
+          renderPort={(ending) => (
+            <SurfacePort
+              side="left"
+              center={rows.exitRow / 2}
+              border={rows.border}
+              port={dimensions.port}
+              look={content.endingPort(ending, ending.id === pendingEnding)}
+            />
+          )}
+        />
       )}
     </article>
   );
@@ -392,6 +359,7 @@ function SurfaceBlock({
           {footer}
         </span>
       ))}
+      {content.subflowFooter}
     </>
   );
   const inputs = Math.max(1, geometry.incomingPorts(block).length);
@@ -537,6 +505,10 @@ type CanvasSurfaceProps = {
   graph: FlowGraph;
   /** The Agents the graph's block exits resolve against. */
   agents: readonly Pick<AgentDefinition, "id" | "exits">[];
+  flows?: ReadonlyMap<string, FlowDraft> | undefined;
+  previewAgents?: readonly AgentDefinition[] | undefined;
+  subflowPreviews?: ReadonlyMap<string, SubflowPreview> | undefined;
+  onCollapseSubflow?: ((blockId: string) => void) | undefined;
   dimensions: Dimensions;
   /** The most status footers a block can draw; a local arrangement reserves room for them. */
   reservedFooters: number;
@@ -587,6 +559,8 @@ function useSurfaceGraph({
   scope,
   graph: sourceGraph,
   agents,
+  flows,
+  subflowPreviews,
   dimensions,
   reservedFooters,
   flowInput,
@@ -598,9 +572,10 @@ function useSurfaceGraph({
   gesture = null,
 }: CanvasSurfaceProps) {
   // Block content does not depend on positions, so the arranged and gesture graphs reuse it.
-  const source = canvasGraph(sourceGraph, agents);
+  const source = canvasGraph(sourceGraph, agents, flows);
   const contents = new Map(source.blocks.map((item) => [item.id, blockContent(item)]));
   const content = (item: CanvasBlock) => contents.get(item.id)!;
+  const blockFrame = subflowPreviews ? previewBlockFrame(subflowPreviews) : undefined;
   const facts = {
     prompt: flowInput.prompt.kind,
     flowInputStatus: flowInput.status !== undefined,
@@ -608,11 +583,13 @@ function useSurfaceGraph({
     reservedFooterCount: reservedFooters,
     emptyGraphSize,
     finish: finish !== undefined,
+    blockFrame,
   };
   const layout = useFlowLayoutSession({
     scope,
     graph: sourceGraph,
     agents,
+    flows,
     dimensions: createFlowLayoutDimensions(source, dimensions, facts, wires.kind === "curved"),
     authoring: arrangement && {
       busy: arrangement.busy,
@@ -620,7 +597,7 @@ function useSurfaceGraph({
       change: arrangement.commit,
     },
   });
-  const arranged = canvasGraph(layout.graph, agents);
+  const arranged = canvasGraph(layout.graph, agents, flows);
   const shown = gestureGraph(arranged, gesture);
   const gesturing = gesture !== null;
   const { cancel, pending: arranging } = layout;
@@ -661,6 +638,10 @@ function SurfaceLayer({
   gesture,
   flowInput,
   finish,
+  flows,
+  previewAgents,
+  subflowPreviews,
+  onCollapseSubflow,
   startPan,
   children,
 }: {
@@ -671,6 +652,10 @@ function SurfaceLayer({
   gesture: CanvasGesture | null;
   flowInput: CanvasFlowInputContent;
   finish: CanvasFinishContent | undefined;
+  flows: ReadonlyMap<string, FlowDraft> | undefined;
+  previewAgents: readonly AgentDefinition[] | undefined;
+  subflowPreviews: ReadonlyMap<string, SubflowPreview> | undefined;
+  onCollapseSubflow: ((blockId: string) => void) | undefined;
   startPan: (event: PointerEvent<HTMLElement>) => void;
   children: ReactNode;
   scope: string | null;
@@ -716,20 +701,70 @@ function SurfaceLayer({
           pendingEnding={pending?.targetEndingId ?? null}
         />
       )}
-      {graph.blocks.map((item) => (
-        <SurfaceBlock
-          key={item.id}
-          block={item}
-          geometry={drawn}
-          dimensions={dimensions}
-          content={content(item)}
-          pendingInput={
-            pending?.targetEndingId === undefined && pending?.targetBlockId === item.id
-              ? drawn.incomingPortIndex(item.id, pending.source)
-              : null
-          }
-        />
-      ))}
+      {graph.blocks.map((item) => {
+        const pendingInput =
+          pending?.targetEndingId === undefined && pending?.targetBlockId === item.id
+            ? drawn.incomingPortIndex(item.id, pending.source)
+            : null;
+        const blockContent = content(item);
+        const subflowPreview = subflowPreviews?.get(item.id);
+        if (subflowPreview) {
+          const inputs = Math.max(1, drawn.incomingPorts(item).length);
+          const incomingPorts = Array.from({ length: inputs }, (_, index) => ({
+            key: `in:${index}`,
+            graphY: drawn.inputPoint(item, index).y - item.position.y,
+          }));
+          const exitPorts = item.exits.map((exit) => ({
+            exit,
+            y: drawn.exitPoint(item, exit.id).y - item.position.y,
+          }));
+          return (
+            <SubflowGroup
+              key={item.id}
+              block={item}
+              preview={subflowPreview}
+              geometry={drawn}
+              dimensions={dimensions}
+              agents={previewAgents ?? []}
+              flows={flows ?? new Map()}
+              frameClassName={blockContent.className}
+              border={dimensions.block.border}
+              headerPress={blockContent.press.render}
+              trailingBadge={blockContent.subflowBadge}
+              onCollapse={() => onCollapseSubflow?.(item.id)}
+              incomingPorts={incomingPorts}
+              exitPorts={exitPorts}
+              renderPort={({ key, side, center, border, graphY }) => (
+                <SurfacePort
+                  key={key}
+                  side={side}
+                  center={center}
+                  border={border}
+                  port={dimensions.port}
+                  look={
+                    side === "left"
+                      ? blockContent.incomingPort(Number(key.slice(3)) === pendingInput)
+                      : blockContent.exitPort(
+                          item.exits.find((candidate) => `exit:${candidate.id}` === key)!,
+                        )
+                  }
+                  {...(graphY !== undefined ? { graphY } : {})}
+                />
+              )}
+            />
+          );
+        }
+        return (
+          <SurfaceBlock
+            key={item.id}
+            block={item}
+            geometry={drawn}
+            dimensions={dimensions}
+            content={blockContent}
+            pendingInput={pendingInput}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -867,6 +902,10 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         gesture={props.gesture ?? null}
         flowInput={props.flowInput}
         finish={props.finish}
+        flows={props.flows}
+        previewAgents={props.previewAgents}
+        subflowPreviews={props.subflowPreviews}
+        onCollapseSubflow={props.onCollapseSubflow}
         startPan={viewport.startPan}
       >
         {props.children}

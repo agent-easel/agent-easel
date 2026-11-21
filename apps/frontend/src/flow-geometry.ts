@@ -1,11 +1,9 @@
 import {
   createNodeGeometry,
   exitRows,
-  incomingPortY,
   type CanvasDimensions,
   type GeometryFacts,
 } from "@t3-factory/flow-layout";
-import type { FlowBlock } from "@t3-factory/contracts";
 import {
   FINISH_SELECTION,
   type CanvasBlockSelection,
@@ -21,7 +19,6 @@ export function createCanvasGeometry(
   dimensions: CanvasDimensions,
   facts: GeometryFacts<CanvasBlock> = {},
 ) {
-  const rows = dimensions.block;
   const input = dimensions.flowInput;
   const {
     ports,
@@ -29,7 +26,10 @@ export function createCanvasGeometry(
     flowInputBox,
     finishBox,
     finishEndingY,
+    blockWidth,
     blockHeight,
+    blockInputY,
+    blockExitY,
     reservedHeight,
     incomingGrowth,
   } = createNodeGeometry(graph, dimensions, facts);
@@ -37,7 +37,7 @@ export function createCanvasGeometry(
   const rowOf = exitRows(graph.blocks);
   const blockBox = (block: CanvasBlock) => ({
     ...block.position,
-    width: rows.width,
+    width: blockWidth(block),
     height: blockHeight(block),
   });
   const bounds = () => {
@@ -50,9 +50,9 @@ export function createCanvasGeometry(
           height: Math.max(box.height, facts.emptyGraphSize.height),
         };
   };
-  const inputPoint = (block: FlowBlock, index: number): Point => ({
+  const inputPoint = (block: CanvasBlock, index: number): Point => ({
     x: block.position.x,
-    y: block.position.y + incomingPortY(index, ports),
+    y: block.position.y + blockInputY(block, index),
   });
   const incomingPorts = (block: CanvasBlock) =>
     incoming.wires(block.id).map((source, index) => ({
@@ -93,8 +93,8 @@ export function createCanvasGeometry(
     exitPoint: (block: CanvasBlock, exitId: string): Point => {
       const index = rowOf(block.id, exitId) ?? 0;
       return {
-        x: block.position.x + rows.width,
-        y: block.position.y + ports.firstExitY + index * ports.exitRow,
+        x: block.position.x + blockWidth(block),
+        y: block.position.y + blockExitY(block, exitId, index),
       };
     },
     flowInputPoint: {

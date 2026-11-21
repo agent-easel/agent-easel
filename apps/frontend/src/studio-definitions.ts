@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { mayPlaceAgent } from "@t3-factory/domain-validation";
+import { mayPlaceAgent, mayPlaceFlow } from "@t3-factory/domain-validation";
 import type {
   AgentDefinition,
   FactoryProject,
@@ -441,6 +441,13 @@ export function placeableAgents(
   return agents.filter((agent) => mayPlaceAgent(flow.projectId, agent.projectId));
 }
 
+export function placeableFlows(
+  flows: readonly FlowDraft[],
+  flow: Pick<FlowDraft, "projectId">,
+): FlowDraft[] {
+  return flows.filter((candidate) => mayPlaceFlow(flow.projectId, candidate.projectId));
+}
+
 /** A small store of one dialog's state; each write publishes a new snapshot. */
 function dialogStore<S extends object>(initial: S) {
   let snapshot = initial;
@@ -504,7 +511,9 @@ export function createChangeOwner(
   function blockers(cause: ApiError): OwnerChangeBlocker[] {
     const lists = definitions.getSnapshot();
     const candidates: readonly (FlowDraft | AgentDefinition)[] =
-      (subject.kind === "flow" ? lists.agents.value : lists.flows.value) ?? [];
+      subject.kind === "flow"
+        ? [...(lists.agents.value ?? []), ...(lists.flows.value ?? [])]
+        : (lists.flows.value ?? []);
     return cause.detail.issues
       .filter((issue) => issue.code === "owner_change_blocked")
       .map((issue) => ({
@@ -634,6 +643,11 @@ export function createFlowDuplicate(
             revision,
             projectId: owner,
             choice,
+          })),
+          flows: plan.flows.map(({ flowId, revision, projectId: owner }) => ({
+            flowId,
+            revision,
+            projectId: owner,
           })),
         });
         store.set({ committing: false });

@@ -383,6 +383,11 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
       handle: ({ parameters, input }) => answer(() => factory.validateFlow(parameters.id, input)),
     },
     getFlow: { handle: ({ parameters }) => answer(() => factory.getFlow(parameters.id)) },
+    listFlowFindings: {
+      body: definitionBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.listFlowFindings(parameters.id, input)),
+    },
     removeFlow: { handle: ({ parameters }) => answer(() => factory.removeFlow(parameters.id)) },
     previewFlowDuplicate: {
       body: standardBody,

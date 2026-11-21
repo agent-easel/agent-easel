@@ -6,8 +6,10 @@ import type {
   AgentDefinition,
   FactoryProject,
   FlowBlock,
+  FlowDraft,
   FlowGraph,
 } from "@t3-factory/contracts";
+import { reachesEnding, subflowCyclePath } from "@t3-factory/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TextLink } from "@/components/ui/text-link";
@@ -47,22 +49,30 @@ export function BlockLibrary({
   open,
   onOpenChange,
   flowId,
+  flowName,
   agents,
+  flows,
+  allFlows,
   projects,
   capabilities,
   agentError,
   onAdd,
+  onAddFlow,
   dropAt,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   flowId: string;
+  flowName: string;
   /** Only the Agents this Flow may place. */
   agents: readonly AgentDefinition[];
+  flows: readonly FlowDraft[];
+  allFlows: readonly FlowDraft[];
   projects: readonly FactoryProject[];
   capabilities: AgentCapabilities | null;
   agentError: string;
   onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
+  onAddFlow: (flow: FlowDraft, position?: BlockPosition) => void;
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
@@ -70,6 +80,9 @@ export function BlockLibrary({
   const matches = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
   const steps = STEPS.filter((step) => matches(step.name));
   const shown = agents.filter((agent) => matches(agent.name));
+  const otherFlows = flows.filter((candidate) => candidate.id !== flowId);
+  const shownFlows = otherFlows.filter((candidate) => matches(candidate.name));
+  const flowMap = new Map(allFlows.map((candidate) => [candidate.id, candidate]));
   const groups = ownerGroups(shown, projects, { kind: "all" });
   const summaries = new Map(
     agents.map((agent) => [agent.id, agentRuntimeMeta(agent.execution, capabilities)]),
@@ -133,7 +146,7 @@ export function BlockLibrary({
           <TooltipContent side="right">Collapse library</TooltipContent>
         </Tooltip>
       </div>
-      {searching && !steps.length && !shown.length && (
+      {searching && !steps.length && !shown.length && !shownFlows.length && (
         <p className="px-1.5 text-sm text-muted-foreground">No matching steps or Agents</p>
       )}
       {steps.length > 0 && (
@@ -154,6 +167,49 @@ export function BlockLibrary({
           {agentError}
         </p>
       )}
+      <AgentLibrarySection
+        agents={agents}
+        groups={groups}
+        summaries={summaries}
+        placeable={placeable}
+        searching={searching}
+        flowId={flowId}
+        dropAt={dropAt}
+        onAdd={onAdd}
+      />
+      <FlowLibrarySection
+        flows={shownFlows}
+        flowId={flowId}
+        flowName={flowName}
+        flowMap={flowMap}
+        dropAt={dropAt}
+        onAddFlow={onAddFlow}
+      />
+    </div>
+  );
+}
+
+function AgentLibrarySection({
+  agents,
+  groups,
+  summaries,
+  placeable,
+  searching,
+  flowId,
+  dropAt,
+  onAdd,
+}: {
+  agents: readonly AgentDefinition[];
+  groups: ReturnType<typeof ownerGroups<AgentDefinition>>;
+  summaries: ReadonlyMap<string, string | null>;
+  placeable: boolean;
+  searching: boolean;
+  flowId: string;
+  dropAt: DropAt;
+  onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
+}) {
+  return (
+    <>
       {!agents.length && !searching && (
         <section aria-label="Agents" className="mt-3 flex flex-col gap-1.5 px-1.5">
           <h3 className={headingClass}>Agents</h3>
@@ -197,7 +253,57 @@ export function BlockLibrary({
       {agents.length > 0 && !placeable && !searching && (
         <NewAgentLink flowId={flowId} className="mt-1 px-1.5" />
       )}
-    </div>
+    </>
+  );
+}
+
+function flowLibraryDetail(candidate: FlowDraft, flowName: string, loops: boolean): string {
+  if (loops) return `Uses ${flowName}, would loop`;
+  if (!reachesEnding(candidate.graph)) return "No reachable ending";
+  const endings = candidate.graph.finish.endings.length;
+  return `${endings} ${endings === 1 ? "ending" : "endings"} · Revision ${candidate.revision}`;
+}
+
+function FlowLibrarySection({
+  flows,
+  flowId,
+  flowName,
+  flowMap,
+  dropAt,
+  onAddFlow,
+}: {
+  flows: readonly FlowDraft[];
+  flowId: string;
+  flowName: string;
+  flowMap: ReadonlyMap<string, FlowDraft>;
+  dropAt: DropAt;
+  onAddFlow: (flow: FlowDraft, position?: BlockPosition) => void;
+}) {
+  if (flows.length === 0) return null;
+  return (
+    <section aria-label="Flows" className="mt-3 flex min-w-0 flex-col gap-1">
+      <div className="flex items-center gap-2 px-1.5 py-1">
+        <h3 className={cn(headingClass, "min-w-0 break-words")}>Flows</h3>
+        <span className="ml-auto text-2xs tracking-label text-subtle-foreground">
+          {flows.length}
+        </span>
+      </div>
+      {flows.map((candidate) => {
+        const loops = subflowCyclePath(flowId, candidate.id, flowMap) !== null;
+        return (
+          <LibraryItem
+            key={candidate.id}
+            name={candidate.name}
+            detail={flowLibraryDetail(candidate, flowName, loops)}
+            kind="subflow"
+            flow={candidate}
+            disabled={loops}
+            dropAt={dropAt}
+            onAdd={(position) => onAddFlow(candidate, position)}
+          />
+        );
+      })}
+    </section>
   );
 }
 
@@ -216,6 +322,7 @@ function LibraryItem({
   detail,
   kind,
   agent,
+  flow,
   disabled = false,
   dropAt,
   onAdd,
@@ -224,6 +331,7 @@ function LibraryItem({
   detail: ReactNode;
   kind: FlowBlock["kind"];
   agent?: AgentDefinition;
+  flow?: FlowDraft;
   /** An Agent without a model is listed but can't be placed. */
   disabled?: boolean;
   dropAt: DropAt;
@@ -258,7 +366,7 @@ function LibraryItem({
     );
   return (
     <>
-      {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} agent={agent} />}
+      {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} agent={agent} flow={flow} />}
       <DragButton
         aria-label={`Add ${name}`}
         className="group flex min-h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-ring active:cursor-grabbing"
@@ -292,6 +400,7 @@ const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   wait: "border border-dashed bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
   condition: "border bg-muted text-muted-foreground",
+  subflow: "border bg-muted text-muted-foreground",
 };
 
 /** The ghost previews the block a drop would add as it reads before it is connected. */
@@ -308,15 +417,18 @@ function BlockGhost({
   kind,
   name,
   agent,
+  flow,
 }: {
   ghost: Ghost;
   kind: FlowBlock["kind"];
   name: string;
   agent: AgentDefinition | undefined;
+  flow: FlowDraft | undefined;
 }) {
-  const { label, value } = blockReference(newBlock(UNCONNECTED, kind, agent), {
+  const { label, value } = blockReference(newBlock(UNCONNECTED, kind, agent, undefined, flow), {
     graph: UNCONNECTED,
     agents: agent ? [agent] : [],
+    flows: flow ? new Map([[flow.id, flow]]) : undefined,
   }).card;
   return createPortal(
     <BlockPreview

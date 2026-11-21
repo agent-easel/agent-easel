@@ -4,6 +4,7 @@ import {
   FINISH_BLOCK_ID,
   type AgentDefinition,
   type EndingOutput,
+  type FlowDraft,
   type FlowEnding,
   type FlowGraph,
 } from "@t3-factory/contracts";
@@ -35,12 +36,16 @@ type IncomingWire = {
   readonly messageRequired: boolean;
 };
 
-function incomingWires(graph: FlowGraph, agents: readonly AgentDefinition[]) {
+function incomingWires(
+  graph: FlowGraph,
+  agents: readonly AgentDefinition[],
+  flows: ReadonlyMap<string, FlowDraft>,
+) {
   const byEnding = new Map<string, IncomingWire[]>();
   const exits = new Map(
     graph.blocks.map((block) => [
       block.id,
-      { block, exits: exitsWithEndings(block, graph, agents) },
+      { block, exits: exitsWithEndings(block, graph, agents, flows) },
     ]),
   );
   graph.connections.forEach((connection, index) => {
@@ -83,6 +88,7 @@ function useEndingFocus(list: HTMLElement | null, requested: { endingId: string 
 export function FinishSettings({
   graph,
   agents,
+  flows,
   issues,
   focus,
   onAdd,
@@ -91,6 +97,7 @@ export function FinishSettings({
 }: {
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  flows: ReadonlyMap<string, FlowDraft>;
   issues: readonly BlockIssue[];
   focus: { endingId: string } | null;
   onAdd: () => string;
@@ -101,7 +108,7 @@ export function FinishSettings({
   const [list, setList] = useState<HTMLDivElement | null>(null);
   const focusEnding = useEndingFocus(list, focus);
   const { endings } = graph.finish;
-  const incoming = incomingWires(graph, agents);
+  const incoming = incomingWires(graph, agents, flows);
   const full = endings.length >= ENDING_LIMIT;
   return (
     <ScrollPane className="p-4" fade="from-card">

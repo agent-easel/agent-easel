@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from "react";
-import type { AgentDefinition, FlowDraft, FlowGraph, FlowReadiness } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  FlowClosure,
+  FlowDraft,
+  FlowGraph,
+  FlowReadiness,
+} from "@t3-factory/contracts";
 import { flowAgentRevisions } from "@t3-factory/domain-validation";
 import { api, ApiError } from "./api.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
@@ -56,6 +62,25 @@ const contentOf = (flow: FlowDraft): FlowContent => ({
  */
 const agentStamp = (graph: FlowGraph, agents: readonly AgentDefinition[] | null) =>
   agents ? canonical(flowAgentRevisions(graph, agents)) : null;
+
+function closureCurrent(
+  closure: FlowClosure | undefined,
+  flows: readonly FlowDraft[] | null,
+  agents: readonly AgentDefinition[] | null,
+) {
+  if (!closure) return true;
+  if (!flows || !agents) return false;
+  const held = (kind: "flow" | "agent", id: string) =>
+    kind === "flow"
+      ? flows.find((flow) => flow.id === id)
+      : agents.find((agent) => agent.id === id);
+  return (
+    closure.definitions.every((entry) => {
+      const current = held(entry.kind, entry.id);
+      return current?.revision === entry.revision && current.projectId === entry.projectId;
+    }) && closure.missing.every((entry) => !held(entry.kind, entry.id))
+  );
+}
 
 const unknownOutcome =
   "Save outcome unknown. The connection was lost before Factory answered; your draft is kept and nothing is sent again.";
@@ -136,16 +161,14 @@ export function createFlowDraft(
   });
   function observed() {
     const { flows, agents } = source.getSnapshot();
-    return { flow: latest()?.revision, synchronized: flows.synchronized, agents: agents.value };
+    return {
+      flow: latest()?.revision,
+      synchronized: flows.synchronized,
+      agents: agents.value,
+      flows: flows.value,
+    };
   }
   let seen = observed();
-  /**
-   * A shown readiness result stops applying as soon as the Flow's saved revision changes, the
-   * Flow is removed, Studio loses synchronization or an Agent the draft places changes, also
-   * while adoption waits for an interaction (an owner change clears it through `onOwnerChange`).
-   * A clean draft then shows the saved Flow's readiness, delivered with those Agents; an unsaved
-   * draft is checked again.
-   */
   function observe() {
     const next = observed();
     const { content } = draft.getSnapshot();
@@ -153,7 +176,8 @@ export function createFlowDraft(
       seen.agents !== null &&
       next.agents !== null &&
       agentStamp(content.graph, seen.agents) !== agentStamp(content.graph, next.agents);
-    if (next.flow !== seen.flow || (seen.synchronized && !next.synchronized) || placed)
+    const nested = checked !== null && !closureCurrent(checked.closure, next.flows, next.agents);
+    if (next.flow !== seen.flow || (seen.synchronized && !next.synchronized) || placed || nested)
       forgetCheck();
     seen = next;
   }
@@ -253,9 +277,14 @@ export function createFlowDraft(
           expectedRevision: saved.revision,
           expectedProjectId: owner,
         });
-        // An Agent change Studio has not delivered yet also makes the answer stale.
-        const shown = agentStamp(content.graph, source.getSnapshot().agents.value);
-        if (asked !== readinessRequest || canonical(agentRevisions) !== shown) return;
+        const { agents, flows } = source.getSnapshot();
+        const shown = agentStamp(content.graph, agents.value);
+        if (
+          asked !== readinessRequest ||
+          canonical(agentRevisions) !== shown ||
+          !closureCurrent(answer.closure, flows.value, agents.value)
+        )
+          return;
         checked = answer;
         if (checkReported) draft.report("");
         checkReported = false;

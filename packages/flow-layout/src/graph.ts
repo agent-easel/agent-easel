@@ -1,5 +1,10 @@
 import { type AgentDefinition, type FlowBlock, type FlowGraph } from "@t3-factory/contracts";
-import { effectiveExits, inheritedExits, type EffectiveExit } from "@t3-factory/domain-validation";
+import {
+  effectiveExits,
+  inheritedExits,
+  type EffectiveExit,
+  type ExitFlows,
+} from "@t3-factory/domain-validation";
 
 type CanvasExit = EffectiveExit & { readonly unavailable?: "hidden" | "removed" };
 
@@ -9,10 +14,14 @@ export type CanvasGraph = Omit<FlowGraph, "blocks"> & { readonly blocks: readonl
 export function canvasGraph(
   graph: FlowGraph,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows: ExitFlows = new Map(),
 ): CanvasGraph {
   return {
     ...graph,
-    blocks: graph.blocks.map((block) => ({ ...block, exits: canvasExits(graph, block, agents) })),
+    blocks: graph.blocks.map((block) => ({
+      ...block,
+      exits: canvasExits(graph, block, agents, flows),
+    })),
   };
 }
 
@@ -33,8 +42,9 @@ function canvasExits(
   graph: FlowGraph,
   block: FlowBlock,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  flows: ExitFlows,
 ): CanvasExit[] {
-  const effective = effectiveExits(block, agents);
+  const effective = effectiveExits(block, agents, flows);
   if (block.kind === "condition") return conditionCanvasExits(graph, effective, block.id);
   const exits: CanvasExit[] = effective;
   const inherited = inheritedExits(block, agents);
@@ -46,7 +56,7 @@ function canvasExits(
       name: hidden?.name ?? wire.exitId,
       description: "",
       messageRequired: hidden?.messageRequired ?? false,
-      source: "agent",
+      source: block.kind === "subflow" ? "ending" : "agent",
       unavailable: hidden ? "hidden" : "removed",
     });
   }

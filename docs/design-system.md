@@ -261,6 +261,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   name and port in the Error colour) or a Run's: neutral before an ending is reached, the reached
   row filled with **Reached · *time*** and **Not reached** on the others, or **No ending reached**.
   Without endings the editor shows its one hint row and a Run its header only.
+- **Subflow group**: SubflowGroup (Figma Canvas/SubflowGroup), drawn by the canvas surface for a
+  placed Subflow block in Studio: a bordered group container holding a read-only in-place preview
+  of the referenced Flow (inner Flow input labeled **Incoming message** wired to its targets,
+  inner blocks and Finish, drawn-only ending routes to the outer right border, and interactive
+  outer left/right ports), with a **Collapse** control in its header. Collapsed, cyclic,
+  over-budget, missing or unset Subflows render as a compact block card with a footer carrying
+  **Expand** (when expandable) or an error badge and **Open Flow**.
 
 ## Changing the design system
 
