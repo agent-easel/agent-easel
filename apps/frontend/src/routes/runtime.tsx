@@ -187,6 +187,9 @@ function TargetDescription({
       {target.path && (
         <span className="block font-mono text-label wrap-anywhere">{target.path}</span>
       )}
+      {target.provider === "antigravity" && target.status === "not-installed" && (
+        <span className="block">{target.message}</span>
+      )}
       {target.status === "installed" && target.launchSkill && target.launchSkill !== "current" && (
         <span className="block">
           Optional skills {target.launchSkill} · {targetAction(target)}{" "}

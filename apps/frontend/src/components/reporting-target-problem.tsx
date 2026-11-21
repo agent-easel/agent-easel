@@ -3,6 +3,17 @@ import type { ReportingInstallation } from "@t3-factory/contracts";
 import { providerName } from "../reporting-state.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 
+function reportingSetupGuidance(
+  target: ReportingInstallation,
+  missing: boolean,
+  profileProblem: boolean,
+) {
+  if (profileProblem) return target.message;
+  if (missing) return "Restore it on the Factory host, then check again.";
+  if (target.actions.repair) return "Repair the configuration, then start a fresh T3 session.";
+  return "Review Technical details and fix the configuration on the Factory host.";
+}
+
 /** Why one harness's reporting needs attention, or why its install failed, with the next step. */
 export function ReportingTargetProblem({
   target,
@@ -28,6 +39,7 @@ export function ReportingTargetProblem({
     );
   if (target.status === "needs-attention") {
     const missing = !target.path && target.message.includes("ENOENT");
+    const profileProblem = target.provider === "antigravity" && !target.path;
     return (
       <ProblemCard
         tone="attention"
@@ -37,13 +49,9 @@ export function ReportingTargetProblem({
             ? `${name}’s configuration folder is missing`
             : `${name}’s reporting configuration needs attention`
         }
-        details={details}
+        details={profileProblem ? undefined : details}
       >
-        {missing
-          ? "Restore it on the Factory host, then check again."
-          : target.actions.repair
-            ? "Repair the configuration, then start a fresh T3 session."
-            : "Review Technical details and fix the configuration on the Factory host."}
+        {reportingSetupGuidance(target, missing, profileProblem)}
       </ProblemCard>
     );
   }

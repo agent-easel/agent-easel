@@ -29,7 +29,7 @@ import { useChatModelAttention, useDiscordAttention } from "../chat-control-atte
 import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { RuntimeSettings } from "../routes/runtime.tsx";
-import { reportingTargetsMarker, useReportingState } from "../reporting-state.tsx";
+import { providerNames, reportingTargetsMarker, useReportingState } from "../reporting-state.tsx";
 import { SettingsPanel } from "./screen-layout.tsx";
 import { ConnectionSettingsPanel } from "../routes/connection.tsx";
 import {
@@ -87,7 +87,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "agent-reporting",
-    rowLabels: ["Harnesses", "Codex", "Claude", "Cursor", "Grok"],
+    rowLabels: ["Harnesses", ...Object.values(providerNames)],
     label: "Agent reporting",
     icon: RadioTower,
     group: "factory",

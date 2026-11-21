@@ -231,7 +231,8 @@ export function reportingSummary(reads: ReportingReads): ReportingStatus {
       };
 }
 
-const providerNames: Record<string, string> = {
+export const providerNames: Readonly<Record<string, string>> = {
+  antigravity: "Antigravity",
   claudeAgent: "Claude",
   codex: "Codex",
   cursor: "Cursor",

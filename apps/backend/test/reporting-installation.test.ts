@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -140,6 +141,96 @@ it("a configured Claude config directory keeps its config and skills directly in
     SETUP_FACTORY_SKILL,
   );
   expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
+});
+
+it("installing Antigravity reporting registers MCP and skills in the selected T3 profile", async (context) => {
+  // Arrange
+  const { factory, state, home } = await driverHomes(context, {
+    "agy-work": { driver: "antigravity", config: {} },
+    "agy-other": { driver: "antigravity", config: {} },
+  });
+  const profiles = join(await realpath(state), "providers", "antigravity");
+  const selected = join(profiles, createHash("sha256").update("agy-work").digest("hex"));
+  const other = join(profiles, createHash("sha256").update("agy-other").digest("hex"));
+  await mkdir(join(selected, "antigravity-acp"), { recursive: true });
+  await mkdir(join(other, "antigravity-acp"), { recursive: true });
+  await mkdir(join(selected, "config"), { recursive: true });
+  const config = join(selected, "config", "mcp_config.json");
+  await writeFile(config, JSON.stringify({ mcpServers: { other: { command: "keep" } } }));
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+  const target = targets.value.find((target) => target.instances.includes("agy-work"));
+  assert(target);
+  expect(target.status).toBe("not-installed");
+
+  // Act
+  const result = await factory.installReporting({ targetId: target.id });
+
+  // Assert
+  assert(result.ok);
+  const skills = join(selected, "config", "skills");
+  expect(result.value).toMatchObject({
+    status: "installed",
+    launchSkill: "current",
+    path: config,
+    skillsPath: skills,
+    instances: ["agy-work"],
+  });
+  expect(JSON.parse(await readFile(config, "utf8"))).toStrictEqual({
+    mcpServers: { other: { command: "keep" }, "factory-runtime": { serverUrl: MCP_URL } },
+  });
+  expect(await readFile(join(skills, "factory-block", "SKILL.md"), "utf8")).toBe(
+    FACTORY_BLOCK_SKILL,
+  );
+  expect(existsSync(join(other, "config"))).toBe(false);
+  expect(existsSync(join(home, ".gemini", "config", "mcp_config.json"))).toBe(false);
+});
+
+it("Antigravity with no T3 profile points the user to provider setup", async (context) => {
+  // Arrange
+  const { factory } = await driverHomes(context, {
+    antigravity: { driver: "antigravity", config: {} },
+  });
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      provider: "antigravity",
+      status: "needs-attention",
+      path: null,
+      message:
+        "Install and sign in to Antigravity in T3 Code → Settings → Providers, then check again.",
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
+it("Antigravity identifies the runtime folder when a file occupies its path", async (context) => {
+  // Arrange
+  const { factory, state } = await driverHomes(context, {
+    antigravity: { driver: "antigravity", config: {} },
+  });
+  const key = createHash("sha256").update("antigravity").digest("hex");
+  const profile = join(state, "providers", "antigravity", key);
+  await mkdir(profile, { recursive: true });
+  await writeFile(join(profile, "antigravity-acp"), "");
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      status: "needs-attention",
+      message: "The antigravity-acp folder inside the T3 profile must be a local directory.",
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
 });
 
 it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
