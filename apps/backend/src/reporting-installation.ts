@@ -57,6 +57,8 @@ function vibeMcpEntry(config: Record<string, unknown>) {
 }
 
 const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/m;
+const EDITED_REGISTRATION =
+  "The Factory registration was edited. Review the factory-runtime entry manually.";
 
 function registeredVibe(
   before: string,
@@ -67,6 +69,8 @@ function registeredVibe(
 ) {
   const servers = vibeMcpServers(config);
   const inline = (value: string) => "{ " + value.trim().split("\n").slice(1).join(", ") + " }";
+  if (previous !== undefined && !before.includes(previous) && !before.includes(inline(previous)))
+    throw Error(EDITED_REGISTRATION);
   const candidates =
     previous === undefined
       ? [
@@ -238,10 +242,7 @@ function registered(
     const entry = tomlEntry(profile, url);
     if (profile.config.format === "toml-array")
       return registeredVibe(before, config, entry, profile.entry(url), previous);
-    if (previous !== undefined && !before.includes(previous))
-      throw Error(
-        "The Factory registration was edited. Review the factory-runtime entry manually.",
-      );
+    if (previous !== undefined && !before.includes(previous)) throw Error(EDITED_REGISTRATION);
     const after = previous !== undefined ? before.replace(previous, () => entry) : before + entry;
     parse(after);
     return after;

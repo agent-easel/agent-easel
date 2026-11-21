@@ -346,52 +346,70 @@ const managedHost = Effect.fn(function* () {
   );
   return present.some(Boolean);
 });
+const enabledLocalReportingInstances = Effect.fn(function* (
+  stateDirectory: string,
+  connection: T3Connection,
+) {
+  const context = connection.authorizationContext;
+  if (connection.state !== "ready" || !context)
+    return {
+      problem: "Connect and authorize T3 before discovering installation targets.",
+    } as const;
+  if (!isLocalEndpoint(context.endpoint))
+    return {
+      problem:
+        "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
+    } as const;
+  if (process.platform === "win32" || (yield* managedHost()))
+    return {
+      problem:
+        "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
+    } as const;
+  const environment = (yield* boundary(() =>
+    readFile(join(stateDirectory, "environment-id"), "utf8"),
+  )).trim();
+  if (environment !== context.environmentId)
+    return {
+      problem:
+        "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
+    } as const;
+  const settings = record(
+    JSON.parse(yield* boundary(() => readFile(join(stateDirectory, "settings.json"), "utf8"))),
+  );
+  const disabled = disabledInstances(settings);
+  return {
+    instances: Object.entries(record(settings.providerInstances)).filter(
+      ([id]) => !disabled.has(id),
+    ),
+  } as const;
+});
+
+export const readVibeReportingInstances = (stateDirectory: string, connection: T3Connection) =>
+  enabledLocalReportingInstances(stateDirectory, connection).pipe(
+    Effect.map(
+      ({ instances }) =>
+        new Set(
+          (instances ?? [])
+            .filter(([, instance]) => reportingHarness(instance) === "mistral-vibe")
+            .map(([id]) => id),
+        ),
+    ),
+    Effect.catchCause(() => Effect.succeed(new Set<string>())),
+  );
+
 export const discoverReporting = Effect.fn(function* (
   stateDirectory: string,
   connection: T3Connection,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation[], never> {
-  if (connection.state !== "ready" || !connection.authorizationContext)
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Connect and authorize T3 before discovering installation targets.",
-      ),
-    ];
-  if (!isLocalEndpoint(connection.authorizationContext.endpoint))
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
-      ),
-    ];
-  if (process.platform === "win32" || (yield* managedHost()))
-    return [
-      discoveryResult(
-        "discovery-refused",
-        "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
-      ),
-    ];
   return yield* Effect.gen(function* (): Generator<
     Effect.Effect<unknown, unknown>,
     ReportingInstallation[],
     never
   > {
-    const environment = (yield* boundary(() =>
-      readFile(join(stateDirectory, "environment-id"), "utf8"),
-    )).trim();
-    if (environment !== connection.authorizationContext!.environmentId)
-      return [
-        discoveryResult(
-          "discovery-refused",
-          "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
-        ),
-      ];
-    const settings = record(
-      JSON.parse(yield* boundary(() => readFile(join(stateDirectory, "settings.json"), "utf8"))),
-    );
-    const disabled = disabledInstances(settings);
+    const result = yield* enabledLocalReportingInstances(stateDirectory, connection);
+    if (result.problem) return [discoveryResult("discovery-refused", result.problem)];
     const targets = yield* Effect.forEach(
-      Object.entries(record(settings.providerInstances)).filter(([id]) => !disabled.has(id)),
+      result.instances,
       ([id, value]) => targetFor(stateDirectory, id, value),
       { concurrency: "unbounded" },
     );

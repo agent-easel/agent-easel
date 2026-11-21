@@ -381,6 +381,34 @@ it("repairing Vibe's inline MCP entry keeps dollar signs in the new address", as
   expect(await readFile(config, "utf8")).toBe(before.replace(MCP_URL, () => backend + "/mcp"));
 });
 
+it("Vibe repair identifies an edited MCP entry and preserves its formatting", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  const directory = join(home, ".vibe");
+  await mkdir(directory);
+  const config = join(directory, "config.toml");
+  const edited =
+    'mcp_servers = [{ name="factory-runtime", transport="streamable-http", url="' +
+    MCP_URL +
+    '" }]\n';
+  await writeFile(config, edited);
+  factory.setRuntimeBackendUrl("http://127.0.0.1:4999");
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+
+  // Act
+  const result = await factory.installReporting({ targetId: targets.value[0]!.id });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.message).toBe(
+    "The Factory registration was edited. Review the factory-runtime entry manually.",
+  );
+  expect(await readFile(config, "utf8")).toBe(edited);
+});
+
 it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
   // Arrange
   const { factory, config, harness, options } = await reportingFixture(context, "codex");
