@@ -234,14 +234,15 @@ drafts); the name and summary wrap, and narrow screens stack list and editor. Th
 Prompt, which starts short enough to keep the exits visible and keeps its resize, and the exits. Leaving an edited Agent asks **Discard unsaved changes?** with **Keep
 editing** or **Discard changes**.
 
-**Worker settings.** The header's Worker picker names what the Agent runs on in display names, never Factory ids:
+**Worker settings.** The header's Worker picker names what the Agent runs on:
 **Provider · Model · Effort** (the effort is the model's first option, its default included, by its label such as **High**),
 with a chevron and an accessible name such as **Worker: Codex · GPT 6.1 Sol · High**. Open, it has the indigo border. The
 picker opens a popover with focus inside; Escape closes only the popover and returns focus to the picker, and every change in
 it is a draft edit (Unsaved changes, **Save**, the leave guard). The popover's **Worker** is one bordered group of rows, each a
 label and its control: **Environment**, **Provider**, **Model**, then the model's options (**Reasoning effort**, …), with
 **Fast mode** and every other on/off option as a switch. The choices come from live T3 capabilities (`orchestrator_capabilities`)
-for the chosen environment, never a Factory allowlist; a field stays disabled until its parent is chosen, and with no model no
+for the chosen environment, never a Factory allowlist. When T3 offers a model without a display name, Studio shows its model ID
+in the picker, Worker summaries and revision comparisons. A field stays disabled until its parent is chosen, and with no model no
 option rows are shown. There are no step numbers or helper lines.
 
 A saved environment, provider, model or option T3 no longer offers is cleared from the draft when the editor opens (a gone
@@ -359,8 +360,8 @@ The editor's toolbar holds the owner badge (Global or the owning Project), the F
 The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the
 search filters steps and Agents by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps** and each owner's name (**Global**,
-the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**,
-never raw ids. An Agent without a model is listed last in its group, disabled, with a **Needs a model** tag. With no Agent to place, the library's group is
+the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**.
+An Agent without a model is listed last in its group, disabled, with a **Needs a model** tag. With no Agent to place, the library's group is
 headed **Agents** whatever the Flow's owner and shows **No Agents yet** with a **New Agent** link; when Agents exist but none has a model, the group keeps its
 disabled rows and shows only the **New Agent** link under them. Add a block by activating the row or drag the row onto the canvas (a ghost shows the drop
 position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow input and are selected. Drag a block's header to move

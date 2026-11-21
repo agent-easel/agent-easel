@@ -309,7 +309,7 @@ async function createFixtureScenarioSet(host: Host) {
       {
         ...t3.projects.controlledProviders[0].models[0],
         id: "gpt-6-astra",
-        label: "GPT 6 Astra",
+        label: null,
       },
     ],
   };

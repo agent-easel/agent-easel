@@ -78,7 +78,7 @@ export function ExecutionSettingsFields({
         disabled={saving || !execution.providerInstanceId}
         choices={(selectedProvider?.models ?? []).map((entry) => ({
           id: entry.id,
-          label: entry.label ?? "Unknown model",
+          label: entry.label ?? entry.id,
         }))}
       />
       {execution.modelId &&
