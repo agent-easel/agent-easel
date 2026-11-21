@@ -79,12 +79,13 @@ function registeredVibe(
             servers: [entry, ...servers],
           },
         ]
-      : [before.replace(previous, block), before.replace(inline(previous), inline(block))].map(
-          (text) => ({
-            text,
-            servers: servers.map((server) => (server.name === entry.name ? entry : server)),
-          }),
-        );
+      : [
+          before.replace(previous, () => block),
+          before.replace(inline(previous), () => inline(block)),
+        ].map((text) => ({
+          text,
+          servers: servers.map((server) => (server.name === entry.name ? entry : server)),
+        }));
   for (const candidate of candidates) {
     try {
       const parsed = parse(candidate.text);
@@ -241,7 +242,7 @@ function registered(
       throw Error(
         "The Factory registration was edited. Review the factory-runtime entry manually.",
       );
-    const after = previous !== undefined ? before.replace(previous, entry) : before + entry;
+    const after = previous !== undefined ? before.replace(previous, () => entry) : before + entry;
     parse(after);
     return after;
   }

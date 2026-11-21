@@ -292,6 +292,33 @@ it("installs Mistral Vibe into its configured home and preserves its own MCP ent
   );
 });
 
+it("Vibe reporting cannot install into a home occupied by a file", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": {
+      driver: "acpRegistry",
+      config: { agentId: "mistral-vibe" },
+      environment: [{ name: "VIBE_HOME", value: "~/vibe-work" }],
+    },
+  });
+  await writeFile(join(home, "vibe-work"), "keep");
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      provider: "mistral-vibe",
+      status: "needs-attention",
+      path: null,
+      message: expect.stringContaining("Vibe's configured home must be a directory."),
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
 it.for([
   { kind: "empty", servers: "", tail: "" },
   {
@@ -325,6 +352,33 @@ it.for([
       tail +
       "] # keep\n",
   );
+});
+
+it("repairing Vibe's inline MCP entry keeps dollar signs in the new address", async (context) => {
+  // Arrange
+  const { factory, home } = await driverHomes(context, {
+    "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  const directory = join(home, ".vibe");
+  await mkdir(directory);
+  const config = join(directory, "config.toml");
+  const before =
+    'mcp_servers = [{ name = "factory-runtime", transport = "streamable-http", url = "' +
+    MCP_URL +
+    '" }] # keep\n';
+  await writeFile(config, before);
+  const backend = "http://127.0.0.1:4999/$&/$$";
+  factory.setRuntimeBackendUrl(backend);
+  const targets = await factory.getReportingInstallations();
+  assert(targets.ok);
+
+  // Act
+  const result = await factory.installReporting({ targetId: targets.value[0]!.id });
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.status).toBe("installed");
+  expect(await readFile(config, "utf8")).toBe(before.replace(MCP_URL, () => backend + "/mcp"));
 });
 
 it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
@@ -738,7 +792,10 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   assert(targets.ok);
   assert((await factory.installReporting({ targetId: targets.value[0]!.id })).ok);
   await factory.close();
-  const moved = await harness.open({ ...options, runtimeBackendUrl: "http://127.0.0.1:4999" });
+  const moved = await harness.open({
+    ...options,
+    runtimeBackendUrl: "http://127.0.0.1:4999/$&/$$",
+  });
 
   // Act
   const result = await moved.installReporting({ targetId: targets.value[0]!.id });
@@ -748,7 +805,7 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   expect(result.value.status).toBe("installed");
   const saved = await readFile(config, "utf8");
   expect(saved).toBe(
-    '# keep this comment\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "http://127.0.0.1:4999/mcp"\n',
+    '# keep this comment\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "http://127.0.0.1:4999/$&/$$/mcp"\n',
   );
 });
 

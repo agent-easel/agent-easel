@@ -86,7 +86,7 @@ function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedH
   };
 }
 
-function vibeReportingHome(instance: Record<string, unknown>) {
+async function vibeReportingDirectory(instance: Record<string, unknown>) {
   const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
   if (
     variables.some(
@@ -108,7 +108,12 @@ function vibeReportingHome(instance: Record<string, unknown>) {
   );
   if (!isAbsolute(home) || !isAbsolute(userHome))
     throw Error("Set an absolute VIBE_HOME and HOME in this T3 provider's environment.");
-  return home;
+  const info = await stat(home).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (info && !info.isDirectory()) throw Error("Vibe's configured home must be a directory.");
+  return info ? realpath(home) : home;
 }
 
 const realpathIfPresent = (directory: string) =>
@@ -290,7 +295,7 @@ const targetFor = Effect.fn(function* (
       return targetAt(resolved, profile.home.message);
     }
     if (profile.home.kind === "vibe") {
-      const directory = yield* boundary(() => realpathIfPresent(vibeReportingHome(instance)));
+      const directory = yield* boundary(() => vibeReportingDirectory(instance));
       return targetAt(directory, "Install once for all Vibe instances using this home.");
     }
     const resolved = resolveReportingHome(instance, profile.home);
