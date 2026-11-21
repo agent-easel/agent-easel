@@ -444,6 +444,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       showError(message, found);
       publish();
     },
+    noteStaleRevision(revision: number) {
+      if (saved?.revision !== revision || removed || conflict.status !== "none") return;
+      conflict = { status: "detected", revision: null };
+      publish();
+    },
     /**
      * Sends the draft. Notices wait for the reply; a stale save enters the same conflict as a
      * revision saved elsewhere, and a removal noted meanwhile beats the reply.

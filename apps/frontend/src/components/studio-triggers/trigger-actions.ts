@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerCheckReply, TriggerDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../../api.ts";
 import type { StudioDefinitions } from "../../studio-definitions.ts";
 import { currentSettings } from "../../trigger-review.ts";
@@ -9,9 +9,18 @@ type TriggerAction = "enable" | "disable" | "run" | "remove";
 /** The last action Factory refused, with its reason. */
 type TriggerFailure = { readonly name: string; readonly message: string } | null;
 
+export type RevisionRefusal = "enable" | "check";
+
+export type CheckOutcome =
+  | { readonly checked: TriggerCheckReply }
+  | { readonly refused: RevisionRefusal; readonly latest: TriggerDefinition };
+
 /** Factory refused enabling because another revision was saved after the reviewed one. */
 const changedSinceReview = (cause: unknown) =>
   cause instanceof ApiError && cause.detail.issues[0]?.code === "trigger_changed";
+
+const staleCheck = (cause: unknown) =>
+  cause instanceof ApiError && cause.detail.issues.some((issue) => issue.code === "stale_revision");
 
 /**
  * Enable, disable, Run and Remove for the Triggers screens. The results arrive through Studio's
@@ -26,6 +35,14 @@ export function useTriggerActions(
 ) {
   const [pending, setPending] = useState<ReadonlyMap<string, TriggerAction>>(new Map());
   const [failure, setFailure] = useState<TriggerFailure>(null);
+  const check = (id: string, expectedRevision: number): Promise<CheckOutcome> =>
+    definitions.runTrigger(id, { expectedRevision }).then(
+      (checked) => ({ checked }),
+      async (cause: unknown) => {
+        if (!staleCheck(cause)) throw cause;
+        return { refused: "check", latest: await definitions.getTrigger(id) };
+      },
+    );
   const perform = useCallback(
     <T>(
       trigger: TriggerDefinition,
@@ -65,27 +82,25 @@ export function useTriggerActions(
       perform(trigger, "disable", () =>
         definitions.setTriggerEnabled(trigger.id, { enabled: false }),
       ),
-    /**
-     * Enable and check: enabling starts the schedule an interval out, so the check runs now.
-     * Answers the Trigger as saved now when another revision was saved after `reviewedRevision`;
-     * nothing is enabled then and its author reviews the current settings instead.
-     */
     enableAndCheck: (trigger: TriggerDefinition, reviewedRevision: number) =>
-      perform(trigger, "enable", async (): Promise<TriggerDefinition | null> => {
+      perform(trigger, "enable", async (): Promise<CheckOutcome> => {
+        let enabled: TriggerDefinition;
         try {
-          await definitions.setTriggerEnabled(trigger.id, { enabled: true, reviewedRevision });
+          enabled = await definitions.setTriggerEnabled(trigger.id, {
+            enabled: true,
+            reviewedRevision,
+          });
         } catch (cause) {
           if (!changedSinceReview(cause)) throw cause;
-          return definitions.getTrigger(trigger.id);
+          return { refused: "enable", latest: await definitions.getTrigger(trigger.id) };
         }
-        await definitions.runTrigger(trigger.id);
-        return null;
+        return check(enabled.id, enabled.revision);
       }),
     /** What a check of the saved Trigger would start now; it starts and changes nothing. */
     preview: (trigger: TriggerDefinition) =>
       definitions.previewTrigger(trigger.id, currentSettings(trigger)),
-    run: (trigger: TriggerDefinition) =>
-      perform(trigger, "run", () => definitions.runTrigger(trigger.id)),
+    run: (trigger: TriggerDefinition, revision?: number) =>
+      perform(trigger, "run", () => check(trigger.id, revision ?? trigger.revision)),
     remove: (trigger: TriggerDefinition) =>
       perform(trigger, "remove", () => definitions.removeTrigger(trigger.id).then(() => true)),
   };

@@ -51,7 +51,7 @@ it("a restored demo's healthy Trigger checks its saved GitHub again without an E
   )!;
 
   // Act
-  const checked = await f.runTrigger(healthy.id);
+  const checked = await f.runTrigger(healthy.id, {});
 
   // Assert
   assert(checked.ok);
