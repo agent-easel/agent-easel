@@ -5,6 +5,7 @@ import type {
   AppearancePreference,
   DesktopAlertSettings,
 } from "@t3-factory/contracts/desktop-bridge";
+import { parseWindowBounds, type WindowBounds } from "./window-bounds.ts";
 
 /** How this client trusts its server: a pinned Factory authority, or the system's trust store. */
 export type ServerTrust =
@@ -33,6 +34,7 @@ export interface DesktopSettings extends DesktopAlertSettings {
   /** Null until chosen: the installation follows the track of the build it runs. */
   readonly updateChannel: UpdateChannel | null;
   readonly appearance: AppearancePreference;
+  readonly windowBounds: WindowBounds | null;
 }
 
 const initialSettings: DesktopSettings = {
@@ -46,6 +48,7 @@ const initialSettings: DesktopSettings = {
   notifications: true,
   dockBadge: true,
   showRunDetails: false,
+  windowBounds: null,
 };
 
 function isTrust(value: unknown): value is ServerTrust {
@@ -90,6 +93,7 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
     notifications: value.notifications !== false,
     dockBadge: value.dockBadge !== false,
     showRunDetails: value.showRunDetails === true,
+    windowBounds: parseWindowBounds(value.windowBounds),
   };
 }
 
@@ -147,5 +151,13 @@ export class SettingsStore {
     });
     this.writes = write.catch(() => undefined);
     return write;
+  }
+
+  async settled(): Promise<void> {
+    let pending: Promise<unknown>;
+    do {
+      pending = this.writes;
+      await pending;
+    } while (pending !== this.writes);
   }
 }

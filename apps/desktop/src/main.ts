@@ -17,6 +17,7 @@ import {
   powerMonitor,
   protocol,
   safeStorage,
+  screen,
   session,
   shell,
   Tray,
@@ -53,6 +54,7 @@ import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
+import { restorableBounds, type WindowBounds } from "./window-bounds.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
 if (process.env.FACTORY_DESKTOP_USER_DATA)
@@ -87,6 +89,7 @@ let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
+let windowBounds: WindowBounds | null = null;
 /** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
 let routeReceiver: WebContents | null = null;
 let pendingRoute: DesktopRoute | null = null;
@@ -274,9 +277,12 @@ function openWindow() {
     window.focus();
     return;
   }
+  const saved = restorableBounds(
+    windowBounds,
+    screen.getAllDisplays().map((display) => display.workArea),
+  );
   const created = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    ...(saved ?? { width: 1400, height: 900 }),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -309,9 +315,13 @@ function openWindow() {
   created.webContents.on("did-navigate", () => {
     routeReceiver = null;
   });
+  const rememberBounds = () => void saveWindowBounds();
+  created.on("resized", rememberBounds);
+  created.on("moved", rememberBounds);
   created.on("close", () => {
     const url = created.webContents.getURL();
     if (url.startsWith(`${appOrigin}/`)) lastView = url;
+    if (!quitting) rememberBounds();
   });
   created.on("minimize", broadcast);
   created.on("restore", broadcast);
@@ -324,6 +334,16 @@ function openWindow() {
   });
   window = created;
   void created.loadURL(lastView);
+}
+
+function saveWindowBounds(): Promise<unknown> {
+  if (window) windowBounds = window.getNormalBounds();
+  return store.update({ windowBounds }).catch(() => undefined);
+}
+
+function persistWindowBounds(): Promise<void> {
+  void saveWindowBounds();
+  return store.settled();
 }
 
 function trayImage() {
@@ -480,6 +500,7 @@ async function installUpdate(): Promise<DesktopResult> {
   installingUpdate = true;
   try {
     await backend.stop();
+    await persistWindowBounds();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
     quitting = true;
@@ -678,12 +699,13 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", (event) => {
     if (quitting) return;
     event.preventDefault();
-    const finish = () => {
-      stopAttention();
-      approvedClient.close();
-      quitting = true;
-      app.quit();
-    };
+    const finish = () =>
+      void persistWindowBounds().then(() => {
+        stopAttention();
+        approvedClient.close();
+        quitting = true;
+        app.quit();
+      });
     // Cancel keeps Factory running; a failed orderly stop still exits, which releases the
     // OS lock with the process, rather than leaving a half-quit application.
     void stopBackendFor("quit").then((stopped) => stopped && finish(), finish);
@@ -703,6 +725,7 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
+  windowBounds = store.get().windowBounds;
   applyNativeAppearance(store.get().appearance);
   nativeTheme.on("updated", updateWindowBackground);
   // A newly issued credential replaces the attention subscription at once.
@@ -743,6 +766,7 @@ async function start() {
     void backend
       .stop()
       .catch(() => undefined)
+      .then(persistWindowBounds)
       .finally(() => {
         stopAttention();
         approvedClient.close();

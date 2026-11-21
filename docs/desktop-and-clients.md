@@ -30,6 +30,8 @@ same conflict in the other direction.
 - Closing the last window leaves the server (and its Runs) running. The Dock icon and
   launching the app again reopen the panel at the view it last showed, unless a Dock click
   [routes](#notifications-and-dock-badge) to waiting Runs.
+- The window reopens, also after Quit, at the size and position it last had. A position on
+  a display that is no longer connected falls back to the default size.
 - Closing the last window also leaves [notifications and the Dock badge](#notifications-and-dock-badge)
   running, in both roles; they stop with Quit.
 - **Settings → Desktop app → Show in the menu bar** (desktop only) is off by
