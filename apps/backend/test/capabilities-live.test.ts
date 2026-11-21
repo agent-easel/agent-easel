@@ -50,6 +50,35 @@ it("orchestrator capability reads preserve live model option values and choices"
   ]);
 });
 
+it("the Agent catalog treats blank model names as absent", async (c) => {
+  // Arrange
+  const { factory } = await authorizedLiveOAuth(c, {
+    capabilities: () => ({
+      providers: [
+        {
+          ...liveCatalog.providers[0]!,
+          models: [
+            { id: "gpt-6.2-sol", label: "" },
+            { id: "gpt-6.2-astra", label: " \t " },
+            { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+          ],
+        },
+      ],
+    }),
+  });
+
+  // Act
+  const catalog = await factory.getAgentCapabilities();
+
+  // Assert
+  assert(catalog.ok);
+  expect(catalog.value.providers[0]?.models).toStrictEqual([
+    { id: "gpt-6.2-sol", label: null },
+    { id: "gpt-6.2-astra", label: null },
+    { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+  ]);
+});
+
 it("settings status marks fastMode unavailable when the live catalog allows only false", async (c) => {
   // Arrange
   const { factory } = await authorizedLiveOAuth(c, { capabilities: () => liveCatalog });
