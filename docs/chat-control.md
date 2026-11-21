@@ -670,18 +670,25 @@ delivery is independent of the Run's card.
 ### Status cards
 
 Each chat-started Run has one status card in its originating thread, which Factory edits as the Run
-changes; it is the accepted Start's only message. It is deliberately small: one line with the Run's
-number, title, state (Active, Snoozed, Settled or Archived) and Flow, then only what is happening now:
-a confirmed Settle still stopping workers, active Blocks, pending Waits with their deadlines, and
-pending Needs input and Problems. An observation that is stale or not yet made is shown as such, never
-as a Problem. Block starts, results, Wait progress and lifecycle changes edit the card; they never post
-a message, and the card never carries results, report bodies or prompts: participants read those with
-Read Run. Long lists are summarized so the card always fits one message. Each line leads with an emoji
-for its state (for example 🟢 Active, 💤 Snoozed, ✅ Settled, 🗄️ Archived; ⚙️ working, ⏳ waiting,
-⚠️ Problem, 🙋 Needs input, ⏰ Wait deadline), and Wait deadlines are Discord timestamps that each
-reader's client shows relative to now in their own time zone. The card mentions nobody. Replying to the
-card points Factory's conversation at its Run: the model receives only the Run's ID and reads the Run
-afresh within the thread's current scope, never the card's text.
+changes. Its header shows the Run's number, title, lifecycle and Flow. A confirmed Settle still
+stopping workers or an unresolved settlement Problem appears below the header. Each Block from
+the captured Flow revision has one row, in breadth-first order from the Flow input's targets.
+Any remaining Blocks follow in canvas order from left to right, then top to bottom, with Block ID
+breaking ties.
+
+A Block's pending Problem takes precedence over Needs input, a pending Wait, working or
+Continuation sent, stopped, finished, and not started. Native T3 requests and workers awaiting
+review direct the reader to T3. When several arrivals are waiting on a Block, its row shows the
+earliest deadline as a relative Discord timestamp and counts the pending arrivals. Observation
+staleness and observations that have yet to be made appear on the relevant Block rows. Settled and
+Archived Runs retain their final Block states. Use Read Run for Finish endings, results, report
+bodies and prompts.
+
+To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at the bottom first,
+then finished Blocks at the top if needed. It omits remaining overflow rows only when those
+summaries still leave insufficient room. The card mentions nobody. Replying to the card points
+Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
+thread's current scope.
 
 Factory captures what each card owes from the Run's committed facts, not from the live updates the
 Factory UI receives: a change to a chat-started Run, every Access save and every backend start bring
