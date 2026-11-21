@@ -99,8 +99,10 @@ async function antigravityConfigDirectory(stateDirectory: string, instanceId: st
     }
     throw error;
   });
-  if (!runtime.isDirectory() || (await realpath(profile)) !== profile)
+  if ((await realpath(profile)) !== profile)
     throw Error("The T3 Antigravity profile must be a local directory.");
+  if (!runtime.isDirectory())
+    throw Error("The antigravity-acp folder inside the T3 profile must be a local directory.");
   const directory = join(profile, "config");
   const config = await lstat(directory).catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -261,13 +263,17 @@ const targetFor = Effect.fn(function* (
   }).pipe(
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);
+      const message = error instanceof Error ? error.message : "Configuration unavailable.";
       return Effect.succeed(
         withReportingInstallationActions({
           ...base,
           path: null,
           skillsPath: null,
           status: "needs-attention" as const,
-          message: `Restore the accessible harness home or use manual setup. ${error instanceof Error ? error.message : "Configuration unavailable."}`,
+          message:
+            profile.home.kind === "antigravity-profile"
+              ? message
+              : `Restore the accessible harness home or use manual setup. ${message}`,
         }),
       );
     }),

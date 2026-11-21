@@ -202,7 +202,32 @@ it("Antigravity with no T3 profile points the user to provider setup", async (co
       provider: "antigravity",
       status: "needs-attention",
       path: null,
-      message: expect.stringContaining("T3 Code → Settings → Providers"),
+      message:
+        "Install and sign in to Antigravity in T3 Code → Settings → Providers, then check again.",
+      actions: { install: false, repair: false, reinstall: false },
+    },
+  ]);
+});
+
+it("Antigravity identifies the runtime folder when a file occupies its path", async (context) => {
+  // Arrange
+  const { factory, state } = await driverHomes(context, {
+    antigravity: { driver: "antigravity", config: {} },
+  });
+  const key = createHash("sha256").update("antigravity").digest("hex");
+  const profile = join(state, "providers", "antigravity", key);
+  await mkdir(profile, { recursive: true });
+  await writeFile(join(profile, "antigravity-acp"), "");
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value).toMatchObject([
+    {
+      status: "needs-attention",
+      message: "The antigravity-acp folder inside the T3 profile must be a local directory.",
       actions: { install: false, repair: false, reinstall: false },
     },
   ]);

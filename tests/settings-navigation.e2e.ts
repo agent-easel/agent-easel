@@ -220,6 +220,17 @@ test("searching for a visible row label such as Mode finds Appearance", async ({
   await expect(sections(screen).getByRole("link", "T3 connection", { exact: true })).toHaveCount(0);
 });
 
+test("searching for Antigravity finds Agent reporting", async ({ app, screen }) => {
+  // Arrange
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("Antigravity");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", /^Agent reporting/)).toBeVisible();
+});
+
 test("searching for a Worker option or a fixed shortcut finds its section", async ({
   app,
   screen,
