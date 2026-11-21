@@ -54,7 +54,7 @@ and restricted OAuth credentials live outside project repositories.
   input or block and level with the Flow input (within the canvas limit), added immutable ending
   rows, and rebuilt the connection table under its restored immutability guards so a connection
   enters exactly one block or one ending of its revision, with every stored wire unchanged.
-  Migration `119` made the Finish block optional: it removed every stored Finish block without
+  Migration `120` made the Finish block optional: it removed every stored Finish block without
   endings, which no wire entered, under its restored immutability guard, and kept each Finish
   block with endings unchanged.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,

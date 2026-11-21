@@ -424,7 +424,7 @@ Protocol 23 makes the [Finish block](studio.md#finish-block) optional: a Flow or
 definition may have no `finish`. Protocol 22 clients assume every Flow has one and cannot show such
 a Flow, so the server refuses them at the handshake and they must update; a current client likewise
 refuses a protocol 22 server, which would add an empty Finish block to every save. Their credentials
-and stored data are kept. This is an intentional transport break; migration `119` converts the stored Flows.
+and stored data are kept. This is an intentional transport break; migration `120` converts the stored Flows.
 
 Protocol 22 adds the [Finish block](studio.md#finish-block) with its endings to Flows and captured
 Run definitions, connections that enter an ending and the Run's `result` in Run detail. Older clients can neither read nor save such

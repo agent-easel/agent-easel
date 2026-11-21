@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
+import { now } from "../time.ts";
+import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 
 /** An Access save's channels and the Projects each grants. */
 type Channels = readonly { readonly channelId: string; readonly projectIds: readonly string[] }[];
@@ -46,19 +48,33 @@ export const applyAccessRevocation = (
       id: string;
       parent_channel_id: string;
       project_ids_json: string;
-    }>`SELECT id,parent_channel_id,project_ids_json FROM chat_deliveries WHERE state IN ('owed','failed','unknown')`;
+    }>`SELECT id,parent_channel_id,project_ids_json FROM chat_deliveries
+        WHERE state IN ('owed','failed','unknown') OR (message_id IS NULL AND state='sending')`;
     const cancelled = owed.filter((row) =>
       ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );
-    if (cancelled.length > 0)
-      yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id IN ${sql.in(cancelled.map((row) => row.id))}`;
+    if (cancelled.length > 0) {
+      const ids = sql.in(cancelled.map((row) => row.id));
+      const at = yield* now;
+      yield* sql`UPDATE chat_deliveries SET next_attempt_at=NULL,
+          problem=${REVOKED_CREATE},problem_at=${at}
+        WHERE id IN ${ids} AND purpose<>'completion' AND state='sending'`;
+      yield* sql`UPDATE chat_deliveries SET state='unknown',next_attempt_at=NULL
+        WHERE id IN ${ids} AND purpose<>'completion' AND state='owed' AND problem=${UNKNOWN_CREATE_PROBLEM}`;
+      yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL
+        WHERE id IN ${ids} AND (purpose='completion' OR state NOT IN ('sending','unknown'))`;
+    }
     // A chat-started Run whose originating channel loses its Project accrues no notices; after a
     // regrant its notices start from its state then, without narrating the revoked interval.
     const origins = yield* sql<{
       run_id: string;
       parent_channel_id: string;
       project_id: string;
-    }>`SELECT o.run_id,o.parent_channel_id,t.project_id FROM chat_run_origins o
+      granted: number;
+    }>`SELECT o.run_id,o.parent_channel_id,t.project_id,
+        EXISTS(SELECT 1 FROM chat_access_channel_projects g
+          WHERE g.channel_id=o.parent_channel_id AND g.project_id=t.project_id) AS granted
+      FROM chat_run_origins o
       JOIN runs r ON r.id=o.run_id JOIN tasks t ON t.id=r.task_id`;
     const revoked = origins.filter((row) =>
       ungranted(access.channels, row.parent_channel_id, JSON.stringify([row.project_id])),
@@ -67,6 +83,15 @@ export const applyAccessRevocation = (
       yield* sql`INSERT INTO chat_run_reporting (run_id,baseline) VALUES ${sql.csv(
         revoked.map((row) => sql`(${row.run_id},1)`),
       )} ON CONFLICT(run_id) DO UPDATE SET baseline=1,final=0`;
+    const regranted = origins.filter(
+      (row) =>
+        row.granted === 0 &&
+        !ungranted(access.channels, row.parent_channel_id, JSON.stringify([row.project_id])),
+    );
+    if (regranted.length > 0)
+      yield* sql`UPDATE chat_run_reporting SET completion_sequence=(
+          SELECT c.sequence FROM chat_settled_cycles c WHERE c.run_id=chat_run_reporting.run_id
+        ) WHERE run_id IN ${sql.in(regranted.map((row) => row.run_id))}`;
     return voided.map((row) => row.id);
   });
 

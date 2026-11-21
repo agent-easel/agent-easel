@@ -66,7 +66,7 @@ type Answer = {
   /** No answer arrives until the server closes. */
   readonly held?: boolean;
   /** No answer arrives until `releaseMessages`; then Discord handles the request normally. */
-  readonly paused?: boolean;
+  readonly paused?: "deliver" | "fail" | "refuse" | "lose";
 };
 
 /**
@@ -84,7 +84,10 @@ export type MessageFault =
   | "lost"
   | "failed"
   | "held"
-  | "paused";
+  | "paused"
+  | "paused-failure"
+  | "paused-refusal"
+  | "paused-lost";
 
 /**
  * Faults that leave one create unproven on Factory's first request and on both re-attempts it
@@ -494,7 +497,9 @@ export async function startControlledDiscord() {
       /^\/api\/v10\/channels\/(\d+)\/messages$/,
       ({ match, fields, bot, resumed }) => {
         const fault = resumed ? undefined : messageFaults.shift();
-        if (fault === "paused") return { status: 0, paused: true };
+        if (fault === "paused") return { status: 0, paused: "deliver" };
+        if (fault === "paused-failure") return { status: 0, paused: "fail" };
+        if (fault === "paused-refusal") return { status: 0, paused: "refuse" };
         const faulted = faultAnswer(fault);
         if (faulted) return faulted;
         if (deletedThreads.has(match[1]!)) return unknownChannel;
@@ -510,7 +515,9 @@ export async function startControlledDiscord() {
         if (thread?.locked && !bot.manageThreads) return locked;
         // A post Discord accepts reopens an archived thread, locked ones included.
         if (thread) thread.archived = false;
-        return { status: 200, body: createdOnce(match[1]!, fields, bot), lost: fault === "lost" };
+        const body = createdOnce(match[1]!, fields, bot);
+        if (fault === "paused-lost") return { status: 200, body, lost: true, paused: "lose" };
+        return { status: 200, body, lost: fault === "lost" };
       },
     ],
     [
@@ -589,7 +596,7 @@ export async function startControlledDiscord() {
       "GET",
       /^\/api\/v10\/channels\/(\d+)$/,
       ({ match, resumed }) => {
-        if (channelLookupsPaused && !resumed) return { status: 0, paused: true };
+        if (channelLookupsPaused && !resumed) return { status: 0, paused: "deliver" };
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
         if (thread) return { status: 200, body: threadPayload(thread) };
@@ -781,7 +788,19 @@ export async function startControlledDiscord() {
       };
       const answer = route(request.method ?? "", path, token, body);
       if (!answer.paused) return respond(answer);
-      pausedCreates.push(() => respond(route(request.method ?? "", path, token, body, true)));
+      if (answer.paused === "lose") {
+        pausedCreates.push(() => respond(answer));
+        return changed.notify();
+      }
+      pausedCreates.push(() =>
+        respond(
+          answer.paused === "fail"
+            ? faultAnswer("failed")!
+            : answer.paused === "refuse"
+              ? faultAnswer("refused")!
+              : route(request.method ?? "", path, token, body, true),
+        ),
+      );
       changed.notify();
     });
   });

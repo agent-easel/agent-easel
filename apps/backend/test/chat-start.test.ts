@@ -1007,13 +1007,14 @@ it("revoking the receipt's destination cancels the owed receipt", async (c) => {
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
-it("a receipt create interrupted by a backend stop is unknown after restart and not sent again", async (c) => {
+it("a revoked receipt create interrupted by a backend stop stays unknown after restart", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const button = await rejectedProposal(world);
   world.discord.faultMessages("held");
   await clicked(world.discord, button, "610000000000000001", 1);
   await world.discord.request("POST", /^\/api\/v10\/channels\/\d+\/messages$/, 3);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], []);
   await world.factory.close();
 
   // Act
@@ -1026,5 +1027,6 @@ it("a receipt create interrupted by a backend stop is unknown after restart and 
     expect.objectContaining({ state: "unknown", purpose: "receipt" }),
   ]);
   await servingAgain(world.discord, 2);
+  expect(world.discord.requested("POST", /^\/api\/v10\/channels\/\d+\/messages$/)).toHaveLength(3);
   expect(await runsOf(reopened)).toStrictEqual([]);
 });
