@@ -188,6 +188,7 @@ export interface RunThreadBinding {
   readonly link: string | null;
   readonly id: string;
   readonly blockId: string;
+  readonly blockName?: string;
   readonly environmentId: string;
   readonly threadId: string;
   readonly role: "worker" | "descendant";
@@ -200,8 +201,78 @@ export interface RunThreadBinding {
 export interface RunDefinitions {
   readonly flow: Omit<FlowDraft, "readiness" | "projectId">;
   readonly agents: readonly CapturedAgent[];
+  readonly subflows?: readonly Omit<FlowDraft, "readiness" | "projectId">[];
 }
+export const SUBFLOW_INVOCATION_PAGE_DEFAULT = 50;
+export const SUBFLOW_INVOCATION_PAGE_MAX = 100;
+
+export type SubflowInvocationState =
+  | "queued"
+  | "active"
+  | "stopping"
+  | "returned"
+  | "nothing-returned"
+  | "cancelled";
+
+export interface SubflowInvocation {
+  readonly id: string;
+  readonly number: number;
+  readonly flowId: string;
+  readonly placementBlockId: string;
+  readonly parentInvocationId: string | null;
+  readonly state: SubflowInvocationState;
+  readonly input: string;
+  readonly incomingIntentId?: string;
+  readonly carriesStartImages: boolean;
+  readonly arrivedAt: string;
+  readonly completedAt: string | null;
+  readonly blocks: readonly RunBlock[];
+  readonly stops: readonly {
+    readonly blockId: string;
+    readonly threadId: string;
+    readonly attempt: number;
+    readonly requestedAt: string;
+    readonly outcome: "acknowledged" | "failed" | null;
+  }[];
+  readonly ending:
+    | (RunResult & {
+        readonly delivery: "held" | "released" | "cancelled";
+        readonly releasedAt: string | null;
+        readonly cancelledAt: string | null;
+        readonly recipientCount: number;
+        readonly recipients: readonly {
+          readonly blockId: string;
+          readonly targetEndingId: string | null;
+          readonly disposition: ConditionRecipientDisposition;
+        }[];
+      })
+    | null;
+}
+
+export interface SubflowPlacementSummary {
+  readonly blockId: string;
+  readonly templateBlockId: string;
+  readonly parentInvocationId: string | null;
+  readonly total: number;
+  readonly queued: number;
+  readonly defaultInvocation: SubflowInvocation | null;
+}
+
+export interface SubflowInvocationPath {
+  readonly ancestors: readonly SubflowInvocation[];
+  readonly invocation: SubflowInvocation;
+  readonly placements: readonly SubflowPlacementSummary[];
+}
+
+export interface SubflowInvocationPage {
+  readonly invocations: readonly SubflowInvocation[];
+  readonly highWater: number;
+  readonly nextCursor: string | null;
+}
+
 export interface RunBlock {
+  readonly invocationId?: string;
+  readonly templateBlockId?: string;
   readonly blockId: string;
   readonly name: string;
   /**
@@ -243,6 +314,8 @@ export type RunWorkspaceDetail =
       readonly mode: "worktree";
       readonly baseRef: string;
       readonly state: "preparing" | "bound" | "failed";
+      readonly creatorBlockId?: string;
+      readonly creatorPlacementPath?: readonly string[];
       /** The worktree path and branch T3 reported; null until bound. */
       readonly path: string | null;
       readonly branch: string | null;
@@ -451,6 +524,7 @@ export interface RunDetail extends RunSummary {
   /** Every image of the initial prompt in manifest order; position + 1 is its `Image N` ordinal. */
   readonly images: readonly RunImage[];
   readonly definitions: RunDefinitions;
+  readonly subflows?: readonly SubflowPlacementSummary[];
   /**
    * The latest saved revision of the Flow the Run captured, read with the Run; null once the
    * Flow is removed. It differs from `definitions.flow.revision` when the Flow was edited after
@@ -511,6 +585,11 @@ export interface RunDetail extends RunSummary {
     readonly id: string;
     readonly blockId: string;
     readonly targetEndingId: string | null;
+    readonly subflowReturn?: {
+      readonly invocationId: string;
+      readonly endingId: string;
+      readonly endingName: string;
+    };
     readonly reportId: string | null;
     readonly occurrenceId: string | null;
     readonly sourceBlockId: string | null;
@@ -553,6 +632,7 @@ export interface RunDetail extends RunSummary {
  * A `settlement-unresolved` matter is about the Run: it has no Block, execution or link, and its
  * blocked workers are the Run's settlement workers that are not resolved. */
 export interface RunAttention {
+  readonly invocationId?: string;
   readonly bindingId?: string;
   readonly id: string;
   readonly runId: string;
@@ -569,7 +649,8 @@ export interface RunAttention {
     | "execution-failed"
     | "report-problem"
     | "condition-integrity"
-    | "settlement-unresolved";
+    | "settlement-unresolved"
+    | "subflow-stop-unresolved";
   readonly nativeRequestId: string | null;
   readonly occurrenceId: string | null;
   readonly link: string | null;
@@ -594,6 +675,7 @@ export type RunAttentionPresentation = "needs-input" | "problem";
  * Later wake detection treats an id that was not already recorded as new attention.
  */
 export interface RunAttentionMatter {
+  readonly invocationId?: string;
   readonly id: string;
   readonly kind: RunAttention["kind"];
   readonly presentation: RunAttentionPresentation;
@@ -627,6 +709,7 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "report-problem":
     case "condition-integrity":
     case "settlement-unresolved":
+    case "subflow-stop-unresolved":
       return "problem";
   }
 }
@@ -791,6 +874,7 @@ export interface ConditionArrivalEvidence extends ConditionSelection {
   readonly sourceBlockId: string | null;
   /** The worker whose message it carries, when known. */
   readonly origin: WorkerProvenance | null;
+  readonly subflowReturn?: NonNullable<RunDetail["intents"][number]["subflowReturn"]>;
   /** The captured rule whose output was selected; null when Otherwise was. */
   readonly rule: { readonly id: string; readonly name: string } | null;
   /** Every recipient of the selected output; empty when that output is unwired. */
@@ -899,6 +983,19 @@ export const runOperations = {
     method: "GET",
     path: "/api/runs/:runId/conditions/:blockId/arrivals",
     query: ["limit", "cursor"],
+  }),
+  listSubflowInvocations: operation<never, SubflowInvocationPage>()({
+    method: "GET",
+    path: "/api/runs/:runId/subflows/:blockId/invocations",
+    query: ["limit", "cursor"],
+  }),
+  getSubflowInvocation: operation<never, SubflowInvocationPath>()({
+    method: "GET",
+    path: "/api/runs/:runId/invocations/:invocationId",
+  }),
+  retrySubflowStop: operation<never, RunDetail>()({
+    method: "POST",
+    path: "/api/runs/:runId/invocations/:invocationId/retry-stop",
   }),
   listAttention: operation<never, readonly RunAttention[]>()({
     method: "GET",

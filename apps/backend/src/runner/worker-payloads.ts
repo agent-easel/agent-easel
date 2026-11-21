@@ -23,6 +23,9 @@ export type StoredLaunchPayload = LaunchPayload & { readonly images?: readonly L
  * The installed Block skill, the Block id its Factory tools take, how attached images map to the
  * initial prompt's references, and the turn to act on.
  */
+export const launchBody = (prompt: string, input?: string) =>
+  input === undefined ? prompt : prompt + "\n\nFlow input:\n" + input;
+
 export function workerTurn(body: string, blockId: string, images: readonly LaunchImage[] = []) {
   const names = images.map((image) => attachmentName(image.ordinal, image.name)).join(", ");
   return [
@@ -49,6 +52,8 @@ export function workerLaunchPayload(
   publicId: string,
   workspaceStrategy: LaunchPayload["workspaceStrategy"],
   images: readonly LaunchImage[] = [],
+  input?: string,
+  titleSuffix = "",
 ): StoredLaunchPayload {
   const blocks = definitions.flow.graph.blocks;
   const block = blocks.find((entry) => entry.id === blockId);
@@ -59,7 +64,7 @@ export function workerLaunchPayload(
     environmentId: target.environmentId,
     projectId: target.projectId,
     clientRequestId: key,
-    title: workerThreadTitle(run, blocks, blockId),
+    title: workerThreadTitle(run, blocks, blockId, titleSuffix),
     workspaceStrategy,
     interactionMode: "default",
     modelSelection: {
@@ -69,7 +74,7 @@ export function workerLaunchPayload(
         agent.execution.modelOptions.map((option) => [option.id, option.value]),
       ),
     },
-    message: workerTurn(agent.prompt, publicId, images),
+    message: workerTurn(launchBody(agent.prompt, input), publicId, images),
     ...(images.length ? { images } : {}),
   };
 }
@@ -153,13 +158,19 @@ export function agentRevisitPayload(
 export function continuationPromptMessage(
   definitions: RunDefinitions,
   blockId: string,
-  arrival: { readonly sourceBlockId: string | null; readonly exitId: string | null },
+  arrival: {
+    readonly sourceBlockId: string | null;
+    readonly exitId: string | null;
+    readonly subflowEndingName?: string;
+  },
   message: string,
 ) {
   const blocks = definitions.flow.graph.blocks;
   const block = blocks.find((entry) => entry.id === blockId);
   if (!block || block.kind !== "continuation") throw Error("Prompt target is not a Continuation");
   const lead = `This is a new Factory task for the Continuation "${block.name}" in this conversation. Report it with the Block id above, not with an earlier Block id; finish it without an exit, with your response as the message.`;
+  if (arrival.subflowEndingName !== undefined)
+    return `${lead}\n\n${block.prompt}\n\nSubflow returned ${arrival.subflowEndingName}:\n${message}`;
   const source = blocks.find((entry) => entry.id === arrival.sourceBlockId);
   const exit = HUMAN_EXITS.find((entry) => entry.id === arrival.exitId);
   const reply =

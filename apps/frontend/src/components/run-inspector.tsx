@@ -1,3 +1,6 @@
+import type { RunSubflows } from "../run-subflows.ts";
+import type { RunAttention, SubflowInvocation } from "@t3-factory/contracts";
+import { RunSubflowView } from "./run-subflow.tsx";
 import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
@@ -393,23 +396,42 @@ function WorkPeriods({ run }: { run: RunDetail }) {
   );
 }
 
+function SubflowOutcomes({ run }: { run: RunDetail }) {
+  if (run.lifecycle !== "settled") return null;
+  const outcomes = run.events.filter((event) => event.kind === "subflow-nothing-returned");
+  if (!outcomes.length) return null;
+  return (
+    <InspectorSection title="Subflow outcomes">
+      {outcomes.map((event) => (
+        <p key={event.sequence} className="text-sm">
+          {run.blocks.find((block) => block.blockId === event.blockId)?.name ?? "Subflow"} · Nothing
+          returned
+        </p>
+      ))}
+    </InspectorSection>
+  );
+}
+
 /** Figma RD13: Run-level facts with one home; raw ids, workspace and periods stay folded. */
 function RunOverview({
   run,
   project,
   projectUnavailable,
   waitingForWorkers,
+  onInspectAttention,
 }: {
   run: RunDetail;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
   waitingForWorkers: boolean;
+  onInspectAttention: (attention: RunAttention) => void;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5.5 overflow-auto px-4 pt-4 pb-3">
       <h2 className="text-base leading-4 font-semibold">Overview</h2>
-      <RunAttentionDetails run={run} />
+      <RunAttentionDetails run={run} onInspect={onInspectAttention} />
       <ResultSection run={run} />
+      <SubflowOutcomes run={run} />
       <PendingIntents run={run} />
       <RunProgress run={run} waitingForWorkers={waitingForWorkers} />
       <RunBranch run={run} />
@@ -452,10 +474,34 @@ function RunOverview({
  * the Run title. What is inspected is the caller's; whether the inspector is shown is the
  * viewer's preference.
  */
-export function RunInspector({
+type RunInspectorProps = Parameters<typeof RunInspection>[0];
+
+export function RunInspector(props: RunInspectorProps) {
+  return (
+    <aside
+      aria-label="Run inspector"
+      className="relative flex w-[var(--factory-run-panel-width,21.25rem)] max-w-[50%] shrink-0 flex-col border-l bg-background"
+    >
+      <PanelResizeHandle label="Resize Run inspector" side="left" bounds={inspectorBounds} />
+      <RunInspection {...props} />
+    </aside>
+  );
+}
+
+function selectedRunBlock(run: RunDetail, id: CanvasBlockSelection | null) {
+  const block = run.definitions.flow.graph.blocks.find((item) => item.id === id);
+  const recorded = run.blocks.find((item) => item.blockId === id);
+  return block && recorded ? { block, recorded } : null;
+}
+
+function RunInspection({
   run,
   selected,
   titleGeneration,
+  subflows,
+  attention,
+  onInspectAttention,
+  onInspectInvocation,
   project,
   projectUnavailable,
   waitingForWorkers,
@@ -464,6 +510,10 @@ export function RunInspector({
 }: {
   run: RunDetail;
   selected: CanvasBlockSelection | null;
+  subflows: RunSubflows;
+  attention: RunAttention | undefined;
+  onInspectAttention: (attention: RunAttention) => void;
+  onInspectInvocation: (invocation: SubflowInvocation) => void;
   /** The Run title's generation while the Run title is inspected. */
   titleGeneration: RunTitleGeneration | null;
   project: FactoryProject | undefined;
@@ -472,34 +522,41 @@ export function RunInspector({
   observationUnavailable: boolean;
   onSelect: (blockId: CanvasBlockSelection | null) => void;
 }) {
-  const block = run.definitions.flow.graph.blocks.find((item) => item.id === selected);
-  const recorded = run.blocks.find((item) => item.blockId === selected);
+  const location = typeof selected === "string" ? subflows.byBlock.get(selected) : undefined;
+  const placement = location && subflows.placements.get(location.path);
+  const scoped = location?.scope.run ?? run;
+  const selection = selectedRunBlock(scoped, selected);
+  const onBack = () => onSelect(null);
+  if (titleGeneration) return <RunTitleView generation={titleGeneration} onBack={onBack} />;
+  if (selected === FINISH_SELECTION) return <RunFinishView run={run} onBack={onBack} />;
+  if (placement)
+    return (
+      <RunSubflowView
+        run={run}
+        scoped={subflows.scopes.get(placement.path)?.run}
+        placement={placement}
+        onBack={onBack}
+        onSelect={onInspectInvocation}
+      />
+    );
+  if (selection)
+    return (
+      <RunBlockView
+        key={selection.block.id}
+        run={scoped}
+        attention={attention}
+        {...selection}
+        observationUnavailable={observationUnavailable}
+        onBack={onBack}
+      />
+    );
   return (
-    <aside
-      aria-label="Run inspector"
-      className="relative flex w-[var(--factory-run-panel-width,21.25rem)] max-w-[50%] shrink-0 flex-col border-l bg-background"
-    >
-      <PanelResizeHandle label="Resize Run inspector" side="left" bounds={inspectorBounds} />
-      {titleGeneration ? (
-        <RunTitleView generation={titleGeneration} onBack={() => onSelect(null)} />
-      ) : selected === FINISH_SELECTION ? (
-        <RunFinishView run={run} onBack={() => onSelect(null)} />
-      ) : block && recorded ? (
-        <RunBlockView
-          run={run}
-          block={block}
-          recorded={recorded}
-          observationUnavailable={observationUnavailable}
-          onBack={() => onSelect(null)}
-        />
-      ) : (
-        <RunOverview
-          run={run}
-          project={project}
-          projectUnavailable={projectUnavailable}
-          waitingForWorkers={waitingForWorkers}
-        />
-      )}
-    </aside>
+    <RunOverview
+      run={run}
+      project={project}
+      projectUnavailable={projectUnavailable}
+      waitingForWorkers={waitingForWorkers}
+      onInspectAttention={onInspectAttention}
+    />
   );
 }

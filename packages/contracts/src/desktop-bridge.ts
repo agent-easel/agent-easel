@@ -38,7 +38,12 @@ export type NotificationPermission = "undetermined" | "requesting" | "granted" |
  * Runs the Dock badge counts.
  */
 export type DesktopRoute =
-  | { readonly kind: "run"; readonly runId: string; readonly blockId: string | null }
+  | {
+      readonly kind: "run";
+      readonly runId: string;
+      readonly blockId: string | null;
+      readonly attentionId?: string;
+    }
   | { readonly kind: "needs-you" };
 
 export interface DesktopState {

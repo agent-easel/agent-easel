@@ -1,5 +1,5 @@
 import { useId, useRef } from "react";
-import { Bot, Workflow } from "lucide-react";
+import { Bot } from "lucide-react";
 import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,15 @@ import {
   useDefinitionImport,
   type DefinitionImportModel,
   type DefinitionImportSnapshot,
-  type ImportFile,
   type ImportRow,
 } from "../definition-import.ts";
 import { ModelOptionField } from "./execution-settings-fields.tsx";
+import {
+  ImportFlowList,
+  ImportInstructions,
+  ImportReviewSection,
+  ImportWorkspaceList,
+} from "./definition-import-summary.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { OwnerPicker } from "./studio-owner.tsx";
@@ -72,7 +77,7 @@ function DefinitionImportDialog({
   async function chosen(input: HTMLInputElement) {
     const file = input.files?.[0];
     input.value = "";
-    if (file) await model.choose({ name: file.name, text: await file.text() });
+    if (file) await model.choose({ name: file.name, data: file });
   }
   async function confirm() {
     const result = await model.confirm();
@@ -112,20 +117,6 @@ function DefinitionImportDialog({
       </Dialog>
     </>
   );
-}
-
-/** Blocks in the held Flow file, or null when the file is not a Flow or cannot be read. */
-function importedBlockCount(file: ImportFile | null): number | null {
-  if (!file) return null;
-  try {
-    const document = JSON.parse(file.text) as {
-      flow?: { graph?: { blocks?: readonly unknown[] } };
-    };
-    const blocks = document.flow?.graph?.blocks;
-    return Array.isArray(blocks) ? blocks.length : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Before a review answers: reading the file, or one error card when it was rejected. */
@@ -196,10 +187,14 @@ function ImportReviewContent({
   projects: readonly FactoryProject[];
   onConfirm: () => void;
 }) {
-  const { rows, capabilities, flow } = review;
+  const { rows, capabilities, flows } = review;
   const missingModelCard = useId();
-  const blocked = ownerPicker(state.target, projects).blocked;
-  const blocks = importedBlockCount(state.file);
+  const { chosen, blocked } = ownerPicker(state.target, projects);
+  const instructionLengths = flows.length
+    ? flows.flatMap((flow) => flow.instructions.map((entry) => entry.length))
+    : rows.map((row) => row.promptLength);
+  const length = instructionLengths.reduce((sum, entry) => sum + entry, 0);
+  const count = instructionLengths.length;
   return (
     <DialogContent
       size="wide"
@@ -228,7 +223,7 @@ function ImportReviewContent({
       }
     >
       <OwnerPicker
-        kind={flow ? "Flow" : "Agent"}
+        kind={flows.length ? "Flow" : "Agent"}
         chosen={state.target}
         projects={projects}
         onChange={model.setTarget}
@@ -243,35 +238,18 @@ function ImportReviewContent({
         title="Imported prompts run with your T3 permissions"
       >
         Read them in Studio before you start a Run.
+        {count > 0 &&
+          ` Instructions below lists all ${count.toLocaleString()} (${length.toLocaleString()} characters).`}
       </ProblemCard>
+      <ImportFlowList flows={flows} owner={chosen.title} />
+      <ImportWorkspaceList flows={flows} />
       {rows.some((row) => !row.selection) && (
-        <ProblemCard
-          id={missingModelCard}
-          density="compact"
-          tone="attention"
-          title="Agents without a model"
-        >
+        <p id={missingModelCard} className="sr-only">
           Choose a model here or in Studio after importing.
-        </ProblemCard>
+        </p>
       )}
-      <section aria-labelledby="import-creates" className="grid gap-1.5">
-        <h3 id="import-creates" className="text-2xs font-medium text-muted-foreground">
-          Creates
-        </h3>
-        <div className="grid overflow-hidden rounded-lg border bg-background">
-          {flow && (
-            <div className={createsRowClass}>
-              <Workflow aria-hidden className={createsIconClass} strokeWidth={1.5} />
-              <p className="flex min-w-0 flex-1 items-center gap-2 leading-[normal]">
-                <span className="truncate text-sm font-medium">{flow.name}</span>
-                {blocks !== null && (
-                  <span className="shrink-0 text-2xs text-subtle-foreground">
-                    {blocks} {blocks === 1 ? "block" : "blocks"}
-                  </span>
-                )}
-              </p>
-            </div>
-          )}
+      {rows.length > 0 && (
+        <ImportReviewSection title={`Agents · ${rows.length} · created in ${chosen.title}`}>
           {rows.map((row) => (
             <ImportModelRow
               key={row.key}
@@ -282,8 +260,23 @@ function ImportReviewContent({
               disabled={state.committing}
             />
           ))}
-        </div>
-      </section>
+        </ImportReviewSection>
+      )}
+      {count > 0 && (
+        <ImportInstructions flows={flows} agents={rows} count={count} length={length} />
+      )}
+      {state.error && (
+        <ProblemCard density="compact" tone="error" title="Couldn’t import this file">
+          {state.error}
+          {state.issues.length > 0 && (
+            <ul className="list-disc pl-5">
+              {state.issues.map((entry) => (
+                <li key={entry}>{entry}</li>
+              ))}
+            </ul>
+          )}
+        </ProblemCard>
+      )}
     </DialogContent>
   );
 }
@@ -327,25 +320,26 @@ function ImportModelRow({
       <ChoiceMenu
         id={pickerId}
         label={`Model for ${row.name}`}
-        className="h-7.5 w-50 shrink-0 bg-card"
+        className="h-7.5 w-60 max-w-full shrink-0 bg-card"
         describedBy={selection ? undefined : missingModelCard}
         value={selection ? choiceId(selection.providerInstanceId, selection.modelId) : ""}
         choices={[
-          { id: "", label: "Needs a model" },
+          { id: "no-model", label: "Needs a model" },
           ...choices.map((choice) => ({
             id: choiceId(choice.providerInstanceId, choice.modelId),
             label: choice.label,
           })),
         ]}
         onChange={(id) => {
-          const [providerInstanceId, modelId] = id ? (JSON.parse(id) as [string, string]) : [];
+          const [providerInstanceId, modelId] =
+            id === "no-model" ? [] : (JSON.parse(id) as [string, string]);
           model.select(
             row.key,
             providerInstanceId && modelId ? { providerInstanceId, modelId } : null,
           );
         }}
         disabled={disabled}
-        placeholder="Needs a model"
+        placeholder="Choose a model"
       />
       {selection && chosenModel?.options && (
         <div className="grid basis-full grid-cols-1 gap-3 pb-1 pl-6.5 sm:grid-cols-2">

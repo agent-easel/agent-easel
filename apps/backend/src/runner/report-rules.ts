@@ -1,6 +1,7 @@
 import type { RunBlock, RunDefinitions } from "@t3-factory/contracts";
-import { exitsWithEndings, handoffRecipients } from "@t3-factory/domain-validation";
+import { effectiveExits, exitsWithEndings, handoffRecipients } from "@t3-factory/domain-validation";
 import { fingerprint } from "../fingerprint.ts";
+import type { ExecutionDefinitions } from "./runner-types.ts";
 import type { RuntimeReport } from "../runtime-types.ts";
 
 type BlockState = RunBlock["state"];
@@ -9,7 +10,11 @@ export const rejected = (code: string) => ({ ok: false as const, reply: { code }
 
 /** Exact exit names and identities resolve against the Run's captured definitions, never a later
  * edit. */
-export function reportRoute(definitions: RunDefinitions, blockId: string, report: RuntimeReport) {
+export function reportRoute(
+  definitions: ExecutionDefinitions,
+  blockId: string,
+  report: RuntimeReport,
+) {
   const block = definitions.flow.graph.blocks.find((block) => block.id === blockId);
   if (!block || block.kind === "human") return rejected("UNKNOWN_BLOCK");
   const exits = exitsWithEndings(block, definitions.flow.graph, definitions.agents);
@@ -29,7 +34,12 @@ export function reportRoute(definitions: RunDefinitions, blockId: string, report
         allowedExits: exits.map((exit) => exit.name || exit.id),
       },
     };
-  if (exit?.messageRequired && !report.message?.trim()) return rejected("FEEDBACK_REQUIRED");
+  const requiresMessage =
+    definitions.invocation && exit
+      ? effectiveExits(block, definitions.agents).find((candidate) => candidate.id === exit.id)
+          ?.messageRequired
+      : exit?.messageRequired;
+  if (requiresMessage && !report.message?.trim()) return rejected("FEEDBACK_REQUIRED");
   const recipients = exit
     ? handoffRecipients(definitions.flow.graph.connections, block.id, exit.id)
     : [];

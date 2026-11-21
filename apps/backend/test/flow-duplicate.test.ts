@@ -17,6 +17,7 @@ it("previewing a Duplicate into the source's Project lists each placed Agent onc
       revision: 1,
       projectId: first.id,
       name: "Release copy",
+      flows: [],
       agents: [
         {
           agentId: coder.id,

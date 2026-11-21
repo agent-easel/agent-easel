@@ -20,6 +20,7 @@ import type {
   FactoryProject,
   FlowBlock,
   FlowDraft,
+  FlowEnding,
   FlowGraph,
 } from "@t3-factory/contracts";
 import {
@@ -53,6 +54,7 @@ import { BLOCK_KINDS } from "../block-kind.ts";
 import { fixedShortcuts, matchesShortcut } from "../keyboard-shortcuts.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration, type BlockAgents } from "../components/block-inspector.tsx";
+import type { BlockFlows } from "../components/subflow-inspector.tsx";
 import { PanelHeading, TargetSelect } from "../components/block-exit-configuration.tsx";
 import { BlockLibrary, NewAgentLink } from "../components/block-library.tsx";
 import { FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
@@ -104,6 +106,7 @@ import {
 import type { RevisionConflict } from "../revisioned-draft.ts";
 import {
   placeableAgents,
+  placeableFlows,
   studioOwner,
   useStudioOwners,
   useStudioRead,
@@ -349,6 +352,7 @@ function useCanvasSelection(
 }
 
 const noAgents: readonly AgentDefinition[] = [];
+const noFlows: readonly FlowDraft[] = [];
 
 /**
  * Condition arrival-number text that is not a valid threshold, by block and rule. It stays shown
@@ -422,18 +426,32 @@ function useAgentCapabilities() {
  * Studio's saved Agents for the canvas, and for the block library only those the Flow's owner
  * may place; the last read stays offered during refreshes.
  */
-function useLibraryAgents(definitions: StudioDefinitions, projectId: string | null) {
+function useLibraryAgents(
+  definitions: StudioDefinitions,
+  projectId: string | null,
+  currentFlow: { readonly id: string; readonly name: string },
+) {
   const { value, error } = useStudioRead(definitions, "agents");
+  const { value: savedFlows } = useStudioRead(definitions, "flows");
   const { projects } = useStudioOwners(definitions);
   const capabilities = useAgentCapabilities();
   const agents = value ?? noAgents;
+  const flows = savedFlows ?? noFlows;
   const placeable = placeableAgents(agents, { projectId });
+  const placeableChildFlows = placeableFlows(flows, { projectId });
   return {
     agents,
+    flows,
     agentError: error ? "Could not load saved Agents. Reopen this Flow to try again." : "",
     owner: studioOwner(projectId, projects),
     projects,
     blockAgents: { all: agents, placeable, capabilities } satisfies BlockAgents,
+    blockFlows: {
+      current: { id: currentFlow.id, name: currentFlow.name, projectId },
+      all: flows,
+      placeable: placeableChildFlows,
+      projects,
+    } satisfies BlockFlows,
   };
 }
 
@@ -488,6 +506,35 @@ function revealed(
   return next && next !== selected ? [selected, next] : [selected];
 }
 
+function dirtyDraftInput(state: ReturnType<typeof useOpenedFlowDraft>["state"], saved: FlowDraft) {
+  if (!state.dirty) return undefined;
+  return {
+    name: state.content.name,
+    graph: state.content.graph,
+    workspace: state.content.workspace,
+    expectedRevision: saved.revision,
+    expectedProjectId: state.owner,
+  };
+}
+
+function finishActions(
+  graph: FlowGraph,
+  focus: ComponentProps<typeof FinishSettings>["focus"],
+  change: (next: FlowGraph) => void,
+  remove: (next: FlowGraph) => void,
+) {
+  return {
+    focus,
+    onAdd: () => {
+      const next = addEnding(graph);
+      change(next);
+      return next.finish.endings.at(-1)!.id;
+    },
+    onEdit: (ending: FlowEnding) => change(replaceEnding(graph, ending)),
+    onRemove: (endingId: string) => remove(removeEnding(graph, endingId)),
+  };
+}
+
 const noIssues: readonly BlockIssue[] = [];
 
 export function FlowDetail({
@@ -508,9 +555,10 @@ export function FlowDetail({
   const { draft, state, interactions } = useOpenedFlowDraft(id, definitions, created);
   const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { saved, error } = state;
-  const { agents, agentError, owner, projects, blockAgents } = useLibraryAgents(
+  const { agents, flows, agentError, owner, projects, blockAgents, blockFlows } = useLibraryAgents(
     definitions,
     state.owner,
+    { id, name: state.content.name },
   );
   const ownerDialogs = useOwnerDialogs(definitions);
   const [libraryOpen, setLibraryOpen] = useState(true);
@@ -536,8 +584,9 @@ export function FlowDetail({
   const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
   // A Project that left T3 leaves its Flow read-only until it is moved or removed.
   const readOnly = owner.gone;
-  const { add, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
+  const { add, addFlow, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
   if (!saved) return <FlowLoadState error={error} />;
+  const draftInput = dirtyDraftInput(state, saved);
   return (
     <CanvasLayout>
       <h1 className="sr-only">{name}</h1>
@@ -568,11 +617,15 @@ export function FlowDetail({
           open={libraryOpen}
           onOpenChange={setLibraryOpen}
           flowId={id}
+          flowName={name}
           agents={blockAgents.placeable}
+          flows={blockFlows.placeable}
+          allFlows={flows}
           projects={projects}
           capabilities={blockAgents.capabilities}
           agentError={agentError}
           onAdd={add}
+          onAddFlow={addFlow}
           dropAt={dropAt}
         />
         <div className="relative flex min-w-0 flex-1" {...interactions.fields}>
@@ -580,6 +633,8 @@ export function FlowDetail({
             ref={canvas}
             graph={graph}
             agents={agents}
+            flows={flows}
+            readiness={readiness}
             marks={marks}
             selected={selected}
             selectedWire={wire}
@@ -599,6 +654,9 @@ export function FlowDetail({
             readiness={readiness}
             folderMissing={folderMissing}
             graph={graph}
+            flowId={id}
+            flows={flows}
+            draftInput={draftInput}
             onSelect={selectIssue}
             newAgent={<NewAgentOffer agents={blockAgents} flowId={id} />}
           />
@@ -607,25 +665,16 @@ export function FlowDetail({
           selected={selected}
           graph={graph}
           agents={blockAgents}
+          flows={blockFlows}
           marks={marks}
           flowId={id}
           condition={conditionEditing}
-          finish={{
-            focus: endingFocus,
-            onAdd: () => {
-              const next = addEnding(graph);
-              change(next);
-              return next.finish.endings.at(-1)!.id;
-            },
-            onEdit: (ending) => change(replaceEnding(graph, ending)),
-            onRemove: (endingId) => remove(removeEnding(graph, endingId)),
-          }}
+          finish={finishActions(graph, endingFocus, change, remove)}
           onClose={select}
           onEdit={editBlock}
-          onWireChange={(wire, connected) => {
-            if (connected) change(addWire(graph, wire));
-            else remove(removeWire(graph, wire));
-          }}
+          onWireChange={(wire, connected) =>
+            connected ? change(addWire(graph, wire)) : remove(removeWire(graph, wire))
+          }
           onRemove={deleteBlock}
         />
       </EditorBody>
@@ -692,6 +741,11 @@ function useBlockAdding(
       change({ ...graph, blocks: [...graph.blocks, next] });
       select(next.id);
     },
+    addFlow(flow: FlowDraft, position?: BlockPosition) {
+      const next = newBlock(graph, "subflow", undefined, position, flow);
+      change({ ...graph, blocks: [...graph.blocks, next] });
+      select(next.id);
+    },
     dropAt: ((x, y, grab) => placement.current?.(x, y, grab) ?? null) satisfies DropAt,
   };
 }
@@ -724,6 +778,7 @@ function EditorSettings({
   selected,
   graph,
   agents,
+  flows,
   marks,
   flowId,
   condition,
@@ -736,10 +791,11 @@ function EditorSettings({
   selected: CanvasBlockSelection | null;
   graph: FlowGraph;
   agents: BlockAgents;
+  flows: BlockFlows;
   marks: ReturnType<typeof readinessMarks>;
   flowId: string;
   condition: (blockId: string) => ConditionEditing;
-  finish: Omit<ComponentProps<typeof FinishSettings>, "graph" | "agents" | "issues">;
+  finish: Omit<ComponentProps<typeof FinishSettings>, "graph" | "agents" | "flows" | "issues">;
   /** Called with null to close the settings. */
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
@@ -747,6 +803,7 @@ function EditorSettings({
   onRemove: (blockId: string) => void;
 }) {
   const close = () => onClose(null);
+  const flowMap = new Map(flows.all.map((flow) => [flow.id, flow]));
   if (selected === FLOW_INPUT)
     return (
       <SettingsPanel
@@ -775,7 +832,13 @@ function EditorSettings({
         iconClassName="text-muted-foreground"
         onClose={close}
       >
-        <FinishSettings graph={graph} agents={agents.all} issues={marks.finish} {...finish} />
+        <FinishSettings
+          graph={graph}
+          agents={agents.all}
+          flows={flowMap}
+          issues={marks.finish}
+          {...finish}
+        />
       </SettingsPanel>
     );
   const block = graph.blocks.find((b) => b.id === selected);
@@ -801,6 +864,7 @@ function EditorSettings({
         block={block}
         graph={graph}
         agents={agents}
+        flows={flows}
         issues={marks.blocks.get(block.id) ?? noIssues}
         flowId={flowId}
         condition={condition(block.id)}

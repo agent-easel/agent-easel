@@ -12,6 +12,8 @@ import { openRunConditions } from "./conditions.ts";
 import { openConditionEvidence } from "./condition-evidence.ts";
 import { openRunContinuations } from "./continuations.ts";
 import { openRunDeliveries } from "./deliveries.ts";
+import { openInvocationReads } from "./invocation-reads.ts";
+import { openRunInvocations } from "./invocations.ts";
 import { openRunEndings } from "./endings.ts";
 import { openRunHuman } from "./human.ts";
 import { openRunManualSettlement } from "./manual-settlement.ts";
@@ -86,6 +88,8 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     ...openRunContinuations(database),
     ...openRunConditions(database),
     ...openRunEndings(database),
+    ...openRunInvocations(database),
+    ...openInvocationReads(database),
     ...openConditionEvidence(database),
     ...openRunDeliveries(database),
     ...openWorkerTitles(database),

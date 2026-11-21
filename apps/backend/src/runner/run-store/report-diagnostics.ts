@@ -16,7 +16,13 @@ export function recordReportVerdict(
 ) {
   return Effect.gen(function* () {
     const diagnostic = reportDiagnostic(reply);
-    if (!run.gate_open || !block.execution_id) return diagnostic;
+    if (
+      run.archived_at ||
+      !run.gate_open ||
+      reply.code === "INVOCATION_CLOSED" ||
+      !block.execution_id
+    )
+      return diagnostic;
     const [binding] = yield* sql<{
       id: string;
     }>`SELECT id FROM run_thread_bindings WHERE run_id=${run.id} AND block_id=${block.block_id} AND thread_id=${block.thread_id} AND role='worker'`;

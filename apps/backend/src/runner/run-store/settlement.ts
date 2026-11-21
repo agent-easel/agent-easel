@@ -59,12 +59,12 @@ type ThreadSettlementCandidate = {
 /** An Agent Block owns its worker thread; a Continuation's prompt runs on the thread its visit is
  * bound to, so its result settles that thread for the prompt's T3 run. */
 function finishedBlockCandidates(sql: SqlClient.SqlClient, runId: string) {
-  return sql<ThreadSettlementCandidate>`SELECT c.report_id,c.thread_id,c.execution_id FROM (SELECT r.id AS report_id,COALESCE(b.thread_id,pt.thread_id) AS thread_id,r.execution_id,b.run_id,b.block_id,b.rowid AS block_order FROM run_blocks b JOIN run_activations a ON a.run_id=b.run_id AND a.block_id=b.block_id AND a.rowid=(SELECT MAX(l.rowid) FROM run_activations l WHERE l.run_id=b.run_id AND l.block_id=b.block_id) LEFT JOIN continuation_visits pv ON pv.activation_id=a.id LEFT JOIN run_thread_bindings pt ON pt.id=pv.binding_id LEFT JOIN working_reports w ON w.activation_id=a.id AND w.replaced_at IS NULL JOIN runtime_reports r ON r.activation_id=a.id AND r.status='finished' AND r.rowid=(SELECT MAX(n.rowid) FROM runtime_reports n WHERE n.activation_id=a.id AND n.status='finished') WHERE b.run_id=${runId} AND w.id IS NULL AND r.execution_id IS NOT NULL) c WHERE c.thread_id IS NOT NULL AND EXISTS(SELECT 1 FROM runs WHERE id=c.run_id AND block_settlement_enabled=1) AND NOT EXISTS(SELECT 1 FROM t3_thread_settlements s WHERE s.run_id=c.run_id AND s.thread_id=c.thread_id AND s.execution_id=c.execution_id) AND NOT EXISTS(SELECT 1 FROM run_attention a2 WHERE a2.run_id=c.run_id AND a2.block_id=c.block_id AND a2.kind IN('execution-failed','missing-report') AND a2.settled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM continuation_visits v JOIN run_thread_bindings t ON t.id=v.binding_id WHERE v.run_id=c.run_id AND t.thread_id=c.thread_id AND v.kind='prompt' AND v.state='sent') ORDER BY c.block_order`;
+  return sql<ThreadSettlementCandidate>`SELECT c.report_id,c.thread_id,c.execution_id FROM (SELECT r.id AS report_id,COALESCE(b.thread_id,pt.thread_id) AS thread_id,r.execution_id,b.run_id,b.block_id,b.rowid AS block_order FROM run_blocks b JOIN run_activations a ON a.run_id=b.run_id AND a.block_id=b.block_id AND a.rowid=(SELECT MAX(l.rowid) FROM run_activations l WHERE l.run_id=b.run_id AND l.block_id=b.block_id) LEFT JOIN continuation_visits pv ON pv.activation_id=a.id LEFT JOIN run_thread_bindings pt ON pt.id=pv.binding_id LEFT JOIN working_reports w ON w.activation_id=a.id AND w.replaced_at IS NULL JOIN runtime_reports r ON r.activation_id=a.id AND r.status='finished' AND r.rowid=(SELECT MAX(n.rowid) FROM runtime_reports n WHERE n.activation_id=a.id AND n.status='finished') WHERE b.run_id=${runId} AND b.invocation_id IS NULL AND w.id IS NULL AND r.execution_id IS NOT NULL) c WHERE c.thread_id IS NOT NULL AND EXISTS(SELECT 1 FROM runs WHERE id=c.run_id AND block_settlement_enabled=1) AND NOT EXISTS(SELECT 1 FROM t3_thread_settlements s WHERE s.run_id=c.run_id AND s.thread_id=c.thread_id AND s.execution_id=c.execution_id) AND NOT EXISTS(SELECT 1 FROM run_attention a2 WHERE a2.run_id=c.run_id AND a2.block_id=c.block_id AND a2.kind IN('execution-failed','missing-report') AND a2.settled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM continuation_visits v JOIN run_thread_bindings t ON t.id=v.binding_id WHERE v.run_id=c.run_id AND t.thread_id=c.thread_id AND v.kind='prompt' AND v.state='sent') ORDER BY c.block_order`;
 }
 
 /** Work that must finish locally before automatic settlement can advance. */
 export function pendingRunWork(sql: SqlClient.SqlClient, runId: Fragment) {
-  return sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND state!='acknowledged' AND NOT (state='cancelled' AND kind IN ('handoff','prepare')) UNION ALL SELECT id FROM human_occurrences WHERE run_id=${runId} AND state!='answered' UNION ALL SELECT id FROM wait_arrivals WHERE run_id=${runId} AND state='pending' UNION ALL SELECT run_id FROM run_workspaces WHERE run_id=${runId} AND state='preparing' UNION ALL SELECT id FROM continuation_visits WHERE run_id=${runId} AND state IN ('sent','queued')`;
+  return sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND state!='acknowledged' AND NOT (state='cancelled' AND kind IN ('handoff','prepare')) UNION ALL SELECT id FROM human_occurrences WHERE run_id=${runId} AND state='pending' UNION ALL SELECT id FROM wait_arrivals WHERE run_id=${runId} AND state='pending' UNION ALL SELECT run_id FROM run_workspaces WHERE run_id=${runId} AND state='preparing' UNION ALL SELECT id FROM continuation_visits WHERE run_id=${runId} AND state IN ('sent','queued') UNION ALL SELECT id FROM subflow_invocations WHERE run_id=${runId} AND state IN ('active','queued','stopping')`;
 }
 
 export function openRunSettlement(database: RunnerDatabase) {
@@ -79,6 +79,13 @@ export function openRunSettlement(database: RunnerDatabase) {
           block_id: string;
           thread_id: string;
         }>`SELECT block_id,thread_id FROM run_blocks WHERE run_id=${runId} AND thread_id IS NOT NULL ORDER BY rowid`;
+        const closedWorkers = new Set(
+          (yield* sql<{
+            block_id: string;
+          }>`SELECT b.block_id FROM run_blocks b JOIN subflow_invocations i ON i.id=b.invocation_id WHERE b.run_id=${runId} AND i.state IN ('returned','nothing-returned','cancelled')`).map(
+            (block) => block.block_id,
+          ),
+        );
         const current = new Map(
           (yield* currentReports(sql, runId)).map((entry) => [entry.blockId, entry.report?.status]),
         );
@@ -89,7 +96,9 @@ export function openRunSettlement(database: RunnerDatabase) {
         const done =
           blocks.length > 0 &&
           !pending.length &&
-          blocks.every((b) => current.get(b.block_id) === "finished");
+          blocks.every(
+            (b) => closedWorkers.has(b.block_id) || current.get(b.block_id) === "finished",
+          );
         return done ? blocks.map((b) => b.thread_id) : null;
       }),
     );

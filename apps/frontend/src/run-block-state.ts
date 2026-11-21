@@ -99,6 +99,8 @@ export function chosenExitIds(
           ? ["output"]
           : [],
       );
+    case "subflow":
+      return new Set();
     case "continuation":
       return new Set(
         run.continuationVisits.some(

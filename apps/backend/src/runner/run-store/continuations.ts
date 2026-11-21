@@ -32,6 +32,15 @@ const arrivalMessage = (handoff: Handoff) => {
  * arrival's source, through consecutive Waits and Conditions. */
 const messageAuthor = (sql: SqlClient.SqlClient, handoff: Handoff) =>
   Effect.gen(function* () {
+    if (handoff.subflow_invocation_id) {
+      const [ending] = yield* sql<{ ending_name: string }>`SELECT ending_name FROM subflow_results
+        WHERE invocation_id=${handoff.subflow_invocation_id}`;
+      return {
+        sourceBlockId: handoff.source_block_id,
+        exitId: handoff.exit_id,
+        subflowEndingName: ending!.ending_name,
+      };
+    }
     const [author] = yield* sql<{
       source_block_id: string | null;
       exit_id: string | null;
@@ -207,7 +216,8 @@ export function openRunContinuations(database: RunnerDatabase) {
       Effect.map(
         sql`SELECT a.id FROM run_activations a JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
           LEFT JOIN continuation_visits v ON v.activation_id=a.id LEFT JOIN run_thread_bindings t ON t.id=v.binding_id
-          WHERE a.run_id=${runId} AND a.block_id!=${blockId} AND a.phase!='finished' AND COALESCE(t.thread_id,b.thread_id)=${threadId}
+          WHERE a.run_id=${runId} AND a.block_id!=${blockId} AND a.phase!='finished'
+          AND NOT EXISTS(SELECT 1 FROM subflow_invocations i WHERE i.id=b.invocation_id AND i.state<>'active') AND COALESCE(t.thread_id,b.thread_id)=${threadId}
           AND (v.id IS NULL OR v.state='sent')
           AND EXISTS(SELECT 1 FROM run_executions e WHERE e.run_id=a.run_id AND e.activation_id=a.id)
           AND NOT EXISTS(SELECT 1 FROM runtime_reports r WHERE r.activation_id=a.id AND r.status='finished')

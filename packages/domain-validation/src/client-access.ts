@@ -11,9 +11,9 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 22;
-export const FACTORY_MINIMUM_PEER_PROTOCOL = 22;
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 22;
+export const FACTORY_PROTOCOL = 23;
+export const FACTORY_MINIMUM_PEER_PROTOCOL = 23;
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 23;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

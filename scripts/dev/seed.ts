@@ -7,6 +7,7 @@ import {
 } from "./seed-scenarios.ts";
 import {
   blockExit,
+  launchedWorkers,
   observeFor,
   controlledAgent,
   repliesDiscussed,
@@ -220,6 +221,8 @@ export async function seedScenario(
     scenario.attachments,
     namespace,
   );
+  if (scenario.state === "subflow closing" || scenario.state === "subflow returned")
+    return seedSubflowReview(context, start, scenario.state === "subflow returned");
   if (scenario.state === "progress overdue") {
     const worker = await threeHoursAgo(async () =>
       workingReported(context, await workerAtWork(context, start), "Checking the indexing job."),
@@ -331,6 +334,8 @@ async function finishScenario(
         | "results released to a Wait"
         | "results released to a Condition"
         | "ending reached"
+        | "subflow closing"
+        | "subflow returned"
         | "progress overdue"
         | "settlement unresolved"
         | "generated title applied";
@@ -440,4 +445,45 @@ async function seedScenarios(context: SeedContext, flows: DemoFlows) {
       await seedScenario(context, flows[scenario.flow], scenario, demoNamespace),
     );
   return runs;
+}
+
+async function seedSubflowReview(
+  context: SeedContext,
+  start: Awaited<ReturnType<typeof demoStart>>,
+  release: boolean,
+) {
+  const worker = await workerAtWork(context, start);
+  await resultReported(context, worker, {
+    exit: "Ready for review",
+    message: "Search is ready for review.",
+  });
+  await observeFor(
+    "launch both reviewers",
+    context,
+    worker.runId,
+    (run) =>
+      run.subflows?.some(
+        (placement) =>
+          placement.defaultInvocation?.blocks.filter((block) => block.threadId).length === 2,
+      ) === true,
+  );
+  const { workers } = await launchedWorkers(context, worker.runId);
+  const [, first, second] = workers;
+  context.t3.threads.holdStops([second!.threadId]);
+  await resultReported(context, first!, {
+    exit: "Approved",
+    message: "Search actions and empty-state copy reviewed.",
+  });
+  await observeFor(
+    "accept the review ending",
+    context,
+    worker.runId,
+    (run) =>
+      run.subflows?.some((placement) => placement.defaultInvocation?.state === "stopping") === true,
+  );
+  if (release) {
+    context.t3.threads.finishHeldStops([second!.threadId]);
+    await blockWorkerLaunched(context, worker.runId, "notes");
+  }
+  return worker.runId;
 }

@@ -596,6 +596,42 @@ A background worker serializes attempts per binding, coalesces unsent revisions 
 
 Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
 
+## Subflow invocations
+
+Start captures one immutable revision per Flow and Agent across the saved composition. The
+acceptance transaction reruns transitive readiness and budgets and requires the same closure
+as preflight. A replay of an accepted Start resolves its original Run before validation.
+The composition budget applies to Runs containing Subflows. Each invocation and its
+Blocks use the same Run, Task, Project and workspace.
+
+Each placement accepts one invocation per released arrival, with a durable serial queue
+inside its parent invocation. Different placements can execute at the same time. The
+invocation's workers, repeated visits, Conditions, Continuations, Human occurrences and Wait
+arrivals use the invocation's own Block identities. Direct Flow input passes Start text and
+images through entry-only chains. Other arrivals pass their exact text, including empty Human
+approval. An Agent connected to an invoked Flow's input gets that invocation's input in its
+first prompt. Ordinary Handoffs expose their message through the recipient's result or feedback fields.
+In a worktree Run, the first Agent in depth-first saved Flow-input order creates the
+worktree. The remaining starters join after it binds.
+
+The first released delivery accepted at an invocation's Finish records its ending and closes
+dispatch into that invocation and its descendants in the same transaction. Factory searches for
+unconfirmed launches and sends Stop to workers that a fresh read shows unfinished. An
+acknowledgement holds the result and the queue until fresh reads verify completion. Unresolved
+Stop raises one Problem at that invocation. Retry starts a fresh authorized repair attempt.
+Closure leaves the threads Run-owned and requests no T3 thread settlement on behalf of
+the invocation.
+
+Verified closure releases one result through the matching ending ID, retaining the producing
+worker and activation through forwarding Blocks. Output None releases empty text. Blank
+Required output records **Output missing** without raising a Problem. A quiet invocation
+without an ending records **Nothing returned**. Pending Human, Wait, delivery, child invocation
+or integrity work and unresolved Block errors keep the invocation open. Queue advancement commits
+with the outcome. A parent cutoff cancels an owed return and preserves the accepted ending.
+A late report for a closed Block records an informational event while the Run gate is open.
+Archive and a closed Run gate take precedence. A parent Continuation on the same worker
+thread gets the ending name and unchanged output beside its prompt, then reports with its own Block id.
+
 ## Run title generations
 
 A [Run title generation](runs.md#run-title-generation) runs beside its Run and is never Run work: it holds no gate,

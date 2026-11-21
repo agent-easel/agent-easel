@@ -22,6 +22,7 @@ import {
   fullLegacyFlowFile,
   historicalFlowReceipts,
   importFullLegacyFlow,
+  nestedFlowFile,
   interruptedUpload,
   reviewedCommit,
   withReversedKeys,
@@ -33,6 +34,7 @@ import {
   reviewerExits,
   sampleAgentInput,
 } from "./support/domain-setup.ts";
+import { savedFlow, subflowBlock } from "./support/subflow.ts";
 import { factoryHarness } from "./support/factory.ts";
 import {
   agentBlock,
@@ -94,7 +96,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 5 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 6 })),
   );
 
   // Assert
@@ -104,7 +106,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 5, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 6, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -526,7 +528,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(4);
+  expect(document.formatVersion).toBe(5);
 
   // Act
   const committed = assertOk(
@@ -710,20 +712,28 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a full-size Flow with an empty Finish can be exported and reimported as version 4", async (context) => {
+it("a full-size child Flow with an empty Finish can be exported and reimported as version 5", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
-  const { document } = assertOk(await factory.exportFlow(flow.id));
+  const parent = await savedFlow(factory, {
+    name: "Parent",
+    graph: {
+      flowInput: flowInput("inner"),
+      blocks: [subflowBlock("inner", "Inner", flow.id)],
+      connections: [],
+    },
+  });
+  const { document } = assertOk(await factory.exportFlow(parent.id));
   const agentBlock = flow.graph.blocks[0];
   assert(agentBlock?.kind === "agent" && agentBlock.agentId);
 
   // Act
-  const copied = await factory.commitImport(reviewedCommit("import-v4", undefined, document));
+  const copied = await factory.commitImport(reviewedCommit("import-v5", undefined, document));
 
   // Assert
   assert(copied.ok);
-  expect(document.formatVersion).toBe(4);
-  const restored = assertOk(await factory.getFlow(copied.value.flowId!));
+  expect(document.formatVersion).toBe(5);
+  const restored = assertOk(await factory.getFlow(copied.value.flows![1]!.id));
   const placedAgents = new Map([[agentBlock.agentId, copied.value.agents[0]!.id]]);
   expect(restored.graph).toStrictEqual({
     ...flow.graph,
@@ -761,7 +771,7 @@ it("a version-3 import counts a Finish with endings toward the block limit", asy
   expect(assertOk(await factory.listFlows())).toStrictEqual([]);
 });
 
-it("version-3 export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
+it("version-5 export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
   const saved = assertOk(
@@ -778,7 +788,7 @@ it("version-3 export refuses a 500-block Flow with an ending while preserving th
 
   // Assert
   assert(!exported.ok);
-  expect(exported.error.issues).toMatchObject([{ code: "graph_too_large", path: "flow.graph" }]);
+  expect(exported.error.issues).toMatchObject([{ code: "graph_too_large", path: "flows.0.graph" }]);
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(saved.graph);
 });
 
@@ -1117,4 +1127,40 @@ it("after upgrading, a retried commit of an earlier release's import into a Proj
     { code: "import_request_conflict", path: "requestId" },
   ]);
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
+});
+
+it("review puts a non-first root first and inventories each placing block under its file-order Flow label", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const file = nestedFlowFile();
+
+  // Act
+  const review = assertOk(await factory.reviewImport(fileBody(file)));
+
+  // Assert
+  expect(review.agents).toHaveLength(1);
+  expect(review.flows).toMatchObject([
+    {
+      name: "Release",
+      opensAfterImport: true,
+      blockCount: 2,
+      uses: [{ flowName: "Checks (1)", blockName: "Recursive" }],
+    },
+    {
+      name: "Checks (1)",
+      uses: [{ flowName: "Release", blockName: "Review" }],
+      instructions: [
+        { kind: "agent", blockName: "Draft", agentName: "Code reviewer", length: 42 },
+        { kind: "revisit", blockName: "Draft", length: 8 },
+      ],
+    },
+    {
+      name: "Checks (2)",
+      uses: [{ flowName: "Release", blockName: "Verify" }],
+      instructions: [
+        { kind: "agent", blockName: "Publish", agentName: "Code reviewer", length: 42 },
+      ],
+    },
+  ]);
+  expect(assertOk(await factory.listFlows())).toStrictEqual([]);
 });

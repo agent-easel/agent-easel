@@ -159,7 +159,7 @@ function numberPendingArrivals(
 export function readConditionSummaries(
   sql: SqlClient.SqlClient,
   runId: string,
-  definitions: RunDefinitions,
+  blockIds: ReadonlySet<string>,
 ) {
   return Effect.gen(function* () {
     const rows = yield* sql<{
@@ -171,8 +171,8 @@ export function readConditionSummaries(
       accepted_at: string | null;
     }>`SELECT c.block_id,c.arrivals,(SELECT COUNT(*) FROM condition_arrivals p WHERE p.run_id=c.run_id AND p.block_id=c.block_id AND p.state='pending') AS pending,l.arrival_number,l.rule_id,l.accepted_at FROM condition_counters c LEFT JOIN condition_arrivals l ON l.run_id=c.run_id AND l.block_id=c.block_id AND l.arrival_number=c.arrivals WHERE c.run_id=${runId}`;
     const byBlock = new Map(rows.map((row) => [row.block_id, row]));
-    return definitions.flow.graph.blocks.flatMap((block): ConditionSummary[] => {
-      const row = byBlock.get(block.id);
+    return [...blockIds].flatMap((blockId): ConditionSummary[] => {
+      const row = byBlock.get(blockId);
       if (!row) return [];
       return [
         {
@@ -234,8 +234,8 @@ export function openRunConditions(database: RunnerDatabase) {
           if (!held) return false;
           const time = yield* now;
           const recorded =
-            yield* sql`INSERT INTO condition_arrivals(id,run_id,block_id,incoming_intent_id,flow_revision_id,binding_id,origin_activation_id,arrived_at)
-              SELECT ${yield* newId},i.run_id,i.block_id,i.id,r.flow_revision_id,i.binding_id,i.origin_activation_id,${time} FROM operation_intents i JOIN runs r ON r.id=i.run_id
+            yield* sql`INSERT INTO condition_arrivals(id,run_id,block_id,incoming_intent_id,flow_revision_id,template_block_id,binding_id,origin_activation_id,arrived_at)
+              SELECT ${yield* newId},i.run_id,i.block_id,i.id,COALESCE(${runRow.definitions.invocation?.revisionId ?? null},r.flow_revision_id),COALESCE(b.template_block_id,b.block_id),i.binding_id,i.origin_activation_id,${time} FROM operation_intents i JOIN runs r ON r.id=i.run_id JOIN run_blocks b ON b.run_id=i.run_id AND b.block_id=i.block_id
               WHERE i.id=${handoff.id} AND i.kind='handoff' AND i.state='pending' ON CONFLICT(incoming_intent_id) DO NOTHING RETURNING id`;
           const { numbered, latched } = yield* numberPendingArrivals(
             sql,

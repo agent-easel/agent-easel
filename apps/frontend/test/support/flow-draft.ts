@@ -160,8 +160,8 @@ function liveFlowStudio(factory: MemoryFactory, flows: readonly FlowDraft[]) {
  * The Flow editor's draft of the Flow Factory holds, in a Studio that receives that Flow and one
  * saved Agent live. The returned deliveries are Studio's live updates of what Factory now holds.
  */
-function flowDraft(factory = memoryFactory()) {
-  const { definitions, socket, changed } = liveFlowStudio(factory, [factory.latest()]);
+function flowDraft(factory = memoryFactory(), others: readonly FlowDraft[] = []) {
+  const { definitions, socket, changed } = liveFlowStudio(factory, [factory.latest(), ...others]);
   const draft = createFlowDraft("flow", definitions, factory);
   draft.open();
   return {
@@ -169,6 +169,7 @@ function flowDraft(factory = memoryFactory()) {
     draft,
     /** Studio receives Factory's latest revision of the Flow. */
     published: (flow = factory.latest()) => changed({ flows: { upserts: [flow], removals: [] } }),
+    flowRemoved: (id: string) => changed({ flows: { upserts: [], removals: [id] } }),
     /** Another client removes the Flow and Studio receives the removal. */
     removedElsewhere: async () => {
       await factory.removeFlow("flow");
@@ -200,6 +201,28 @@ export function unlistedFlow() {
 
 /** The Flow editor shows a loaded, clean Flow. */
 export const openedFlow = () => flowDraft();
+
+export const reviewPanel = (revision = 1): FlowDraft => ({
+  ...memoryFactory().latest(),
+  id: "review-panel",
+  name: "Review panel",
+  revision,
+});
+
+export function editedComposition() {
+  const factory = memoryFactory();
+  factory.validateFlow.mockResolvedValue({
+    ...validated(),
+    closure: {
+      stamp: "review-panel-1",
+      definitions: [{ kind: "flow", id: "review-panel", revision: 1, projectId: null }],
+      missing: [],
+    },
+  });
+  const setup = flowDraft(factory, [reviewPanel()]);
+  setup.draft.edit({ name: "Edited" });
+  return setup;
+}
 
 /** The opened Flow has an unsaved rename. */
 export function editedFlow(name = "Edited") {

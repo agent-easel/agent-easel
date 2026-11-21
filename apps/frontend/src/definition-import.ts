@@ -17,10 +17,9 @@ import { randomId } from "./lib/ids.ts";
 /** The Factory calls an import makes; the HTTP client in the app, fakes in tests. */
 export type DefinitionImportOperations = Pick<typeof api, "reviewImport" | "commitImport">;
 
-/** A chosen file's name and text, kept until the import finishes or is cancelled. */
 export interface ImportFile {
   readonly name: string;
-  readonly text: string;
+  readonly data: Blob;
 }
 
 export interface ImportRow extends ImportReviewAgent {
@@ -149,9 +148,7 @@ export function createDefinitionImport(
   async function review(file: ImportFile) {
     set({ ...idle, file, reviewing: true });
     try {
-      const reviewed = await operations.reviewImport(
-        new Blob([file.text], { type: "application/json" }),
-      );
+      const reviewed = await operations.reviewImport(file.data);
       if (snapshot.file !== file) return;
       const { agents, ...rest } = reviewed;
       const rows = agents.map((agent) => ({ ...agent, selection: agent.proposed, refusal: "" }));
@@ -220,7 +217,7 @@ export function createDefinitionImport(
       try {
         const input: CommitImportInput = {
           requestId,
-          document: JSON.parse(file.text) as CommitImportInput["document"],
+          document: JSON.parse(await file.data.text()) as CommitImportInput["document"],
           selections: Object.fromEntries(reviewed.rows.map((row) => [row.key, row.selection])),
           projectId: snapshot.target,
         };
