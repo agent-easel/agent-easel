@@ -15,6 +15,7 @@ import type {
   LaunchDiscovery,
   LaunchPayload,
   LaunchReference,
+  PendingBackgroundTask,
   SendPayload,
   SendReference,
   T3Threads,
@@ -28,10 +29,12 @@ type ThreadExecutionRead = {
   thread: {
     threadId: string;
     projectId: string;
+    status?: unknown;
     activeRunId: string | null;
     link: string | null;
     worktreePath: string | null;
     pendingRequestCount: number;
+    pendingBackgroundTasks?: unknown;
     latestRunId?: string | null;
     branch?: unknown;
     pullRequests?: unknown;
@@ -50,15 +53,37 @@ type RecentRun = {
 
 const isNullableString = (value: unknown) => value === null || typeof value === "string";
 
+type RawPendingBackgroundTask = {
+  readonly taskId: string;
+  readonly kind: string;
+  readonly awaited?: boolean;
+};
+
+const isPendingBackgroundTask = (value: unknown): value is RawPendingBackgroundTask => {
+  if (!value || typeof value !== "object") return false;
+  const task = value as Record<string, unknown>;
+  return (
+    typeof task.taskId === "string" &&
+    typeof task.kind === "string" &&
+    (task.awaited === undefined || typeof task.awaited === "boolean")
+  );
+};
+
+const isPendingBackgroundTasks = (value: unknown): value is readonly RawPendingBackgroundTask[] =>
+  Array.isArray(value) && value.every(isPendingBackgroundTask);
+
 function isObservedThread(thread: ThreadExecutionRead["thread"] | undefined, threadId: string) {
   return (
     thread?.threadId === threadId &&
     typeof thread.projectId === "string" &&
+    (thread.status === undefined || typeof thread.status === "string") &&
     isNullableString(thread.activeRunId) &&
     isNullableString(thread.link) &&
     isNullableString(thread.worktreePath) &&
     Number.isInteger(thread.pendingRequestCount) &&
-    thread.pendingRequestCount >= 0
+    thread.pendingRequestCount >= 0 &&
+    (thread.pendingBackgroundTasks === undefined ||
+      isPendingBackgroundTasks(thread.pendingBackgroundTasks))
   );
 }
 
@@ -76,10 +101,22 @@ function executionObservation(threadId: string, body: ThreadExecutionRead): Exec
     ...(repository ? { repository } : {}),
     threadId,
     projectId: body.thread.projectId,
+    ...(typeof body.thread.status === "string" ? { status: body.thread.status } : {}),
     activeRunId: body.thread.activeRunId,
     link: body.thread.link,
     workspaceRoot: body.thread.worktreePath,
     pendingRequestCount: body.thread.pendingRequestCount,
+    ...(isPendingBackgroundTasks(body.thread.pendingBackgroundTasks)
+      ? {
+          pendingBackgroundTasks: body.thread.pendingBackgroundTasks.map(
+            ({ taskId, kind, awaited }): PendingBackgroundTask => ({
+              taskId,
+              kind,
+              awaited: awaited === true,
+            }),
+          ),
+        }
+      : {}),
     ...(body.thread.latestRunId !== undefined ? { latestRunId: body.thread.latestRunId } : {}),
     recentRuns: body.recentRuns.map((recentRun) => {
       const source = recentRun.completedAt ?? recentRun.startedAt ?? recentRun.requestedAt;

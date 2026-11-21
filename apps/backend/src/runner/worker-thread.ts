@@ -16,13 +16,13 @@ export interface WorkerThread {
   readonly finished: boolean;
 }
 
-/**
- * Factory trusts T3 to decide when a worker thread is finished. It is finished when the thread
- * read shows no active run and no pending native request, and `t3_thread_wait` for its latest
- * run (with its delegated and background work) answers a terminal status without timing out.
- * T3's `resultRun` is not consulted. Factory keeps no model of descendants, queues or
- * individual executions.
- */
+export function awaitingBackgroundWork(thread: ExecutionObservation): boolean {
+  return (
+    thread.status === "waiting" ||
+    thread.pendingBackgroundTasks?.some((task) => task.awaited) === true
+  );
+}
+
 export async function readWorkerThread(
   t3: T3Threads,
   run: ThreadRun,
@@ -38,7 +38,12 @@ export async function readWorkerThread(
     throw Error("Worker thread scope changed.");
   const latestId = thread.activeRunId ?? thread.latestRunId ?? null;
   const latest = thread.recentRuns.find((r) => r.runId === latestId) ?? null;
-  if (thread.activeRunId || thread.pendingRequestCount !== 0 || !latestId)
+  if (
+    thread.activeRunId ||
+    thread.pendingRequestCount !== 0 ||
+    awaitingBackgroundWork(thread) ||
+    !latestId
+  )
     return { thread, latest, finished: false };
   const settlement = await t3.readDelegatedSettlement(target, threadId, latestId);
   return { thread, latest, finished: settlement.state === "settled" };

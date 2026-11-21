@@ -7,7 +7,7 @@ import {
   type RunStore,
 } from "./run-store/run-store.ts";
 import type { RunRow } from "./runner-types.ts";
-import { readWorkerThread } from "./worker-thread.ts";
+import { awaitingBackgroundWork, readWorkerThread } from "./worker-thread.ts";
 
 /** The Handoff release rule's answer for a Handoff, or for the delivery it became. */
 export type Release =
@@ -55,7 +55,8 @@ const neverRan = (thread: ExecutionObservation) =>
   !thread.activeRunId &&
   !thread.latestRunId &&
   thread.recentRuns.length === 0 &&
-  thread.pendingRequestCount === 0;
+  thread.pendingRequestCount === 0 &&
+  !awaitingBackgroundWork(thread);
 
 /** Asks the Handoff release rule for one Final result version. The Run store answers what the
  * release still waits for and applies the local part; this reads the T3 part, whether the source
