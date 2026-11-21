@@ -11,6 +11,7 @@ import type { RunnerDatabase } from "./database.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { DeliveryKind } from "./states.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
+import { baselineWorkerTitle } from "./worker-titles.ts";
 
 /** A send's worker turn holds its Block until an observation sees the turn's run. */
 const UNOBSERVED_WORKER_HOLD = "Worker thread not observed yet.";
@@ -217,9 +218,12 @@ export function openRunDeliveries(database: RunnerDatabase) {
         });
         if (!held) return;
         const [reserved] = yield* sql<{
-          id: string;
-        }>`SELECT id FROM operation_intents WHERE id=${delivery.id} AND state IN ('reserved','uncertain') AND payload_json IS NOT NULL`;
+          payload_json: string;
+        }>`SELECT payload_json FROM operation_intents WHERE id=${delivery.id} AND state IN ('reserved','uncertain') AND payload_json IS NOT NULL`;
         if (!reserved) return;
+        const launchTitle = (JSON.parse(reserved.payload_json) as { title?: unknown }).title;
+        if (typeof launchTitle !== "string" || !launchTitle)
+          return yield* Effect.fail(Error("Invalid launch reference; outcome is uncertain"));
         const time = yield* now;
         const bindingId = randomUUID();
         const link = scopedThreadHref(runRow.environment_id, reference.threadId);
@@ -232,6 +236,14 @@ export function openRunDeliveries(database: RunnerDatabase) {
         }>`SELECT id FROM run_activations WHERE run_id=${runRow.id} AND block_id=${delivery.block_id} ORDER BY rowid DESC LIMIT 1`;
         if (!binding || !activation)
           return yield* Effect.fail(Error("Worker binding is incomplete"));
+        yield* baselineWorkerTitle(
+          sql,
+          runRow.id,
+          binding.id,
+          delivery.block_id,
+          reference.threadId,
+          launchTitle,
+        );
         yield* sql`INSERT INTO run_executions(run_id,block_id,thread_id,execution_id,binding_id,activation_id,engine_status) VALUES(${runRow.id},${delivery.block_id},${reference.threadId},${reference.runId},${binding.id},${activation.id},${reference.status}) ON CONFLICT DO NOTHING`;
         yield* writeBlockState(
           sql,

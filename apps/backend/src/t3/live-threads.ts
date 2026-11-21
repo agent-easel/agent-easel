@@ -7,6 +7,7 @@ import {
 } from "./connection.ts";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
 import { discoverLaunches, threadIdentityRead } from "./launch-discovery.ts";
+import { workerTitleRenameDisposition } from "./rename-disposition.ts";
 import type {
   AttachmentUpload,
   ExecutionObservation,
@@ -17,6 +18,8 @@ import type {
   SendReference,
   T3Threads,
   ThreadIdentityRead,
+  WorkerTitleRenameDisposition,
+  WorkerTitleRenameRequest,
 } from "./threads.ts";
 import { threadRepository } from "./worker-repository.ts";
 
@@ -251,6 +254,35 @@ export class LiveT3Threads implements T3Threads {
         throw Error("Invalid thread observation");
       return executionObservation(threadId, body);
     });
+  }
+  async renameThread(
+    target: T3Endpoint,
+    request: WorkerTitleRenameRequest,
+  ): Promise<WorkerTitleRenameDisposition> {
+    const unavailable = (): WorkerTitleRenameDisposition => ({ kind: "unavailable" });
+    try {
+      return await this.connection.authorized(target, async (session) => {
+        const answer = await session.call(
+          "t3_thread_update",
+          {
+            threadId: request.threadId,
+            action: "rename",
+            title: request.title,
+            clientRequestId: request.clientRequestId,
+            ...(request.environmentId !== undefined
+              ? { environmentId: request.environmentId }
+              : {}),
+          },
+          10_000,
+        );
+        return workerTitleRenameDisposition(request, answer);
+      });
+    } catch (error) {
+      if (error instanceof T3Failure && error.kind === "refused") return { kind: "unclassified" };
+      if (error instanceof T3Failure && error.kind === "authorization-required")
+        return { kind: "unclassified" };
+      return unavailable();
+    }
   }
   readDelegatedSettlement(target: T3Endpoint, threadId: string, runId: string) {
     return readDelegatedSettlement(

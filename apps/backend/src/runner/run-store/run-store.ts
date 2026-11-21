@@ -24,6 +24,7 @@ import { openRunSettlement } from "./settlement.ts";
 import { openRunStart } from "./start.ts";
 import { openRunWorkspace } from "./workspace.ts";
 import { openRunWaits } from "./waits.ts";
+import { openWorkerTitles } from "./worker-titles.ts";
 
 export type { Delivery, Handoff } from "./records.ts";
 export { passedThrough } from "./release.ts";
@@ -84,6 +85,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     ...openRunConditions(database),
     ...openConditionEvidence(database),
     ...openRunDeliveries(database),
+    ...openWorkerTitles(database),
     ...openRunStart(database),
     ...openRunWorkspace(database),
     ...openRunObservation(database),

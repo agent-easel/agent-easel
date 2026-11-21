@@ -33,6 +33,8 @@ export class ControlledT3Contract implements T3ContractReader {
     settle: true,
     stop: true,
     reportReads: true,
+    rename: true,
+    renameEnvironmentId: false,
   };
   /** Runs at the start of every inspection T3 answers, such as a connection check's. */
   beforeInspection?: () => void | Promise<void>;
@@ -136,6 +138,13 @@ export class ControlledT3Contract implements T3ContractReader {
             },
       settle: { supported: support.settle, explanation: "Controlled settlement support" },
       stop: { supported: support.stop, explanation: "Controlled Stop support" },
+      rename: {
+        supported: support.rename,
+        includeEnvironmentId: support.rename && support.renameEnvironmentId,
+        explanation: support.rename
+          ? "Controlled thread rename support"
+          : "T3 thread update schema does not advertise thread rename.",
+      },
       reportReads: support.reportReads,
     };
   }

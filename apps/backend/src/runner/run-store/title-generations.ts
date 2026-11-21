@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { now } from "../../time.ts";
 import { appendTimelineEvent } from "./steps.ts";
+import { queueWorkerTitleSync } from "./worker-titles.ts";
 
 /**
  * Run title generation records. Like the generation itself, these transitions take no Run gate,
@@ -402,7 +403,11 @@ export function applyGeneratedTitle(
   appliedAt: string,
 ) {
   return Effect.gen(function* () {
+    const [current] = yield* sql<{
+      title: string;
+    }>`SELECT title FROM runs WHERE id=${generation.runId}`;
     yield* sql`UPDATE runs SET title=${title},title_provenance='generated' WHERE id=${generation.runId}`;
+    if (current && current.title !== title) yield* queueWorkerTitleSync(sql, generation.runId);
     yield* sql`UPDATE run_title_generations SET state='applied',generated_title=${title},ended_at=${appliedAt} WHERE id=${generation.id}`;
     yield* titleEvent(sql, generation.runId, "applied", appliedAt);
     yield* sql`UPDATE run_title_settings SET diagnostic_run_id=NULL,diagnostic_message=NULL,diagnostic_at=NULL WHERE singleton=1`;

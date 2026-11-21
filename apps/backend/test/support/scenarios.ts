@@ -544,6 +544,7 @@ export const report = (world: ScenarioWorld, worker: WorkerHandle, fields: Repor
 
 /** Resolves with the next worker launch T3 records, also one background work issues. */
 export const nextLaunch = (world: ScenarioWorld) => world.t3.threads.nextLaunch();
+export const nextRename = (world: ScenarioWorld) => world.t3.threads.nextRename();
 
 /** Resolves with the next send T3 records, also one background work issues. */
 export const nextSend = (world: ScenarioWorld) => world.t3.threads.nextSend();

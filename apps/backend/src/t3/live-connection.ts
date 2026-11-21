@@ -106,6 +106,11 @@ function toolContent(result: ToolResult): unknown {
   return undefined;
 }
 
+function firstToolText(result: ToolResult) {
+  for (const item of result.content) if (item.type === "text" && item.text) return item.text;
+  return undefined;
+}
+
 /** Collects every tools/list page; repeated or runaway cursors fail with `invalidPagination`. */
 async function listAllTools(
   client: Client,
@@ -128,7 +133,12 @@ const session = (client: Client, invalidPagination: () => Error): T3Session => (
   tools: () => listAllTools(client, invalidPagination),
   call: async (name, args, timeout) => {
     const result = await client.callTool({ name, arguments: args }, { timeout });
-    return { isError: Boolean(result.isError), content: toolContent(result) };
+    const text = firstToolText(result);
+    return {
+      isError: Boolean(result.isError),
+      content: toolContent(result),
+      ...(text !== undefined ? { text } : {}),
+    };
   },
 });
 /** An inspection answers an invalid catalog as a contract failure. */

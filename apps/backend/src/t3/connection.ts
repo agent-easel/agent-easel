@@ -72,6 +72,7 @@ export type T3ListedTool = Pick<ListToolsResult["tools"][number], "name" | "inpu
 export interface T3ToolAnswer {
   readonly isError: boolean;
   readonly content: unknown;
+  readonly text?: string;
 }
 /** One MCP connection as the live T3 modules use it. */
 export interface T3Session {

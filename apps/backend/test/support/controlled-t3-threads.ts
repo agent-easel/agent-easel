@@ -9,6 +9,8 @@ import type {
   SendPayload,
   SendReference,
   T3Threads,
+  WorkerTitleRenameDisposition,
+  WorkerTitleRenameRequest,
 } from "../../src/t3/threads.ts";
 import type { ControlledT3Connection } from "./controlled-t3-connection.ts";
 
@@ -103,6 +105,48 @@ export class ControlledT3Threads implements T3Threads {
       throw new T3Failure("unavailable", "Lost response after remote acceptance");
     return launch.reference;
   }
+  readonly remoteTitles = new Map<string, string>();
+  readonly renames: WorkerTitleRenameRequest[] = [];
+  readonly renameReceipts = new Map<string, { threadId: string; title: string }>();
+  readonly deletedThreads = new Set<string>();
+  loseRenameReply = false;
+  compactRenameKeys = new Set<string>();
+  renameDisposition: WorkerTitleRenameDisposition | undefined;
+  beforeRename?: (request: WorkerTitleRenameRequest) => Promise<void>;
+  private readonly renameWaiters: ((request: WorkerTitleRenameRequest) => void)[] = [];
+  nextRename() {
+    return new Promise<WorkerTitleRenameRequest>((resolve) => this.renameWaiters.push(resolve));
+  }
+  threadTitle(threadId: string) {
+    return this.remoteTitles.get(threadId) ?? this.launchedThread(threadId)?.payload.title;
+  }
+  async renameThread(
+    _target: T3Endpoint,
+    request: WorkerTitleRenameRequest,
+  ): Promise<WorkerTitleRenameDisposition> {
+    this.connection.requireConnection();
+    await this.beforeRename?.(request);
+    this.renames.push(request);
+    for (const notify of this.renameWaiters.splice(0)) notify(request);
+    if (this.renameDisposition) return this.renameDisposition;
+    if (this.deletedThreads.has(request.threadId) || !this.launchedThread(request.threadId))
+      return { kind: "thread-not-found" };
+    const receipt = this.renameReceipts.get(request.clientRequestId);
+    if (!receipt) {
+      this.remoteTitles.set(request.threadId, request.title);
+      this.renameReceipts.set(request.clientRequestId, {
+        threadId: request.threadId,
+        title: request.title,
+      });
+    }
+    if (this.loseRenameReply) return { kind: "unavailable" };
+    const title = this.compactRenameKeys.has(request.clientRequestId)
+      ? (this.threadTitle(request.threadId) ?? request.title)
+      : (receipt?.title ?? request.title);
+    return title === request.title
+      ? { kind: "acknowledged", threadId: request.threadId, title }
+      : { kind: "superseded", threadId: request.threadId, title };
+  }
   private launchedThread(threadId: string) {
     return [...this.launches.values()].find((entry) => entry.reference.threadId === threadId);
   }
@@ -172,7 +216,7 @@ export class ControlledT3Threads implements T3Threads {
   ): LaunchCandidate {
     const { payload, reference } = launch;
     return {
-      title: payload.title,
+      title: this.threadTitle(reference.threadId) ?? payload.title,
       projectId: payload.projectId,
       parentThreadId: null,
       ...this.threadWorkspace(payload, reference.threadId, target.workspaceRoot),

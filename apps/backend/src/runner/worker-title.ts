@@ -1,5 +1,7 @@
 import type { FlowBlock } from "@t3-factory/contracts";
 
+import { fingerprint } from "../fingerprint.ts";
+
 const blockLabelLimit = 24;
 const threadTitleLimit = 200;
 const separator = " · ";
@@ -67,6 +69,10 @@ function blockLabels(blocks: readonly TitleBlock[]) {
       return [id, label] as const;
     }),
   );
+}
+
+export function workerTitleRequestId(runId: string, threadId: string, revision: number) {
+  return fingerprint(JSON.stringify(["worker-title-rename", runId, threadId, revision]));
 }
 
 export function workerThreadTitle(

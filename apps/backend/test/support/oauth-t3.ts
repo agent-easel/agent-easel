@@ -72,6 +72,8 @@ export async function oauthT3(
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
     attachments?: boolean;
     themeRead?: (args: Record<string, unknown>) => unknown;
+    updateSchema?: Record<string, unknown>;
+    update?: (args: Record<string, unknown>) => unknown;
     /** Protected-resource metadata always answers with a server error; the SDK treats it as
      * optional, so a grant is approved and refreshed without caching it. */
     resourceMetadataUnavailable?: boolean;
@@ -231,6 +233,9 @@ export async function oauthT3(
       : []),
     ...(options.send ? [{ name: "t3_thread_send", inputSchema: options.sendSchema! }] : []),
     ...(options.launch ? [{ name: "t3_thread_launch", inputSchema: options.launchSchema! }] : []),
+    ...(options.updateSchema
+      ? [{ name: "t3_thread_update", inputSchema: options.updateSchema }]
+      : []),
     ...(options.themeRead
       ? [
           {
@@ -294,6 +299,7 @@ export async function oauthT3(
     ["t3_thread_send", structuredTool(options.send)],
     ["t3_thread_interrupt", structuredTool(options.interrupt)],
     ["t3_thread_organize", options.organize],
+    ["t3_thread_update", options.update],
     ["t3_queue", structuredTool(options.queue)],
     ["t3_thread_list", structuredTool(options.threads)],
     ["t3_thread_wait", structuredTool(options.wait)],

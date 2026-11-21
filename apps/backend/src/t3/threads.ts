@@ -28,7 +28,26 @@ export interface T3Threads {
   readThreadIdentity(target: T3Target, threadId: string): Promise<ThreadIdentityRead>;
   /** One thread read: active/latest run, recent runs and the pending native request count. */
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
+  renameThread(
+    target: T3Endpoint,
+    request: WorkerTitleRenameRequest,
+  ): Promise<WorkerTitleRenameDisposition>;
 }
+
+export interface WorkerTitleRenameRequest {
+  readonly threadId: string;
+  readonly title: string;
+  readonly clientRequestId: string;
+  readonly environmentId?: string;
+}
+
+export type WorkerTitleRenameDisposition =
+  | { readonly kind: "acknowledged"; readonly threadId: string; readonly title: string }
+  | { readonly kind: "superseded"; readonly threadId: string; readonly title: string }
+  | { readonly kind: "thread-not-found" }
+  | { readonly kind: "capability-denied" }
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "unclassified" };
 
 /** `root` is the project checkout. Worktree strategies name the branch every Run worker shares. */
 type WorkspaceStrategy =
