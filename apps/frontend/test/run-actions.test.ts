@@ -99,6 +99,7 @@ function runActionsWith(replaced: Partial<RunActionPorts> = {}) {
     searching: () => false,
     navigationEntry: () => undefined,
     requestFocus: vi.fn<RunActionPorts["requestFocus"]>(),
+    copy: vi.fn<RunActionPorts["copy"]>(async () => undefined),
     ...replaced,
   };
   return { actions: createRunActions(ports), ports };
@@ -197,4 +198,56 @@ it("a Settle confirmation waiting for the user leaves no Run busy", () => {
 
   // Assert
   expect(actions.getSnapshot().busyRunId).toBeUndefined();
+});
+
+it("Copy Run number puts the Run's #N reference on the clipboard", async () => {
+  // Arrange
+  const { actions, ports } = runActionsWith();
+
+  // Act
+  await actions.copy({ entry: { ...active, number: 125 } }, "number");
+
+  // Assert
+  expect(ports.copy).toHaveBeenCalledWith("#125");
+});
+
+it("Copy Run ID puts the Run id on the clipboard", async () => {
+  // Arrange
+  const { actions, ports } = runActionsWith();
+
+  // Act
+  await actions.copy({ detail: runDetail() }, "id");
+
+  // Assert
+  expect(ports.copy).toHaveBeenCalledWith(runDetail().id);
+});
+
+it("a clipboard the browser withholds reports that copying is unavailable", async () => {
+  // Arrange
+  const { actions } = runActionsWith({
+    copy: vi.fn<RunActionPorts["copy"]>(async () => {
+      throw new DOMException("Clipboard denied", "NotAllowedError");
+    }),
+  });
+
+  // Act
+  await actions.copy({ entry: active }, "id");
+
+  // Assert
+  expect(actions.getSnapshot().error).toBe("Copy unavailable here.");
+});
+
+it("a browser without a clipboard API reports that copying is unavailable", async () => {
+  // Arrange
+  const { actions } = runActionsWith({
+    copy: vi.fn<RunActionPorts["copy"]>(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'writeText')");
+    }),
+  });
+
+  // Act
+  await actions.copy({ entry: active }, "number");
+
+  // Assert
+  expect(actions.getSnapshot().error).toBe("Copy unavailable here.");
 });

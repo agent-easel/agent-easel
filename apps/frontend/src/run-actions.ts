@@ -11,6 +11,14 @@ export type RunActionSubject = {
 
 export type RunActionAvailability = Readonly<Record<RunActionId, boolean>>;
 
+export type RunCopyTarget = "number" | "id";
+
+export function runCopyText({ entry, detail }: RunActionSubject, target: RunCopyTarget) {
+  if (target === "id") return entry?.id ?? detail?.id;
+  const number = entry?.number ?? detail?.number ?? null;
+  return number === null ? undefined : `#${number}`;
+}
+
 /**
  * Keyboard shortcuts "Command behaviour": nothing for an archived Run; Snooze or restore and
  * Settle need an Active Run, Archive and Rename any other Run; every action needs mutations
@@ -108,6 +116,7 @@ export type RunActionPorts = {
   /** The Run's entry in the latest navigation. */
   readonly navigationEntry: (runId: string) => RunNavigationEntry | undefined;
   readonly requestFocus: (request: FocusRequest) => void;
+  readonly copy: (text: string) => Promise<void>;
 };
 
 /** Runs Snooze, Restore and Settle and holds the Archive and Rename dialog, whichever surface asks. */
@@ -199,6 +208,16 @@ export function createRunActions(ports: RunActionPorts) {
       update({ dialog: { kind, runId: target.id, title: target.title, returnFocusId } });
     },
     closeDialog: () => update({ dialog: undefined }),
+    async copy(subject: RunActionSubject, target: RunCopyTarget) {
+      const text = runCopyText(subject, target);
+      if (text === undefined) return;
+      update({ error: "" });
+      try {
+        await ports.copy(text);
+      } catch {
+        update({ error: "Copy unavailable here." });
+      }
+    },
     /** Declares the Run open in detail, or none once its screen closes. */
     setOpenRun: (subject: RunActionSubject | undefined) => update({ openRun: subject ?? noRun }),
   };
