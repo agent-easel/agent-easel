@@ -642,16 +642,9 @@ export const textResult = (isError: boolean, reply: unknown): CallToolResult => 
   content: [{ type: "text", text: JSON.stringify(reply) }],
 });
 
-/** A tool call's arguments as an object; anything else is an empty call. */
 export const toolArguments = (args: unknown) =>
   typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
 
-/**
- * Answers one definition tool call in the authoring envelope: the success value as a single JSON
- * text item, or a failure with its outer code, issues, a next step from `steps` (an issue code
- * wins over the outer code; `internal` also answers a call that threw) and never the call's
- * arguments.
- */
 export async function answerDefinitionCall(
   steps: Partial<Record<string, string>>,
   call: () => Promise<Result<unknown>>,

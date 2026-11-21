@@ -128,9 +128,7 @@ type TriggerProposal =
   | {
       readonly kind: "update";
       readonly id: string;
-      /** The edit as a review previews it, on the repository the form shows. */
       readonly input: UpdateTriggerInput;
-      /** What the save sends. */
       readonly body: UpdateTriggerInput;
     }
   | { readonly kind: "create"; readonly input: CreateTriggerInput & TriggerReviewedFields };
@@ -138,11 +136,6 @@ type TriggerProposal =
 /** The fields a create sends in full, so a review can describe them. */
 type TriggerReviewedFields = Required<Pick<CreateTriggerInput, "schedule" | "maxActiveRuns">>;
 
-/**
- * What a save of `input` over `trigger` sends: the saved repository is left out, so the save keeps
- * it without reading GitHub even after the Project's remote moved, while a confirmed other one is
- * named and checked against the Project's remote.
- */
 function updateBody(trigger: TriggerDefinition, input: UpdateTriggerInput): UpdateTriggerInput {
   const { repositoryNodeId, ...github } = input.github;
   return repositoryNodeId === trigger.github.repository.nodeId ? { ...input, github } : input;

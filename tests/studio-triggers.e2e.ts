@@ -92,7 +92,6 @@ async function runStartedBy(baseUrl: string | undefined, trigger: string) {
 
 const mutation = { "content-type": "application/json", "X-Factory-Request": "1" };
 
-/** The saved Trigger named `name`, as Factory answers it now. */
 async function savedTrigger(baseUrl: string | undefined, name: string) {
   const listed = (await (await fetch(new URL("/api/triggers", baseUrl))).json()) as Result<
     readonly TriggerDefinition[]
@@ -103,7 +102,6 @@ async function savedTrigger(baseUrl: string | undefined, name: string) {
   return trigger;
 }
 
-/** Another client switches the saved Trigger named `name` off. */
 async function disableElsewhere(baseUrl: string | undefined, name: string) {
   const trigger = await savedTrigger(baseUrl, name);
   const reply = await fetch(new URL(`/api/triggers/${trigger.id}/enabled`, baseUrl), {
@@ -114,10 +112,6 @@ async function disableElsewhere(baseUrl: string | undefined, name: string) {
   assert.equal(reply.ok, true);
 }
 
-/**
- * Holds the page's next check of the Trigger named `name` until another client saved it as
- * `renamed`, a newer revision, then sends that check. Later checks pass untouched.
- */
 async function saveBeforeCheck(
   browser: Browser,
   baseUrl: string | undefined,
@@ -149,10 +143,6 @@ async function saveBeforeCheck(
   });
 }
 
-/**
- * The review a check refused for the saved revision `renamed` reopens: it says nothing was checked
- * and offers only Check now. Answers that button.
- */
 async function expectRefusedCheckReview(screen: Screen, renamed: string) {
   const review = screen.getByRole("dialog", `Check “${renamed}”?`);
   await expect(
@@ -648,10 +638,6 @@ test("Check now on a Trigger saved elsewhere meanwhile checks nothing and review
   await app.screenshot("trigger-check-now-saved-elsewhere");
 });
 
-/**
- * Check now from the open Trigger list, refused because another client saved the Trigger as
- * `renamed`; answers the reopened review's confirm button.
- */
 async function reviewRefusedCheck(
   { app, browser, screen }: { app: App; browser: Browser; screen: Screen },
   name: string,

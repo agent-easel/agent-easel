@@ -237,8 +237,6 @@ function useTriggerEditor({
   const { canSave } = validation;
   const ghProblem = readinessNotice(validation.ghProblem, shown?.error?.code);
   const repositoryName = content.repository?.nameWithOwner ?? "";
-  // The warning for the repository the form shows, which differs from the one the Project's
-  // folder names once its remote moved and before a retarget.
   const warnings =
     host.readiness?.repositoryWarnings.find((entry) => entry.nodeId === content.repository?.nodeId)
       ?.warnings ?? [];
@@ -430,7 +428,6 @@ function visibleCheck(checked: TriggerCheckReply | undefined, shown: TriggerDefi
   return checked;
 }
 
-/** A review captures the proposal to preview; its repository warning comes from the preview. */
 function useDraftReview({
   draft,
   definitions,

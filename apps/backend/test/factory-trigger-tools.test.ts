@@ -17,7 +17,6 @@ import {
   triggerWorld,
 } from "./support/triggers.ts";
 
-/** The complete settings of a new draft, as a conversation sends them: no repository. */
 const draftSettings = (world: { project: { id: string }; flow: { id: string } }) => ({
   name: "Ready issues",
   projectId: world.project.id,

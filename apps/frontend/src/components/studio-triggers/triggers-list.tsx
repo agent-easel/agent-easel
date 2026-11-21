@@ -28,24 +28,16 @@ import {
   studioListClass,
 } from "../studio-list.tsx";
 
-/** Why the review opened again: the step that another saved revision refused. */
 const refusalNotice = (revision: number, refused: RevisionRefusal) =>
   refused === "enable"
     ? `Revision ${revision} was saved after your review, so nothing was enabled. Review these settings before enabling.`
     : `Revision ${revision} was saved after the revision you checked, so nothing was checked. Review these settings before checking.`;
 
-/** How a review opens: first before enabling, or again after another saved revision refused a step. */
 export interface ReviewOptions {
-  /** The refused step, which confirming repeats on the revision the review shows. */
   readonly refused?: RevisionRefusal;
-  /** Receives the reply once confirming checked the Trigger. */
   readonly onChecked?: (reply: TriggerCheckReply) => void;
 }
 
-/**
- * Turning a Trigger on first shows what its first check would start. After a refused check the
- * review offers only that check: the Trigger is not enabled again.
- */
 const triggerReview = (
   trigger: TriggerDefinition,
   names: TriggerNames,
@@ -60,11 +52,6 @@ const triggerReview = (
   ...(refused && { notice: refusalNotice(trigger.revision, refused) }),
 });
 
-/**
- * The review before enabling a saved Trigger; Enable and check confirms the revision it showed.
- * When another revision was saved after that, refusing the enable or the check, the review opens
- * again on the current settings with that notice, and confirming repeats only the refused step.
- */
 export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   const [reviewing, setReviewing] = useState<{
     readonly trigger: TriggerDefinition;
@@ -72,14 +59,12 @@ export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
     readonly options: ReviewOptions;
   } | null>(null);
   const busy = reviewing !== null && actions.state.pending.has(reviewing.trigger.id);
-  /** Opens the review of `trigger`, first or again after a refused step. */
   const open = (trigger: TriggerDefinition, options: ReviewOptions = {}) =>
     setReviewing({
       trigger,
       options,
       review: triggerReview(trigger, names, actions, options.refused),
     });
-  /** Closes the review, or opens it again on the revision that refused the step. */
   const settle = (outcome: CheckOutcome | undefined, options: ReviewOptions) => {
     if (outcome && "refused" in outcome)
       return open(outcome.latest, { ...options, refused: outcome.refused });
@@ -111,10 +96,6 @@ export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   };
 }
 
-/**
- * The Runs the latest check from a row started in this visit: Check now, Enable and check, or a
- * check confirmed after a refusal. An empty list is “Nothing ready to start”.
- */
 type Started = ReadonlyMap<string, readonly TriggerStartedRun[]>;
 
 /** Figma T01/T02: Triggers grouped by Project, with Search and Check now on every row. */
@@ -129,7 +110,6 @@ export function TriggersList({
   names: TriggerNames;
   projects: readonly FactoryProject[];
   actions: TriggerActions;
-  /** Opens the review before enabling `trigger`, or again for the step another revision refused. */
   onEnable: (trigger: TriggerDefinition, options?: ReviewOptions) => void;
 }) {
   const openStudio = useStudioNavigation();
@@ -145,7 +125,6 @@ export function TriggersList({
   const groups = matching ? ownerGroups(matching, projects, { kind: "all" }) : [];
   const loaded = items !== null;
   const noMatch = loaded && items.length > 0 && groups.length === 0;
-  // Every check started from a row, also one confirmed after a refusal, answers here.
   const remember = (trigger: TriggerDefinition) => (reply: TriggerCheckReply) =>
     rememberCheck(setStarted, trigger.id, reply);
   const checked = (trigger: TriggerDefinition) =>

@@ -65,10 +65,6 @@ function watching(
   } satisfies CreateTriggerInput;
 }
 
-/**
- * A saved, disabled Trigger named `name` on a second Project whose folder names the world's
- * repository, so it watches the repository the world's own Trigger input does.
- */
 export async function otherProjectWatcher(
   world: Pick<Awaited<ReturnType<typeof triggerWorld>>, "f" | "github" | "triggerInput">,
   name: string,
@@ -154,10 +150,6 @@ export async function reviewingWorld(c: TestContext, settings: TriggerSettings =
   return { ...world, trigger, readyIssue: readyIssues(world.github) };
 }
 
-/**
- * An enabled Trigger an approved client created and enabled over REST, with one ready issue:
- * `send` is that client's request, `runPath` the Trigger's run route and `f` the host's Factory.
- */
 export async function remoteCheckingWorld(c: TestContext): Promise<{
   readonly f: Factory;
   readonly project: FactoryProject;
@@ -265,11 +257,6 @@ export async function startedIssues(f: Factory, projectId: string) {
     .sort((left, right) => left - right);
 }
 
-/**
- * Holds a check's Start at its T3 contract snapshot until the test releases it: the first one, or
- * the one after `startedFirst` Starts went through. The check's own launch-blocker read inspects
- * T3 as each Start does.
- */
 export async function pendingCheck(
   world: Awaited<ReturnType<typeof checkingWorld>>,
   startedFirst = 0,
@@ -298,14 +285,12 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
   return { checked, release };
 }
 
-/** From now on GitHub's `call` fails unexpectedly instead of answering, as a lost connection does. */
 export function failingGitHubCall(github: ControlledGitHub, failing: GitHubCall) {
   github.beforeAnswer = async (call) => {
     if (call === failing) throw new Error("The connection to GitHub was reset.");
   };
 }
 
-/** The Project's folder names `repository` from GitHub's second read of it on, as a remote changed between reads. */
 export function remoteMovesAfterFirstRead(
   world: { readonly github: ControlledGitHub; readonly project: FactoryProject },
   repository: GitHubRepository,

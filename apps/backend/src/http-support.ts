@@ -54,14 +54,12 @@ export interface JsonBodyLimit {
   readonly tooLarge?: string;
   /** When set, a body whose read failed for another reason answers with this message. */
   readonly unreadable?: string;
-  /** When set, a request with an empty body is accepted and reads as no input. */
   readonly optional?: true;
 }
 export const standardBody: JsonBodyLimit = {
   bytes: 16_384,
   message: "Send valid JSON up to 16 KiB with application/json.",
 };
-/** For a body that only refines a call callers made before it existed: omitting it is valid. */
 export const optionalStandardBody: JsonBodyLimit = { ...standardBody, optional: true };
 export const definitionBody: JsonBodyLimit = {
   bytes: DEFINITION_REQUEST_LIMIT_BYTES,

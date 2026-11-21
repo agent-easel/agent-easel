@@ -17,7 +17,6 @@ export interface TriggerReview {
   /** Project · repository · Flow · schedule · limit. */
   readonly summary: string;
   readonly repository: string;
-  /** Check now confirms only a check, after another saved revision refused one. */
   readonly confirmLabel: "Enable and check" | "Apply and check" | "Check now";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
@@ -34,11 +33,6 @@ type PreviewRead =
 
 const captionClass = "text-2xs leading-tight tracking-label text-subtle-foreground";
 
-/**
- * Figma T04: the issues a check would start now, oldest first, marked Starts now or Waits, before
- * enabling a Trigger, applying an edit that widens what can start, or repeating a check another
- * saved revision refused. Nothing starts until the author confirms; confirming runs the check.
- */
 export function TriggerReviewDialog({
   review,
   busy,

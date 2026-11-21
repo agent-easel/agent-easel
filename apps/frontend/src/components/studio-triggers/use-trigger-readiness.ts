@@ -7,11 +7,6 @@ type ReadinessRead =
   | { readonly status: "answered"; readonly readiness: TriggerReadiness }
   | { readonly status: "failed"; readonly message: string };
 
-/**
- * What a GitHub Issues Trigger needs on the Factory host for the chosen Project (which
- * may be empty), read again whenever it changes; an answer for an earlier choice is dropped.
- * `triggerId` is the saved Trigger being edited, empty for a new one.
- */
 export function useTriggerReadiness(projectId: string, triggerId: string) {
   const [attempt, setAttempt] = useState(0);
   const key = `${projectId}\n${triggerId}\n${attempt}`;

@@ -640,7 +640,9 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 | `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |
 | `DELETE /api/triggers/:id` | Remove a Trigger |
 
-A save body may leave out `github.repositoryNodeId` to keep the Trigger's saved repository; with the same Project and query it then saves without calling GitHub. A save that names a repository, even the saved one, is refused with the repository-mismatch issue unless the Project's folder names that repository at save time, and a node id that is not a string, `null` included, is a validation refusal. A preview body may leave out `github.repositoryNodeId` to evaluate the repository the Project's folder names now. Every preview reply carries that repository as `repository`, or `null` when GitHub could not be read.
+A save body may leave out `github.repositoryNodeId` to keep the Trigger's saved repository; with the same Project and query it then saves without calling GitHub. A save that names a repository, even the saved one, is refused with the repository-mismatch issue unless the Project's folder names that repository at save time, and a node id that is not a string, `null` included, is a validation refusal.
+
+A preview body may leave out `github.repositoryNodeId` to evaluate the repository the Project's folder names now. The reply carries the evaluated repository as `repository`. It returns `null` when GitHub could not identify it or when the folder names a different repository from the one requested. A preview of a saved Trigger or edit reports the first blocker in check order, so a Flow or T3 launch blocker takes precedence over a repository mismatch. For a new draft that names a repository, a mismatch takes precedence so the preview cannot offer a repository the user did not review.
 
 ## Definition export
 

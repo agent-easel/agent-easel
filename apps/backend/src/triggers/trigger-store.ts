@@ -169,7 +169,6 @@ export const triggerNameTaken = (sql: SqlClient.SqlClient, name: string, exceptI
     Effect.map((rows) => rows.length > 0),
   );
 
-/** The other current Triggers that read the repository `nodeId`, by name, with its saved name. */
 export const triggersWatching = (
   sql: SqlClient.SqlClient,
   nodeId: string,
@@ -270,16 +269,11 @@ export interface CheckOutcome {
   readonly runs: readonly TriggerStartedRun[];
 }
 
-/** What a check records on its Trigger: its summary and the problem it hit, if any. */
 export interface CheckRecord {
   readonly latestCheck: NonNullable<TriggerDefinition["latestCheck"]>;
   readonly error: TriggerDefinition["error"];
 }
 
-/**
- * The record of `outcome`, replacing the latest check and setting or clearing the current error.
- * A problem repeating the `previous` one keeps its first sighting and counts the checks that hit it.
- */
 export function checkRecord(
   previous: TriggerDefinition["error"],
   outcome: CheckOutcome,
@@ -304,7 +298,6 @@ export function checkRecord(
   };
 }
 
-/** Stores a check's record on its Trigger; callers own the transaction. */
 export const writeCheckRecord = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   triggerId: string,

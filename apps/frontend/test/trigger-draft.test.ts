@@ -46,7 +46,6 @@ it("a case-insensitive Trigger name already in Studio disables saving the draft"
   close();
 });
 
-/** A saved, enabled Trigger at revision 3, as Studio delivers it. */
 const savedTrigger: TriggerDefinition = {
   id: "trigger-1",
   kind: "github_issues",

@@ -68,10 +68,6 @@ export interface TriggerDefinition {
   readonly schedule: TriggerSchedule;
   /** 1 to 10 Runs from this Trigger that are neither Settled nor Archived. */
   readonly maxActiveRuns: number;
-  /**
-   * Each settings save and each off-to-on enable advances it. Disabling, enabling an already
-   * enabled Trigger, and checks keep it.
-   */
   readonly revision: number;
   readonly nextCheckAt: string | null;
   readonly latestCheck: TriggerLatestCheck | null;
@@ -101,15 +97,9 @@ export interface CreateTriggerInput {
   readonly github: GitHubIssuesInput;
 }
 
-/** GitHub settings whose repository may be left out; each operation says what that means. */
 type OptionalRepositoryInput = Omit<GitHubIssuesInput, "repositoryNodeId"> &
   Partial<Pick<GitHubIssuesInput, "repositoryNodeId">>;
 
-/**
- * A complete replacement of the saved settings; the kind must stay the same. Leaving out
- * `github.repositoryNodeId` keeps the saved repository; naming one, even the saved one, is
- * accepted only while the Project's folder names it now.
- */
 export interface UpdateTriggerInput {
   readonly expectedRevision: number;
   readonly kind: TriggerKind;
@@ -121,20 +111,13 @@ export interface UpdateTriggerInput {
   readonly github: Required<Omit<GitHubIssuesInput, "repositoryNodeId">> & OptionalRepositoryInput;
 }
 
-/** The settings of a new Trigger to preview, as a create takes them; the repository may be left out. */
 export interface PreviewNewTriggerInput extends Omit<CreateTriggerInput, "github"> {
   readonly github: OptionalRepositoryInput;
 }
 
-/**
- * A saved Trigger's settings to preview, as a save takes them. Without a repository it evaluates
- * the one the Project's folder names now, not the saved one.
- */
 export type PreviewTriggerInput = UpdateTriggerInput;
 
-/** What a manual check may carry. */
 export interface RunTriggerInput {
-  /** Checks only this revision: a Trigger saved or enabled since is refused and starts nothing. */
   readonly expectedRevision?: number;
 }
 
@@ -170,11 +153,6 @@ export interface TriggerReadiness {
     | { readonly ready: true; readonly repository: TriggerRepositoryChoice }
     | { readonly ready: false; readonly problem: string }
     | null;
-  /**
-   * What the editor shows before any preview for each repository it may save: the one the
-   * Project's folder names and the edited Trigger's confirmed one. Each carries the warning a
-   * preview carries when another saved Trigger watches that repository.
-   */
   readonly repositoryWarnings: readonly {
     readonly nodeId: string;
     readonly warnings: readonly ValidationIssue[];
@@ -215,11 +193,6 @@ export interface TriggerPreview {
    * Trigger or an unsaved edit.
    */
   readonly revision: number | null;
-  /**
-   * The repository the preview evaluated, as GitHub answered: the one the Project's folder names
-   * now, which must be the requested one when the preview named a repository. Null when GitHub
-   * could not be read or the folder names another repository than the requested one.
-   */
   readonly repository: TriggerRepositoryChoice | null;
 }
 
@@ -231,20 +204,12 @@ export interface TriggerStartedRun {
   readonly title: string;
 }
 
-/**
- * The Trigger revision a check ran, with the latest check and problem that check recorded and the
- * Runs it started. A save or removal while the check ran does not change it.
- */
 export interface TriggerCheckReply extends TriggerDefinition {
   readonly startedRuns: readonly TriggerStartedRun[];
 }
 
 /** The Trigger operations the Factory facade implements; any approved client may call them. */
 export const triggerOperations = {
-  /**
-   * Query parameters may be empty: readiness then covers only what was chosen. `triggerId` names
-   * the saved Trigger being edited, which the shared-repository warning leaves out.
-   */
   getTriggerReadiness: operation<never, TriggerReadiness>()({
     method: "GET",
     path: "/api/triggers/readiness",
@@ -270,12 +235,6 @@ export const triggerOperations = {
     path: "/api/triggers/:id/enabled",
     body: "json",
   }),
-  /**
-   * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
-   * check's summary and the Runs it started. Every limit of a scheduled check applies. Those Runs
-   * are not stored on the Trigger. The body may name the revision to check, which is refused as
-   * stale when another is saved; a request without a body checks whatever is saved.
-   */
   runTrigger: operation<RunTriggerInput, TriggerCheckReply>()({
     method: "POST",
     path: "/api/triggers/:id/run",

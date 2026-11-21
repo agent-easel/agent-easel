@@ -51,7 +51,6 @@ export function TriggerGuidance({ message }: { message: string }) {
   );
 }
 
-/** The backend's warning that another saved Trigger watches `repository`, from a preview or readiness. */
 export function SharedRepositoryCard({
   repository,
   warnings,

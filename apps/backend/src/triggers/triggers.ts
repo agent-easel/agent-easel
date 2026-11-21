@@ -138,10 +138,6 @@ const enabledDeadline = (current: TriggerDefinition, enabled: boolean, time: str
     : deadlineAfter(time, current.schedule.intervalMinutes);
 };
 
-/**
- * Whether `settings`, evaluated on the repository `nodeId`, are exactly `saved`'s, so a preview of
- * them reviewed that revision.
- */
 const previewsSaved = (
   saved: TriggerDefinition,
   settings: TriggerPreviewSettings,
@@ -210,10 +206,6 @@ const sharedRepositoryWarning = (name: string, trigger: TriggerDefinition): Vali
 
 type Watcher = { readonly name: string; readonly nameWithOwner: string };
 
-/**
- * One warning naming every other saved Trigger on a repository, or none when none watches it. The
- * repository is named as GitHub answered, else as the first watcher saved it.
- */
 function sharedRepositoryPreviewWarnings(
   watching: readonly Watcher[],
   nameWithOwner?: string,
@@ -309,13 +301,6 @@ export const makeTriggers = (
         return { ok: true, value: project };
       });
 
-    /**
-     * Settles the repository a save stores. An edit that leaves the repository out keeps the saved
-     * one, and with the same Project and query it is stored without calling GitHub. Otherwise the
-     * Project's repository is read and the query checked against it: a named repository, even the
-     * saved one, or the kept one under a new Project or query, is accepted only while it is the one
-     * the Project's folder names now, which is how a Trigger is pointed at a moved remote.
-     */
     const settleGitHub = (
       settings: TriggerUpdateSettings,
       project: FactoryProject,
@@ -332,7 +317,6 @@ export const makeTriggers = (
             ok: true,
             value: { repository: saved.github.repository, warnings: [], newRepository: false },
           };
-        // Validation leaves a repository out only on an edit, which has a saved Trigger.
         const confirmed = named ?? saved?.github.repository.nodeId;
         const newRepository =
           saved?.projectId !== settings.projectId || saved.github.repository.nodeId !== confirmed;
@@ -366,8 +350,6 @@ export const makeTriggers = (
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<TriggerSave>, unknown> {
         const saved = target ? yield* readTrigger(target.id) : undefined;
-        // A stale edit is refused before the Project, Flow or GitHub are read, so its reply asks
-        // for a reconcile rather than a repair that the newer revision may not need.
         const stale = storeRefusal(target, saved, false);
         if (stale) return stale;
         const project = yield* hostLocalProject(settings.projectId);
@@ -413,10 +395,6 @@ export const makeTriggers = (
         );
       });
 
-    /**
-     * The shared-repository warning for each repository an editor may save: the one the Project's
-     * folder names and the edited Trigger's confirmed one, named as GitHub or that Trigger has it.
-     */
     const repositoryWarnings = (detected: GitHubRepository | null, triggerId: string) =>
       Effect.gen(function* () {
         const edited = triggerId ? yield* readTrigger(triggerId) : undefined;
@@ -479,13 +457,6 @@ export const makeTriggers = (
     });
     const { check } = triggerCheck;
 
-    /**
-     * A check's reads and admission rules for `settings`, on the saved Trigger `target` when given;
-     * nothing starts and nothing is written. Settings without a repository evaluate the one the
-     * Project's folder names. The repository's warnings hold even when a problem stops the check,
-     * and the reply names a repository only when GitHub's answer is the evaluated one, so its
-     * warnings and the repository it names never describe different repositories.
-     */
     const preview = (
       settings: TriggerPreviewSettings,
       target: { readonly id: string; readonly expectedRevision: number } | null,
@@ -504,7 +475,6 @@ export const makeTriggers = (
         });
         const detected = planned.repository;
         const nodeId = repositoryNodeId ?? detected?.nodeId ?? null;
-        // GitHub's answer for the repository the preview evaluated, when GitHub gave one.
         const evaluated = detected?.nodeId === nodeId ? detected : null;
         const login = detected
           ? yield* Effect.promise(() => github.readiness(detected.host))

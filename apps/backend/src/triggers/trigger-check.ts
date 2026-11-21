@@ -64,11 +64,6 @@ export interface TriggerCheckDeps {
   ) => Effect.Effect<Result<undefined>, unknown>;
 }
 
-/**
- * What a check reads its settings from: a saved Trigger, or proposed settings to preview. Without
- * an id nothing is guarded yet and no Run counts against the limit. A preview without a repository
- * node id evaluates whichever repository the Project's folder names.
- */
 export interface AdmissionSubject {
   readonly id: string | null;
   readonly projectId: string;
@@ -79,10 +74,6 @@ export interface AdmissionSubject {
   };
 }
 
-/**
- * A preview's issues, or the shared problem, and the repository the Project's folder names, as
- * GitHub answered; null when GitHub could not answer.
- */
 interface TriggerPlanPreview {
   readonly repository: GitHubRepository | null;
   readonly issues: readonly TriggerPreviewIssue[];
@@ -97,10 +88,6 @@ interface Candidate {
   readonly labellingEventId: string | null;
 }
 
-/**
- * What GitHub answered for the Project's folder before a problem stopped the check: its
- * repository, null when that read failed, or undefined when the check stopped before reading it.
- */
 type ReadRepository = GitHubRepository | null | undefined;
 
 /** Everything a check decides before it writes, or the shared problem that stops it. */
@@ -503,7 +490,6 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return yield* admitAll(trigger, plan.repository.nameWithOwner, plan.candidates, plan.free);
     });
 
-  /** The repository the Project's folder names, or null when it or GitHub cannot be read. */
   const projectRepository = (projectId: string) =>
     Effect.gen(function* () {
       const project = yield* deps.hostLocalProject(projectId);
@@ -512,13 +498,6 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return read.ok ? read.value : null;
     });
 
-  /**
-   * What a check of `subject` would start now and what would wait, without starting or writing,
-   * and the repository the Project's folder names, also read when a problem stopped the plan
-   * before GitHub. A saved Trigger's preview answers the problem its check would hit first. A new
-   * draft's folder that no longer names the repository it was pinned to is the problem even when
-   * another one stopped the plan first, so nothing previewed on one repository is offered for another.
-   */
   const preview = (subject: AdmissionSubject) =>
     admissionPlan(subject).pipe(
       Effect.flatMap((plan): Effect.Effect<TriggerPlanPreview, unknown> => {
@@ -562,18 +541,12 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       }),
     );
 
-  /**
-   * Checks an enabled Trigger once and records what the check did. A manual check may name the
-   * revision it was asked to run; scheduled checks name none and run whatever is saved. The reply
-   * is the revision checked with the check's record and the Runs it started.
-   */
   const check = (triggerId: string, expectedRevision?: number) =>
     lanes
       .serial(triggerId, () =>
         Effect.gen(function* (): Effect.fn.Return<Result<TriggerCheckReply>, unknown> {
           const trigger = yield* deps.readTrigger(triggerId);
           if (!trigger) return failure("not_found", "This Trigger does not exist.");
-          // Before any GitHub read, so a refused check starts nothing and changes nothing.
           if (expectedRevision !== undefined && trigger.revision !== expectedRevision)
             return failure(
               "conflict",
@@ -596,8 +569,6 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             ]);
           const outcome = yield* inspect(trigger);
           const time = yield* now;
-          // The reply describes the revision this check ran and keeps every Run it started, even
-          // when a save or removal landed meanwhile; the record is stored only while the Trigger is.
           const current = yield* sql.withTransaction(
             Effect.gen(function* () {
               const stored = yield* deps.readTrigger(triggerId);
