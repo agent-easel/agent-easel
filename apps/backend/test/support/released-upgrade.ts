@@ -192,6 +192,7 @@ export function currentRun(
     // Released deliveries came from no Final result, so they carry no origin.
     intents: run.intents.map((intent) => ({
       ...intent,
+      targetEndingId: null,
       waitArrivalId: null,
       conditionArrivalId: null,
       origin: null,
