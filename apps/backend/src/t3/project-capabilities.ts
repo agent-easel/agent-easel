@@ -77,9 +77,9 @@ function modelCapability(model: unknown): AgentModelCapability[] {
   if (!isObject(model)) return [];
   const id = stringField(model, "id") ?? "";
   if (!id) return [];
-  const label = stringField(model, "label") ?? null;
+  const label = stringField(model, "label");
   const options = arrayField(model, "options")?.flatMap(optionDescriptor);
-  return [{ id, label, ...(options?.length ? { options } : {}) }];
+  return [{ id, label: label?.trim() ? label : null, ...(options?.length ? { options } : {}) }];
 }
 
 function providerCapability(provider: unknown): T3ProviderCapability[] {

@@ -71,7 +71,7 @@ function workerLines(
       `  Provider  ${provider?.displayName ?? "Unknown provider"}`,
       settings.providerInstanceId,
     ),
-    revisionLine(`  Model  ${model?.label ?? "Unknown model"}`, settings.modelId),
+    revisionLine(`  Model  ${model?.label ?? model?.id ?? "Unknown model"}`, settings.modelId),
     ...workerOptionLines(settings.modelOptions, model?.options ?? []),
   ];
 }

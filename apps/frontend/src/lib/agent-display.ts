@@ -86,11 +86,7 @@ export function workerTrigger(
     descriptor?.type === "select"
       ? modelOptionLabel(descriptor, optionValue(execution.modelOptions, descriptor))
       : "";
-  const label = [
-    provider?.displayName ?? "Unknown provider",
-    model.label ?? "Unknown model",
-    effort,
-  ]
+  const label = [provider?.displayName ?? "Unknown provider", model.label ?? model.id, effort]
     .filter(Boolean)
     .join(" · ");
   return { state: "ok", label };

@@ -40,14 +40,15 @@ async function overrideDialogForNorthwind(
   return { northwind, agent, dialog };
 }
 
-/** A new global Agent with a GPT 6 Astra override for Northwind applied in its editor, unsaved. */
 async function appliedNorthwindOverride(
   fixtures: Pick<StudioFixtures, "app" | "screen" | "browser">,
 ) {
   const { app, screen, browser } = fixtures;
   const { northwind, agent, dialog } = await overrideDialogForNorthwind(fixtures, "Override");
   await dialog.getByRole("combobox", /^Model:/).tap();
-  await screen.getByRole("option", "GPT 6 Astra", { exact: true }).tap();
+  await browser.evaluate(settled);
+  await app.screenshot("model-picker");
+  await screen.getByRole("option", "gpt-6-astra", { exact: true }).tap();
   await browser.evaluate(settled);
   await app.screenshot("override-dialog");
   await dialog.getByRole("button", "Apply", { exact: true }).tap();
@@ -86,7 +87,7 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   );
 });
 
-test("the model picker of a saved Agent lists its Project override with that Worker", async ({
+test("a saved Project override shows the model ID when T3 supplies no display name", async ({
   app,
   screen,
   browser,
@@ -102,7 +103,7 @@ test("the model picker of a saved Agent lists its Project override with that Wor
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
   // A screen reader hears the override's Worker on its row, not only the Project.
   await expect(
-    overrides.getByRole("button", /^Edit override for Northwind: .*GPT 6 Astra/),
+    overrides.getByRole("button", /^Edit override for Northwind: .*gpt-6-astra/),
   ).toBeVisible();
 });
 
