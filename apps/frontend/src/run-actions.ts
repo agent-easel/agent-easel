@@ -212,7 +212,11 @@ export function createRunActions(ports: RunActionPorts) {
       const text = runCopyText(subject, target);
       if (text === undefined) return;
       update({ error: "" });
-      await ports.copy(text).catch(() => update({ error: "Copy unavailable here." }));
+      try {
+        await ports.copy(text);
+      } catch {
+        update({ error: "Copy unavailable here." });
+      }
     },
     /** Declares the Run open in detail, or none once its screen closes. */
     setOpenRun: (subject: RunActionSubject | undefined) => update({ openRun: subject ?? noRun }),

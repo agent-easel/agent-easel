@@ -236,3 +236,18 @@ it("a clipboard the browser withholds reports that copying is unavailable", asyn
   // Assert
   expect(actions.getSnapshot().error).toBe("Copy unavailable here.");
 });
+
+it("a browser without a clipboard API reports that copying is unavailable", async () => {
+  // Arrange
+  const { actions } = runActionsWith({
+    copy: vi.fn<RunActionPorts["copy"]>(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'writeText')");
+    }),
+  });
+
+  // Act
+  await actions.copy({ entry: active }, "number");
+
+  // Assert
+  expect(actions.getSnapshot().error).toBe("Copy unavailable here.");
+});
