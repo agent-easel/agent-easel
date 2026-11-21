@@ -7,6 +7,7 @@ import {
   fanOutFlow,
   manyEntryWorkers,
   holdRunRenames,
+  holdWorkerLaunchReply,
   twoWorkersStarted,
   heldWorkerRename,
   workerAtWork,
@@ -270,5 +271,41 @@ it.effect("a later Run renames its worker while an earlier Run still has blocked
     // Assert
     expect((yield* Effect.promise(() => updated)).title).toContain("Healthy");
     expect(held.count()).toBe(4);
+  }),
+);
+
+it.effect("a newly bound worker renames while its sibling's rename reply is held", (c) =>
+  Effect.gen(function* () {
+    // Arrange
+    const f = yield* preparedService(c, fanOutFlow);
+    const launch = holdWorkerLaunchReply(f.t3, "F#1 Second entry · Improve search");
+    c.onTestFinished(launch.release);
+    const started = yield* f.factory.startRun(f.input);
+    assert(started.ok);
+    const { threadId } = yield* Effect.promise(() => launch.reached);
+    const run = yield* f.factory.getRun(started.value.id);
+    assert(run.ok);
+    const sibling = run.value.blocks.find((block) => block.blockId === "worker")?.threadId;
+    assert(sibling);
+    const releaseSibling = f.t3.threads.holdRenameReply();
+    c.onTestFinished(releaseSibling);
+    const first = f.t3.threads.nextRename();
+    assert((yield* f.factory.renameRun(started.value.id, { title: "Updated" })).ok);
+    const sent = yield* Effect.promise(() => first);
+    expect(sent.threadId).toBe(sibling);
+    const idle = yield* Effect.forkChild(f.factory.awaitWorkerTitles(), { startImmediately: true });
+
+    // Act
+    launch.release();
+
+    // Assert
+    yield* Effect.promise(() =>
+      expect.poll(() => f.t3.threads.threadTitle(threadId)).toBe("F#1 Second entry · Updated"),
+    );
+    expect(f.t3.threads.renames).toStrictEqual([
+      sent,
+      expect.objectContaining({ threadId, title: "F#1 Second entry · Updated" }),
+    ]);
+    expect(idle.pollUnsafe()).toBeUndefined();
   }),
 );

@@ -185,6 +185,27 @@ export function holdTitleThreadLaunch(t3: ControlledT3) {
   };
   return release;
 }
+
+export function holdWorkerLaunchReply(t3: ControlledT3, title: string) {
+  const launch = t3.threads.launchThread.bind(t3.threads);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let notify = (_reference: Awaited<ReturnType<typeof launch>>) => {};
+  const reached = new Promise<Awaited<ReturnType<typeof launch>>>((resolve) => {
+    notify = resolve;
+  });
+  t3.threads.launchThread = async (target, payload) => {
+    const reference = await launch(target, payload);
+    if (payload.title === title) {
+      notify(reference);
+      await held;
+    }
+    return reference;
+  };
+  return { release, reached };
+}
 const titleThreadEntry = (t3: ControlledT3) =>
   [...t3.threads.launches.values()].find((launch) =>
     launch.payload.title.startsWith("Factory title · "),

@@ -1,4 +1,3 @@
-import * as Semaphore from "effect/Semaphore";
 import * as Latch from "effect/Latch";
 import type { LiveChanges } from "../live-changes.ts";
 import { recoverOperation } from "./runner-effects.ts";
@@ -12,68 +11,52 @@ function canRename(snapshot: T3ContractSnapshot, contextId: string) {
   return snapshot.answered && snapshot.contextId === contextId && snapshot.support.rename.supported;
 }
 
-function syncWorkerTitles(
+type RenameCapability = { contextId: string; includeEnvironmentId: boolean };
+
+function syncWorkerTitle(
   store: RunStore,
   t3: T3Threads,
   snapshots: ContractSnapshots,
-  permits: Semaphore.Semaphore,
   runId: string,
-): Effect.Effect<void, unknown> {
+  bindingId: string,
+  capability: RenameCapability,
+) {
   return Effect.gen(function* () {
-    const due = yield* store.dueWorkerTitleSyncs(runId);
-    if (!due.length) return;
-    const snapshot = yield* snapshots.fresh();
-    yield* Effect.forEach(
-      due,
-      (item) =>
-        permits.withPermit(
-          Effect.gen(function* () {
-            if (!canRename(snapshot, item.context_id)) return;
-            const claimed = yield* store.claimWorkerTitleSync(runId, item.id, item.context_id);
-            if (!claimed) return;
-            const authorizeDispatch = Effect.gen(function* () {
-              const latest = yield* snapshots.latest();
-              if (
-                !canRename(latest, claimed.contextId) ||
-                latest.support.rename.includeEnvironmentId !==
-                  snapshot.support.rename.includeEnvironmentId
-              )
-                return false;
-              return yield* store.authorizeWorkerTitleDispatch(claimed);
-            });
-            const disposition = yield* Effect.promise((signal) =>
-              t3
-                .renameThread(
-                  {
-                    endpoint: claimed.endpoint,
-                    authorizationIdentity: claimed.authorizationIdentity,
-                    signal,
-                    refuseDispatch: () =>
-                      Effect.runPromise(store.refuseWorkerTitleDispatch(claimed)),
-                    authorizeDispatch: () => Effect.runPromise(authorizeDispatch),
-                  },
-                  {
-                    threadId: claimed.threadId,
-                    title: claimed.title,
-                    clientRequestId: claimed.requestId,
-                    ...(snapshot.support.rename.includeEnvironmentId
-                      ? { environmentId: claimed.environmentId }
-                      : {}),
-                  },
-                )
-                .catch(() => ({ kind: "unavailable" as const })),
-            ).pipe(
-              Effect.interruptible,
-              Effect.timeout("15 seconds"),
-              Effect.catchTag("TimeoutError", () =>
-                Effect.succeed({ kind: "unavailable" as const }),
-              ),
-            );
-            yield* store.recordWorkerTitleSync(claimed, disposition.kind);
-          }),
-        ),
-      { concurrency: 4, discard: true },
+    const claimed = yield* store.claimWorkerTitleSync(runId, bindingId, capability.contextId);
+    if (!claimed) return false;
+    const authorizeDispatch = Effect.gen(function* () {
+      const latest = yield* snapshots.latest();
+      if (
+        !canRename(latest, claimed.contextId) ||
+        latest.support.rename.includeEnvironmentId !== capability.includeEnvironmentId
+      )
+        return false;
+      return yield* store.authorizeWorkerTitleDispatch(claimed);
+    });
+    const disposition = yield* Effect.promise((signal) =>
+      t3
+        .renameThread(
+          {
+            endpoint: claimed.endpoint,
+            authorizationIdentity: claimed.authorizationIdentity,
+            signal,
+            refuseDispatch: () => Effect.runPromise(store.refuseWorkerTitleDispatch(claimed)),
+            authorizeDispatch: () => Effect.runPromise(authorizeDispatch),
+          },
+          {
+            threadId: claimed.threadId,
+            title: claimed.title,
+            clientRequestId: claimed.requestId,
+            ...(capability.includeEnvironmentId ? { environmentId: claimed.environmentId } : {}),
+          },
+        )
+        .catch(() => ({ kind: "unavailable" as const })),
+    ).pipe(
+      Effect.interruptible,
+      Effect.timeout("15 seconds"),
+      Effect.catchTag("TimeoutError", () => Effect.succeed({ kind: "unavailable" as const })),
     );
+    return yield* store.recordWorkerTitleSync(claimed, disposition.kind);
   });
 }
 
@@ -83,15 +66,17 @@ export const openWorkerTitleDispatch = Effect.fn("WorkerTitles.open")(function* 
   snapshots: ContractSnapshots,
   changes: LiveChanges,
 ) {
-  const permits = Semaphore.makeUnsafe(8);
   const dirty = new Set<string>();
-  const active = new Set<string>();
+  const pending = new Map<string, { capability: RenameCapability; bindings: Set<string> }>();
+  const active = new Map<string, string>();
+  const slots = (id: string) =>
+    Math.min(4 - [...active.values()].filter((runId) => runId === id).length, 8 - active.size);
   const wake = Latch.makeUnsafe(false);
   const idle = Latch.makeUnsafe(true);
   const queue = (id: string) => {
     dirty.add(id);
     idle.closeUnsafe();
-    if (!active.has(id)) wake.openUnsafe();
+    wake.openUnsafe();
   };
   yield* changes.onRunChanged(queue);
   const worker = yield* Effect.forkScoped(
@@ -99,23 +84,57 @@ export const openWorkerTitleDispatch = Effect.fn("WorkerTitles.open")(function* 
       Effect.gen(function* () {
         yield* wake.await;
         wake.closeUnsafe();
-        for (const id of dirty) {
-          if (active.has(id)) continue;
-          dirty.delete(id);
-          active.add(id);
-          yield* recoverOperation(syncWorkerTitles(store, t3, snapshots, permits, id), () =>
-            Effect.logWarning("Worker title synchronization failed", { runId: id }),
-          ).pipe(
-            Effect.ensuring(
-              Effect.sync(() => {
-                active.delete(id);
-                if (dirty.has(id)) wake.openUnsafe();
-                if (!active.size && !dirty.size) idle.openUnsafe();
+        for (const id of new Set([...dirty, ...pending.keys()])) {
+          if (!slots(id)) continue;
+
+          const warn = () =>
+            Effect.logWarning("Worker title synchronization failed", { runId: id });
+          if (dirty.delete(id)) {
+            pending.delete(id);
+            yield* recoverOperation(
+              Effect.gen(function* () {
+                const due = yield* store.dueWorkerTitleSyncs(id);
+                const first = due[0];
+                if (!first) return;
+                const snapshot = yield* snapshots.fresh();
+                if (!canRename(snapshot, first.context_id)) return;
+                pending.set(id, {
+                  capability: {
+                    contextId: first.context_id,
+                    includeEnvironmentId: snapshot.support.rename.includeEnvironmentId,
+                  },
+                  bindings: new Set(due.map((item) => item.id)),
+                });
               }),
-            ),
-            Effect.forkChild,
-          );
+              warn,
+            );
+          }
+
+          const work = pending.get(id);
+          if (!work) continue;
+          const batch = [...work.bindings]
+            .filter((binding) => !active.has(binding))
+            .slice(0, slots(id));
+          for (const binding of batch) {
+            work.bindings.delete(binding);
+            active.set(binding, id);
+            yield* recoverOperation(
+              syncWorkerTitle(store, t3, snapshots, id, binding, work.capability),
+              () => warn().pipe(Effect.as(false)),
+            ).pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => {
+                  active.delete(binding);
+                  if (exit._tag === "Success" && exit.value) queue(id);
+                  else wake.openUnsafe();
+                }),
+              ),
+              Effect.forkChild,
+            );
+          }
+          if (!work.bindings.size) pending.delete(id);
         }
+        if (!active.size && !dirty.size && !pending.size) idle.openUnsafe();
       }),
     ),
   );

@@ -144,7 +144,7 @@ function finishRename(
     title_target=CASE WHEN ${Number(pending)} THEN title_target END,
     title_request_id=CASE WHEN ${Number(pending)} THEN title_request_id END,
     title_target_revision=CASE WHEN ${Number(pending)} THEN title_target_revision END
-    WHERE id=${claim.bindingId}`;
+    WHERE id=${claim.bindingId}`.pipe(Effect.as(pending));
 }
 
 export function openWorkerTitles(database: RunnerDatabase) {
@@ -226,31 +226,29 @@ export function openWorkerTitles(database: RunnerDatabase) {
       (sql) =>
         Effect.gen(function* () {
           const row = yield* currentClaim(sql, claim);
-          if (!row) return;
+          if (!row) return false;
           const dispatched = row.title_inflight_request_id === claim.requestId;
           if (
             !dispatched &&
             row.title_disposition === null &&
             row.title_target === row.title_acknowledged
           ) {
-            yield* finishRename(sql, claim, row, row.title_acknowledged);
-            return;
+            return yield* finishRename(sql, claim, row, row.title_acknowledged);
           }
           if (
             disposition === "acknowledged" ||
             (disposition === "different-title" && claim.lastDispatchedKey === claim.requestId)
           ) {
-            yield* finishRename(
+            return yield* finishRename(
               sql,
               claim,
               row,
               disposition === "acknowledged" ? claim.title : null,
             );
-            return;
           }
           if (disposition === "thread-not-found") {
             yield* sql`UPDATE run_thread_bindings SET title_sync_state='retired',title_disposition='thread-not-found',title_inflight_revision=NULL,title_inflight_request_id=NULL,title_target=NULL,title_target_revision=NULL,title_request_id=NULL,title_not_before=NULL WHERE id=${claim.bindingId}`;
-            return;
+            return false;
           }
           const delay = Math.min(60_000, 1000 * 2 ** Math.min(row.title_attempt - 1, 6));
           const retryAt =
@@ -260,6 +258,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
           const blocked = disposition === "capability-denied" ? claim.contextId : null;
           const state = disposition === "capability-denied" ? "paused" : "pending";
           yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},title_last_dispatched_key=CASE WHEN ${Number(dispatched)} THEN ${claim.requestId} ELSE title_last_dispatched_key END,title_disposition=CASE WHEN ${Number(dispatched)} THEN ${disposition === "different-title" ? "unclassified" : disposition} ELSE title_disposition END,title_blocked_context=${blocked},title_inflight_revision=NULL,title_inflight_request_id=NULL,title_not_before=${retryAt} WHERE id=${claim.bindingId}`;
+          return state === "pending" && retryAt === null;
         }),
       () => false,
     );
