@@ -1,3 +1,4 @@
+import { invocationSummary } from "./run-subflow.tsx";
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
@@ -6,6 +7,7 @@ import {
   FINISH_BLOCK_ID,
   type RunAttention,
   type RunDetail,
+  type SubflowInvocation,
 } from "@t3-factory/contracts";
 import { capturedExits, FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
@@ -308,6 +310,19 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
   "continuation-prompt-sent": continuationPromptSent,
   "continuation-forwarded": said("response forwarded"),
   "continuation-passed": continuationPassed,
+  "subflow-ending-accepted": (_run, event) => ({
+    actorId: event.blockId,
+    text: "Invocation ending accepted",
+  }),
+  "subflow-released": (_run, event) => ({ actorId: event.blockId, text: "Invocation released" }),
+  "subflow-nothing-returned": (_run, event) => ({
+    actorId: event.blockId,
+    text: "Nothing returned",
+  }),
+  "subflow-report-ignored": (_run, event) => ({
+    actorId: event.blockId,
+    text: "Report received after invocation closed",
+  }),
   "condition-selected": conditionSelected,
   "operation-unresolved": operationUnresolved,
   "settlement-requested": said("settlement requested · automatic work held"),
@@ -408,9 +423,11 @@ function useTimelineFilter() {
 export function RunTimeline({
   run,
   selectedBlockId,
+  invocation,
 }: {
   run: RunDetail;
   selectedBlockId: CanvasBlockSelection | null;
+  invocation?: SubflowInvocation | null | undefined;
 }) {
   const [expanded, toggle] = useTimelineOpen();
   const [filter, setFilter] = useTimelineFilter();
@@ -419,6 +436,7 @@ export function RunTimeline({
   const keyEvents = rows.flatMap((row) => (row.kind === "event" ? [row.event] : []));
   // Collapsed, the bar names only the event count; the details open with the list.
   const count = expanded && filter === "key" ? `${keyEvents.length} key events` : `${total} events`;
+  const summary = invocation ? invocationSummary(run, invocation) : count;
   return (
     <section className="flex min-h-10 flex-col bg-sidebar" aria-label="Timeline">
       <Tabs
@@ -429,8 +447,11 @@ export function RunTimeline({
         <div className="flex h-10 shrink-0 items-center gap-2.5 border-t pr-2.5 pl-4">
           <History aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           <h2 className="text-sm font-semibold whitespace-nowrap">Timeline</h2>
-          <span className="min-w-0 flex-1 truncate text-2xs font-medium whitespace-nowrap text-subtle-foreground">
-            {count}
+          <span
+            title={summary}
+            className="min-w-0 flex-1 truncate text-2xs font-medium whitespace-nowrap text-subtle-foreground"
+          >
+            {summary}
           </span>
           {expanded && (
             <TabsList variant="segmented" aria-label="Timeline events">

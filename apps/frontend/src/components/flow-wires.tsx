@@ -188,6 +188,25 @@ function visibleWires(
   return shown;
 }
 
+const nestedWires = new WeakMap<Geometry, { allInputs: Wire[]; allConnections: Wire[] }>();
+
+export function nestedWiresReach(graph: CanvasGraph, geometry: Geometry, area: Rect) {
+  return Object.values(nestedWirePaths(graph, geometry)).some((wires) =>
+    wires.some((wire) => wireReaches(area, wire.path.bounds)),
+  );
+}
+
+function nestedWirePaths(graph: CanvasGraph, geometry: Geometry) {
+  const existing = nestedWires.get(geometry);
+  if (existing) return existing;
+  const computed = {
+    allInputs: flowInputWires(graph, "orthogonal", geometry, undefined),
+    allConnections: exitWires(graph, "orthogonal", geometry, undefined, true),
+  };
+  nestedWires.set(geometry, computed);
+  return computed;
+}
+
 function useVisibleWires({
   graph,
   kind,
@@ -198,6 +217,7 @@ function useVisibleWires({
   area,
   current,
   focused,
+  nested,
 }: {
   graph: CanvasGraph;
   kind: WirePresentation["kind"];
@@ -208,14 +228,17 @@ function useVisibleWires({
   area: Rect | null;
   current: FlowWire | null;
   focused: string | null;
+  nested: boolean | undefined;
 }) {
-  const allInputs = useMemo(
-    () => flowInputWires(graph, kind, geometry, routed),
-    [graph, kind, geometry, routed],
-  );
-  const allConnections = useMemo(
-    () => exitWires(graph, kind, geometry, routed, finish),
-    [graph, kind, geometry, routed, finish],
+  const { allInputs, allConnections } = useMemo(
+    () =>
+      nested
+        ? nestedWirePaths(graph, geometry)
+        : {
+            allInputs: flowInputWires(graph, kind, geometry, routed),
+            allConnections: exitWires(graph, kind, geometry, routed, finish),
+          },
+    [graph, kind, geometry, routed, finish, nested],
   );
   const connections = useMemo(
     () =>
@@ -241,6 +264,56 @@ function wireKeyOf(target: EventTarget | null) {
     : null;
 }
 
+function WireMarkers({ selection, marker }: { selection: boolean; marker: string }) {
+  return (
+    <defs>
+      {selection ? (
+        <>
+          <marker id={marker} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" className="fill-muted-foreground" />
+          </marker>
+          <marker
+            id="arrow-selected"
+            markerWidth="12"
+            markerHeight="10"
+            refX="10"
+            refY="5"
+            orient="auto"
+            markerUnits="userSpaceOnUse"
+          >
+            <path d="M0,0 L0,10 L11,5 z" className="fill-primary" />
+          </marker>
+        </>
+      ) : (
+        <>
+          <marker
+            id={marker}
+            markerWidth="6"
+            markerHeight="8"
+            refX="6"
+            refY="4"
+            orient="auto"
+            markerUnits="userSpaceOnUse"
+          >
+            <path d="M0,0 L6,4 L0,8 z" className="fill-subtle-foreground" />
+          </marker>
+          <marker
+            id="execution-arrow-emphasis"
+            markerWidth="9"
+            markerHeight="11"
+            refX="9"
+            refY="5.5"
+            orient="auto"
+            markerUnits="userSpaceOnUse"
+          >
+            <path d="M0,0 L9,5.5 L0,11 z" className="fill-foreground" />
+          </marker>
+        </>
+      )}
+    </defs>
+  );
+}
+
 /**
  * Configured connections and the Flow input's wires in one neutral style, without labels.
  * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
@@ -256,6 +329,7 @@ export function FlowWires({
   emphasized,
   finish,
   area,
+  nested,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
@@ -267,6 +341,7 @@ export function FlowWires({
   pendingWire: FlowWire | null;
   emphasized: CanvasNode | null;
   area: Rect | null;
+  nested?: boolean;
 }) {
   const selection = presentation.kind === "curved" ? presentation : null;
   const marker = selection ? "arrow" : "execution-arrow";
@@ -282,6 +357,7 @@ export function FlowWires({
     area,
     current,
     focused,
+    nested,
   });
   const selected = current && wires.find((wire) => sameWire(wire.wire, current));
   const emphasis = (item: Wire) => emphasized !== null && leavesNode(item.wire, emphasized);
@@ -297,51 +373,7 @@ export function FlowWires({
         onFocus={(event) => setFocused(wireKeyOf(event.target))}
         onBlur={(event) => setFocused(wireKeyOf(event.relatedTarget))}
       >
-        <defs>
-          {selection ? (
-            <>
-              <marker id={marker} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L7,3 z" className="fill-muted-foreground" />
-              </marker>
-              <marker
-                id="arrow-selected"
-                markerWidth="12"
-                markerHeight="10"
-                refX="10"
-                refY="5"
-                orient="auto"
-                markerUnits="userSpaceOnUse"
-              >
-                <path d="M0,0 L0,10 L11,5 z" className="fill-primary" />
-              </marker>
-            </>
-          ) : (
-            <>
-              <marker
-                id={marker}
-                markerWidth="6"
-                markerHeight="8"
-                refX="6"
-                refY="4"
-                orient="auto"
-                markerUnits="userSpaceOnUse"
-              >
-                <path d="M0,0 L6,4 L0,8 z" className="fill-subtle-foreground" />
-              </marker>
-              <marker
-                id="execution-arrow-emphasis"
-                markerWidth="9"
-                markerHeight="11"
-                refX="9"
-                refY="5.5"
-                orient="auto"
-                markerUnits="userSpaceOnUse"
-              >
-                <path d="M0,0 L9,5.5 L0,11 z" className="fill-foreground" />
-              </marker>
-            </>
-          )}
-        </defs>
+        <WireMarkers selection={selection !== null} marker={marker} />
         {selection
           ? wires.map((wire) => (
               <SelectableWire

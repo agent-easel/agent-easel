@@ -10,6 +10,7 @@ import {
   SUBFLOW_HEADER_HEIGHT,
   type SubflowCollapseReason,
   type SubflowPreview,
+  type CanvasFlow,
 } from "../subflow-preview.ts";
 import { StudioLink } from "./app-link.tsx";
 import { FinishEndingList, finishIdentity, finishShowsRows } from "./finish-block.tsx";
@@ -106,7 +107,7 @@ function PreviewBlockCard({
   preview: SubflowPreview;
   dimensions: CanvasDimensions;
   agents: readonly AgentDefinition[];
-  flows: ReadonlyMap<string, FlowDraft>;
+  flows: ReadonlyMap<string, CanvasFlow>;
 }) {
   const nested = preview.innerPreviews.get(block.id);
   if (nested) {
@@ -290,7 +291,7 @@ function SubflowPreviewBody({
   preview: SubflowPreview;
   dimensions: CanvasDimensions;
   agents: readonly AgentDefinition[];
-  flows: ReadonlyMap<string, FlowDraft>;
+  flows: ReadonlyMap<string, CanvasFlow>;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
@@ -311,6 +312,57 @@ function SubflowPreviewBody({
   );
 }
 
+function GroupHeader({
+  name,
+  label,
+  press,
+  badge,
+  runHeader,
+  onCollapse,
+}: {
+  name: string;
+  label: string;
+  press: (content: ReactNode) => ReactNode;
+  badge: ReactNode;
+  runHeader: { readonly visible: boolean; readonly evidence: ReactNode } | undefined;
+  onCollapse: () => void;
+}) {
+  if (runHeader && !runHeader.visible) return null;
+  return (
+    <div
+      className="relative z-[1] flex items-center gap-2 border-b border-border/60 pr-2"
+      style={{ height: SUBFLOW_HEADER_HEIGHT }}
+    >
+      <div className={cn("min-w-0", runHeader ? "max-w-80" : "flex-1")}>
+        {press(
+          <span className="flex h-full items-center gap-1.5 pl-3">
+            <Workflow aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="text-2xs font-semibold tracking-section text-muted-foreground">
+              SUBFLOW
+            </span>
+            <span className="truncate text-sm font-semibold text-foreground">{label}</span>
+            {badge}
+          </span>,
+        )}
+      </div>
+      {runHeader?.evidence}
+      <button
+        type="button"
+        aria-label={`Collapse ${name}`}
+        className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-ring"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCollapse();
+        }}
+      >
+        Collapse
+        <ChevronUp aria-hidden className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export function SubflowGroup({
   block,
   preview,
@@ -322,6 +374,7 @@ export function SubflowGroup({
   border,
   headerPress,
   trailingBadge,
+  runHeader,
   onCollapse,
   renderPort,
   incomingPorts,
@@ -332,11 +385,12 @@ export function SubflowGroup({
   geometry: Geometry;
   dimensions: CanvasDimensions;
   agents: readonly AgentDefinition[];
-  flows: ReadonlyMap<string, FlowDraft>;
+  flows: ReadonlyMap<string, CanvasFlow>;
   frameClassName: string;
   border: number;
   headerPress: (content: ReactNode) => ReactNode;
   trailingBadge?: ReactNode;
+  runHeader?: { readonly visible: boolean; readonly evidence: ReactNode } | undefined;
   onCollapse: () => void;
   renderPort: (props: {
     key: string;
@@ -366,41 +420,26 @@ export function SubflowGroup({
         left: block.position.x,
         top: block.position.y,
         width: preview.width,
-        height: preview.height,
+        height: geometry.blockHeight(block),
         borderWidth: border,
       }}
     >
-      <div
-        className="relative z-[1] flex items-center gap-2 border-b border-border/60 pr-2"
-        style={{ height: SUBFLOW_HEADER_HEIGHT }}
-      >
-        <div className="min-w-0 flex-1">
-          {headerPress(
-            <span className="flex h-full items-center gap-1.5 pl-3">
-              <Workflow aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="text-2xs font-semibold tracking-section text-muted-foreground">
-                SUBFLOW
-              </span>
-              <span className="truncate text-sm font-semibold text-foreground">{headerLabel}</span>
-              {trailingBadge}
-            </span>,
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label={`Collapse ${name}`}
-          className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-ring"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCollapse();
-          }}
-        >
-          Collapse
-          <ChevronUp aria-hidden className="size-3.5" />
-        </button>
-      </div>
-      <SubflowPreviewBody preview={preview} dimensions={dimensions} agents={agents} flows={flows} />
+      <GroupHeader
+        name={name}
+        label={headerLabel}
+        press={headerPress}
+        badge={trailingBadge}
+        runHeader={runHeader}
+        onCollapse={onCollapse}
+      />
+      {!runHeader && (
+        <SubflowPreviewBody
+          preview={preview}
+          dimensions={dimensions}
+          agents={agents}
+          flows={flows}
+        />
+      )}
       {exitPorts.map(({ exit, y }) => (
         <div
           key={`broken-${exit.id}`}

@@ -716,3 +716,39 @@ it("keeps the accepted child ending held while another worker's launch is unboun
   expect(t3.threads.launchCalls).toBe(2);
   expect(t3.threads.threadStops).toEqual([]);
 });
+
+it("reads an exact inner invocation with its ancestor placement through HTTP", async (c) => {
+  // Arrange
+  const { f, mcp, world, input, agent } = await preparedServer(c);
+  const leaf = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
+  const group = await savedFlow(f, {
+    name: "Panel",
+    graph: { ...placingGraph(leaf.id), connections: [toEnding("inner-0", "approved", "done")] },
+  });
+  const parent = await savedFlow(f, {
+    name: "Release",
+    graph: { ...placingGraph(group.id), connections: [toEnding("inner-0", "done", "done")] },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const run = await observeFor(
+    "both levels have an invocation",
+    world,
+    started.id,
+    (detail) => detail.subflows?.filter((placement) => placement.defaultInvocation).length === 2,
+  );
+  const ancestor = run.subflows![0]!.defaultInvocation!;
+  const invocation = run.subflows![1]!.defaultInvocation!;
+
+  // Act
+  const response = await fetch(new URL(`/api/runs/${run.id}/invocations/${invocation.id}`, mcp));
+
+  // Assert
+  expect(await response.json()).toMatchObject({
+    ok: true,
+    value: {
+      ancestors: [{ id: ancestor.id, placementBlockId: "inner-0" }],
+      invocation: { id: invocation.id, placementBlockId: invocation.placementBlockId },
+      placements: [],
+    },
+  });
+});

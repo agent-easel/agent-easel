@@ -29,7 +29,13 @@ export function capturedExits(
   blockId: string,
 ): readonly EffectiveExit[] {
   const block = definitions.flow.graph.blocks.find((item) => item.id === blockId);
-  return block ? effectiveExits(block, definitions.agents) : [];
+  return block
+    ? effectiveExits(
+        block,
+        definitions.agents,
+        definitions.subflows && new Map(definitions.subflows.map((flow) => [flow.id, flow])),
+      )
+    : [];
 }
 
 const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {

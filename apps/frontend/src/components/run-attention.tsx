@@ -63,6 +63,7 @@ function selectedExit(run: RunDetail, item: RunAttention) {
 type AttentionDetailsProps = {
   run: RunDetail;
   blockId?: string;
+  onInspect?: (attention: RunAttention) => void;
 };
 
 export function RunAttentionDetails(props: AttentionDetailsProps) {
@@ -107,7 +108,7 @@ function reportGroups(items: readonly RunAttention[]) {
 }
 
 /** Pending attention only; resolved matters wait in their own closed row below. */
-function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
+function AttentionDetails({ run, blockId, onInspect }: AttentionDetailsProps) {
   const compact = blockId !== undefined;
   const pending = run.attention.filter(
     (item) => !item.settledAt && (blockId === undefined || item.blockId === blockId),
@@ -126,6 +127,16 @@ function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
   return (
     <section className="flex min-w-0 flex-col gap-3 wrap-anywhere" aria-label="Run attention">
       {!compact && <InspectorHeading title="Attention" count={`${count} pending`} />}
+      {onInspect &&
+        pending
+          .filter((item) => item.invocationId && item.blockId)
+          .map((item) => (
+            <TextLink key={item.id} className="self-start text-sm" onClick={() => onInspect(item)}>
+              {item.kind === "subflow-stop-unresolved"
+                ? "Inspect unresolved Stop"
+                : `Inspect ${attentionSubject(item)} · ${item.executionId ? "worker visit" : "invocation"}`}
+            </TextLink>
+          ))}
       {(questions.length > 0 || reviews.length > 0) && (
         <section aria-label="Needs input" className="space-y-3">
           {reviews.map((block) => (

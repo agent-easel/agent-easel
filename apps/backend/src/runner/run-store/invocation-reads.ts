@@ -4,6 +4,7 @@ import {
   type Result,
   type SubflowInvocation,
   type SubflowInvocationPage,
+  type SubflowInvocationPath,
   type SubflowPlacementSummary,
 } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
@@ -87,6 +88,7 @@ function readInvocationViews(sql: SqlClient.SqlClient, invocations: readonly Inv
         parentInvocationId: row.parent_id,
         state: row.state,
         input: row.input,
+        ...(row.incoming_intent_id && { incomingIntentId: row.incoming_intent_id }),
         carriesStartImages: row.entry_input === 1,
         arrivedAt: row.arrived_at,
         completedAt: row.completed_at,
@@ -124,7 +126,11 @@ const placingBlocks = (sql: SqlClient.SqlClient, runId: string) => sql`
     AND f.block_id=COALESCE(b.template_block_id,b.block_id)
   WHERE b.run_id=${runId} AND f.kind='subflow'`;
 
-export function readSubflowSummaries(sql: SqlClient.SqlClient, runId: string) {
+export function readSubflowSummaries(
+  sql: SqlClient.SqlClient,
+  runId: string,
+  parentInvocationId: string | null = null,
+) {
   return Effect.gen(function* () {
     const placements = yield* sql<Placement>`WITH RECURSIVE
       placements AS (${placingBlocks(sql, runId)}),
@@ -138,7 +144,7 @@ export function readSubflowSummaries(sql: SqlClient.SqlClient, runId: string) {
         FROM placements p
       ),
       visible AS (
-        SELECT * FROM current WHERE invocation_id IS NULL
+        SELECT * FROM current WHERE invocation_id IS ${parentInvocationId}
         UNION ALL SELECT c.* FROM current c JOIN visible v ON c.invocation_id=v.selected
       )
       SELECT * FROM visible`;
@@ -177,6 +183,27 @@ const invalidCursor = failure(
 );
 
 export function openInvocationReads(database: RunnerDatabase) {
+  function getSubflowInvocation(runId: string, invocationId: string) {
+    return database.transaction((sql) =>
+      Effect.gen(function* (): Effect.fn.Return<Result<SubflowInvocationPath>, unknown> {
+        const rows = yield* sql<Invocation>`WITH RECURSIVE path AS (
+          SELECT i.*,0 AS distance FROM subflow_invocations i WHERE i.run_id=${runId} AND i.id=${invocationId}
+          UNION ALL SELECT i.*,p.distance+1 FROM subflow_invocations i
+          JOIN path p ON p.parent_id=i.id WHERE i.run_id=${runId}
+        ) SELECT * FROM path ORDER BY distance DESC`;
+        if (!rows.length) return failure("not_found", "This Run has no such invocation.");
+        const views = yield* readInvocationViews(sql, rows);
+        return {
+          ok: true,
+          value: {
+            ancestors: views.slice(0, -1),
+            invocation: views.at(-1)!,
+            placements: yield* readSubflowSummaries(sql, runId, invocationId),
+          },
+        };
+      }),
+    );
+  }
   function listSubflowInvocations(
     runId: string,
     blockId: string,
@@ -236,5 +263,5 @@ export function openInvocationReads(database: RunnerDatabase) {
       }),
     );
   }
-  return { listSubflowInvocations };
+  return { getSubflowInvocation, listSubflowInvocations };
 }

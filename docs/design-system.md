@@ -267,7 +267,9 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   inner blocks and Finish, drawn-only ending routes to the outer right border, and interactive
   outer left/right ports), with a **Collapse** control in its header. Collapsed, cyclic,
   over-budget, missing or unset Subflows render as a compact block card with a footer carrying
-  **Expand** (when expandable) or an error badge and **Open Flow**.
+  **Expand** (when expandable) or an error badge and **Open Flow**. In Runs the same group
+  shows the captured Flow, invocation and queue evidence in its header and draws the inner Flow
+  input, execution Blocks and Finish with their Run state.
 
 ## Changing the design system
 

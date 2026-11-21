@@ -24,6 +24,9 @@ type ArrivalRow = {
   source_block_id: string | null;
   origin_activation_id: string | null;
   origin_thread_id: string | null;
+  subflow_invocation_id: string | null;
+  ending_id: string | null;
+  ending_name: string | null;
 };
 
 type RecipientRow = {
@@ -120,9 +123,10 @@ export function openConditionEvidence(database: RunnerDatabase) {
           window = { highWater, after };
         }
         const rows =
-          yield* sql<ArrivalRow>`SELECT a.id,a.run_id,a.arrival_number,a.accepted_at,a.rule_id,r.name AS rule_name,i.source_block_id,a.origin_activation_id,t.thread_id AS origin_thread_id
+          yield* sql<ArrivalRow>`SELECT a.id,a.run_id,a.arrival_number,a.accepted_at,a.rule_id,r.name AS rule_name,i.source_block_id,a.origin_activation_id,t.thread_id AS origin_thread_id,i.subflow_invocation_id,s.ending_id,s.ending_name
           FROM condition_arrivals a
           JOIN operation_intents i ON i.id=a.incoming_intent_id
+          LEFT JOIN subflow_results s ON s.invocation_id=i.subflow_invocation_id
           LEFT JOIN flow_revision_condition_rules r ON r.flow_revision_id=a.flow_revision_id AND r.block_id=a.template_block_id AND r.rule_id=a.rule_id
           LEFT JOIN run_thread_bindings t ON t.id=a.binding_id
           WHERE a.run_id=${runId} AND a.block_id=${blockId} AND a.arrival_number>${window.after} AND a.arrival_number<=${window.highWater}
@@ -142,6 +146,15 @@ export function openConditionEvidence(database: RunnerDatabase) {
               acceptedAt: row.accepted_at,
               sourceBlockId: row.source_block_id,
               origin: workerProvenance(row),
+              ...(row.subflow_invocation_id &&
+                row.ending_id !== null &&
+                row.ending_name !== null && {
+                  subflowReturn: {
+                    invocationId: row.subflow_invocation_id,
+                    endingId: row.ending_id,
+                    endingName: row.ending_name,
+                  },
+                }),
               // A matched rule references its captured rule row, so its name is always read.
               rule: row.rule_id === null ? null : { id: row.rule_id, name: row.rule_name! },
               recipients: recipients

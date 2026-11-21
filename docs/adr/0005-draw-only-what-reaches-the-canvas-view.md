@@ -29,3 +29,12 @@ cost of a Follow from a zoomed-out view is the number of blocks and wires drawn 
 
 A browser journey compares wire geometry before and after a block leaves and returns to view. Timings on 500 blocks and 5,000
 connections are measured by hand and recorded in the pull request; no automated check asserts a time.
+
+In a composed Run, captured Subflow groups determine their size from the inside out. Saved
+positions place their contents and displace overlapping sibling frames. Each occurrence has
+its own canvas position and inspection identity, including when two placements capture the
+same revision. Nested geometry is independent of mounted elements. Inner scopes draw at their
+absolute positions as the view reaches them. A large ancestor whose border and controls are
+outside the draw window does not need to mount a container for each visible descendant.
+Auto-arrange reuses each captured revision's arranged geometry across occurrences and accepts
+the arrangement together under a single deadline.

@@ -221,6 +221,7 @@ export interface SubflowInvocation {
   readonly parentInvocationId: string | null;
   readonly state: SubflowInvocationState;
   readonly input: string;
+  readonly incomingIntentId?: string;
   readonly carriesStartImages: boolean;
   readonly arrivedAt: string;
   readonly completedAt: string | null;
@@ -254,6 +255,12 @@ export interface SubflowPlacementSummary {
   readonly total: number;
   readonly queued: number;
   readonly defaultInvocation: SubflowInvocation | null;
+}
+
+export interface SubflowInvocationPath {
+  readonly ancestors: readonly SubflowInvocation[];
+  readonly invocation: SubflowInvocation;
+  readonly placements: readonly SubflowPlacementSummary[];
 }
 
 export interface SubflowInvocationPage {
@@ -866,6 +873,7 @@ export interface ConditionArrivalEvidence extends ConditionSelection {
   readonly sourceBlockId: string | null;
   /** The worker whose message it carries, when known. */
   readonly origin: WorkerProvenance | null;
+  readonly subflowReturn?: NonNullable<RunDetail["intents"][number]["subflowReturn"]>;
   /** The captured rule whose output was selected; null when Otherwise was. */
   readonly rule: { readonly id: string; readonly name: string } | null;
   /** Every recipient of the selected output; empty when that output is unwired. */
@@ -979,6 +987,10 @@ export const runOperations = {
     method: "GET",
     path: "/api/runs/:runId/subflows/:blockId/invocations",
     query: ["limit", "cursor"],
+  }),
+  getSubflowInvocation: operation<never, SubflowInvocationPath>()({
+    method: "GET",
+    path: "/api/runs/:runId/invocations/:invocationId",
   }),
   retrySubflowStop: operation<never, RunDetail>()({
     method: "POST",

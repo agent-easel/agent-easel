@@ -1,3 +1,4 @@
+import type { RunAttention } from "@t3-factory/contracts";
 import { targetsBlock } from "../run-evidence.ts";
 import { useEffect, useRef, type ReactNode } from "react";
 import {
@@ -481,12 +482,14 @@ export function InspectedHeader({
 /** Figma RD14: the selected block in the docked inspector, attention first and raw ids last. */
 export function RunBlockView({
   run,
+  attention,
   block,
   recorded,
   observationUnavailable,
   onBack,
 }: {
   run: RunDetail;
+  attention?: RunAttention | undefined;
   block: FlowBlock;
   recorded: RunBlock;
   observationUnavailable: boolean;
@@ -507,6 +510,16 @@ export function RunBlockView({
         (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
       );
   const threadId = recorded.threadId ?? promptBinding?.threadId;
+  const visit =
+    attention?.executionId &&
+    run.executions.find(
+      (item) => item.blockId === block.id && item.executionId === attention.executionId,
+    );
+  const visitNumber =
+    visit &&
+    run.activations
+      .filter((item) => item.blockId === block.id)
+      .findIndex((item) => item.id === visit.activationId) + 1;
   return (
     <>
       <div
@@ -528,6 +541,14 @@ export function RunBlockView({
           <BlockNow run={run} block={block} recorded={recorded} />
         )}
         <BlockResults run={run} block={block} />
+        {attention?.executionId && (
+          <InspectorSection
+            title={visitNumber ? `Selected worker · Visit ${visitNumber}` : "Selected worker visit"}
+          >
+            <p className="text-xs text-muted-foreground wrap-anywhere">{attention.executionId}</p>
+            {attention.link && <OpenInT3 href={attention.link} />}
+          </InspectorSection>
+        )}
         <CapturedRevisitInstruction block={block} />
         <BlockExits run={run} block={block} />
         <div aria-hidden className="flex-1" />

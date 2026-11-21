@@ -68,7 +68,10 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
   seeded Runs and new demo Runs. Its title thread is simulated and the seed submits the generated title through
   `factory_set_run_title` itself; it proves no title model or live T3 launch.
 - The `ending-reached` Run starts two workers in a Flow whose Finish block has the endings Shipped and Dropped. The first worker's result enters Shipped, so the Run records its result, stops the second worker
-  (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once in that scenario. The Subflow demo also keeps one invocation stopping after T3 acknowledges Stop and advances another through verified release to the release-notes worker. These scenarios use controlled Stop behavior.
+  (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once in that scenario. For the Subflow canvas, inspect **Review panel** in `subflow-closing` to see the accepted
+  **Approved** ending with **Stop acknowledged** and **Release pending** together. The
+  `subflow-returned` Run shows **Released** and an **Acknowledged** recipient at **Release notes**.
+  These scenarios use controlled Stop behavior.
 - No seeded Run shows a Condition integrity Problem. Only missing or inconsistent stored Condition state records one, and public operations cannot produce that state.
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
 - A repository registered through the project API gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed. The composer does not add repositories.

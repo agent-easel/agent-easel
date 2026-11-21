@@ -5,7 +5,11 @@ export function targetsBlock(intent: RunDetail["intents"][number], blockId: stri
 }
 
 export function blockName(run: RunDetail, blockId: string) {
-  return run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name || blockId;
+  return (
+    run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name ||
+    run.blocks.find((block) => block.blockId === blockId)?.name ||
+    blockId
+  );
 }
 
 export function capturedEnding(run: RunDetail, endingId: string) {

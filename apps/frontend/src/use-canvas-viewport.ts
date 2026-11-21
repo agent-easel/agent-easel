@@ -28,6 +28,7 @@ type CanvasViewportOptions = {
   getEntryView?: ((width: number, height: number) => CanvasView) | undefined;
   /** Ids the focus view frames, in a stable order. Providing them enables following. */
   focusTargets?: readonly string[] | undefined;
+  onFollow?: (() => void) | undefined;
   padding: { x: number; top: number; bottom: number };
   /** Accepted local layout identity, stable across status polls. */
   fitRevision?: object | null;
@@ -296,7 +297,12 @@ export function useCanvasViewport(options: CanvasViewportOptions) {
       surface.current,
       changeViewManually,
       fitFlow,
-      options.focusTargets ? () => follow.followActive({ immediate: true }) : undefined,
+      options.focusTargets
+        ? () => {
+            options.onFollow?.();
+            follow.followActive({ immediate: true });
+          }
+        : undefined,
     );
   const zoom = (factor: number) =>
     changeViewManually((current) => zoomCanvasBy(surface.current, current, factor));
@@ -307,6 +313,10 @@ export function useCanvasViewport(options: CanvasViewportOptions) {
     zoom,
     startPan,
     onKeyDown,
+    stopFollowing: useCallback(
+      () => changeViewManually((current) => current),
+      [changeViewManually],
+    ),
     following: follow.following,
     /** The focus targets changed while following was off. */
     focusChanged: follow.changed,

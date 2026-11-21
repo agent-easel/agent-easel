@@ -26,7 +26,10 @@ export function useDesktopRoutes() {
         to: "/runs/$runId",
         params: { runId: route.runId },
         search: {},
-        state: { routedBlock: route.blockId },
+        state: {
+          routedBlock: route.blockId,
+          ...(route.attentionId && { routedAttentionId: route.attentionId }),
+        },
       });
     });
   }, [navigate, router]);
@@ -36,5 +39,6 @@ declare module "@tanstack/react-router" {
   interface HistoryState {
     /** A desktop route's Block to select in the Run it opened; null opens the Run overview. */
     routedBlock?: string | null;
+    routedAttentionId?: string;
   }
 }

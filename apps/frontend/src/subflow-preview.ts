@@ -7,11 +7,17 @@ import {
 } from "@t3-factory/contracts";
 import {
   canvasGraph,
+  createFlowLayoutDimensions,
   type BlockFrame,
   type CanvasBlock,
   type CanvasDimensions,
   type CanvasGraph,
 } from "@t3-factory/flow-layout";
+import {
+  applyLayoutPositions,
+  type FlowLayoutDimensions,
+  type FlowLayoutResult,
+} from "./flow-layout-elk.ts";
 import { createCanvasGeometry } from "./flow-geometry.ts";
 
 export const SUBFLOW_HEADER_HEIGHT = 36;
@@ -20,6 +26,7 @@ const SUBFLOW_MIN_WIDTH = 360;
 const SUBFLOW_MIN_HEIGHT = 180;
 const BROKEN_EXIT_STEP = 24;
 const MAX_PREVIEW_NODES = 120;
+const executionFooters = () => 2;
 
 const BUDGET_CODES: ReadonlySet<string> = new Set([
   "subflow_capture_bytes_exceeded",
@@ -37,9 +44,14 @@ export type SubflowEndingRoute = {
   readonly to: SubflowPreviewPoint;
 };
 
+export type CanvasFlow = Pick<FlowDraft, "id" | "name" | "graph">;
+
+export const placementKey = (parent: string, blockId: string) =>
+  `${parent}/${encodeURIComponent(blockId)}`;
+
 export type SubflowPreview = {
   readonly blockId: string;
-  readonly childFlow: FlowDraft;
+  readonly childFlow: CanvasFlow;
   readonly width: number;
   readonly height: number;
   readonly inputY: number;
@@ -56,7 +68,7 @@ export type SubflowPreview = {
 export function blockedSubflowReasons(
   graph: FlowGraph,
   readiness: FlowReadiness | null,
-  flows: ReadonlyMap<string, FlowDraft>,
+  flows: ReadonlyMap<string, CanvasFlow>,
 ): ReadonlyMap<string, SubflowCollapseReason> {
   const reasons = new Map<string, SubflowCollapseReason>();
   const overBudget = readiness?.issues.some((issue) => BUDGET_CODES.has(issue.code)) ?? false;
@@ -87,7 +99,7 @@ export function blockedSubflowReasons(
 
 function previewExitPositions(
   block: CanvasBlock,
-  childFlow: FlowDraft,
+  childFlow: CanvasFlow,
   innerGeometry: ReturnType<typeof createCanvasGeometry>,
   offsetY: number,
   bodyBottom: number,
@@ -115,40 +127,90 @@ function previewExitPositions(
   return { exitPositions, endingRoutes, height: Math.max(SUBFLOW_MIN_HEIGHT, maxExitY) };
 }
 
+type PreviewGeometry = Pick<
+  SubflowPreview,
+  "childFlow" | "innerGraph" | "innerGeometry" | "innerPreviews"
+>;
+
+type PreviewBuild = {
+  readonly flows: ReadonlyMap<string, CanvasFlow>;
+  readonly agents: readonly Pick<AgentDefinition, "id" | "exits">[];
+  readonly dimensions: CanvasDimensions;
+  readonly ancestors: Set<string>;
+  readonly runCollapsed?: ReadonlySet<string> | undefined;
+  readonly affected: ReadonlySet<string>;
+  readonly arranged?: boolean | undefined;
+  readonly revisions: Map<string, PreviewGeometry>;
+  remaining: number;
+};
+
 function buildSubflowPreview(
   block: CanvasBlock,
-  flows: ReadonlyMap<string, FlowDraft>,
-  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
-  dimensions: CanvasDimensions,
-  ancestors: ReadonlySet<string>,
-  budget: { remaining: number },
+  path: string,
+  build: PreviewBuild,
 ): SubflowPreview | null {
+  const { flows, ancestors, runCollapsed, affected, revisions } = build;
   if (block.kind !== "subflow" || block.flowId === null) return null;
-  if (ancestors.has(block.flowId) || budget.remaining <= 0) return null;
+  if (ancestors.has(block.flowId) || build.remaining <= 0) return null;
   const childFlow = flows.get(block.flowId);
   if (!childFlow) return null;
+  const cached = revisions.get(childFlow.id);
+  const share = runCollapsed !== undefined && !affected.has(path);
+  if (share && cached)
+    return frameSubflow(
+      block,
+      childFlow,
+      cached.innerGraph,
+      cached.innerGeometry,
+      cached.innerPreviews,
+    );
   const childNodes = childFlow.graph.blocks.length + 2;
-  if (childNodes > budget.remaining) return null;
-  budget.remaining -= childNodes;
-  const nextAncestors = new Set(ancestors);
-  nextAncestors.add(childFlow.id);
-  const innerGraph = canvasGraph(childFlow.graph, agents, flows);
+  if (childNodes > build.remaining) return null;
+  build.remaining -= childNodes;
+  const geometry = buildPreviewGeometry(childFlow, path, build);
+  if (share) revisions.set(childFlow.id, geometry);
+  return frameSubflow(
+    block,
+    childFlow,
+    geometry.innerGraph,
+    geometry.innerGeometry,
+    geometry.innerPreviews,
+  );
+}
+
+function buildPreviewGeometry(
+  childFlow: CanvasFlow,
+  path: string,
+  build: PreviewBuild,
+): PreviewGeometry {
+  const { flows, agents, dimensions, ancestors, runCollapsed, arranged } = build;
+  ancestors.add(childFlow.id);
+  let innerGraph = canvasGraph(childFlow.graph, agents, flows);
   const innerPreviews = new Map<string, SubflowPreview>();
   for (const innerBlock of innerGraph.blocks) {
-    const nested = buildSubflowPreview(
-      innerBlock,
-      flows,
-      agents,
-      dimensions,
-      nextAncestors,
-      budget,
-    );
+    const key = placementKey(path, innerBlock.id);
+    if (runCollapsed?.has(key)) continue;
+    const nested = buildSubflowPreview(innerBlock, key, build);
     if (nested) innerPreviews.set(innerBlock.id, nested);
   }
+  ancestors.delete(childFlow.id);
+  if (runCollapsed && !arranged)
+    innerGraph = displaceSubflowSiblings(innerGraph, innerPreviews, dimensions);
   const innerGeometry = createCanvasGeometry(innerGraph, dimensions, {
+    ...(runCollapsed && { prompt: "line", footerCount: executionFooters }),
     finish: true,
     blockFrame: previewBlockFrame(innerPreviews),
   });
+  return { childFlow, innerGraph, innerGeometry, innerPreviews };
+}
+
+function frameSubflow(
+  block: CanvasBlock,
+  childFlow: CanvasFlow,
+  innerGraph: CanvasGraph,
+  innerGeometry: ReturnType<typeof createCanvasGeometry>,
+  innerPreviews: ReadonlyMap<string, SubflowPreview>,
+): SubflowPreview {
   const innerBounds = innerGeometry.bounds();
   const offsetX = SUBFLOW_PADDING.left - innerBounds.minX;
   const offsetY = SUBFLOW_HEADER_HEIGHT + SUBFLOW_PADDING.top - innerBounds.minY;
@@ -200,22 +262,42 @@ export function computeSubflowPreviews({
   dimensions,
   collapsed,
   blocked,
+  runCollapsed,
+  arranged,
 }: {
   readonly rootFlowId: string;
   readonly graph: CanvasGraph;
-  readonly flows: ReadonlyMap<string, FlowDraft>;
+  readonly flows: ReadonlyMap<string, CanvasFlow>;
   readonly agents: readonly Pick<AgentDefinition, "id" | "exits">[];
   readonly dimensions: CanvasDimensions;
   readonly collapsed: ReadonlySet<string>;
   readonly blocked: ReadonlyMap<string, SubflowCollapseReason>;
+  readonly runCollapsed?: ReadonlySet<string>;
+  readonly arranged?: boolean;
 }): ReadonlyMap<string, SubflowPreview> {
   const previews = new Map<string, SubflowPreview>();
-  const ancestors = new Set<string>([rootFlowId]);
-  const budget = { remaining: MAX_PREVIEW_NODES };
+  const affected = new Set<string>();
+  for (const path of runCollapsed ?? []) {
+    for (let slash = path.lastIndexOf("/"); slash > 0; slash = path.lastIndexOf("/", slash - 1))
+      affected.add(path.slice(0, slash));
+  }
+  const build: PreviewBuild = {
+    flows,
+    agents,
+    dimensions,
+    ancestors: new Set([rootFlowId]),
+    runCollapsed,
+    affected,
+    arranged,
+    revisions: new Map(),
+    remaining: runCollapsed ? Number.POSITIVE_INFINITY : MAX_PREVIEW_NODES,
+  };
   for (const block of graph.blocks) {
     if (block.kind !== "subflow") continue;
     if (collapsed.has(block.id) || blocked.has(block.id)) continue;
-    const preview = buildSubflowPreview(block, flows, agents, dimensions, ancestors, budget);
+    const key = placementKey("", block.id);
+    if (runCollapsed?.has(key)) continue;
+    const preview = buildSubflowPreview(block, key, build);
     if (preview) previews.set(block.id, preview);
   }
   return previews;
@@ -234,4 +316,123 @@ export function previewBlockFrame(
       exitY: (exitId) => preview.exitPositions.get(exitId),
     };
   };
+}
+
+export function displaceSubflowSiblings(
+  graph: CanvasGraph,
+  previews: ReadonlyMap<string, SubflowPreview>,
+  dimensions: CanvasDimensions,
+): CanvasGraph {
+  if (!previews.size) return graph;
+  const geometry = createCanvasGeometry(graph, dimensions, {
+    finish: true,
+    prompt: "line",
+    footerCount: executionFooters,
+    blockFrame: previewBlockFrame(previews),
+  });
+  const items = [
+    ...graph.blocks.map((block) => ({
+      id: block.id,
+      box: geometry.blockBox(block),
+      group: previews.has(block.id),
+    })),
+    { id: null, box: geometry.finishBox, group: false },
+  ].sort((a, b) => a.box.x - b.box.x || a.box.y - b.box.y);
+  const moved = new Map<string | null, { x: number; y: number }>();
+  const occupied = [{ box: geometry.flowInputBox, group: false }];
+  for (const { id, box, group } of items) {
+    let x = box.x;
+    for (const other of occupied) {
+      const b = other.box;
+      if (
+        (group || other.group) &&
+        box.y < b.y + b.height + 24 &&
+        box.y + box.height + 24 > b.y &&
+        x < b.x + b.width + 32 &&
+        x + box.width > b.x
+      ) {
+        x = b.x + b.width + 32;
+      }
+    }
+    const next = { ...box, x };
+    const index = occupied.findIndex((other) => other.box.x > x);
+    occupied.splice(index < 0 ? occupied.length : index, 0, { box: next, group });
+    moved.set(id, { x, y: box.y });
+  }
+  return {
+    ...graph,
+    blocks: graph.blocks.map((block) => ({ ...block, position: moved.get(block.id)! })),
+    finish: { ...graph.finish, position: moved.get(null)! },
+  };
+}
+
+type ArrangeScope = (
+  graph: FlowGraph,
+  canvas: CanvasGraph,
+  dimensions: FlowLayoutDimensions,
+) => Promise<FlowLayoutResult>;
+
+export async function arrangeSubflowComposition(
+  root: FlowGraph,
+  flows: ReadonlyMap<string, CanvasFlow>,
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+  dimensions: CanvasDimensions,
+  arrange: ArrangeScope,
+): Promise<FlowLayoutResult> {
+  const arrangedFlows = new Map<string, CanvasFlow>();
+  const geometryByFlow = new Map<string, PreviewGeometry>();
+
+  async function visit(source: FlowGraph) {
+    const graph = canvasGraph(source, agents, flows);
+    const children = new Map<string, SubflowPreview>();
+    for (const block of graph.blocks) {
+      if (block.kind !== "subflow" || !block.flowId) continue;
+      const child = flows.get(block.flowId)!;
+      let arranged = geometryByFlow.get(child.id);
+      if (!arranged) {
+        const model = await visit(child.graph);
+        const childFlow = { ...child, graph: model.positioned };
+        arranged = {
+          childFlow,
+          innerGraph: model.graph,
+          innerGeometry: model.geometry,
+          innerPreviews: model.children,
+        };
+        geometryByFlow.set(child.id, arranged);
+        arrangedFlows.set(child.id, childFlow);
+      }
+      children.set(
+        block.id,
+        frameSubflow(
+          block,
+          arranged.childFlow,
+          arranged.innerGraph,
+          arranged.innerGeometry,
+          arranged.innerPreviews,
+        ),
+      );
+    }
+    const facts = {
+      prompt: "line" as const,
+      finish: true,
+      footerCount: executionFooters,
+      blockFrame: previewBlockFrame(children),
+    };
+    const result = await arrange(
+      source,
+      graph,
+      createFlowLayoutDimensions(graph, dimensions, facts, false),
+    );
+    const positioned = applyLayoutPositions(source, result);
+    const drawn = canvasGraph(positioned, agents, flows);
+    return {
+      result,
+      positioned,
+      graph: drawn,
+      geometry: createCanvasGeometry(drawn, dimensions, facts),
+      children,
+    };
+  }
+  const { result } = await visit(root);
+  return { ...result, arrangedFlows };
 }
