@@ -3,6 +3,7 @@ import { CornerDownLeft } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
+  AgentRevisitContext,
   FlowBlock,
   FlowGraph,
   ValidationIssue,
@@ -21,6 +22,7 @@ import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
 import { fieldAria } from "./field-state.ts";
 import { ProblemCard } from "./problem-card.tsx";
 import { fieldProblem, issueTag, type BlockIssue } from "./flow-readiness.tsx";
+import { SegmentedChoice } from "./segmented-choice.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 import type { FlowWire } from "../flow-graph.ts";
@@ -202,6 +204,11 @@ function AgentPicker({
   );
 }
 
+const REVISIT_CONTEXT_OPTIONS: readonly (readonly [AgentRevisitContext, string])[] = [
+  ["keep", "Keep context"],
+  ["fresh", "Fresh context"],
+];
+
 function AgentBlockSettings({
   block,
   agents,
@@ -216,6 +223,7 @@ function AgentBlockSettings({
   onEdit: (block: FlowBlock) => void;
 }) {
   const agentId = useId();
+  const revisitContextId = useId();
   const revisitId = useId();
   const agent = agents.all.find((a) => a.id === block.agentId);
   const summary = agent && agentRuntimeMeta(agent.execution, agents.capabilities);
@@ -249,6 +257,21 @@ function AgentBlockSettings({
           </div>
         )}
       </Field>
+      <div className="grid gap-1.5">
+        <span
+          id={revisitContextId}
+          className="text-label font-normal tracking-label text-muted-foreground"
+        >
+          On revisit
+        </span>
+        <SegmentedChoice
+          labelledBy={revisitContextId}
+          value={block.revisitContext}
+          options={REVISIT_CONTEXT_OPTIONS}
+          size="sm"
+          onChange={(revisitContext) => onEdit({ ...block, revisitContext })}
+        />
+      </div>
       <Field id={revisitId} label="Revisit instruction (optional)">
         <Textarea
           id={revisitId}

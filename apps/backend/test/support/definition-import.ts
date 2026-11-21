@@ -70,7 +70,7 @@ export function withReversedKeys(value: unknown): unknown {
 /** An Agent file as Definition export writes it (version 2). */
 export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {}) => ({
   format: "t3-factory/definitions",
-  formatVersion: 2,
+  formatVersion: 3,
   kind: "agent",
   factoryVersion: "0.6.0",
   exportedAt: "2026-11-14T10:00:00.000Z",
@@ -82,7 +82,7 @@ export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {
  * A Flow file as Definition export writes it, or as an earlier release did with `formatVersion: 1`:
  * a Code review block of `exportedAgent()` whose pass reaches a Human step.
  */
-export const flowFile = (envelope: object = {}) => ({
+export const flowFile = (envelope: { formatVersion?: number } = {}) => ({
   ...agentFile(exportedAgent(), envelope),
   kind: "flow",
   flow: {
@@ -98,6 +98,9 @@ export const flowFile = (envelope: object = {}) => ({
           hiddenExitIds: [],
           localExits: [],
           revisitInstruction: "",
+          ...(envelope.formatVersion === undefined || envelope.formatVersion >= 3
+            ? { revisitContext: "keep" as const }
+            : {}),
         },
         { id: "approve", name: "Approve", kind: "human", position: { x: 480, y: 0 } },
       ],

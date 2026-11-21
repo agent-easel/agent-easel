@@ -290,7 +290,12 @@ export const makeDefinitions = (
           blocks: input.blocks.map((block): FlowBlock => {
             const position = block.position ?? { x: 0, y: 0 };
             return block.kind === "agent"
-              ? { ...block, position, revisitInstruction: block.revisitInstruction ?? "" }
+              ? {
+                  ...block,
+                  position,
+                  revisitInstruction: block.revisitInstruction ?? "",
+                  revisitContext: block.revisitContext ?? "keep",
+                }
               : { ...block, position };
           }),
         };

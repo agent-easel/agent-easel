@@ -362,8 +362,8 @@ answer directly authorizes its outgoing handoffs.
 A first visit launches that Block's own top-level worker. The message is `$factory-block`
 followed by the captured Agent prompt. A revisit queues a turn on the same worker after
 the previous activation's current result is released and, at send time, the worker thread is
-finished. Only the launch invokes the installed skill. The revisit carries the incoming message, preceded by the Block's
-[Revisit instruction](#revisit-instructions) when one is set, and never resends the Agent prompt. Two Blocks using the same
+finished. When `revisitContext` is `"keep"` (the default), only the launch invokes the installed skill, and the revisit carries the incoming message preceded by the Block's
+[Revisit instruction](#revisit-instructions) when one is set, without resending the Agent prompt. When `revisitContext` is `"fresh"`, the revisit sends `freshContext: true` so T3 starts a fresh provider session on that worker thread without earlier context, and resends `$factory-block`, the `Factory Block id` header, the captured Agent prompt, any Revisit instruction and the incoming message. Continuation prompts and Request report always keep the current session. Two Blocks using the same
 Agent still have separate workers. Parallel arrivals never join or batch their feedback.
 Threads share the Run's workspace, the project-root checkout or the Run's worktree; Factory guarantees neither edit-conflict handling
 nor agreement on one repository revision.

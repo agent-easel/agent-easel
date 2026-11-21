@@ -73,7 +73,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_run",
     description:
-      "Read the Run your Block belongs to, with each Block's state and latest result, and each Condition's summary {blockId, arrivals, pending, latest} without its arrival history.",
+      "Read the Run your Block belongs to (id, number, title, input, state, startedAt), with each Block's state and latest result, and each Condition's summary {blockId, arrivals, pending, latest} without its arrival history.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },

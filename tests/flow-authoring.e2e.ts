@@ -398,6 +398,38 @@ test("a saved Agent block's Revisit instruction is shown again after reload and 
   await app.screenshot("revisit-instruction-authoring");
 });
 
+test("switching an Agent block to Fresh context on revisit persists across reload and marks the block on the canvas", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await saveSingleAgentFlow(app.baseUrl, "Fresh revisit loop", "Sample worker", {
+    id: "poller",
+    name: "Poller",
+    x: 320,
+    y: 180,
+  });
+  await app.open(`/studio/flows/${flowId}`);
+  const poller = screen.getByRole("article", "Block Poller");
+  await expect(poller).not.toContainText("Fresh context");
+  await screen.getByRole("button", "Agent Poller").tap();
+  const panel = screen.getByRole("complementary", "Block settings");
+  await expect(panel.getByRole("radio", "Keep context")).toBeChecked();
+  await panel.getByRole("radio", "Fresh context").tap();
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectFlowSaved(screen);
+  await browser.reload();
+  await expect(poller).toContainText("Fresh context");
+  await screen.getByRole("button", "Agent Poller").tap();
+  await expect(panel.getByRole("radio", "Fresh context")).toBeChecked();
+  await app.screenshot("revisit-fresh-context-authoring");
+});
+
 test("choosing another Agent for a block keeps its Revisit instruction and canvas marker", async ({
   app,
   screen,

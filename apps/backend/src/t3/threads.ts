@@ -136,6 +136,7 @@ export interface SendPayload {
   readonly environmentId: string;
   readonly threadId: string;
   readonly mode: "queue";
+  readonly freshContext?: true;
   readonly clientRequestId: string;
   readonly message: string;
 }

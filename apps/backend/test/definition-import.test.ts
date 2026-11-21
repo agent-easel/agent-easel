@@ -89,7 +89,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 3 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 4 })),
   );
 
   // Assert
@@ -99,7 +99,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 3, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 4, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -521,7 +521,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(2);
+  expect(document.formatVersion).toBe(3);
 
   // Act
   const committed = assertOk(
@@ -604,11 +604,65 @@ it("a version-1 Flow file from an earlier release still commits as the Flow it h
       flowInput: file.flow.graph.flowInput,
       connections: file.flow.graph.connections,
       blocks: [
-        { id: "review", kind: "agent", agentId: committed.value.agents[0]!.id },
+        {
+          id: "review",
+          kind: "agent",
+          agentId: committed.value.agents[0]!.id,
+          revisitContext: "keep",
+        },
         { id: "approve", kind: "human" },
       ],
     },
   });
+});
+
+it("a version-2 Flow file without revisitContext imports with keep revisitContext", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const file = flowFile({ formatVersion: 2 });
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow-v2",
+    document: file,
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "keep" });
+});
+
+it("a version-3 Flow file preserves fresh revisitContext on import", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const base = flowFile();
+  const file = {
+    ...base,
+    flow: {
+      ...base.flow,
+      graph: {
+        ...base.flow.graph,
+        blocks: [
+          { ...base.flow.graph.blocks[0]!, revisitContext: "fresh" as const },
+          base.flow.graph.blocks[1]!,
+        ],
+      },
+    },
+  };
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow-v3-fresh",
+    document: file,
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "fresh" });
 });
 
 it("retrying a Flow commit whose file lists the same content with fields reordered returns the original result", async (context) => {

@@ -104,6 +104,7 @@ function checkKindFields(block: Record<string, unknown>, path: string, issue: Is
   if (block.kind === "wait") checkWaitDuration(block.duration, `${path}.duration`, issue);
   if (block.kind === "condition") checkCondition(block, path, issue);
   checkRevisitInstruction(block, `${path}.revisitInstruction`, issue);
+  checkRevisitContext(block, `${path}.revisitContext`, issue);
 }
 
 /** Only an Agent block has a Revisit instruction, reported at its own path on any other kind;
@@ -125,6 +126,15 @@ function checkRevisitInstruction(
     );
 }
 
+function checkRevisitContext(block: Record<string, unknown>, path: string, issue: IssueReporter) {
+  const revisitContext = block.revisitContext;
+  if (revisitContext === undefined) return;
+  if (block.kind !== "agent")
+    issue("invalid_revisit_context", path, "Only an Agent block has a revisit context setting.");
+  else if (revisitContext !== "keep" && revisitContext !== "fresh")
+    issue("invalid_revisit_context", path, 'Use "keep" or "fresh" for revisitContext.');
+}
+
 function checkBlockFields(
   block: Record<string, unknown>,
   path: string,
@@ -133,7 +143,11 @@ function checkBlockFields(
 ) {
   const kindFields = KIND_FIELDS.get(block.kind);
   const allowed = ["id", "name", "kind", "position", ...(kindFields ?? [])];
-  if (Object.keys(block).some((key) => key !== "revisitInstruction" && !allowed.includes(key)))
+  if (
+    Object.keys(block).some(
+      (key) => key !== "revisitInstruction" && key !== "revisitContext" && !allowed.includes(key),
+    )
+  )
     issue(
       "block_overrides_forbidden",
       path,

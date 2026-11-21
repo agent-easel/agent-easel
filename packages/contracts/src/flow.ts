@@ -56,6 +56,7 @@ export interface ConditionRule {
  * it and has one fixed, unnamed output. A Condition routes each arrival by its arrival number: the
  * first matching rule selects that rule's output, else the fixed last Otherwise output.
  */
+export type AgentRevisitContext = "keep" | "fresh";
 export type FlowBlock = BlockBase &
   (
     | {
@@ -67,6 +68,7 @@ export type FlowBlock = BlockBase &
         readonly localExits: readonly BlockExit[];
         /** Sent on every visit to this block after the first; stored trimmed, empty when unset. */
         readonly revisitInstruction: string;
+        readonly revisitContext: AgentRevisitContext;
       }
     | { readonly kind: "human" }
     | { readonly kind: "wait"; readonly duration: WaitDuration | null }
@@ -105,7 +107,10 @@ type OptionalPosition<B extends { readonly position: FlowBlock["position"] }> = 
   : never;
 /** An omitted Revisit instruction saves empty. */
 type OptionalRevisitInstruction<B> = B extends { readonly kind: "agent" }
-  ? Omit<B, "revisitInstruction"> & { readonly revisitInstruction?: string }
+  ? Omit<B, "revisitInstruction" | "revisitContext"> & {
+      readonly revisitInstruction?: string;
+      readonly revisitContext?: AgentRevisitContext;
+    }
   : B;
 export type FlowBlockInput = OptionalRevisitInstruction<OptionalPosition<FlowBlock>>;
 /** Save/create input only: if any position is omitted, the server arranges the whole graph. */

@@ -102,6 +102,7 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
           messageRequired: requiresFeedback,
         })),
         revisitInstruction: "",
+        revisitContext: "keep",
       };
 
 /** A released Flow as current Factory reads it: the same revision in the project checkout, its

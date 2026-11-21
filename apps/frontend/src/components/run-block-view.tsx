@@ -205,16 +205,28 @@ function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
 /** The Revisit instruction captured with the Run's Flow revision; the composed turn stays in the
  * worker thread. */
 function CapturedRevisitInstruction({ block }: { block: FlowBlock }) {
-  if (block.kind !== "agent" || !block.revisitInstruction) return null;
+  if (block.kind !== "agent" || (!block.revisitInstruction && block.revisitContext !== "fresh"))
+    return null;
+  const contextNote =
+    block.revisitContext === "fresh"
+      ? "Captured at Start · fresh context on every visit after the first"
+      : "Captured at Start · sent on every visit after the first";
+  if (!block.revisitInstruction)
+    return (
+      <InspectorSection title="On revisit" label="On revisit">
+        <Surface tone="inset" className="flex flex-col gap-1.5 px-3 py-2">
+          <p className="text-sm text-foreground">Fresh context</p>
+          <p className="text-xs text-subtle-foreground">{contextNote}</p>
+        </Surface>
+      </InspectorSection>
+    );
   return (
     <InspectorSection title="Revisit instruction" label="Revisit instruction">
       <Surface tone="inset" className="flex flex-col gap-1.5 px-3 py-2">
         <p className="text-sm break-words whitespace-pre-wrap text-foreground">
           {block.revisitInstruction}
         </p>
-        <p className="text-xs text-subtle-foreground">
-          Captured at Start · sent on every visit after the first
-        </p>
+        <p className="text-xs text-subtle-foreground">{contextNote}</p>
       </Surface>
     </InspectorSection>
   );

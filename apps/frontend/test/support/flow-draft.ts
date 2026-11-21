@@ -67,6 +67,7 @@ export function memoryFactory(): MemoryFactory {
           hiddenExitIds: [],
           localExits: [],
           revisitInstruction: "",
+          revisitContext: "keep",
         },
       ],
       connections: [],

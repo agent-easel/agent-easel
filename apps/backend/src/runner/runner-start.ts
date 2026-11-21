@@ -456,6 +456,10 @@ export function openRunnerStart(
       const support = snapshot.support.launch[flow.workspace.mode];
       const workspace = yield* resolveStartWorkspace(git, flow, target.project);
       const attachments = attachmentIssues(snapshot, imageCount);
+      const freshContextMissing =
+        flow.graph.blocks.some(
+          (block) => block.kind === "agent" && block.revisitContext === "fresh",
+        ) && !snapshot.support.freshContextSend;
       const issues: ValidationIssue[] = [
         ...attachments,
         ...(!workspace.ok ? workspace.issues : []),
@@ -471,8 +475,24 @@ export function openRunnerStart(
               },
             ]
           : []),
+        ...(freshContextMissing
+          ? [
+              {
+                code: "fresh_context_unsupported",
+                path: "connection.contract",
+                message:
+                  "This T3 does not support fresh-context revisits. Update T3 or set Agent blocks to keep context on revisit.",
+              },
+            ]
+          : []),
       ];
-      if (attachments.length || !workspace.ok || !agents.ok || !support.supported)
+      if (
+        attachments.length ||
+        !workspace.ok ||
+        !agents.ok ||
+        !support.supported ||
+        freshContextMissing
+      )
         return failure(
           "validation",
           "Flow execution setup is incomplete. No Run was created.",

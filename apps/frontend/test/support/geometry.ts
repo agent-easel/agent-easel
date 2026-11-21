@@ -21,6 +21,7 @@ export function geometryGraph(): CanvasGraph {
         hiddenExitIds: [],
         localExits: [{ id: "done", name: "Done", description: "", messageRequired: false }],
         revisitInstruction: "",
+        revisitContext: "keep",
         position: { x: 0, y: 0 },
         exits: [
           { id: "done", name: "Done", description: "", messageRequired: false, source: "local" },
@@ -43,6 +44,7 @@ const agentBlock = (id: string, exitId: string, x: number): FlowBlock => ({
   hiddenExitIds: [],
   localExits: [{ id: exitId, name: `Exit ${exitId}`, description: "", messageRequired: false }],
   revisitInstruction: "",
+  revisitContext: "keep",
   position: { x, y: 0 },
 });
 

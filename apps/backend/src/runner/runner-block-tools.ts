@@ -222,10 +222,12 @@ function incomingResults(detail: RunDetail, cause: string) {
 function runView(detail: RunDetail): RuntimeReply {
   return {
     code: "RUN",
+    id: detail.id,
     number: detail.number,
     title: detail.title,
     input: detail.input,
     state: detail.lifecycle,
+    startedAt: detail.startedAt,
     conditions: detail.conditions,
     blocks: detail.blocks.map((block) => ({
       blockId: block.blockId,

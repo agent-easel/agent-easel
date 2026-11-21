@@ -37,6 +37,7 @@ function blockSettings(block: FlowBlock, agent: AgentDefinition | undefined): Re
           `    Agent  ${agent?.name ?? (block.agentId ? "Unavailable Agent" : "No Agent")}`,
           block.agentId,
         ),
+        `    On revisit  ${block.revisitContext === "fresh" ? "Fresh context" : "Keep context"}`,
         ...textLines("Revisit instruction", block.revisitInstruction),
         ...block.hiddenExitIds.map((id) =>
           revisionLine(`    Hidden exit  ${exitNames.get(id) ?? "Unavailable exit"}`, id),

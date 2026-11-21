@@ -316,6 +316,7 @@ export const agentBlock = (
   hiddenExitIds: readonly string[] = [],
   localExits: readonly BlockExit[] = [],
   revisitInstruction = "",
+  revisitContext: AgentShape["revisitContext"] = "keep",
 ): ScenarioAgentBlock => ({
   id,
   name,
@@ -325,6 +326,7 @@ export const agentBlock = (
   hiddenExitIds,
   localExits,
   revisitInstruction,
+  revisitContext,
 });
 export const humanStep = (
   id: string,
@@ -588,6 +590,7 @@ export interface SingleWorkerVariant {
   readonly workspace?: FlowWorkspace;
   readonly revisit?: boolean;
   readonly revisitInstruction?: string;
+  readonly revisitContext?: AgentShape["revisitContext"];
   /** The owning Project of the Flow and its Agent; global when omitted. */
   readonly projectId?: OwningProject;
 }
@@ -661,6 +664,7 @@ export async function singleWorkerFlow(world: ScenarioWorld, variant: SingleWork
           variant.hiddenExitIds,
           variant.localExits,
           variant.revisitInstruction,
+          variant.revisitContext,
         ),
       ],
       connections: variant.revisit ? [connection("worker", "done", "worker")] : [],

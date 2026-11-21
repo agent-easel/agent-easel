@@ -174,8 +174,15 @@ function grip(visible: boolean) {
  */
 function blockTags(block: FlowBlock, issue: ValidationIssue | undefined) {
   const revisit = block.kind === "agent" && !!block.revisitInstruction.trim();
+  const fresh = block.kind === "agent" && block.revisitContext === "fresh";
   const issueId = `block-issue-${block.id}`;
   const revisitId = `revisit-instruction-${block.id}`;
+  const revisitLabel =
+    fresh && revisit
+      ? "Fresh · Revisit instruction"
+      : fresh
+        ? "Fresh context"
+        : "Revisit instruction";
   return {
     tags: (
       <>
@@ -184,14 +191,14 @@ function blockTags(block: FlowBlock, issue: ValidationIssue | undefined) {
             {issueTag(issue)}
           </StatusBadge>
         )}
-        {revisit && !issue && (
+        {(revisit || fresh) && !issue && (
           <StatusBadge id={revisitId} kind="neutral" icon={RotateCcw}>
-            Revisit instruction
+            {revisitLabel}
           </StatusBadge>
         )}
       </>
     ),
-    describedBy: issue ? issueId : revisit ? revisitId : undefined,
+    describedBy: issue ? issueId : revisit || fresh ? revisitId : undefined,
   };
 }
 

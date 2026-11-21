@@ -70,3 +70,38 @@ it("a new Flow revision exposes Wait, Continuation and Condition edits in the co
     expect.objectContaining({ text: "    Approve · From arrival 3 onward" }),
   ]);
 });
+
+it("a new Flow revision exposes an Agent block's revisitContext change in the compared panes", () => {
+  // Arrange
+  const flow = (revisitContext: "keep" | "fresh"): FlowContent => ({
+    name: "Loop",
+    workspace: { mode: "checkout" },
+    graph: {
+      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["poll"] },
+      connections: [],
+      blocks: [
+        {
+          id: "poll",
+          name: "Poller",
+          kind: "agent",
+          agentId: null,
+          position: { x: 240, y: 0 },
+          hiddenExitIds: [],
+          localExits: [],
+          revisitInstruction: "",
+          revisitContext,
+        },
+      ],
+    },
+  });
+  const mine = comparedFlowLines(flow("keep"), []);
+  const theirs = comparedFlowLines(flow("fresh"), []);
+
+  // Act
+  const { theirsChanged } = diffRevisionLines(mine, theirs);
+
+  // Assert
+  expect(theirs.filter((_, index) => theirsChanged[index])).toStrictEqual([
+    "    On revisit  Fresh context",
+  ]);
+});
