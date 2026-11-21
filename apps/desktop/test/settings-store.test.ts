@@ -58,6 +58,7 @@ it("settings saved before appearance and alerts existed open in System with Noti
     notifications: true,
     dockBadge: true,
     showRunDetails: false,
+    windowBounds: null,
   });
 });
 
@@ -75,5 +76,56 @@ it("turned-off Notifications and Dock badge and shown Run details are still chos
     notifications: false,
     dockBadge: false,
     showRunDetails: true,
+  });
+});
+
+it("the window size and position the user left are restored when the installation opens again", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  const store = await SettingsStore.open(directory);
+  await store.update({ windowBounds: { x: 120, y: 80, width: 1111, height: 777 } });
+
+  // Act
+  const reopened = await SettingsStore.open(directory);
+
+  // Assert
+  expect(reopened.get().windowBounds).toStrictEqual({ x: 120, y: 80, width: 1111, height: 777 });
+});
+
+it("a stored window position keeps only its size and position, never other window options", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  await writeFile(
+    join(directory, "desktop-settings.json"),
+    JSON.stringify({
+      version: 1,
+      windowBounds: { x: 10, y: 20, width: 1000, height: 700, webPreferences: { sandbox: false } },
+    }),
+  );
+
+  // Act
+  const store = await SettingsStore.open(directory);
+
+  // Assert
+  expect(store.get().windowBounds).toStrictEqual({ x: 10, y: 20, width: 1000, height: 700 });
+});
+
+it("waiting for saved settings also waits for a change made while an earlier save is still being written", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  const store = await SettingsStore.open(directory);
+  void store.update({ windowBounds: { x: 0, y: 0, width: 1000, height: 700 } });
+  const settled = store.settled();
+  void store.update({ windowBounds: { x: 300, y: 140, width: 1180, height: 760 } });
+
+  // Act
+  await settled;
+
+  // Assert
+  expect((await SettingsStore.open(directory)).get().windowBounds).toStrictEqual({
+    x: 300,
+    y: 140,
+    width: 1180,
+    height: 760,
   });
 });

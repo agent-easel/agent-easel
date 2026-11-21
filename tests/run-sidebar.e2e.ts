@@ -107,6 +107,26 @@ test("opening Run actions dismisses the preview and menu hover keeps it closed",
   await expect(preview).toBeHidden();
 });
 
+test("Copy in a Run row menu puts the Run ID on the clipboard", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const run = await findRun(app.baseUrl, workingTitle);
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/runs/new");
+  await screen.getByRole("link").filter({ hasText: workingTitle }).secondaryTap();
+  await screen.getByRole("menuitem", "Copy", { exact: true }).hover();
+
+  // Act
+  await screen.getByRole("menuitem", "Run ID", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByRole("menu")).toHaveCount(0);
+  expect(await browser.evaluate("navigator.clipboard.readText()")).toBe(run.id);
+});
+
 test("restoring the last snoozed Run hides its group and focuses the restored row", async ({
   app,
   screen,

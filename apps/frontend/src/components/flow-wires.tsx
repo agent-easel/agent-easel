@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { FlowConnection } from "@t3-factory/contracts";
 import { wireRouteKey } from "@t3-factory/flow-layout";
@@ -176,8 +176,10 @@ function visibleWires(
   connections: readonly Wire[],
   area: Rect | null,
   current: FlowWire | null,
+  focused: string | null,
 ) {
   const keep = (item: Wire) =>
+    item.key === focused ||
     (current !== null && sameWire(item.wire, current)) ||
     (area !== null && wireReaches(area, item.path.bounds));
   const shown: Wire[] = [];
@@ -195,6 +197,7 @@ function useVisibleWires({
   pendingWire,
   area,
   current,
+  focused,
 }: {
   graph: CanvasGraph;
   kind: WirePresentation["kind"];
@@ -204,6 +207,7 @@ function useVisibleWires({
   pendingWire: FlowWire | null;
   area: Rect | null;
   current: FlowWire | null;
+  focused: string | null;
 }) {
   const allInputs = useMemo(
     () => flowInputWires(graph, kind, geometry, routed),
@@ -225,10 +229,16 @@ function useVisibleWires({
     [allInputs, pendingWire],
   );
   const wires = useMemo(
-    () => visibleWires(inputs, connections, area, current),
-    [inputs, connections, area, current],
+    () => visibleWires(inputs, connections, area, current, focused),
+    [inputs, connections, area, current, focused],
   );
   return { inputs, connections, wires };
+}
+
+function wireKeyOf(target: EventTarget | null) {
+  return target instanceof Element
+    ? (target.closest("[data-wire-key]")?.getAttribute("data-wire-key") ?? null)
+    : null;
 }
 
 /**
@@ -261,6 +271,7 @@ export function FlowWires({
   const selection = presentation.kind === "curved" ? presentation : null;
   const marker = selection ? "arrow" : "execution-arrow";
   const current = selection?.selected ?? null;
+  const [focused, setFocused] = useState<string | null>(null);
   const { inputs, connections, wires } = useVisibleWires({
     graph,
     kind: presentation.kind,
@@ -270,6 +281,7 @@ export function FlowWires({
     pendingWire,
     area,
     current,
+    focused,
   });
   const selected = current && wires.find((wire) => sameWire(wire.wire, current));
   const emphasis = (item: Wire) => emphasized !== null && leavesNode(item.wire, emphasized);
@@ -282,6 +294,8 @@ export function FlowWires({
         aria-label={presentation.label}
         data-connection-count={connections.length}
         data-flow-input-count={inputs.length}
+        onFocus={(event) => setFocused(wireKeyOf(event.target))}
+        onBlur={(event) => setFocused(wireKeyOf(event.relatedTarget))}
       >
         <defs>
           {selection ? (
@@ -382,6 +396,7 @@ function SelectableWire({
     <g
       role="button"
       tabIndex={0}
+      data-wire-key={wire.key}
       aria-label={
         wire.exit === null
           ? `Connection from ${wire.source} to ${wire.target}`

@@ -3,9 +3,8 @@
 The Flow editor and the Run canvas share one surface. It draws the blocks whose frames, and the wires whose paths, reach a
 window: the part of the graph the view shows plus half a view beyond each edge. The window is kept while the view stays
 inside it, so panning draws nothing new until the view leaves it, and it is replaced when zooming in leaves it more than four
-times the view. Fit Flow draws every block, since every block is then in view. The Flow input and Finish always draw, as do a
-block that has keyboard focus, a selected wire in Studio, and the blocks a drag or a connection gesture holds, so a gesture or
-a key press never loses its element when the view moves.
+times the view. Fit Flow draws every block, since every block is then in view. The Flow input and Finish always draw. Blocks
+and wires with keyboard focus stay drawn, along with a selected wire in Studio and blocks held by a drag or connection gesture.
 
 Layout and wire geometry never depend on what is drawn. Block frames, ports, wire paths and the bounds that decide whether a
 wire reaches the window are computed from the whole graph, as is the view that Fit, entry and Follow active choose. A block that

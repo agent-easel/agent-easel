@@ -568,7 +568,9 @@ fixed Human exits their old exits were mapped to.
   observations are stale or delivery is unavailable. It offers **Open in T3 ↗** for the conversation or first
   worker when the Project is available, then the inspector toggle and ···. The menu shares the sidebar row's
   availability and shortcuts: **Snooze** or **Restore**, **Settle**, **Rename**, and **Archive…** for Active Runs,
-  and **Rename** and **Archive…** for Settled Runs. Archived Runs have no action menu. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing worktree** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
+  and **Rename** and **Archive…** for Settled Runs. Both menus also offer a **Copy** submenu: **Run number** copies
+  `#N` (unavailable for a Run without a number) and **Run ID** copies the Run id; Copy needs no mutation access, and a
+  browser that withholds the clipboard shows **Copy unavailable here.** Archived Runs have no action menu. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing worktree** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
   **Worktree not created**. A worktree T3 could not create is a Run-level Problem card, **T3 couldn’t create this Run’s
   worktree**. When a worker or the Run coordinator thread can fix it, the action is **Open in T3 ↗** and the next step is to fix it in T3, then start the Run again; otherwise the action is **Settle…**. T3's reason stays in Technical details. Retained Runs that queued a
   first visit on an idle worker prepared under the earlier contract still show **entered · prepared idle T3 thread**.

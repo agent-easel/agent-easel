@@ -163,11 +163,13 @@ export function RunSidebar({ path }: { path: string }) {
         <NewRunButton current={path === "/runs/new"} />
       </div>
       {needsYou && <NeedsYouFilter count={open.length} />}
-      {(loadError || actionError) && (
-        <p role="alert" className="px-3 pb-2 text-xs text-destructive">
-          {loadError || actionError}
-        </p>
-      )}
+      {[loadError, actionError]
+        .filter((message) => message !== "")
+        .map((message) => (
+          <p key={message} role="alert" className="px-3 pb-2 text-xs text-destructive">
+            {message}
+          </p>
+        ))}
       <SidebarRowsProvider>
         <RunGroups
           path={path}

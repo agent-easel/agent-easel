@@ -782,12 +782,10 @@ function visibleBlocks(
   blocks: readonly CanvasBlock[],
   drawn: Geometry,
   area: Rect | null,
-  pinned: string,
+  pinned: ReadonlySet<string>,
 ) {
-  const held = pinned ? new Set(pinned.split("\n")) : null;
   return blocks.filter(
-    (item) =>
-      (held?.has(item.id) ?? false) || (area !== null && reaches(area, drawn.blockBox(item))),
+    (item) => pinned.has(item.id) || (area !== null && reaches(area, drawn.blockBox(item))),
   );
 }
 
@@ -816,7 +814,7 @@ function SurfaceLayer({
   // Kept here rather than in the surface, so a preview does not recompute every block's content.
   const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
   const [focused, setFocused] = useState<string | null>(null);
-  const pinned = pinnedBlockIds(gesture, focused).join("\n");
+  const pinned = useMemo(() => new Set(pinnedBlockIds(gesture, focused)), [gesture, focused]);
   const layer = useMemo(() => layerSize([geometry, drawn]), [geometry, drawn]);
   const blocks = useMemo(
     () => visibleBlocks(graph.blocks, drawn, area, pinned),
