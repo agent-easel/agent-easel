@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vp build",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "vp dev"
   },

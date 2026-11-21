@@ -11,6 +11,7 @@ coverage/
 *.sqlite-*
 
 .e2e/
+.vercel/
 
 # Desktop bundle, staged Electron app and packaged artifacts.
 apps/desktop/build/
