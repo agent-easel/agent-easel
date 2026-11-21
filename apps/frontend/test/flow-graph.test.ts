@@ -166,9 +166,10 @@ it("undoing an ending removal brings the ending back in its place with its wires
   expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
 });
 
-it("removing the Finish block takes the wires into its endings, and undo brings both back", () => {
+it("removing the Finish block takes the wires into its endings, and undo restores the saved graph in its order", () => {
   // Arrange
-  const before = endingFlow();
+  const flow = endingFlow();
+  const before = { ...flow, connections: [...flow.connections].reverse() };
   const after = removeFinish(before);
 
   // Act
@@ -176,9 +177,8 @@ it("removing the Finish block takes the wires into its endings, and undo brings 
 
   // Assert
   expect(after).not.toHaveProperty("finish");
-  expect(after.connections).toStrictEqual(before.connections.slice(0, 1));
-  expect(undone.finish).toStrictEqual(before.finish);
-  expect(undone.connections).toStrictEqual(before.connections);
+  expect(after.connections).toStrictEqual(before.connections.slice(1));
+  expect(undone).toStrictEqual(before);
 });
 
 it("an exit reaches each ending at most once, and the Flow input reaches no ending", () => {

@@ -297,6 +297,35 @@ test("removing the Finish block takes its endings and their wires, and the libra
   await app.screenshot("finish-removed-library-offers-finish");
 });
 
+test("undo brings back a Finish block added and removed before saving, with its ending", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await saveSingleAgentFlow(app.baseUrl, "Undo a new Finish", "Sample worker", {
+    id: "coder",
+    name: "Coder",
+    x: 320,
+    y: 60,
+  });
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Add Finish", { exact: true }).tap();
+  await addEnding(screen, "Shipped");
+  await screen.getByRole("button", "Remove block", { exact: true }).tap();
+  await expect(finishBlock(screen)).toHaveCount(0);
+  const undo = await browser.evaluate(
+    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
+  );
+
+  // Act
+  await browser.keyboard.press(undo as string);
+
+  // Assert
+  await expect(finishBlock(screen)).toContainText("Shipped");
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
+});
+
 test("a started Run has no result yet, then shows the reached ending on the canvas, inspector, overview and Timeline", async ({
   app,
   screen,

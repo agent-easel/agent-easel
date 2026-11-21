@@ -266,10 +266,14 @@ type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
  */
 function useStructuralUndo(
   scope: RefObject<HTMLElement | null>,
-  draft: { graph: FlowGraph; dirty: boolean; busy: boolean; change: (next: FlowGraph) => void },
+  draft: { graph: FlowGraph; baseline: string; busy: boolean; change: (next: FlowGraph) => void },
 ) {
   const [removals, setRemovals] = useState<readonly Removal[]>([]);
-  if (!draft.dirty && removals.length) setRemovals([]);
+  const [baseline, setBaseline] = useState(draft.baseline);
+  if (baseline !== draft.baseline) {
+    setBaseline(draft.baseline);
+    setRemovals([]);
+  }
   const latest = useRef({ ...draft, removals });
   useEffect(() => {
     latest.current = { ...draft, removals };
@@ -521,7 +525,7 @@ export function FlowDetail({
   const { change, editBlock } = graphEdits(draft, graph);
   const remove = useStructuralUndo(canvas, {
     graph,
-    dirty: state.dirty,
+    baseline: savedBaseline(saved),
     busy: state.busy,
     change,
   });
@@ -704,6 +708,8 @@ function useBlockAdding(
     dropAt: ((x, y, grab) => placement.current?.(x, y, grab) ?? null) satisfies DropAt,
   };
 }
+
+const savedBaseline = (saved: FlowDraft | null) => (saved ? `${saved.id}:${saved.revision}` : "");
 
 /** The saved graph of the Flow this editor opened, once Studio holds it. */
 const savedGraphOf = (saved: FlowDraft, id: string) => (saved.id === id ? saved.graph : undefined);

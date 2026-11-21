@@ -70,6 +70,11 @@ stored presentation. [`migration-appearance-upgrade.test.ts`](../migration-appea
 migration keeps the snapshot's endpoint, environment, resolver pin, theme and both modes without the grant, and that
 the upgraded host shows those colors and declares that source from its first status while T3 is unreachable.
 
+[`optional-finish-upgrade-data.json`](optional-finish-upgrade-data.json) holds Finish blocks with and without endings, which the
+baseline predates; migration `119` removes those without endings. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)
+checks through public reads that a Flow saved without endings, and the definitions its settled Run captured, have no Finish block,
+while a Flow's configured ending, its wire and the result its Run reached are kept.
+
 [`migration-flow-exits-upgrade.test.ts`](../migration-flow-exits-upgrade.test.ts) opens the outcome-exit capture and checks, through public reads only, that Agent block exits became Flow-local with the same IDs, the Agent has no exits, Human exits became Approve and Request changes with their wires merged into one fan-out without duplicates, and that the in-progress and settled Runs keep their captured graph in that shape, their reports and their Human answers and handoffs under the new exit IDs.
 
 See the [persistence contract](../../../../docs/foundation.md#sql-migrations) and [testing policy](../../../../docs/testing.md).
@@ -109,3 +114,12 @@ T3 accepted the second launch and lost its reply while discovery was unavailable
 The fixture retains the schema, ledger, execution and definition rows, and controlled
 T3 launch references and payloads. Reopening it exercises recovery and the first
 post-upgrade Rename without starting a second copy of either worker.
+
+`optional-finish-upgrade-data.json` captures released tag `v0.9.0` (commit `c88d5b6b751f7f0379c533d45db94334b4b7c117`), with its schema
+and migration ledger through `118_worker_title_dispatch`. Capture ran that release's own backend test harness against an empty disposable
+database with the controlled T3 adapter, using only public operations: prepare a ready single-worker Flow whose **Done** exit enters the
+ending **Delivered** (Output Optional), Start a Run, report its result and observe the ending reached and the Run settled; then create
+**Plain review** with the same Agent block and no `finish`, which that release saved with an empty Finish block, Start a Run on it, report
+**Done** and observe it settle. The first Flow's earlier revision also holds an empty Finish block. Factory was closed, then table and index
+DDL, triggers as post-data schema and named-column rows were captured, excluding `runner_owner` and SQLite's internal tables. Of the adapter, its
+identity, authorization and project catalog are kept. The capture script and logs stay outside Git.

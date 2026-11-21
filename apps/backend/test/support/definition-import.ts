@@ -216,6 +216,23 @@ export async function importFullLegacyFlow(context: TestContext) {
   return { factory, flow: assertOk(await factory.getFlow(imported.flowId!)) };
 }
 
+export async function importFullFlowWithEmptyFinish(context: TestContext) {
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const legacy = fullLegacyFlowFile();
+  const document = {
+    ...legacy,
+    formatVersion: 3,
+    flow: {
+      ...legacy.flow,
+      graph: { ...legacy.flow.graph, finish: { position: { x: 960, y: 0 }, endings: [] } },
+    },
+  };
+  const imported = assertOk(
+    await factory.commitImport(reviewedCommit("import-full-v3", undefined, document)),
+  );
+  return { factory, flow: assertOk(await factory.getFlow(imported.flowId!)) };
+}
+
 /** The fingerprint release 0.6.0 recorded for `reviewedCommit()` of a version-1 Agent file. */
 const VERSION_1_RECEIPT_FINGERPRINT =
   "f077cb806441c7cff68a08fb6087d6d6ac59520209f8ec9e0a563cf062fea593";

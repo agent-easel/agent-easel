@@ -470,14 +470,17 @@ function portableBlockLimit(finish: unknown) {
 function graphSizeIssue(
   blocks: number,
   connections: number,
-  ordinaryBlockLimit: number,
+  blockLimit: number,
+  counted: "ordinary" | "including Finish" = blockLimit === MAX_ORDINARY_BLOCKS
+    ? "ordinary"
+    : "including Finish",
 ): ValidationIssue | undefined {
-  if (blocks <= ordinaryBlockLimit && connections <= 5000) return;
+  if (blocks <= blockLimit && connections <= 5000) return;
   return {
     code: "graph_too_large",
     path: "graph",
     message:
-      ordinaryBlockLimit === MAX_ORDINARY_BLOCKS
+      counted === "ordinary"
         ? "Use at most 500 ordinary blocks and 5000 connections."
         : "Use at most 500 blocks, including Finish, and 5000 connections.",
   };
@@ -493,14 +496,18 @@ export function portableFlowSizeIssue(
   );
 }
 
+const authoredBlockCount = (graph: Pick<FlowGraphInput, "blocks" | "finish">) =>
+  graph.blocks.length + (graph.finish === undefined ? 0 : 1);
+
 export function flowEditSizeRefusal(
   graph: FlowGraphInput,
   saved: FlowGraphInput,
 ): Result<never> | undefined {
   const issue = graphSizeIssue(
-    graph.blocks.length,
+    authoredBlockCount(graph),
     graph.connections.length,
-    Math.max(authoredBlockLimit(graph.finish), saved.blocks.length),
+    Math.max(MAX_ORDINARY_BLOCKS, authoredBlockCount(saved)),
+    "including Finish",
   );
   if (issue)
     return { ok: false, error: { code: "validation", message: issue.message, issues: [issue] } };

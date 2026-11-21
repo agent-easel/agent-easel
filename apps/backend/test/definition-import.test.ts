@@ -21,6 +21,7 @@ import {
   flowUnderCreateLimitBy,
   fullLegacyFlowFile,
   historicalFlowReceipts,
+  importFullFlowWithEmptyFinish,
   importFullLegacyFlow,
   interruptedUpload,
   reviewedCommit,
@@ -94,7 +95,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 5 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 6 })),
   );
 
   // Assert
@@ -104,7 +105,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 5, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 6, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -526,7 +527,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(4);
+  expect(document.formatVersion).toBe(5);
 
   // Act
   const committed = assertOk(
@@ -709,7 +710,7 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a full-size Flow without a Finish can be exported and reimported as version 4", async (context) => {
+it("a full-size Flow without a Finish can be exported and reimported as version 5", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
   const { document } = assertOk(await factory.exportFlow(flow.id));
@@ -717,11 +718,11 @@ it("a full-size Flow without a Finish can be exported and reimported as version 
   assert(agentBlock?.kind === "agent" && agentBlock.agentId);
 
   // Act
-  const copied = await factory.commitImport(reviewedCommit("import-v4", undefined, document));
+  const copied = await factory.commitImport(reviewedCommit("import-v5", undefined, document));
 
   // Assert
   assert(copied.ok);
-  expect(document.formatVersion).toBe(4);
+  expect(document.formatVersion).toBe(5);
   const restored = assertOk(await factory.getFlow(copied.value.flowId!));
   const placedAgents = new Map([[agentBlock.agentId, copied.value.agents[0]!.id]]);
   expect(restored.graph).toStrictEqual({
@@ -764,7 +765,7 @@ it("a version-3 import counts a Finish with endings toward the block limit", asy
 
 it("version-3 export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
   // Arrange
-  const { factory, flow } = await importFullLegacyFlow(context);
+  const { factory, flow } = await importFullFlowWithEmptyFinish(context);
   const saved = assertOk(
     await factory.updateFlow(flow.id, {
       name: flow.name,
@@ -781,6 +782,24 @@ it("version-3 export refuses a 500-block Flow with an ending while preserving th
   assert(!exported.ok);
   expect(exported.error.issues).toMatchObject([{ code: "graph_too_large", path: "flow.graph" }]);
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(saved.graph);
+});
+
+it("a saved 500-block Flow without a Finish block cannot add one", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+
+  // Act
+  const saved = await factory.updateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+    graph: { ...flow.graph, finish: finishWithEnding },
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
+  expect(assertOk(await factory.getFlow(flow.id)).revision).toBe(flow.revision);
 });
 
 it("newly authored Flows must count an added Finish block toward the block limit", async (context) => {
@@ -824,6 +843,42 @@ it("saving a newly authored Flow with a Finish block cannot exceed the block lim
   assert(!saved.ok);
   expect(saved.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
   expect(assertOk(await factory.getFlow(created.id)).revision).toBe(created.revision);
+});
+
+it("a version-4 Flow file without its Finish block is rejected as missing it, as every version-4 Flow had one", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 4 });
+  const { finish: _finish, ...graph } = flow.graph;
+
+  // Act
+  const review = await factory.reviewImport(fileBody({ ...file, flow: { ...flow, graph } }));
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "missing_field", path: "flow.graph.finish" },
+  ]);
+});
+
+it("a version-5 Flow file without a Finish block imports a Flow without one", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 5 });
+  const { finish: _finish, ...graph } = flow.graph;
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-v5-plain",
+    document: { ...file, flow: { ...flow, graph } },
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  expect(assertOk(await factory.getFlow(committed.value.flowId!)).graph).not.toHaveProperty(
+    "finish",
+  );
 });
 
 it("a version-2 Flow file holding a Finish block is rejected at it, as version 2 has none", async (context) => {

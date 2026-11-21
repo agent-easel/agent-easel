@@ -1,51 +1,87 @@
-import { expect, it } from "@effect/vitest";
-import { readFileSync, readdirSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
+import { assert, expect, it } from "@effect/vitest";
+import type { TestContext } from "vitest";
+import { factoryHarness } from "./support/factory.ts";
+import { loadMigrationData, restoreCapturedAdapter } from "./support/migration-data.ts";
 
-const directory = new URL("../src/migrations/", import.meta.url);
-const OPTIONAL_FINISH = "119_optional_finish_block.sql";
-
-function apply(database: DatabaseSync, file: string) {
-  for (const statement of readFileSync(new URL(file, directory), "utf8")
-    .split(/^-- statement-breakpoint\s*$/m)
-    .filter((part) => part.trim()))
-    database.exec(statement);
+interface Capture {
+  readonly endingFlowId: string;
+  readonly plainFlowId: string;
+  readonly endingRunId: string;
+  readonly plainRunId: string;
+  readonly t3: Record<string, unknown>;
 }
 
-function applyBefore(database: DatabaseSync, last: string) {
-  for (const file of readdirSync(directory)
-    .filter((name) => name.endsWith(".sql") && name < last)
-    .sort())
-    apply(database, file);
-}
-
-it("the optional Finish migration removes Finish blocks without endings and keeps those with endings, their wires and the guard", () => {
-  // Arrange
-  const database = new DatabaseSync(":memory:");
-  database.exec("PRAGMA foreign_keys = OFF");
-  applyBefore(database, OPTIONAL_FINISH);
-  database.exec(
-    `INSERT INTO flow_revisions(id,flow_id,revision,name,input_x,input_y,saved_at)
-     VALUES ('plain','flow-a',1,'Plain',0,0,'2026-11-21T10:00:00.000Z'),
-            ('ending','flow-b',1,'Ending',0,0,'2026-11-21T10:00:00.000Z');
-     INSERT INTO flow_revision_finish(flow_revision_id,x,y) VALUES ('plain',620,0),('ending',900,40);
-     INSERT INTO flow_revision_endings(flow_revision_id,ending_id,ordinal,name,description,output,output_description)
-     VALUES ('ending','delivered',0,'Delivered','','required','PR URL');
-     INSERT INTO flow_revision_connections(flow_revision_id,ordinal,source_block_id,exit_id,target_block_id,target_ending_id)
-     VALUES ('ending',0,'coder','done',NULL,'delivered')`,
+async function capturedRelease(c: TestContext) {
+  const h = await factoryHarness(c);
+  const capture = await loadMigrationData<Capture>(
+    h.databasePath,
+    "optional-finish-upgrade-data.json",
   );
+  const t3 = await restoreCapturedAdapter(capture.t3, h.processHome);
+  return { h, t3, capture };
+}
+
+const delivered = {
+  id: "delivered",
+  name: "Delivered",
+  description: "",
+  output: "optional",
+  outputDescription: "URL of the PR opened",
+};
+
+it("upgrading v0.9.0 removes the empty Finish block from a Flow saved without endings and from the definitions its settled Run captured", async (c) => {
+  // Arrange
+  const { h, t3, capture } = await capturedRelease(c);
 
   // Act
-  apply(database, OPTIONAL_FINISH);
+  const factory = await h.open({ t3 });
 
   // Assert
-  const finishes = database.prepare("SELECT * FROM flow_revision_finish").all();
-  const wires = database.prepare("SELECT target_ending_id FROM flow_revision_connections").all();
-  const guarded = () => database.exec("DELETE FROM flow_revision_finish");
-  expect(finishes.map((row) => ({ ...row }))).toStrictEqual([
-    { flow_revision_id: "ending", x: 900, y: 40 },
+  const flow = await factory.getFlow(capture.plainFlowId);
+  assert(flow.ok);
+  expect(flow.value.graph).not.toHaveProperty("finish");
+  expect(flow.value.graph).toMatchObject({
+    blocks: [{ id: "worker", kind: "agent" }],
+    connections: [],
+    flowInput: { targetBlockIds: ["worker"] },
+  });
+  expect(flow.value.readiness.ready).toBe(true);
+  const run = await factory.getRun(capture.plainRunId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(run.value.result).toBeNull();
+  expect(run.value.definitions.flow.graph).not.toHaveProperty("finish");
+});
+
+it("upgrading v0.9.0 keeps a configured Finish block, its ending wire and the result its Run reached", async (c) => {
+  // Arrange
+  const { h, t3, capture } = await capturedRelease(c);
+
+  // Act
+  const factory = await h.open({ t3 });
+
+  // Assert
+  const flow = await factory.getFlow(capture.endingFlowId);
+  assert(flow.ok);
+  expect(flow.value.graph.finish).toStrictEqual({
+    position: { x: 1200, y: 0 },
+    endings: [delivered],
+  });
+  expect(flow.value.graph.connections).toStrictEqual([
+    {
+      sourceBlockId: "worker",
+      exitId: "done",
+      targetBlockId: "finish",
+      targetEndingId: "delivered",
+    },
   ]);
-  expect(wires.map((row) => ({ ...row }))).toStrictEqual([{ target_ending_id: "delivered" }]);
-  expect(guarded).toThrow("Flow revisions are immutable");
-  database.close();
+  const run = await factory.getRun(capture.endingRunId);
+  assert(run.ok);
+  expect(run.value.result).toMatchObject({
+    endingId: "delivered",
+    endingName: "Delivered",
+    output: "https://example.test/pull/7",
+  });
+  expect(run.value.definitions.flow.graph.finish?.endings).toStrictEqual([delivered]);
+  expect(run.value.definitions.flow.graph.connections).toStrictEqual(flow.value.graph.connections);
 });

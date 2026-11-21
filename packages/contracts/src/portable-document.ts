@@ -9,8 +9,8 @@ import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
 /** The version every export writes. */
-export const PORTABLE_DOCUMENT_VERSION = 4;
-export type PortableFormatVersion = 1 | 2 | 3 | typeof PORTABLE_DOCUMENT_VERSION;
+export const PORTABLE_DOCUMENT_VERSION = 5;
+export type PortableFormatVersion = 1 | 2 | 3 | 4 | typeof PORTABLE_DOCUMENT_VERSION;
 
 /**
  * The exporter's model choice, which a receiving installation may match against its own catalog.

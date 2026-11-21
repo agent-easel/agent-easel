@@ -288,20 +288,21 @@ export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
   };
 }
 
-function restoredEndings(
-  current: readonly FlowEnding[],
-  before: readonly FlowEnding[],
-  after: readonly FlowEnding[],
-) {
-  const endings = [...current];
-  const has = (list: readonly FlowEnding[], id: string) => list.some((e) => e.id === id);
-  before.forEach((ending, index) => {
-    if (has(after, ending.id) || has(endings, ending.id)) return;
-    const previous = before.slice(0, index).findLast((candidate) => has(endings, candidate.id));
-    const at = previous ? endings.findIndex((e) => e.id === previous.id) + 1 : 0;
-    endings.splice(at, 0, ending);
+function restoreInOrder<T>(
+  current: readonly T[],
+  before: readonly T[],
+  key: (item: T) => string,
+  restore: (item: T) => boolean,
+): T[] {
+  const items = [...current];
+  const has = (item: T) => items.some((candidate) => key(candidate) === key(item));
+  before.forEach((item, index) => {
+    if (has(item) || !restore(item)) return;
+    const previous = before.slice(0, index).findLast(has);
+    const at = previous ? items.findIndex((candidate) => key(candidate) === key(previous)) + 1 : 0;
+    items.splice(at, 0, item);
   });
-  return endings;
+  return items;
 }
 
 /**
@@ -354,34 +355,42 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
 }
 
 export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
-  const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
-  const blocks = [
-    ...current.blocks,
-    ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
-  ];
+  const removedBy =
+    <T>(list: readonly T[], key: (item: T) => string) =>
+    (item: T) =>
+      !list.some((candidate) => key(candidate) === key(item));
+  const byId = (item: { readonly id: string }) => item.id;
+  const blocks = restoreInOrder(current.blocks, before.blocks, byId, removedBy(after.blocks, byId));
   const finish = current.finish ?? (after.finish ? undefined : before.finish);
-  const endings = finish
-    ? restoredEndings(
-        current.finish?.endings ?? [],
-        before.finish?.endings ?? [],
-        after.finish?.endings ?? [],
-      )
-    : [];
+  const endings = restoreInOrder(
+    current.finish?.endings ?? [],
+    finish ? (before.finish?.endings ?? []) : [],
+    byId,
+    removedBy(after.finish?.endings ?? [], byId),
+  );
   const exists = (id: string) => blocks.some((b) => b.id === id);
   const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
     targetEndingId !== undefined
       ? endings.some((ending) => ending.id === targetEndingId)
       : exists(targetBlockId);
-  const restored = (graph: FlowGraph, wire: FlowWire) =>
-    !hasWire(after, wire) && !hasWire(graph, wire) && targetExists(wire);
-  let next: FlowGraph = { ...current, blocks, ...(finish && { finish: { ...finish, endings } }) };
-  for (const targetBlockId of before.flowInput.targetBlockIds) {
-    const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
-    if (restored(next, wire)) next = addWire(next, wire);
-  }
-  for (const connection of before.connections) {
-    const wire = connectionWire(connection);
-    if (exists(connection.sourceBlockId) && restored(next, wire)) next = addWire(next, wire);
-  }
-  return next;
+  const restorable = (wire: FlowWire) => !hasWire(after, wire) && targetExists(wire);
+  const targetBlockIds = restoreInOrder(
+    current.flowInput.targetBlockIds,
+    before.flowInput.targetBlockIds,
+    (id) => id,
+    (targetBlockId) => restorable({ source: { kind: "flow-input" }, targetBlockId }),
+  );
+  const connections = restoreInOrder(
+    current.connections,
+    before.connections,
+    connectionKey,
+    (connection) => exists(connection.sourceBlockId) && restorable(connectionWire(connection)),
+  );
+  return {
+    ...current,
+    blocks,
+    ...(finish && { finish: { ...finish, endings } }),
+    flowInput: { ...current.flowInput, targetBlockIds },
+    connections,
+  };
 }

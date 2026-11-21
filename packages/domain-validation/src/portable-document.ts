@@ -93,7 +93,7 @@ const CONDITION_OTHERWISE_FIELDS = ["id"];
  */
 interface FormatReader {
   readonly version: PortableFormatVersion;
-  readonly finish: boolean;
+  readonly finish: "none" | "required" | "optional";
   readonly kindFields: ReadonlyMap<unknown, readonly string[]>;
   readonly kindChoice: string;
 }
@@ -108,7 +108,7 @@ const VERSION_1_KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
 /** Version 1 holds no Condition block, so its definitions already are the current model. */
 const VERSION_1: FormatReader = {
   version: 1,
-  finish: false,
+  finish: "none",
   kindFields: VERSION_1_KIND_FIELDS,
   kindChoice: "an Agent, Human, Wait or Continuation block",
 };
@@ -116,24 +116,30 @@ const VERSION_1: FormatReader = {
 /** Version 2 is version 1 plus the Condition block. */
 const VERSION_2: FormatReader = {
   version: 2,
-  finish: false,
+  finish: "none",
   kindFields: new Map([...VERSION_1_KIND_FIELDS, ["condition", ["rules", "otherwise"]]]),
   kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
 };
 
-const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: true };
+const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: "required" };
 
 const VERSION_4: FormatReader = {
   ...VERSION_3,
-  version: PORTABLE_DOCUMENT_VERSION,
+  version: 4,
   kindFields: new Map([
     ...VERSION_3.kindFields,
     ["agent", ["agentKey", "hiddenExitIds", "localExits", "revisitInstruction", "revisitContext"]],
   ]),
 };
 
+const VERSION_5: FormatReader = {
+  ...VERSION_4,
+  version: PORTABLE_DOCUMENT_VERSION,
+  finish: "optional",
+};
+
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2, VERSION_3, VERSION_4].map((reader) => [reader.version, reader]),
+  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5].map((reader) => [reader.version, reader]),
 );
 
 type Issues = ValidationIssue[];
@@ -340,48 +346,44 @@ function checkAgentShape(agent: unknown, path: string, subject: string, issues: 
   );
 }
 
+const FINISH_GRAPH_FIELDS = {
+  none: { required: GRAPH_FIELDS, optional: [], connection: [] },
+  required: { required: [...GRAPH_FIELDS, "finish"], optional: [], connection: ["targetEndingId"] },
+  optional: { required: GRAPH_FIELDS, optional: ["finish"], connection: ["targetEndingId"] },
+} as const;
+
 function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
-  const subject = "The Flow";
-  const fields = checkFields(flow, "flow", FLOW_FIELDS, [], subject, issues);
+  const fields = checkFields(flow, "flow", FLOW_FIELDS, [], "The Flow", issues);
   if (!fields) return;
-  if ("graph" in fields) {
-    const graph = checkFields(
-      fields.graph,
-      "flow.graph",
-      GRAPH_FIELDS,
-      reader.finish ? ["finish"] : [],
-      subject,
-      issues,
-    );
-    checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
-      checkBlockShape(
-        block,
-        `flow.graph.blocks.${index}`,
-        blockLabel(block, index),
-        reader,
+  if ("graph" in fields) checkGraphShape(fields.graph, reader, issues);
+  if ("workspace" in fields) checkWorkspaceShape(fields.workspace, issues);
+}
+
+function checkGraphShape(value: unknown, reader: FormatReader, issues: Issues) {
+  const subject = "The Flow";
+  const finish = FINISH_GRAPH_FIELDS[reader.finish];
+  const graph = checkFields(value, "flow.graph", finish.required, finish.optional, subject, issues);
+  checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
+    checkBlockShape(block, `flow.graph.blocks.${index}`, blockLabel(block, index), reader, issues),
+  );
+  checkList(graph?.connections, "flow.graph.connections", subject, issues).forEach(
+    (connection, index) =>
+      checkFields(
+        connection,
+        `flow.graph.connections.${index}`,
+        CONNECTION_FIELDS,
+        finish.connection,
+        subject,
         issues,
       ),
-    );
-    checkList(graph?.connections, "flow.graph.connections", subject, issues).forEach(
-      (connection, index) =>
-        checkFields(
-          connection,
-          `flow.graph.connections.${index}`,
-          CONNECTION_FIELDS,
-          reader.finish ? ["targetEndingId"] : [],
-          subject,
-          issues,
-        ),
-    );
-    if (graph && "finish" in graph) checkFinishShape(graph.finish, issues);
-    if (graph && "flowInput" in graph) {
-      const path = "flow.graph.flowInput";
-      const input = checkFields(graph.flowInput, path, FLOW_INPUT_FIELDS, [], subject, issues);
-      if (input && "position" in input)
-        checkFields(input.position, `${path}.position`, POSITION_FIELDS, [], subject, issues);
-    }
+  );
+  if (graph && "finish" in graph) checkFinishShape(graph.finish, issues);
+  if (graph && "flowInput" in graph) {
+    const path = "flow.graph.flowInput";
+    const input = checkFields(graph.flowInput, path, FLOW_INPUT_FIELDS, [], subject, issues);
+    if (input && "position" in input)
+      checkFields(input.position, `${path}.position`, POSITION_FIELDS, [], subject, issues);
   }
-  if ("workspace" in fields) checkWorkspaceShape(fields.workspace, issues);
 }
 
 function checkFinishShape(finish: unknown, issues: Issues) {

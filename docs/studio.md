@@ -671,12 +671,12 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 4, whatever the definition holds:
+Every export writes portable document format version 5, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 4,
+  "formatVersion": 5,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -775,12 +775,13 @@ Export refuses a file another installation could not import. A definition save r
 Version-3 import and export allow 500 ordinary blocks when Finish has no endings. A Finish with endings counts toward the
 500-block limit. An existing Flow at the former block limit remains editable at that size.
 
-**Format versions.** Import reads versions 1, 2, 3 and 4, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
+**Format versions.** Import reads versions 1, 2, 3, 4 and 5, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
 endings and the connections entering them; a version-1 or version-2 file holding `finish` or `targetEndingId` is rejected at that field as
-unknown, and a version-3 or version-4 Flow file without `finish` imports without a Finish block. Version 4 adds `revisitContext` on Agent blocks;
-version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Files exported before version 3 arrive without a Finish
-block. A newer version is refused and asks to update Factory. Writing version 4 for every export is an intentional
+unknown, and a version-3 or version-4 Flow file without `finish` is rejected as missing it. Version 4 adds `revisitContext` on Agent blocks;
+version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Version 5 is version 4 with an optional `finish`: a Flow
+without a Finish block omits it. Files exported before version 3 arrive without a Finish block, and version-3 and version-4 files keep the
+Finish block they carry, with or without endings. A newer version is refused and asks to update Factory. Writing version 5 for every export is an intentional
 compatibility break: an installation that reads only earlier versions refuses every newly exported file and asks to be updated before it can
 import it; it refuses before creating anything. Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt
 fingerprint covers the document under the file's own version, so retrying an earlier-version commit still replays its receipt.
@@ -877,7 +878,8 @@ A saved graph carries at most one `finish`: a canvas `position` and its ordered 
 from an ordinary Block target, including a Block whose ID is `finish`. Any exit or output may enter an ending, including Human **Approve** and **Request changes**, Wait and
 Continuation outputs and every Condition output with Otherwise, several wires may enter one ending, and a rename keeps the wires
 because they enter by ID. A create or save that omits `finish` saves the Flow without a Finish block, so wires into endings are refused;
-a `finish` without a `position` is placed one layer right of every block, level with the Flow input. Upgrading removed every stored
+a `finish` without a `position` is placed one layer right of every block, level with the Flow input. A save that adds a Finish block counts it toward the 500-block limit, so a Flow
+already at 500 blocks cannot add one. Upgrading removed every stored
 Finish block without endings, which held no wire. A Flow with no endings is ready. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
 [Canvas and block configuration](#canvas-and-block-configuration).
 
