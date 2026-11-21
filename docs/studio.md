@@ -475,8 +475,8 @@ no longer exists.
 The Flow editor and the Run canvas draw only the blocks and wires near the view, half a view beyond each edge, so a Flow of hundreds
 of blocks and thousands of connections stays responsive ([ADR 0005](adr/0005-draw-only-what-reaches-the-canvas-view.md)). Positions and
 wire routes come from the whole graph, so a block that returns to view and a wire crossing the view between two blocks that are away sit
-where the whole Flow puts them. A block with keyboard focus or held by a drag or a connection gesture stays drawn, and **Fit Flow**
-draws every block.
+where the whole Flow puts them. Blocks and wires with keyboard focus stay drawn, as do blocks held by a drag or connection gesture.
+**Fit Flow** draws every block.
 
 ### Workspace setting
 
