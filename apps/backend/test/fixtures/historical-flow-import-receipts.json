@@ -1,0 +1,113 @@
+{
+  "document": {
+    "format": "t3-factory/definitions",
+    "formatVersion": 3,
+    "kind": "flow",
+    "factoryVersion": "0.8.0",
+    "exportedAt": "2026-11-20T09:00:00.000Z",
+    "agents": [
+      {
+        "key": "agent-1",
+        "name": "Reviewer",
+        "prompt": "Review the change.",
+        "model": null,
+        "exits": [
+          {
+            "id": "done",
+            "name": "Done",
+            "description": "",
+            "messageRequired": false
+          }
+        ]
+      }
+    ],
+    "flow": {
+      "name": "Review",
+      "workspace": {
+        "mode": "checkout"
+      },
+      "graph": {
+        "blocks": [
+          {
+            "id": "review",
+            "name": "Review",
+            "kind": "agent",
+            "position": {
+              "x": 240,
+              "y": 0
+            },
+            "agentKey": "agent-1",
+            "hiddenExitIds": [],
+            "localExits": [],
+            "revisitInstruction": ""
+          }
+        ],
+        "connections": [],
+        "flowInput": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "targetBlockIds": ["review"]
+        },
+        "finish": {
+          "position": {
+            "x": 560,
+            "y": 0
+          },
+          "endings": []
+        }
+      }
+    }
+  },
+  "receipts": [
+    {
+      "source": "b079ecc4",
+      "formatVersion": 1,
+      "fingerprintVersion": 1,
+      "fingerprint": "ef8a91c2a993956b8621bb60683ba9f8351f89b49b48fd70cce25e4876d59155"
+    },
+    {
+      "source": "b079ecc4",
+      "formatVersion": 2,
+      "fingerprintVersion": 1,
+      "fingerprint": "627971034407ec9f13162c0c328eb4c8e8a5070547dec4a2fe47780b5b731012"
+    },
+    {
+      "source": "f9c0caef",
+      "formatVersion": 1,
+      "fingerprintVersion": 2,
+      "fingerprint": "a02326687cc2c807df89ad015e4730c1b1866e4bf7deddf31d57a5d8a5125450"
+    },
+    {
+      "source": "f9c0caef",
+      "formatVersion": 2,
+      "fingerprintVersion": 2,
+      "fingerprint": "d8322e471478bfc6b26469d97c3cc5f475ba8a5e74d93e8814081ec3a9cf0f98"
+    },
+    {
+      "source": "f9c0caef",
+      "formatVersion": 3,
+      "fingerprintVersion": 2,
+      "fingerprint": "a2652d1bfba5e8bb745fe115a19ca8c89ca9e76063a1db7f5f4e723bf2054775"
+    },
+    {
+      "source": "05307afc",
+      "formatVersion": 1,
+      "fingerprintVersion": 2,
+      "fingerprint": "3b2e4772507e91a5266e07c9df63af2f50b1b4277d7c58eba365e63410e68db8"
+    },
+    {
+      "source": "05307afc",
+      "formatVersion": 2,
+      "fingerprintVersion": 2,
+      "fingerprint": "fc79274bb74a9ba583832f279f749a1c346a714ba4272753aa7a42cd8e938ba6"
+    },
+    {
+      "source": "05307afc",
+      "formatVersion": 3,
+      "fingerprintVersion": 2,
+      "fingerprint": "0f6b42378d195139391b1bfb38dc88ee2c9becf11e1c248b075222ddae6353b8"
+    }
+  ]
+}
