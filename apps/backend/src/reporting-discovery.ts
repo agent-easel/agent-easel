@@ -373,28 +373,42 @@ const enabledLocalReportingInstances = Effect.fn(function* (
       problem:
         "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
     } as const;
-  const settings = record(
-    JSON.parse(yield* boundary(() => readFile(join(stateDirectory, "settings.json"), "utf8"))),
-  );
-  const disabled = disabledInstances(settings);
-  return {
-    instances: Object.entries(record(settings.providerInstances)).filter(
-      ([id]) => !disabled.has(id),
-    ),
-  } as const;
+  return yield* boundary(async () => {
+    const settings = record(
+      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
+    );
+    const disabled = disabledInstances(settings);
+    return {
+      instances: Object.entries(record(settings.providerInstances)).filter(
+        ([id]) => !disabled.has(id),
+      ),
+    } as const;
+  });
 });
+
+export type VibeReportingLookup =
+  | { readonly instances: ReadonlySet<string>; readonly problem?: never }
+  | { readonly problem: string; readonly instances?: never };
 
 export const readVibeReportingInstances = (stateDirectory: string, connection: T3Connection) =>
   enabledLocalReportingInstances(stateDirectory, connection).pipe(
-    Effect.map(
-      ({ instances }) =>
-        new Set(
-          (instances ?? [])
-            .filter(([, instance]) => reportingHarness(instance) === "mistral-vibe")
-            .map(([id]) => id),
-        ),
+    Effect.map((result): VibeReportingLookup =>
+      "problem" in result
+        ? { problem: result.problem }
+        : {
+            instances: new Set(
+              result.instances
+                .filter(([, instance]) => reportingHarness(instance) === "mistral-vibe")
+                .map(([id]) => id),
+            ),
+          },
     ),
-    Effect.catchCause(() => Effect.succeed(new Set<string>())),
+    Effect.catch(() =>
+      Effect.succeed({
+        problem:
+          "Cannot read the local T3 configuration to identify ACP Registry providers. Check the T3 state directory on the Factory host.",
+      }),
+    ),
   );
 
 export const discoverReporting = Effect.fn(function* (
@@ -407,7 +421,7 @@ export const discoverReporting = Effect.fn(function* (
     never
   > {
     const result = yield* enabledLocalReportingInstances(stateDirectory, connection);
-    if (result.problem) return [discoveryResult("discovery-refused", result.problem)];
+    if ("problem" in result) return [discoveryResult("discovery-refused", result.problem)];
     const targets = yield* Effect.forEach(
       result.instances,
       ([id, value]) => targetFor(stateDirectory, id, value),

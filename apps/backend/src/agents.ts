@@ -1,6 +1,7 @@
 import { optionAvailability, resolveAgentModel } from "@t3-factory/domain-validation";
 import type { T3ProviderCapability } from "./t3/projects.ts";
 import { providerReporting } from "./reporting-drivers.ts";
+import type { VibeReportingLookup } from "./reporting-discovery.ts";
 import { failure } from "./result.ts";
 import type {
   AgentCapabilities,
@@ -97,7 +98,7 @@ export function readyCapabilities(
   environments: AgentCapabilities["environments"],
   providers: readonly T3ProviderCapability[],
   checkedAt: string,
-  vibeInstances: ReadonlySet<string>,
+  vibe: VibeReportingLookup | undefined,
 ): AgentCapabilities {
   return {
     state: "ready",
@@ -106,11 +107,15 @@ export function readyCapabilities(
     environments,
     providers: providers.map((provider) => ({
       ...provider,
-      reporting: providerReporting(
-        provider.driverKind === "acpRegistry" && vibeInstances.has(provider.providerInstanceId)
-          ? "mistral-vibe"
-          : provider.driverKind,
-      ),
+      reporting:
+        provider.driverKind === "acpRegistry" && vibe?.problem
+          ? { supported: false, explanation: vibe.problem }
+          : providerReporting(
+              provider.driverKind === "acpRegistry" &&
+                vibe?.instances?.has(provider.providerInstanceId)
+                ? "mistral-vibe"
+                : provider.driverKind,
+            ),
     })),
   };
 }

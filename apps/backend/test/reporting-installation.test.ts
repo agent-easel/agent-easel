@@ -320,38 +320,81 @@ it("Vibe reporting cannot install into a home occupied by a file", async (contex
 });
 
 it.for([
-  { kind: "empty", servers: "", tail: "" },
+  { kind: "empty", servers: "", tail: "", prefix: "" },
   {
     kind: "populated",
     servers: '{ name = "other", transport = "stdio", command = "keep" }',
     tail: ', { name = "other", transport = "stdio", command = "keep" }',
+    prefix: "",
   },
-])("installs Vibe reporting into a $kind inline MCP array", async ({ servers, tail }, context) => {
+  {
+    kind: "populated after a multiline string",
+    servers: '{ name = "other", transport = "stdio", command = "keep" }',
+    tail: ', { name = "other", transport = "stdio", command = "keep" }',
+    prefix: 'example = """\nmcp_servers = [\n"""\n',
+  },
+])(
+  "installs Vibe reporting into a $kind inline MCP array",
+  async ({ servers, tail, prefix }, context) => {
+    // Arrange
+    const { factory, home } = await driverHomes(context, {
+      "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+    });
+    const directory = join(home, ".vibe");
+    await mkdir(directory);
+    const config = join(directory, "config.toml");
+    await writeFile(
+      config,
+      prefix + 'active_model = "sample"\nmcp_servers = [' + servers + "] # keep\n",
+    );
+    const targets = await factory.getReportingInstallations();
+    assert(targets.ok);
+    const target = targets.value[0]!;
+
+    // Act
+    const result = await factory.installReporting({ targetId: target.id });
+
+    // Assert
+    assert(result.ok);
+    expect(result.value.status).toBe("installed");
+    expect(await readFile(config, "utf8")).toBe(
+      prefix +
+        'active_model = "sample"\nmcp_servers = [{ name = "factory-runtime", transport = "streamable-http", url = "' +
+        MCP_URL +
+        '" }' +
+        tail +
+        "] # keep\n",
+    );
+  },
+);
+
+it("Agent capabilities explain why unreadable T3 settings block ACP reporting", async (context) => {
   // Arrange
-  const { factory, home } = await driverHomes(context, {
+  const { factory, state, t3 } = await driverHomes(context, {
     "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
   });
-  const directory = join(home, ".vibe");
-  await mkdir(directory);
-  const config = join(directory, "config.toml");
-  await writeFile(config, 'active_model = "sample"\nmcp_servers = [' + servers + "] # keep\n");
-  const targets = await factory.getReportingInstallations();
-  assert(targets.ok);
-  const target = targets.value[0]!;
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
+    providerInstanceId: "vibe-work",
+    driverKind: "acpRegistry",
+  });
+  await writeFile(join(state, "settings.json"), "{ malformed");
 
   // Act
-  const result = await factory.installReporting({ targetId: target.id });
+  const result = await factory.getAgentCapabilities();
 
   // Assert
   assert(result.ok);
-  expect(result.value.status).toBe("installed");
-  expect(await readFile(config, "utf8")).toBe(
-    'active_model = "sample"\nmcp_servers = [{ name = "factory-runtime", transport = "streamable-http", url = "' +
-      MCP_URL +
-      '" }' +
-      tail +
-      "] # keep\n",
-  );
+  expect(result.value.providers).toMatchObject([
+    { providerInstanceId: "codex-main", reporting: { supported: true } },
+    {
+      providerInstanceId: "vibe-work",
+      reporting: {
+        supported: false,
+        explanation: expect.stringContaining("Check the T3 state directory on the Factory host"),
+      },
+    },
+  ]);
 });
 
 it("repairing Vibe's inline MCP entry keeps dollar signs in the new address", async (context) => {

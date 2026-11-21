@@ -427,10 +427,10 @@ export const makeDefinitions = (
       return yield* Effect.gen(function* () {
         const environment = yield* Effect.tryPromise(() => t3.readEnvironment({ endpoint }));
         const providers = yield* Effect.tryPromise(() => t3.orchestratorCapabilities({ endpoint }));
-        const vibeInstances = providers.some(({ driverKind }) => driverKind === "acpRegistry")
+        const vibe = providers.some(({ driverKind }) => driverKind === "acpRegistry")
           ? yield* readVibeReportingInstances(t3StateDirectory, status.value)
-          : new Set<string>();
-        return readyCapabilities([environment], providers, yield* currentTime, vibeInstances);
+          : undefined;
+        return readyCapabilities([environment], providers, yield* currentTime, vibe);
       }).pipe(
         Effect.catch(() =>
           currentTime.pipe(

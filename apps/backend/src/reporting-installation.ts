@@ -56,9 +56,27 @@ function vibeMcpEntry(config: Record<string, unknown>) {
   return entries[0];
 }
 
-const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/m;
+const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/gm;
 const EDITED_REGISTRATION =
   "The Factory registration was edited. Review the factory-runtime entry manually.";
+
+function* vibeInsertions(
+  before: string,
+  block: string,
+  inline: string,
+  servers: Record<string, unknown>[],
+  entry: Record<string, string>,
+) {
+  yield { text: before + block, servers: [...servers, entry] };
+  const inserted = inline + (servers.length ? ", " : "");
+  for (const match of before.matchAll(VIBE_INLINE_MCP_ARRAY)) {
+    const offset = match.index + match[0].length;
+    yield {
+      text: before.slice(0, offset) + inserted + before.slice(offset),
+      servers: [entry, ...servers],
+    };
+  }
+}
 
 function registeredVibe(
   before: string,
@@ -73,16 +91,7 @@ function registeredVibe(
     throw Error(EDITED_REGISTRATION);
   const candidates =
     previous === undefined
-      ? [
-          { text: before + block, servers: [...servers, entry] },
-          {
-            text: before.replace(
-              VIBE_INLINE_MCP_ARRAY,
-              (header) => header + inline(block) + (servers.length ? ", " : ""),
-            ),
-            servers: [entry, ...servers],
-          },
-        ]
+      ? vibeInsertions(before, block, inline(block), servers, entry)
       : [
           before.replace(previous, () => block),
           before.replace(inline(previous), () => inline(block)),
