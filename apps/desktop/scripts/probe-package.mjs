@@ -510,12 +510,12 @@ try {
   });
 
   await stage("closing the window closes its live socket", async () => {
+    liveClient.child.kill("SIGTERM");
+    await liveClient.exited;
     await writeFile(
       join(liveData, "desktop-settings.json"),
       settings("client", { url: standIn.url, trust: standIn.trust, credential: null }),
     );
-    liveClient.child.kill("SIGTERM");
-    await liveClient.exited;
     const reopened = launch(liveData, 9445, { HOME: join(work, "client-home") });
     await until(
       () => evaluate(9445, "typeof window.factoryDesktop?.openLive === 'function'"),
