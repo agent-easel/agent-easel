@@ -25,12 +25,37 @@ import {
   userEnvelopes,
 } from "./support/chat-conversation.ts";
 import { addedProject, calls, readRun } from "./support/chat-runs.ts";
+import { promptAnswered, promptSent } from "./support/continuation.ts";
 import { PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
-import { resultHeld, resultReported, settled } from "./support/scenarios.ts";
-import { cardProblem, messageShows, chatStartedRun } from "./support/status-cards.ts";
+import { nativeRequestShown } from "./support/report-notices.ts";
+import {
+  continuationFlow,
+  exactLimitCardFlow,
+  humanReviewFlow,
+  largeStatusCardFlow,
+  launchedWorkers,
+  longEntryNamesFlow,
+  missingReport,
+  observeFor,
+  parallelWaitFlow,
+  racingEndingsFlow,
+  resultReleasedToHumanReview,
+  resultReported,
+  settled,
+  settleUnresolved,
+  statusCardFlow,
+  workingReportedIdle,
+} from "./support/scenarios.ts";
+import {
+  cardProblem,
+  messageShows,
+  chatStartedRun,
+  unknownStatusCard,
+} from "./support/status-cards.ts";
 
 const NOTICE =
   "_Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card._";
+const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
 const CORRECTIONS = {
   locked:
     "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.",
@@ -60,31 +85,379 @@ it("ordinary Block activity edits the Run's one status card in its originating t
   const world = await startingWorld(c);
   const { worker, card } = await chatStartedRun(world);
   const messages = besidesReports(world.discord).length;
+  await resultReported(world.world, worker, { message: "Implemented the requested result." });
 
   // Act
-  await finished(world.world, worker);
+  assert((await world.factory.reconcileRuns()).ok);
 
   // Assert
   const shown = await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(shown.channelId).toBe(THREAD);
-  expect(shown.content).toBe("**Run #1 · Improve search** · ✅ Settled · 🔀 Single worker");
+  expect(shown.content).toBe(
+    "**Run #1 · Improve search** · ✅ Settled · 🔀 Single worker\n✅ Entry worker — finished",
+  );
   expect(shown.content).not.toContain("Implemented the requested result.");
   expect(besidesReports(world.discord)).toHaveLength(messages);
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("a new card shows the Run's identity, its Flow and its active Block", async (c) => {
+it("a new card shows every captured Block in breadth-first graph order and disables mentions", async (c) => {
   // Arrange
-  const world = await startingWorld(c);
+  const world = await startingWorld(c, statusCardFlow);
 
   // Act
-  const { card } = await chatStartedRun(world);
+  const { card } = await chatStartedRun(world, 1, "@everyone improve search");
 
   // Assert
-  const shown = await messageShows(world.discord, card, /⚙️ Entry worker — working/);
-  expect(shown.content).toBe(
-    "**Run #1 · Improve search** · 🟢 Active · 🔀 Single worker\n⚙️ Entry worker — working",
+  const shown = await messageShows(world.discord, card, /⚙️ \*\*Second @\u200bhere\*\* — working/);
+  expect(shown.content).toMatch(
+    /^\*\*Run #1 · @\u200beveryone improve search\*\* · 🟢 Active · 🔀 Status card Flow\n⚙️ \*\*Entry worker\*\* — working(?: · not observed yet)?\n⚙️ \*\*Second @\u200bhere\*\* — working(?: · not observed yet)?\n○ Follow-up — not started\n○ Last Block — not started$/,
   );
+  const posted = world.discord
+    .requested("POST", new RegExp(`^/api/v10/channels/${THREAD}/messages$`))
+    .find((request) => isStatusCard(request.body as { content: string }));
+  expect(posted?.body).toMatchObject({ allowed_mentions: { parse: [] } });
+});
+
+it("Archiving preserves the captured Blocks and their final states after the Flow is edited", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, statusCardFlow);
+  const { runId, card } = await chatStartedRun(world);
+  await observeFor(
+    "observe both workers",
+    world.world,
+    runId,
+    (run) => run.blocks.filter((block) => block.freshness === "fresh").length === 2,
+  );
+  const edited = await world.factory.updateFlow(world.flow.id, {
+    name: world.flow.name,
+    expectedRevision: world.flow.revision,
+    expectedProjectId: world.flow.projectId,
+    workspace: world.flow.workspace,
+    graph: {
+      ...world.flow.graph,
+      blocks: world.flow.graph.blocks.map((block) => ({ ...block, name: `Edited ${block.name}` })),
+    },
+  });
+  assert(edited.ok, JSON.stringify(edited));
+
+  // Act
+  const archived = await world.factory.archiveRun(runId);
+
+  // Assert
+  assert(archived.ok, JSON.stringify(archived));
+  const shown = await messageShows(world.discord, card, /· 🗄️ Archived · /);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "⏹️ Entry worker — stopped",
+    "⏹️ Second @\u200bhere — stopped",
+    "○ Follow-up — not started",
+    "○ Last Block — not started",
+  ]);
+  expect(
+    world.discord.requested(
+      "PATCH",
+      new RegExp(`^/api/v10/channels/${THREAD}/messages/${card.id}$`),
+    ),
+  ).toContainEqual(
+    expect.objectContaining({ body: { content: shown.content, allowed_mentions: { parse: [] } } }),
+  );
+});
+
+it("Archiving retains the unknown observation of an acknowledged Continuation", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, continuationFlow);
+  const { runId, worker, card } = await chatStartedRun(world);
+  await resultReported(world.world, worker);
+  await promptSent(world.world, worker);
+  const sent = await world.factory.getRun(runId);
+  assert(sent.ok, JSON.stringify(sent));
+  expect(sent.value.blocks.find((block) => block.blockId === "spec")).toMatchObject({
+    state: "sent",
+    freshness: "unknown",
+  });
+
+  // Act
+  const archived = await world.factory.archiveRun(runId);
+
+  // Assert
+  assert(archived.ok, JSON.stringify(archived));
+  const shown = await messageShows(world.discord, card, /· 🗄️ Archived · /);
+  expect(shown.content.split("\n")).toContain("⏹️ Spec — stopped · not observed yet");
+});
+
+it("a Human step replaces the Block's waiting state with one Needs input row", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, humanReviewFlow);
+  const { worker, card } = await chatStartedRun(world);
+  await resultReported(world.world, worker);
+
+  // Act
+  await resultReleasedToHumanReview(world.world, worker);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /🙋 \*\*Review\*\* — needs input/);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "✅ Entry worker — finished",
+    "🙋 **Review** — needs input",
+    "○ Parallel work — not started",
+  ]);
+});
+
+it("a native T3 request replaces Working with one Needs input row that points to T3", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, card } = await chatStartedRun(world);
+
+  // Act
+  await nativeRequestShown(world.world, worker);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /🙋 \*\*Entry worker\*\* — needs input/);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "🙋 **Entry worker** — needs input (answer in T3)",
+  ]);
+});
+
+it("a worker idle on a working report asks for review in T3, including when its observation goes stale", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, card } = await chatStartedRun(world);
+  await workingReportedIdle(world.world, worker, "Private working report");
+  world.t3.connection.available = false;
+
+  // Act
+  assert((await world.factory.reconcileRuns()).ok);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /· observation stale/);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "🙋 **Entry worker** — needs input (answer in T3) · observation stale",
+  ]);
+});
+
+it("a Wait lists its earliest deadline and the count of pending arrivals on one row", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, parallelWaitFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+
+  await resultReported(world.world, workers[0]!);
+  const first = await observeFor("read the first Wait arrival", world.world, runId, (run) =>
+    run.waitArrivals.some((arrival) => arrival.state === "pending"),
+  );
+  await resultReported(world.world, workers[1]!);
+
+  // Act
+  const reconciled = await world.factory.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok, JSON.stringify(reconciled));
+  const relative = Math.floor(Date.parse(first.waitArrivals[0]!.deadlineAt) / 1000);
+  const shown = await messageShows(
+    world.discord,
+    card,
+    /✅ Second entry — finished\n[^\n]+ · 2 waiting/,
+  );
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "✅ Entry worker — finished",
+    "✅ Second entry — finished",
+    `⏰ Cool down — waits until <t:${relative}:R> · 2 waiting`,
+  ]);
+});
+
+it("a missing report is the Block's inline Problem", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, card } = await chatStartedRun(world);
+
+  // Act
+  await missingReport(world.world, worker);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /report missing/);
+  expect(shown.content.split("\n").slice(1)).toEqual(["⚠️ **Entry worker** — report missing"]);
+});
+
+it("a Continuation moves from sent to finished on its own row", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, continuationFlow);
+  const { worker, card } = await chatStartedRun(world);
+  await resultReported(world.world, worker);
+  const prompt = await promptSent(world.world, worker);
+  const sent = await messageShows(world.discord, card, /⚙️ \*\*Spec\*\* — Continuation sent/);
+  const sentRow = sent.content.split("\n")[2];
+  await promptAnswered(world.world, worker, prompt);
+
+  // Act
+  assert((await world.factory.reconcileRuns()).ok);
+
+  // Assert
+  const forwarded = await messageShows(world.discord, card, /✅ Spec — finished/);
+  expect(sentRow).toMatch(/^⚙️ \*\*Spec\*\* — Continuation sent/);
+  expect(forwarded.content.split("\n")[2]).toBe("✅ Spec — finished");
+});
+
+it("confirmed Settle stays above the Block's own state while stopping workers", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, card } = await chatStartedRun(world);
+
+  // Act
+  assert((await world.factory.settleRun(runId, { stopWorkers: true })).ok);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /Settle confirmed: Factory is stopping/);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "⏹️ Settle confirmed: Factory is stopping this Run's workers.",
+    expect.stringMatching(/^⚙️ \*\*Entry worker\*\* — working/),
+  ]);
+});
+
+it("an unresolved Settle stays above the Block's own state", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, card } = await chatStartedRun(world);
+
+  // Act
+  await settleUnresolved(world.world, worker);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /could not be confirmed stopped/);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "⚠️ Settle confirmed, but some workers could not be confirmed stopped.",
+    expect.stringMatching(/^⚙️ \*\*Entry worker\*\* — working/),
+  ]);
+});
+
+it("a Run reaching Finish keeps the final Block states without naming the ending or result", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, racingEndingsFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  world.t3.threads.stopsEndThreads();
+  await resultReported(
+    world.world,
+    workers.find((worker) => worker.flowBlockId === "worker")!,
+  );
+
+  // Act
+  assert((await world.factory.reconcileRuns()).ok);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /· ✅ Settled · /);
+  expect(shown.content.split("\n")).toEqual([
+    "**Run #1 · Improve search** · ✅ Settled · 🔀 Racing endings",
+    "✅ Entry worker — finished",
+    "⏹️ Second entry — stopped",
+  ]);
+});
+
+it("oversize cards summarize not-started Blocks while keeping actionable rows", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, largeStatusCardFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+
+  // Act
+  await nativeRequestShown(
+    world.world,
+    workers.find((worker) => worker.flowBlockId === "second")!,
+  );
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /🙋 \*\*Second entry\*\* — needs input/);
+  expect(shown.content.length).toBeLessThanOrEqual(2_000);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    expect.stringMatching(/^⚙️ \*\*Entry worker\*\* — working/),
+    "🙋 **Second entry** — needs input (answer in T3)",
+    "○ 25 Blocks not started",
+  ]);
+});
+
+it("oversize cards summarize finished Blocks above actionable rows and not-started Blocks below", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, largeStatusCardFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  await nativeRequestShown(
+    world.world,
+    workers.find((worker) => worker.flowBlockId === "second")!,
+  );
+  await resultReported(
+    world.world,
+    workers.find((worker) => worker.flowBlockId === "worker")!,
+  );
+  const waiting = await observeFor(
+    "observe all pending Waits",
+    world.world,
+    runId,
+    (run) => run.waitArrivals.filter((arrival) => arrival.state === "pending").length === 24,
+  );
+  const [last, ...earlier] = waiting.waitArrivals.toReversed();
+  const continued = await Promise.all(
+    earlier.map((arrival) => world.factory.continueWaitArrival(arrival.id)),
+  );
+  expect(continued.every((result) => result.ok)).toBe(true);
+
+  // Act
+  const final = await world.factory.continueWaitArrival(last!.id);
+
+  // Assert
+  assert(final.ok, JSON.stringify(final));
+  const shown = await messageShows(world.discord, card, /✅ 25 Blocks finished/);
+  expect(shown.content.length).toBeLessThanOrEqual(2_000);
+  expect(shown.content.split("\n").slice(1)).toEqual([
+    "✅ 25 Blocks finished",
+    "🙋 **Second entry** — needs input (answer in T3)",
+    "○ 1 Block not started",
+  ]);
+});
+
+it("compacting finished Blocks keeps every actionable row when the card fits exactly", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, exactLimitCardFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  const first = workers.find((worker) => worker.flowBlockId === "first")!;
+  const second = workers.find((worker) => worker.flowBlockId === "second")!;
+  await resultReported(world.world, first);
+  await observeFor(
+    "observe the settled first Block and other workers",
+    world.world,
+    runId,
+    (run) =>
+      run.blocks.find((block) => block.blockId === "first")?.state === "finished" &&
+      run.blocks.filter((block) => block.state === "working" && block.freshness === "fresh")
+        .length === 11,
+  );
+  await resultReported(world.world, second);
+
+  // Act
+  const reconciled = await world.factory.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok, JSON.stringify(reconciled));
+  const shown = await messageShows(world.discord, card, /✅ 2 Blocks finished/);
+  const rows = shown.content.split("\n");
+  expect(shown.content).toHaveLength(2_000);
+  expect(rows).toHaveLength(12);
+  expect(rows.at(-1)).toBe("⚙️ **X** — working");
+});
+
+it("a finished summary covering every Block shows no overflow line", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, longEntryNamesFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  await Promise.all(workers.map((worker) => resultReported(world.world, worker)));
+
+  // Act
+  const reconciled = await world.factory.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok, JSON.stringify(reconciled));
+  const shown = await messageShows(world.discord, card, /✅ 12 Blocks finished/);
+  expect(shown.content.split("\n").slice(1)).toEqual(["✅ 12 Blocks finished"]);
 });
 
 it("Snooze keeps the card reported, and a failing language model does not stop it", async (c) => {
@@ -278,13 +651,14 @@ it("an archived, unlocked thread is reopened to edit the card, without posting a
 it("a locked thread is never unlocked: the card edit shows as a failed delivery with its correction", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
+  const { runId } = await chatStartedRun(world);
   world.discord.archiveThread(THREAD, { locked: true });
 
   // Act
-  await resultHeld(world.world, worker);
+  const snoozed = await world.factory.snoozeRun(runId);
 
   // Assert
+  assert(snoozed.ok, JSON.stringify(snoozed));
   const settings = await cardProblem(world.factory, "failed");
   expect(settings.delivery.problems).toStrictEqual([
     expect.objectContaining({
@@ -408,21 +782,150 @@ it("a card create Discord may already have performed is not repeated and is show
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("the warned Retry of an unknown card create posts it once more with the current state and never starts another Run", async (c) => {
+it("a Status card accepted before revocation stays unknown when its response is lost after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const known = await chatStartedRun(world);
+  const button = await proposedStart(world, "600000000000000002", 4);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  world.discord.faultMessages("paused-lost");
+  await clicked(world.discord, button, "610000000000000002", 2);
+  await world.discord.createdWhere(isStatusCard, 2);
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  world.discord.nonceWindowPassed();
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assert((await world.factory.snoozeRun(known.runId)).ok);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, known.card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toStrictEqual([
+    expect.objectContaining({
+      purpose: "status-card",
+      state: "unknown",
+      threadId: THREAD,
+      message: CORRECTIONS.unknown,
+    }),
+  ]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts);
+  expect(statusCardsIn(world.discord)).toHaveLength(2);
+});
+
+it("an Active Run gets its card after revocation and regrant when Discord refused its first POST", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
-  world.discord.faultMessages(...unproven("lost"));
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  world.discord.faultMessages("paused-refusal");
   await clicked(world.discord, button, "610000000000000001", 1);
-  const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
+  await world.discord.request("POST", MESSAGES, posts + 1);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await world.discord.createdWhere(isStatusCard, 1);
+  expect(statusCardsIn(world.discord)).toHaveLength(1);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([]);
+});
+
+it("Retry of an unknown card refuses a revoked destination and preserves the warning", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: true,
+  });
+
+  // Assert
+  assert(!retried.ok);
+  expect(retried.error.message).toBe("Access no longer permits this destination.");
+  const settings = await cardProblem(world.factory, "unknown");
+  expect(settings.delivery.problems).toContainEqual(problem);
+});
+
+it("a refused warned Retry across regrant does not authorize another Status card POST", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const known = await chatStartedRun(world, 2);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  world.discord.nonceWindowPassed();
+  world.discord.faultMessages("paused-refusal");
+  assert(
+    (await world.factory.retryChatDelivery({ deliveryId: problem.id, duplicateRiskAccepted: true }))
+      .ok,
+  );
+  await world.discord.request("POST", MESSAGES, posts + 1);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assert((await world.factory.snoozeRun(known.runId)).ok);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, known.card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([
+    expect.objectContaining({ id: problem.id, state: "unknown", message: CORRECTIONS.unknown }),
+  ]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts + 1);
+  expect(statusCardsIn(world.discord)).toHaveLength(2);
+});
+
+it("after regrant, Retry of an unknown card still requires duplicate-risk acceptance", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: false,
+  });
+
+  // Assert
+  assert(!retried.ok);
+  expect(retried.error.code).toBe("validation");
+});
+
+it("after revocation and regrant, warned Retry of an unknown card posts the current state without starting another Run", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const problem = await unknownStatusCard(world);
   world.discord.nonceWindowPassed();
   const navigation = await world.factory.listRunNavigation();
   assert(navigation.ok);
   assert((await world.factory.snoozeRun(navigation.value[0]!.id)).ok);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  expect(statusCardsIn(world.discord)).toHaveLength(1);
 
   // Act
   const retried = await world.factory.retryChatDelivery({
-    deliveryId: problem!.id,
+    deliveryId: problem.id,
     duplicateRiskAccepted: true,
   });
 

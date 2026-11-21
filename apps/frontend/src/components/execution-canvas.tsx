@@ -1,5 +1,5 @@
 import { runResultState, stoppedVisitAt } from "../run-status.ts";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   type FlowBlock,
   type RunAttention,
@@ -507,15 +507,28 @@ function executionFlowInput(
   };
 }
 
+function executionFooterCount(
+  run: RunDetail,
+  block: FlowBlock,
+  recorded: RunBlock | undefined,
+  unavailable: boolean,
+) {
+  const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
+  return (
+    (continuableArrival(run, block) ? 1 : 0) +
+    (observation === "stale" || observation === "unknown" ? 1 : 0)
+  );
+}
+
 function executionBlock(
   run: RunDetail,
   recipients: ReturnType<typeof exitRecipients>,
   block: CanvasBlock,
+  recorded: RunBlock | undefined,
   selected: boolean,
   unavailable: boolean,
   onSelect: () => void,
 ): CanvasBlockContent {
-  const recorded = run.blocks.find((item) => item.blockId === block.id);
   const state = blockStateKind(run, recorded);
   const workingMessage = recorded?.state === "working" ? recorded.workingMessage : null;
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
@@ -624,7 +637,19 @@ export function ExecutionCanvas({
   overlay?: ReactNode;
 }) {
   const targets = selectExecutionTargets(run);
-  const recipients = exitRecipients(run.definitions.flow.graph);
+  const recordedById = useMemo(
+    () => new Map(run.blocks.map((item) => [item.blockId, item])),
+    [run.blocks],
+  );
+  const recipients = useMemo(
+    () => exitRecipients(run.definitions.flow.graph),
+    [run.definitions.flow.graph],
+  );
+  const blockFooters = useMemo(
+    () => (block: CanvasBlock) =>
+      executionFooterCount(run, block, recordedById.get(block.id), observationUnavailable),
+    [run, recordedById, observationUnavailable],
+  );
   return (
     <CanvasSurface
       label="Execution canvas"
@@ -635,10 +660,17 @@ export function ExecutionCanvas({
       reservedFooters={MAX_FOOTERS}
       flowInput={executionFlowInput(run, () => onSelect(null), title)}
       block={(block) =>
-        executionBlock(run, recipients, block, selected === block.id, observationUnavailable, () =>
-          onSelect(block.id),
+        executionBlock(
+          run,
+          recipients,
+          block,
+          recordedById.get(block.id),
+          selected === block.id,
+          observationUnavailable,
+          () => onSelect(block.id),
         )
       }
+      blockFooters={blockFooters}
       finish={executionFinish(run, selected === FINISH_SELECTION, () => onSelect(FINISH_SELECTION))}
       wires={{ kind: "orthogonal", label: "Configured connections" }}
       covered={{ top: BADGES_HEIGHT }}

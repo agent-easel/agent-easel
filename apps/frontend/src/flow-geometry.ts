@@ -14,6 +14,7 @@ import {
 } from "./flow-graph.ts";
 import { EXECUTION_DIMENSIONS } from "./components/canvas-dimensions.ts";
 import { mergeGraphBounds } from "./canvas-fit.ts";
+import type { Rect } from "./canvas-culling.ts";
 
 type Point = { x: number; y: number };
 export function createCanvasGeometry(
@@ -72,6 +73,7 @@ export function createCanvasGeometry(
     flowInputBox,
     /** The Flow input and every block, in graph coordinates. */
     boxes: () => [flowInputBox, ...graph.blocks.map(blockBox), ...finishBoxes],
+    blockBox,
     finishBox,
     endingPoint: (index: number): Point => ({
       x: finishBox.x,
@@ -106,6 +108,20 @@ export function createCanvasGeometry(
   };
 }
 
+export function pointsBounds(points: readonly Point[]): Rect {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 /** Forward connections curve; backward and self connections route above both blocks. */
 export function wirePath(from: Point, to: Point, approachLane = 0) {
   if (to.x > from.x + 40) {
@@ -113,12 +129,15 @@ export function wirePath(from: Point, to: Point, approachLane = 0) {
     return {
       d: `M${from.x},${from.y} C${from.x + bend},${from.y} ${to.x - bend},${to.y} ${to.x},${to.y}`,
       label: { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
+      bounds: pointsBounds([from, to]),
     };
   }
   const top = Math.max(8, Math.min(from.y, to.y) - 70);
+  const away = to.x - 20 - approachLane;
   return {
-    d: `M${from.x},${from.y} H${from.x + 20} V${top} H${to.x - 20 - approachLane} V${to.y} H${to.x}`,
+    d: `M${from.x},${from.y} H${from.x + 20} V${top} H${away} V${to.y} H${to.x}`,
     label: { x: (from.x + to.x) / 2, y: top },
+    bounds: pointsBounds([from, to, { x: from.x + 20, y: top }, { x: away, y: top }]),
   };
 }
 
@@ -162,18 +181,19 @@ export function orthogonalWirePath(exit: Point, input: Point, below: number, app
   const from = { x: exit.x + PORT_RIM, y: exit.y };
   const to = { x: input.x - PORT_RIM, y: input.y };
   const approachX = to.x - 16 - approachLane;
-  if (to.x > from.x + 24) {
-    const middle = Math.round((from.x + to.x) / 2);
-    return roundedPolyline([from, { x: middle, y: from.y }, { x: middle, y: to.y }, to]);
-  }
-  return roundedPolyline([
-    from,
-    { x: from.x + 12, y: from.y },
-    { x: from.x + 12, y: below },
-    { x: approachX, y: below },
-    { x: approachX, y: to.y },
-    to,
-  ]);
+  const middle = Math.round((from.x + to.x) / 2);
+  const points =
+    to.x > from.x + 24
+      ? [from, { x: middle, y: from.y }, { x: middle, y: to.y }, to]
+      : [
+          from,
+          { x: from.x + 12, y: from.y },
+          { x: from.x + 12, y: below },
+          { x: approachX, y: below },
+          { x: approachX, y: to.y },
+          to,
+        ];
+  return { d: roundedPolyline(points), bounds: pointsBounds(points) };
 }
 
 /** Horizontal lane offset for backward manual routes so returns do not share one vertical. */

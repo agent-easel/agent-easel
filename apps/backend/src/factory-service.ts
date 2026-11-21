@@ -212,7 +212,9 @@ export const makeFactoryService = (
       archiveRun: (id, requestId) => guard(runner.archiveRun(id, requestId)),
       acceptedArchive: (requestId) => runner.acceptedArchive(requestId),
     });
-    const chatDeliveries = yield* makeChatDeliveries(sql);
+    const chatDeliveries = yield* makeChatDeliveries(sql, (runId): void =>
+      reportCapture.changed(runId),
+    );
     const reportCapture = yield* makeReportCapture(
       sql,
       { getRun: (id) => guard(runner.getRun(id)) },

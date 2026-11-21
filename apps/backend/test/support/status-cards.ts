@@ -2,6 +2,7 @@ import { assert } from "@effect/vitest";
 import type { DiscordSettings } from "@t3-factory/contracts";
 import type { Factory } from "../../src/index.ts";
 import {
+  besidesReports,
   clicked,
   isStatusCard,
   proposedStart,
@@ -10,7 +11,7 @@ import {
   type startingWorld,
 } from "./chat-actions.ts";
 import { discordSettingsWhen } from "./chat-control.ts";
-import type { ControlledDiscord, CreatedMessage } from "./controlled-discord.ts";
+import { unproven, type ControlledDiscord, type CreatedMessage } from "./controlled-discord.ts";
 import { launchedWorkers } from "./scenarios.ts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
@@ -22,7 +23,7 @@ type World = Awaited<ReturnType<typeof startingWorld>>;
  * the card message.
  */
 export async function chatStartedRun(world: World, ordinal = 1, prompt = START_PROMPT) {
-  const before = world.discord.created.length;
+  const before = besidesReports(world.discord).length;
   const button = await proposedStart(
     world,
     `60000000000000000${ordinal}`,
@@ -62,3 +63,11 @@ export const cardProblem = (
       (problem) => problem.purpose === "status-card" && problem.state === state,
     ),
   );
+
+export async function unknownStatusCard(world: World) {
+  const button = await proposedStart(world, "600000000000000001", 2);
+  world.discord.faultMessages(...unproven("lost"));
+  await clicked(world.discord, button, "610000000000000001", 1);
+  const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
+  return problem!;
+}
