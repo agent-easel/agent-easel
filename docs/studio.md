@@ -778,8 +778,8 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
   missing or removed. There is no fallback to local ids or names.
 
 Export refuses a file another installation could not import. A definition save request is limited to 2 MB and the file to 16 MiB.
-Version-3 import and export allow 500 ordinary blocks when Finish has no endings. A Finish with endings counts toward the
-500-block limit. An existing Flow at the former block limit remains editable at that size.
+The portable format allows 500 ordinary blocks when Finish is absent or has no endings. A Finish with endings counts toward
+the 500-block limit. An existing Flow at the former block limit remains editable at that size.
 
 **Format versions.** Import reads versions 1, 2, 3, 4 and 5, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its

@@ -763,7 +763,7 @@ it("a version-3 import counts a Finish with endings toward the block limit", asy
   expect(assertOk(await factory.listFlows())).toStrictEqual([]);
 });
 
-it("version-3 export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
+it("export refuses a 500-block Flow with an ending while preserving the saved graph", async (context) => {
   // Arrange
   const { factory, flow } = await importFullFlowWithEmptyFinish(context);
   const saved = assertOk(
