@@ -9,7 +9,7 @@ import { clip, MESSAGE_LIMIT, name, runHeading } from "./status-cards.ts";
 type MatterKind = RunReport["needsInput"][number]["kind"];
 /** A pending attention matter as a report lists it. */
 type Matter = Pick<RunReport["needsInput"][number], "id" | "kind" | "block" | "appearedAt">;
-type NoticePurpose = "attention" | "catch-up";
+type MatterNoticePurpose = "attention" | "catch-up";
 type DeliveryState =
   | "owed"
   | "sending"
@@ -58,7 +58,7 @@ type MatterRow = {
 type NoticeRow = {
   delivery_id: string;
   run_id: string;
-  purpose: NoticePurpose;
+  purpose: MatterNoticePurpose;
   state: DeliveryState;
   text: string;
   message_id: string | null;
@@ -146,24 +146,20 @@ const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
 /** A notice message never created and not being sent: new content may still join it. */
 const OPEN = "d.state='owed' AND d.message_id IS NULL";
 
-/**
- * Attention notices: new messages in a chat-started Run's originating thread for each new Needs
- * input or Problem matter; everything else only edits the status card. Each capture compares the
- * Run's pending matters with what notices accounted for, so a matter that appeared and resolved
- * between two captures is never reported. Matters appearing together share one notice, each on its own
- * line; a resolved matter edits the notice that announced it. While the thread's channel does not
- * grant the Run nothing accrues; the first capture after a regrant takes the Run's pending matters
- * as its baseline without a message, and known messages are corrected silently.
- */
 export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
-  const insertNotice = (origin: ReportOrigin, report: RunReport, purpose: NoticePurpose) =>
+  const insertNotice = (
+    origin: ReportOrigin,
+    report: RunReport,
+    purpose: MatterNoticePurpose | "completion",
+    text = "",
+  ) =>
     Effect.gen(function* () {
       const id = yield* newId;
       const createdAt = yield* now;
       const { destination } = origin;
       yield* sql`INSERT INTO chat_deliveries (id,purpose,run_id,guild_id,parent_channel_id,thread_id,project_ids_json,text,state,created_at)
         VALUES (${id},${purpose},${origin.runId},${destination.guildId},${destination.parentChannelId},${destination.threadId},
-          ${JSON.stringify([report.run.project.id])},'','owed',${createdAt})`;
+          ${JSON.stringify([report.run.project.id])},${text},'owed',${createdAt})`;
       yield* sql`INSERT INTO chat_report_notices (delivery_id,run_id) VALUES (${id},${origin.runId})`;
       return id;
     });
@@ -185,7 +181,7 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
     Effect.gen(function* () {
       const notices: string[] = [];
       let queue = fresh;
-      const [open] = yield* sql<{ id: string; purpose: NoticePurpose; count: number }>`
+      const [open] = yield* sql<{ id: string; purpose: MatterNoticePurpose; count: number }>`
         SELECT d.id,d.purpose,(SELECT COUNT(*) FROM chat_report_matters m WHERE m.notice_id=d.id) AS count
         FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
         WHERE n.run_id=${origin.runId} AND ${sql.literal(OPEN)} AND d.purpose IN ('attention','catch-up')
@@ -234,6 +230,23 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       return row.baseline === 1;
     });
 
+  const capturedCompletion = (origin: ReportOrigin, report: RunReport) =>
+    Effect.gen(function* () {
+      const [cycle] = yield* sql<{ sequence: number }>`SELECT c.sequence FROM chat_settled_cycles c
+        JOIN chat_run_reporting r ON r.run_id=c.run_id
+        JOIN chat_access_channel_projects g ON g.channel_id=${origin.destination.parentChannelId}
+          AND g.project_id=${report.run.project.id}
+        WHERE c.run_id=${origin.runId} AND r.completion_sequence IS NOT c.sequence`;
+      if (!cycle) return;
+      yield* insertNotice(
+        origin,
+        report,
+        "completion",
+        `✅ ${runHeading(runReference(report.run), report.run.title)} finished.\nReply here to inspect the result or choose what to do next.`,
+      );
+      yield* sql`UPDATE chat_run_reporting SET completion_sequence=${cycle.sequence} WHERE run_id=${origin.runId}`;
+    });
+
   /**
    * Marks matters no longer pending resolved and records new ones: announced, or at a baseline
    * only shown on the card. Returns the notices whose text changed.
@@ -265,7 +278,8 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
     Effect.map(
       sql<{ delivery_id: string }>`SELECT n.delivery_id FROM chat_report_notices n
         JOIN chat_deliveries d ON d.id=n.delivery_id
-        WHERE n.run_id=${runId} AND d.state='cancelled' AND d.message_id IS NOT NULL`,
+        WHERE n.run_id=${runId} AND d.purpose IN ('attention','catch-up')
+          AND d.state='cancelled' AND d.message_id IS NOT NULL`,
       (rows) => rows.map((row) => row.delivery_id),
     );
 
@@ -275,6 +289,7 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
         if (!report) return;
         const { runId } = origin;
         const baseline = yield* accounting(runId, report);
+        yield* capturedCompletion(origin, report);
         const touched = new Set(yield* capturedMatters(origin, report, baseline));
         if (baseline) yield* sql`UPDATE chat_run_reporting SET baseline=0 WHERE run_id=${runId}`;
         for (const id of yield* cancelledMessages(runId)) touched.add(id);

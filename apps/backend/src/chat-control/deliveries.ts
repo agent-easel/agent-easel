@@ -186,7 +186,14 @@ export const nonceOf = (...intent: readonly string[]) =>
 /** How one create intent ended: Discord's message ID, or what its failure proves. */
 type Created =
   | { readonly messageId: string }
+  | { readonly withdrawn: true }
   | { readonly failure: SendFailure; readonly cause: unknown };
+
+function createRefusal(failure: SendFailure, unproven: boolean): SendFailure | undefined {
+  if (failure === "unknown") return undefined;
+  if (!unproven) return failure;
+  return failure === "rejected" ? "unknown" : undefined;
+}
 
 /**
  * Creates one message under its intent's nonce. When no answer proves whether Discord created it,
@@ -201,25 +208,23 @@ export const createDeduplicated = (
   destination: Destination,
   text: string,
   options: Omit<CreateMessageOptions, "requesterId">,
-  mentionRequester?: Effect.Effect<string | undefined, unknown>,
+  noticeAccess: Effect.Effect<
+    Pick<CreateMessageOptions, "requesterId"> | false,
+    unknown
+  > = Effect.succeed({}),
 ) =>
   Effect.gen(function* (): Effect.fn.Return<Created, unknown> {
     const firstAt = yield* Clock.currentTimeMillis;
     let unproven = false;
     for (let requests = 1; ; requests++) {
-      const requesterId = mentionRequester === undefined ? undefined : yield* mentionRequester;
+      const access = yield* noticeAccess;
+      if (access === false) return { withdrawn: true };
       const sent = yield* Effect.result(
-        bounded(() =>
-          sender.create(destination, text, {
-            ...options,
-            ...(requesterId === undefined ? {} : { requesterId }),
-          }),
-        ),
+        bounded(() => sender.create(destination, text, { ...options, ...access })),
       );
       if (sent._tag === "Success") return { messageId: sent.success };
-      const failure = sendFailure(sent.failure.cause);
-      if (failure === "rejected" || (failure === "transient" && !unproven))
-        return { failure: unproven ? "unknown" : failure, cause: sent.failure.cause };
+      const refusal = createRefusal(sendFailure(sent.failure.cause), unproven);
+      if (refusal) return { failure: refusal, cause: sent.failure.cause };
       unproven = true;
       const elapsed = (yield* Clock.currentTimeMillis) - firstAt;
       if (requests >= DEDUPLICATED_REQUESTS || elapsed >= DEDUPLICATION_WINDOW_MS)
@@ -235,16 +240,25 @@ const destinationOf = (row: DeliveryRow): Destination => ({
   threadId: row.thread_id,
 });
 
-const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = ["attention", "catch-up"];
+const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
+  "attention",
+  "catch-up",
+  "completion",
+];
 
-const allowedRunRequester = (sql: SqlClient.SqlClient, runId: string | null) =>
+const noticeCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
   Effect.map(
-    sql<{ user_id: string }>`SELECT u.user_id FROM chat_run_origins o
+    sql<{ user_id: string | null }>`SELECT (
+      SELECT u.user_id FROM chat_run_origins o
       JOIN chat_actions a ON a.id=o.action_id
       JOIN chat_proposals p ON p.id=a.proposal_id
       JOIN chat_access_users u ON u.user_id=p.requester_id
-      WHERE o.run_id=${runId}`,
-    ([user]) => user?.user_id,
+      WHERE o.run_id=d.run_id
+    ) AS user_id FROM chat_deliveries d WHERE d.id=${deliveryId} AND d.state='sending'`,
+    ([access]) => {
+      if (!access) return false as const;
+      return access.user_id === null ? {} : { requesterId: access.user_id };
+    },
   );
 
 export const publishedRun =
@@ -356,7 +370,7 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
         const at = yield* now;
         const problem = fields.problem ?? null;
         yield* sql`UPDATE chat_deliveries SET state=${fields.state},next_attempt_at=${fields.next_attempt_at ?? null},
-          problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id}`;
+          problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id} AND state='sending'`;
       });
 
     /** Owed again after a wait: 1 s doubling to five minutes over consecutive attempts. */
@@ -497,12 +511,13 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
           row.text,
           { nonce: nonceOf("delivery", row.id) },
           REQUESTER_NOTICE_PURPOSES.includes(row.purpose)
-            ? allowedRunRequester(sql, row.run_id)
+            ? noticeCreateAccess(sql, row.id)
             : undefined,
         ).pipe(
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );
         if ("messageId" in sent) return yield* delivered(row, sent.messageId, sender.applicationId);
+        if ("withdrawn" in sent) return;
         if (sent.failure === "transient")
           return yield* later(row.id, row.attempts, PROBLEMS.transient);
         yield* record(row.id, {
@@ -606,8 +621,10 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
             "Access no longer permits this destination; the message was cancelled.",
           );
         }
-        yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,problem=NULL,problem_at=NULL
-          WHERE id=${row.id} AND state=${row.state}`;
+        const [scheduled] =
+          yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,problem=NULL,problem_at=NULL
+          WHERE id=${row.id} AND state=${row.state} RETURNING id`;
+        if (!scheduled) return failure("conflict", "This message no longer needs a Retry.");
         dispatcher.wake();
         return { ok: true, value: undefined };
       });

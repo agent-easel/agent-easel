@@ -27,6 +27,8 @@ import {
   humanReviewFlow,
   launchedWorkers,
   missingReport,
+  optionalEndingFlow,
+  resultHeld,
   resultReleasedToHumanReview,
   resultReported,
   settled,
@@ -35,6 +37,7 @@ import {
   type ReadyFlowShape,
   woke,
   workingReportedIdle,
+  workerWorking,
 } from "./support/scenarios.ts";
 import { chatStartedRun, messageShows } from "./support/status-cards.ts";
 
@@ -74,6 +77,26 @@ function expectNoticePing(discord: World["discord"], notice: CreatedMessage) {
       }),
     }),
   );
+}
+
+const isCompletion = (message: CreatedMessage) => /^✅ .+ finished\.\n/.test(message.content);
+const completions = (discord: World["discord"]) => discord.created.filter(isCompletion);
+
+async function completionCreated(discord: World["discord"], ordinal = 1) {
+  await discord.createdWhere(isCompletion, ordinal);
+  return completions(discord)[ordinal - 1]!;
+}
+
+async function completionProblem(
+  factory: Pick<World["factory"], "getDiscordSettings">,
+  state: "failed" | "unknown" | "retrying",
+) {
+  const matches = (problem: { purpose: string; state: string }) =>
+    problem.purpose === "completion" && problem.state === state;
+  const settings = await discordSettingsWhen(factory, (current) =>
+    current.delivery.problems.some(matches),
+  );
+  return settings.delivery.problems.find(matches)!;
 }
 
 function expectSilentEdit(discord: World["discord"], notice: CreatedMessage) {
@@ -141,18 +164,260 @@ async function applicationReplaced(world: World) {
   assert(replaced.ok, JSON.stringify(replaced));
 }
 
-it("a Run becoming Settled only edits its card in the originating thread and posts no message", async (c) => {
+it("automatic settlement posts one plain completion notice to the requester in the originating thread", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker, card } = await chatStartedRun(world);
-  const messages = world.discord.created.length;
+  const { worker } = await chatStartedRun(world);
 
   // Act
   await finished(world, worker);
 
   // Assert
-  await messageShows(world.discord, card, /^\*\*Run #1 · Improve search\*\* · ✅ Settled · /);
-  expect(world.discord.created).toHaveLength(messages);
+  const notice = await completionCreated(world.discord);
+  expect(notice.channelId).toBe(THREAD);
+  expect(notice.content).toBe(
+    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nReply here to inspect the result or choose what to do next.`,
+  );
+  expectNoticePing(world.discord, notice);
+  expect(noticesIn(world.discord)).toStrictEqual([notice]);
+});
+
+it("reaching Finish posts a completion notice without disclosing the chosen ending or its output", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, optionalEndingFlow);
+  const { worker } = await chatStartedRun(world);
+
+  // Act
+  await finished(world, worker);
+
+  // Assert
+  const notice = await completionCreated(world.discord);
+  expect(notice.content).toBe(
+    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nReply here to inspect the result or choose what to do next.`,
+  );
+  expectNoticePing(world.discord, notice);
+});
+
+it("a Run posts a new completion when it settles again, even after its first notice was deleted", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  await finished(world, worker);
+  const first = await completionCreated(world.discord);
+  world.discord.deleteMessage(first.id);
+  expect((await world.factory.runtime.submit(workerWorking(worker.blockId))).code).toBe("ACCEPTED");
+
+  // Act
+  await finished(world, worker);
+
+  // Assert
+  const second = await completionCreated(world.discord, 2);
+  expect(completions(world.discord)).toStrictEqual([
+    expect.objectContaining({ id: first.id, deleted: true }),
+    second,
+  ]);
+  expect(second.id).not.toBe(first.id);
+  expectNoticePing(world.discord, second);
+});
+
+it("reactivating a Run retires its completion waiting for a rate-limit retry", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, card } = await chatStartedRun(world);
+  world.discord.faultMessages("rate-limited");
+  await finished(world, worker);
+  const problem = await completionProblem(world.factory, "retrying");
+
+  // Act
+  const accepted = await world.factory.runtime.submit(workerWorking(worker.blockId));
+
+  // Assert
+  expect(accepted.code).toBe("ACCEPTED");
+  await messageShows(world.discord, card, /· 🟢 Active · /);
+  await discordSettingsWhen(world.factory, (current) =>
+    current.delivery.problems.every(({ id }) => id !== problem.id),
+  );
+  expect(completions(world.discord)).toEqual([]);
+});
+
+it("archiving a Settled Run removes an unproven completion from diagnostics and retires its Retry", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker, runId } = await chatStartedRun(world);
+  world.discord.faultMessages(...unproven("failed"));
+  await finished(world, worker);
+  const problem = await completionProblem(world.factory, "unknown");
+
+  // Act
+  const archived = await world.factory.archiveRun(runId);
+
+  // Assert
+  assert(archived.ok, JSON.stringify(archived));
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: true,
+  });
+  expect(retried).toMatchObject({ ok: false, error: { code: "conflict" } });
+  expect(completions(world.discord)).toEqual([]);
+});
+
+it("reconnecting Discord delivers the completion owed during the Gateway outage", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  world.discord.holdResume();
+  world.discord.interruptSessions();
+  await world.discord.resumeAttempted();
+  await finished(world, worker);
+  expect(completions(world.discord)).toEqual([]);
+
+  // Act
+  world.discord.releaseResume();
+
+  // Assert
+  expectNoticePing(world.discord, await completionCreated(world.discord));
+});
+
+it("reopening Factory discovers a completion whose worker finished while the backend was stopped", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  await resultHeld(world.world, worker);
+  await world.factory.close();
+  world.t3.threads.endThreadRun(worker.threadId, worker.executionId, "completed");
+
+  // Act
+  await world.open();
+
+  // Assert
+  expectNoticePing(world.discord, await completionCreated(world.discord));
+});
+
+it("regrant reports a later settlement without replaying a Run that settled during revocation", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const revoked = await chatStartedRun(world);
+  const later = await chatStartedRun(world, 2, "Later authorized work");
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await finished(world, revoked.worker);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  await messageShows(world.discord, revoked.card, /· ✅ Settled · /);
+
+  // Act
+  await finished(world, later.worker);
+
+  // Assert
+  const notice = await completionCreated(world.discord);
+  expect(notice.content).toContain("**Run #2 · Later authorized work** finished.");
+  expectNoticePing(world.discord, notice);
+  expect(completions(world.discord)).toHaveLength(1);
+});
+
+it("revoking the Project grant cancels a locked-thread completion through regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  world.discord.archiveThread(THREAD, { locked: true });
+  await finished(world, worker);
+  const problem = await completionProblem(world.factory, "failed");
+  expect(problem.message).toContain("Unlock it in Discord, then retry.");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  world.discord.unlockThread(THREAD);
+
+  // Act
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Assert
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: false,
+  });
+  expect(retried).toMatchObject({ ok: false, error: { code: "conflict" } });
+  expect(completions(world.discord)).toEqual([]);
+});
+
+it("application replacement delivers the completion owed while Off and leaves the first Run's delivered notice alone", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const first = await chatStartedRun(world);
+  await finished(world, first.worker);
+  const original = await completionCreated(world.discord);
+  const second = await chatStartedRun(world, 2, "Follow-up work");
+  await applicationReplaced(world);
+  await finished(world, second.worker);
+
+  // Act
+  await turnedOn(world.factory, world.discord, 2);
+
+  // Assert
+  const recovered = await completionCreated(world.discord, 2);
+  expect(recovered.applicationId).toBe(otherBot.applicationId);
+  expect(recovered.content).toContain("**Run #2 · Follow-up work** finished.");
+  expect(completions(world.discord)).toStrictEqual([original, recovered]);
+});
+
+it("an unproven completion requires warned Retry and delivers without a ping after requester removal", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  world.discord.faultMessages(...unproven("failed"));
+  await finished(world, worker);
+  const problem = await completionProblem(world.factory, "unknown");
+  await savedAccess(world.factory, [COLLABORATOR_ID], [world.project.id]);
+  const unwarned = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: false,
+  });
+  expect(unwarned).toMatchObject({
+    ok: false,
+    error: {
+      code: "validation",
+      issues: [expect.objectContaining({ code: "chat_delivery_duplicate_risk" })],
+    },
+  });
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: true,
+  });
+
+  // Assert
+  assert(retried.ok, JSON.stringify(retried));
+  const notice = await completionCreated(world.discord);
+  expect(notice.content).not.toContain(REQUESTER_MENTION);
+  expect(world.discord.requested("POST", MESSAGES).at(-1)?.body).toEqual(
+    expect.objectContaining({ content: notice.content, allowed_mentions: { parse: [] } }),
+  );
+});
+
+it("a reply to a completion gives the model the Run ID while a revoked Project blocks the read", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, worker } = await chatStartedRun(world);
+  await finished(world, worker);
+  const notice = await completionCreated(world.discord);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  world.model.script(calls(readRun({ run: runId })), { text: "Not visible here." });
+  const requests = world.model.requests.length;
+
+  // Act
+  world.discord.deliver(noticeReply(notice));
+
+  // Assert
+  await world.model.requested(requests + 2);
+  expect(userEnvelopes(world.model, requests).at(-1)).toEqual(
+    expect.objectContaining({ referencedRun: runId }),
+  );
+  expect(JSON.stringify(requestMessages(world.model, requests))).not.toContain(
+    "Reply here to inspect the result or choose what to do next.",
+  );
+  expect(toolResults(world.model, requests + 1)).toEqual([
+    expect.objectContaining({ error: "not_found" }),
+  ]);
 });
 
 it("a Needs input matter in a locked thread posts no notice there, even though the bot may post in locked threads, and Settings asks to unlock it", async (c) => {
@@ -281,7 +546,7 @@ it("a confirmed Settle that could not stop workers posts a Problem notice in the
   expectNoticePing(world.discord, notice);
 });
 
-it("settling the Run after Settle could not stop its workers edits the Problem notice to resolved", async (c) => {
+it("manual settlement after a failed Stop resolves the Problem notice and posts a completion", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { runId, worker } = await chatStartedRun(world);
@@ -301,6 +566,7 @@ it("settling the Run after Settle could not stop its workers edits the Problem n
       "^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem · ✅ resolved\\n• ~~Settle could not stop workers~~ ✅$",
     ),
   );
+  expectNoticePing(world.discord, await completionCreated(world.discord));
 });
 
 it("a notice pings only the requester and leaves mention syntax in Run, Flow, and Block names inert", async (c) => {

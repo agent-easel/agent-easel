@@ -108,11 +108,6 @@ export const confirmations = (discord: ControlledDiscord) =>
 /** The model asks for one mutation tool call. */
 type MutationCall = { readonly toolCalls: readonly { name: string; input: unknown }[] };
 
-/**
- * Delivers a participant invocation asking to start `prompt` (scripted as the model's start_run
- * call), and returns the confirmation button's custom ID once Factory created `messages` messages
- * in total, the last of them the button.
- */
 export const proposedStart = (
   world: StartingWorld,
   id: string,
@@ -121,11 +116,6 @@ export const proposedStart = (
   content = `start this:\n${START_PROMPT}`,
 ) => proposed(world, id, messages, answer, content);
 
-/**
- * Delivers a participant invocation with `content` whose interpretation is the model's `answer`
- * call, and returns the confirmation button's custom ID once Factory created `messages` messages
- * in total, the last of them the button.
- */
 export async function proposed(
   world: Pick<StartingWorld, "model" | "discord">,
   id: string,
@@ -135,8 +125,8 @@ export async function proposed(
 ) {
   world.model.script(answer);
   world.discord.deliver(invocation(id, { content }));
-  await world.discord.createdMessages(messages);
-  const button = buttonOf(world.discord.created.at(-1)!);
+  await createdBesidesReports(world.discord, messages);
+  const button = buttonOf(besidesReports(world.discord)[messages - 1]!);
   assert(button !== undefined, "the last message carries the confirmation button");
   return button;
 }
