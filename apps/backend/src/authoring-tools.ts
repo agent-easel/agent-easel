@@ -423,7 +423,7 @@ type Subject =
   | "flowOwner"
   | "duplicate";
 
-const fixIssuesNext = "Fix the listed issue paths and call the tool again.";
+export const fixIssuesNext = "Fix the listed issue paths and call the tool again.";
 const staleOwnerNext =
   "Nothing changed. Read the definition again with factory_get_flow or factory_get_agent, confirm its current projectId with the user and call the tool again with it as expectedProjectId.";
 const ownerChangeBlockedNext =
@@ -483,9 +483,9 @@ const unavailableNext = "Recheck the Factory backend, then call the tool again."
 type Call = (args: Record<string, unknown>) => Promise<Result<unknown>>;
 
 /** Splits a required id argument from the operation's input; a missing id is a validation issue. */
-const withId =
+export const withId =
   (
-    key: "agentId" | "flowId",
+    key: "agentId" | "flowId" | "triggerId",
     operation: (id: string, input: unknown) => Promise<Result<unknown>>,
   ) =>
   ({ [key]: id, ...input }: Record<string, unknown>): Promise<Result<unknown>> =>
@@ -527,7 +527,10 @@ const ownedBy =
   };
 
 /** A removal reply names only the removed id; removing an absent or removed id succeeds too. */
-const removal = (key: "agentId" | "flowId", remove: (id: string) => Promise<Result<void>>) =>
+export const removal = (
+  key: "agentId" | "flowId" | "triggerId",
+  remove: (id: string) => Promise<Result<void>>,
+) =>
   withId(key, async (id) => {
     const removed = await remove(id);
     return removed.ok ? { ok: true, value: { [key]: id, removed: true } } : removed;
@@ -639,21 +642,17 @@ export const textResult = (isError: boolean, reply: unknown): CallToolResult => 
   content: [{ type: "text", text: JSON.stringify(reply) }],
 });
 
-/** Answers an authoring tool call, or `undefined` when `name` is not an authoring tool. */
-export async function callAuthoringTool(
-  factory: AuthoringOperations,
-  name: string,
-  args: unknown,
-): Promise<CallToolResult | undefined> {
-  const calls = authoringCalls(factory);
-  if (!Object.hasOwn(calls, name)) return undefined;
-  const [subject, call] = calls[name]!;
-  const input = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
+export const toolArguments = (args: unknown) =>
+  typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
+
+export async function answerDefinitionCall(
+  steps: Partial<Record<string, string>>,
+  call: () => Promise<Result<unknown>>,
+): Promise<CallToolResult> {
   try {
-    const result = await call(input);
+    const result = await call();
     if (result.ok) return textResult(false, result.value);
     const { code, message, issues } = result.error;
-    const steps = nextSteps[subject];
     const issueNext = issues.map((issue) => steps[issue.code]).find((next) => next !== undefined);
     return textResult(true, {
       code,
@@ -666,7 +665,19 @@ export async function callAuthoringTool(
       code: "internal",
       message: "Factory could not complete this call.",
       issues: [],
-      next: unavailableNext,
+      next: steps.internal ?? unavailableNext,
     });
   }
+}
+
+/** Answers an authoring tool call, or `undefined` when `name` is not an authoring tool. */
+export async function callAuthoringTool(
+  factory: AuthoringOperations,
+  name: string,
+  args: unknown,
+): Promise<CallToolResult | undefined> {
+  const calls = authoringCalls(factory);
+  if (!Object.hasOwn(calls, name)) return undefined;
+  const [subject, call] = calls[name]!;
+  return answerDefinitionCall(nextSteps[subject], () => call(toolArguments(args)));
 }

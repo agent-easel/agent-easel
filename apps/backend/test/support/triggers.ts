@@ -8,16 +8,18 @@ import type {
   CreateTriggerInput,
   FactoryProject,
   TriggerDefinition,
+  TriggerSave,
   UpdateTriggerInput,
 } from "@t3-factory/contracts";
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
-import type { ControlledGitHub, ControlledIssue } from "./controlled-github.ts";
+import type { ControlledGitHub, ControlledIssue, GitHubCall } from "./controlled-github.ts";
 import { START_INSPECTIONS } from "./controlled-t3.ts";
 import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
 import { prepared, preparedService } from "./prepared-runner.ts";
+import { remotePrepared } from "./remote-clients.ts";
 import { triggerEnabled, triggerSaved } from "./scenarios.ts";
 
 /** The repository the prepared Project's folder names on GitHub. */
@@ -61,6 +63,16 @@ function watching(
     flowId: fixture.flow.id,
     github: { repositoryNodeId: repository.nodeId },
   } satisfies CreateTriggerInput;
+}
+
+export async function otherProjectWatcher(
+  world: Pick<Awaited<ReturnType<typeof triggerWorld>>, "f" | "github" | "triggerInput">,
+  name: string,
+) {
+  const other = await world.f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  world.github.repositories.set("/repos/other", atlasRepository);
+  return triggerSaved(world.f, { ...world.triggerInput, name, projectId: other.value.id });
 }
 
 /** The prepared Project as T3 lists it once the connection points at a remote T3. */
@@ -136,6 +148,36 @@ export async function reviewingWorld(c: TestContext, settings: TriggerSettings =
   const world = await triggerWorld(c);
   const trigger = await triggerSaved(world.f, { ...world.triggerInput, ...settings });
   return { ...world, trigger, readyIssue: readyIssues(world.github) };
+}
+
+export async function remoteCheckingWorld(c: TestContext): Promise<{
+  readonly f: Factory;
+  readonly project: FactoryProject;
+  readonly trigger: TriggerDefinition;
+  readonly runPath: string;
+  readonly send: (method: string, path: string, body?: unknown) => Promise<{ body: unknown }>;
+}> {
+  const world = await remotePrepared(c);
+  const created = await world.laptop.send<TriggerSave>(
+    "POST",
+    "/api/triggers",
+    watching(world, atlasRepository),
+  );
+  assert(created.body.ok);
+  const { id, revision } = created.body.value.trigger;
+  const enabled = await world.laptop.send<TriggerDefinition>("PUT", `/api/triggers/${id}/enabled`, {
+    enabled: true,
+    reviewedRevision: revision,
+  });
+  assert(enabled.body.ok);
+  readyIssues(world.github)(1, "Ready over REST");
+  return {
+    f: world.server.factory,
+    project: world.project,
+    trigger: enabled.body.value,
+    runPath: `/api/triggers/${id}/run`,
+    send: (method, path, body) => world.laptop.send(method, path, body),
+  };
 }
 
 /**
@@ -215,13 +257,14 @@ export async function startedIssues(f: Factory, projectId: string) {
     .sort((left, right) => left - right);
 }
 
-/**
- * Holds a check's first Start at its T3 contract snapshot until the test releases it. The check's
- * own launch-blocker read inspects T3 as that Start does.
- */
-export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
-  const { inspecting, release } = world.t3.contract.holdInspection(START_INSPECTIONS);
-  const checked = world.f.runTrigger(world.trigger.id);
+export async function pendingCheck(
+  world: Awaited<ReturnType<typeof checkingWorld>>,
+  startedFirst = 0,
+) {
+  const { inspecting, release } = world.t3.contract.holdInspection(
+    START_INSPECTIONS * (1 + startedFirst),
+  );
+  const checked = world.f.runTrigger(world.trigger.id, {});
   await inspecting;
   return { checked, release };
 }
@@ -237,9 +280,43 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
     entered();
     await held;
   };
-  const checked = world.f.runTrigger(world.trigger.id);
+  const checked = world.f.runTrigger(world.trigger.id, {});
   await reading;
   return { checked, release };
+}
+
+export function failingGitHubCall(github: ControlledGitHub, failing: GitHubCall) {
+  github.beforeAnswer = async (call) => {
+    if (call === failing) throw new Error("The connection to GitHub was reset.");
+  };
+}
+
+export function remoteMovesAfterFirstRead(
+  world: { readonly github: ControlledGitHub; readonly project: FactoryProject },
+  repository: GitHubRepository,
+) {
+  let reads = 0;
+  world.github.beforeAnswer = async (call) => {
+    if (call !== "repository" || ++reads < 2) return;
+    delete world.github.beforeAnswer;
+    world.github.repositories.set(world.project.workspaceRoot, repository);
+  };
+}
+
+type BlockableWorld = Pick<Awaited<ReturnType<typeof triggerWorld>>, "f" | "flow" | "t3">;
+
+export async function flowMovedAway(world: BlockableWorld) {
+  const other = await world.f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  const moved = await world.f.changeFlowOwner(world.flow.id, {
+    expectedProjectId: null,
+    projectId: other.value.id,
+  });
+  assert(moved.ok);
+}
+
+export function launchBlocked(world: BlockableWorld) {
+  world.t3.contract.support.launch = false;
 }
 
 /** Starts saving `edit` and holds it at GitHub's answer to its query, before anything is written. */

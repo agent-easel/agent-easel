@@ -33,7 +33,7 @@ it("a check starts the oldest ready issues, ties by number, up to the free slots
   world.readyIssue(4, "Same time, lower number", "2026-11-10T09:00:00.000Z");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -54,7 +54,7 @@ it("a Run the Trigger started that is neither Settled nor Archived takes its slo
   world.readyIssue(2, "Second");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -69,7 +69,7 @@ it("an issue Start keeps the repository prefix in the Run and worker titles", as
   const launch = world.t3.threads.nextLaunch();
 
   // Act
-  await world.f.runTrigger(world.trigger.id);
+  await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   const runs = await world.f.listRuns(world.project.id);
@@ -162,7 +162,7 @@ it("an issue whose Run ended before the worker claimed it does not start again w
   assert((await world.f.archiveRun(runs.value[0]!.id)).ok);
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -183,7 +183,7 @@ it("an issue whose ready label was removed and later added again starts again", 
   labelIssue(world.github, issue, "factory:ready");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -203,7 +203,7 @@ it("an issue relabelled between two checks starts again", async (c) => {
   labelIssue(world.github, issue, "factory:ready");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -224,7 +224,7 @@ it("an issue that left the query for another reason and returned with the same l
   issue.matchesQuery = true;
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -241,7 +241,7 @@ it("an issue Start rejected for a T3 blocker starts at the next check once the b
   world.t3.contract.support.launch = true;
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -258,7 +258,7 @@ it("a Start blocker sets the Error with Start's guidance and starts nothing", as
   world.t3.contract.support.launch = false;
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -287,7 +287,7 @@ it("a check whose Flow moved to another Project sets the Error and starts nothin
   );
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -307,7 +307,7 @@ it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", asyn
   issue.open = false;
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -347,7 +347,7 @@ it("a check that cannot read GitHub starts nothing, sets the Error with host gui
   world.github.signedIn = false;
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -372,7 +372,7 @@ it("a check whose label read fails starts none of the matching issues", async (c
   world.github.failures.set("labelStates", { reason: "timeout" });
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -387,7 +387,7 @@ it("a Project folder that now names another repository stops the check with a re
   world.github.repositories.set(world.project.workspaceRoot, movedRepository);
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -412,7 +412,7 @@ it("after its author reconfirms the Project's new repository, the next check cle
   assert(reconfirmed.ok);
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -429,7 +429,7 @@ it("a query GitHub rejects at check time becomes the Error", async (c) => {
   });
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -446,7 +446,7 @@ it("a problem that persists keeps its first sighting and counts the checks that 
   const first = await triggerChecked(world.f, world.trigger.id);
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -464,7 +464,7 @@ it("an issue Start rejects for itself is listed in the latest check while the ne
   world.readyIssue(2, "Ordinary");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -495,7 +495,7 @@ it("a check uses the Flow's latest saved revision", async (c) => {
   assert(saved.ok);
 
   // Act
-  await world.f.runTrigger(world.trigger.id);
+  await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   const runs = await world.f.listRuns(world.project.id);
@@ -512,12 +512,78 @@ it("a disabled Trigger refuses to check", async (c) => {
   assert((await world.f.setTriggerEnabled(world.trigger.id, { enabled: false })).ok);
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(!checked.ok);
   expect(checked.error.issues[0]?.code).toBe("trigger_disabled");
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a check bound to a revision another save replaced is refused, starts nothing and leaves the Trigger unchanged", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "Would start");
+  const shown = world.trigger.revision;
+  assert(
+    (await world.f.updateTrigger(world.trigger.id, triggerEdit(world.trigger, { name: "Renamed" })))
+      .ok,
+  );
+  const before = await world.f.getTrigger(world.trigger.id);
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id, { expectedRevision: shown });
+
+  // Assert
+  assert(!checked.ok);
+  expect(checked.error.code).toBe("conflict");
+  expect(checked.error.issues[0]).toMatchObject({
+    code: "stale_revision",
+    path: "expectedRevision",
+  });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual(before);
+});
+
+it("a check bound to the current revision runs", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "First");
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id, {
+    expectedRevision: world.trigger.revision,
+  });
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.startedRuns).toHaveLength(1);
+});
+
+it("a check without a revision still runs", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "First");
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id, {});
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.startedRuns).toHaveLength(1);
+});
+
+it("a check with a revision that is not a positive integer is a validation refusal", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id, { expectedRevision: "2" });
+
+  // Assert
+  assert(!checked.ok);
+  expect(checked.error.code).toBe("validation");
+  expect(checked.error.issues[0]).toMatchObject({ code: "trigger_revision" });
 });
 
 it("two checks of one Trigger racing start a ready issue once", async (c) => {
@@ -527,8 +593,8 @@ it("two checks of one Trigger racing start a ready issue once", async (c) => {
 
   // Act
   const checks = await Promise.all([
-    world.f.runTrigger(world.trigger.id),
-    world.f.runTrigger(world.trigger.id),
+    world.f.runTrigger(world.trigger.id, {}),
+    world.f.runTrigger(world.trigger.id, {}),
   ]);
 
   // Assert
@@ -565,9 +631,56 @@ it("removing a Trigger while its Start is in preflight accepts no Run", async (c
   const checked = await pending.checked;
 
   // Assert
-  assert(!checked.ok);
-  expect(checked.error.code).toBe("not_found");
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({ startedRuns: [], latestCheck: { started: 0 } });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("removing a Trigger after its check started a Run still answers the Run that check started", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { maxActiveRuns: 2 });
+  world.readyIssue(1, "Started before the removal", "2026-11-10T09:00:00.000Z");
+  world.readyIssue(2, "Reached after the removal", "2026-11-10T10:00:00.000Z");
+  const pending = await pendingCheck(world, 1);
+  assert((await world.f.removeTrigger(world.trigger.id)).ok);
+
+  // Act
+  pending.release();
+  const checked = await pending.checked;
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({
+    revision: world.trigger.revision,
+    startedRuns: [{ title: expect.stringContaining("Started before the removal") }],
+    latestCheck: { started: 1, waiting: 0 },
+  });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
+});
+
+it("saving a Trigger after its check started a Run answers that Run under the revision the check ran", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { maxActiveRuns: 2 });
+  world.readyIssue(1, "Started before the save", "2026-11-10T09:00:00.000Z");
+  world.readyIssue(2, "Reached after the save", "2026-11-10T10:00:00.000Z");
+  const pending = await pendingCheck(world, 1);
+  assert(
+    (await world.f.updateTrigger(world.trigger.id, triggerEdit(world.trigger, { name: "Renamed" })))
+      .ok,
+  );
+
+  // Act
+  pending.release();
+  const checked = await pending.checked;
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({
+    name: world.trigger.name,
+    revision: world.trigger.revision,
+    startedRuns: [{ title: expect.stringContaining("Started before the save") }],
+    latestCheck: { started: 1, waiting: 0 },
+  });
 });
 
 it("saving a Trigger while its Start is in preflight accepts no Run under the older settings", async (c) => {
@@ -609,7 +722,7 @@ it("a Run that returned to Active may exceed Max active Runs, and new issues wai
   world.readyIssue(3, "Waits");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -627,7 +740,7 @@ it("after a crash during an issue's Start preflight, the next check starts that 
   const recovered = await reopenedAfterCrashedCheck(world, "preflight");
 
   // Act
-  const checked = await recovered.runTrigger(world.trigger.id);
+  const checked = await recovered.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -642,7 +755,7 @@ it("after a crash once Start accepted an issue's Run, the next check starts no s
   const recovered = await reopenedAfterCrashedCheck(world, "accepted");
 
   // Act
-  const checked = await recovered.runTrigger(world.trigger.id);
+  const checked = await recovered.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);
@@ -657,7 +770,7 @@ it("a Trigger skips its ready issue when the issue has a merged closing PR", asy
     "https://github.com/factory-maintainer/atlas/pull/12";
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);

@@ -125,11 +125,21 @@ export function matchingTriggerName(
 /** The settings a save would send, validated, or why they cannot be sent. */
 type TriggerProposal =
   | { readonly error: string }
-  | { readonly kind: "update"; readonly id: string; readonly input: UpdateTriggerInput }
+  | {
+      readonly kind: "update";
+      readonly id: string;
+      readonly input: UpdateTriggerInput;
+      readonly body: UpdateTriggerInput;
+    }
   | { readonly kind: "create"; readonly input: CreateTriggerInput & TriggerReviewedFields };
 
 /** The fields a create sends in full, so a review can describe them. */
 type TriggerReviewedFields = Required<Pick<CreateTriggerInput, "schedule" | "maxActiveRuns">>;
+
+function updateBody(trigger: TriggerDefinition, input: UpdateTriggerInput): UpdateTriggerInput {
+  const { repositoryNodeId, ...github } = input.github;
+  return repositoryNodeId === trigger.github.repository.nodeId ? { ...input, github } : input;
+}
 
 function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent): TriggerProposal {
   if (content.projectId && !content.repository)
@@ -139,7 +149,7 @@ function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent):
     const input = { ...settings, expectedRevision: trigger.revision };
     const validation = validateUpdateTrigger(input);
     if (!validation.ok) return { error: validation.error.message };
-    return { kind: "update", id: trigger.id, input };
+    return { kind: "update", id: trigger.id, input, body: updateBody(trigger, input) };
   }
   const validation = validateCreateTrigger(settings);
   if (!validation.ok) return { error: validation.error.message };
@@ -157,7 +167,7 @@ function saveRequest(
   if (proposal.kind === "update")
     return {
       submitted: content,
-      send: () => source.updateTrigger(proposal.id, proposal.input).then((save) => save.trigger),
+      send: () => source.updateTrigger(proposal.id, proposal.body).then((save) => save.trigger),
       unknownMessage:
         "Save outcome unknown. Factory may have saved this Trigger; your edits are kept and nothing is retried.",
       fallback,
@@ -307,6 +317,7 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     },
     dismissUpdate: draft.dismissUpdate,
     compare: draft.compare,
+    noteStaleRevision: draft.noteStaleRevision,
     loadLatest: draft.takeLatest,
     keepEdits(revision: number) {
       draft.keep(revision);

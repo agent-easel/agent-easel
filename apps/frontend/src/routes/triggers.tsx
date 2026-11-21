@@ -38,7 +38,6 @@ import {
 import { reviewSummary, type TriggerNames } from "../components/studio-triggers/trigger-text.ts";
 import {
   EditorNotices,
-  otherRepositoryWatchers,
   SharedRepositoryCard,
   TriggerFieldNotices,
 } from "../components/studio-triggers/trigger-notices.tsx";
@@ -66,7 +65,7 @@ export function StudioTriggersPage({
   };
   const actions = useTriggerActions(definitions);
   // Shared by the list's switches and Create, and kept open when Create opens the new Trigger.
-  const enabling = useEnableReview(names, actions, triggers.value);
+  const enabling = useEnableReview(names, actions);
   const serverId = useServerId();
   // This window's own Create, answered before Studio may have delivered it.
   const [created, setCreated] = useState<TriggerDefinition | null>(null);
@@ -188,7 +187,7 @@ function useOpenedTriggerDraft(
   useEffect(() => draft.connect(), [draft]);
   useDraftGuard(draft, draftId, reportDraft);
   const state = useTriggerDraftSnapshot(draft);
-  const { read, retry } = useTriggerReadiness(state.content.projectId);
+  const { read, retry } = useTriggerReadiness(state.content.projectId, trigger?.id ?? "");
   const readiness = read.status === "answered" ? read.readiness : undefined;
   const answer = readiness?.repository;
   useEffect(() => {
@@ -234,12 +233,13 @@ function useTriggerEditor({
   const [checked, setChecked] = useState<TriggerCheckReply>();
   const pending = shown ? actions.state.pending.get(shown.id) : undefined;
   const { content } = state;
-  const triggers = useStudioRead(definitions, "triggers").value;
   const validation = triggerFormReadiness(state, names, host);
   const { canSave } = validation;
   const ghProblem = readinessNotice(validation.ghProblem, shown?.error?.code);
   const repositoryName = content.repository?.nameWithOwner ?? "";
-  const watchers = otherRepositoryWatchers(triggers, content.repository, shown?.id);
+  const warnings =
+    host.readiness?.repositoryWarnings.find((entry) => entry.nodeId === content.repository?.nodeId)
+      ?.warnings ?? [];
 
   async function finishSave(enable: boolean) {
     const saved = await draft.save();
@@ -254,8 +254,10 @@ function useTriggerEditor({
   }
 
   async function check(target: TriggerDefinition) {
-    const result = await actions.run(target);
-    if (result) setChecked(result);
+    const outcome = await actions.run(target);
+    if (!outcome) return;
+    if ("refused" in outcome) draft.noteStaleRevision(target.revision);
+    else setChecked(outcome.checked);
   }
 
   const saveOff = () => void finishSave(false);
@@ -264,7 +266,6 @@ function useTriggerEditor({
     definitions,
     names,
     repositoryName,
-    watchers,
     enabled: shown?.enabled === true,
     saveOff,
   });
@@ -289,7 +290,7 @@ function useTriggerEditor({
     canSubmit,
     closeBlocked,
     fieldsLocked,
-    sharedRepository: { watchers, repository: repositoryName },
+    sharedRepository: { warnings, repository: repositoryName },
     reviewActions: { review, reviewDraft, closeReview, finishSave },
     check,
     saveOff,
@@ -427,13 +428,11 @@ function visibleCheck(checked: TriggerCheckReply | undefined, shown: TriggerDefi
   return checked;
 }
 
-/** A review captures the proposal to preview, while the repository warning follows Studio. */
 function useDraftReview({
   draft,
   definitions,
   names,
   repositoryName,
-  watchers,
   enabled,
   saveOff,
 }: {
@@ -441,11 +440,10 @@ function useDraftReview({
   definitions: StudioDefinitions;
   names: TriggerNames;
   repositoryName: string;
-  watchers: readonly TriggerDefinition[];
   enabled: boolean;
   saveOff: () => void;
 }) {
-  const [review, setReview] = useState<Omit<TriggerReview, "watchers"> | null>(null);
+  const [review, setReview] = useState<TriggerReview | null>(null);
   function reviewDraft() {
     const proposal = draft.proposal();
     const { saved } = draft.getSnapshot();
@@ -479,7 +477,7 @@ function useDraftReview({
   }
 
   return {
-    review: review && { ...review, watchers },
+    review,
     reviewDraft,
     closeReview: () => setReview(null),
   };

@@ -291,7 +291,10 @@ It is set up and managed in [Studio → Triggers](studio.md#triggers); this sect
   interval sets it one interval ahead, and each scheduled check sets the next one to its completion plus the interval
   (1 minute to 24 hours, default 5 minutes). Factory runs exactly one overdue check after a restart or sleep and never
   replays missed checks. **Run** performs one check of an enabled Trigger whether or not its schedule is on, obeys
-  every limit and leaves the deadline unchanged. Checks of one Trigger never overlap; disabled Triggers never check.
+  every limit and leaves the deadline unchanged. It may name the Trigger revision it was asked to run: when the Trigger
+  has been saved or enabled since, the check is refused before GitHub is read and starts nothing. Studio's **Check now**
+  and [`factory_run_trigger_check`](t3-integration.md#trigger-tools), which requires the revision, always name one;
+  scheduled checks never do. Checks of one Trigger never overlap; disabled Triggers never check.
 - **Recovery.** A guard is written before Start is called and gains its Run inside the acceptance transaction, so after
   a crash a guard without a Run that no check holds was never accepted. The next check deletes it, without calling Start,
   and starts the issue again if it is still labelled; an accepted Start is never repeated.

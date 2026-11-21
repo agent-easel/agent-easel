@@ -5,7 +5,9 @@ import { triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,
   movedRepository,
+  otherProjectWatcher,
   pendingTriggerUpdate,
+  remoteCheckingWorld,
   remoteProject,
   reviewingWorld,
   startedIssues,
@@ -300,6 +302,35 @@ it("an edit saved from an older revision is refused and the newer settings stay"
   expect(current.value).toMatchObject({ name: "Laptop edit", revision: 2 });
 });
 
+it("an edit from an older revision is refused as stale before the Project's moved remote is read", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  assert(
+    (
+      await world.f.updateTrigger(
+        world.trigger.id,
+        triggerEdit(world.trigger, { name: "Laptop edit" }),
+      )
+    ).ok,
+  );
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+
+  // Act
+  const saved = await world.f.updateTrigger(
+    world.trigger.id,
+    triggerEdit(world.trigger, {
+      github: { repositoryNodeId: "R_atlas", query: "label:factory:ready" },
+    }),
+  );
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "stale_revision", path: "expectedRevision" }],
+  });
+});
+
 it("reconfirming the Project's new repository with the same Project and query saves that repository", async (c) => {
   // Arrange
   const { f, github, project, triggerInput } = await triggerWorld(c);
@@ -339,6 +370,73 @@ it("reconfirming a repository the Project does not name is refused and the saved
   assert(!saved.ok);
   expect(saved.error.issues[0]?.code).toBe("trigger_repository_mismatch");
   expect(await f.getTrigger(trigger.id)).toStrictEqual({ ok: true, value: trigger });
+});
+
+it("an edit naming the saved repository is refused once the Project's remote names another, and the saved settings stay", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+
+  // Act
+  const saved = await world.f.updateTrigger(
+    world.trigger.id,
+    triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+  );
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "trigger_repository_mismatch", path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
+});
+
+it("an edit that leaves out the repository keeps the saved one without reading the Project's moved remote", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  world.github.calls.length = 0;
+
+  // Act
+  const saved = await world.f.updateTrigger(world.trigger.id, {
+    ...triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+    github: { query: world.trigger.github.query },
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.trigger).toMatchObject({
+    maxActiveRuns: 2,
+    revision: world.trigger.revision + 1,
+    github: { repository: { nodeId: atlasRepository.nodeId } },
+  });
+  expect(world.github.calls).toStrictEqual([]);
+});
+
+it("an edit whose repository node id is null is refused and the saved settings stay", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+
+  // Act
+  const saved = await world.f.updateTrigger(world.trigger.id, {
+    ...triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+    github: { repositoryNodeId: null, query: world.trigger.github.query },
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error).toMatchObject({
+    code: "validation",
+    issues: [{ path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
 });
 
 it("enabling with the revision a review showed is refused once a newer revision was saved, and the Trigger stays off", async (c) => {
@@ -408,7 +506,7 @@ it("readiness names the login @me resolves to, the Project's repository and the 
   const { f, project, flow } = await triggerWorld(c);
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, flow.id);
+  const readiness = await f.getTriggerReadiness(project.id, flow.id, "");
 
   // Assert
   expect(readiness).toStrictEqual({
@@ -416,9 +514,84 @@ it("readiness names the login @me resolves to, the Project's repository and the 
     value: {
       gitHub: { ready: true, login: "factory-maintainer" },
       repository: { ready: true, repository: atlasRepository },
+      repositoryWarnings: [{ nodeId: "R_atlas", warnings: [] }],
       flow: { ready: true, issues: [] },
     },
   });
+});
+
+it("readiness for a new draft warns that other Triggers watch the Project's repository", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  await triggerSaved(world.f, world.triggerInput);
+  await otherProjectWatcher(world, "Docs issues");
+
+  // Act
+  const readiness = await world.f.getTriggerReadiness(world.project.id, "", "");
+
+  // Assert
+  assert(readiness.ok);
+  expect(readiness.value.repositoryWarnings).toStrictEqual([
+    {
+      nodeId: "R_atlas",
+      warnings: [
+        {
+          code: "trigger_repository_shared",
+          path: "projectId",
+          message:
+            "Triggers Docs issues, Ready issues already watch factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+        },
+      ],
+    },
+  ]);
+});
+
+it("readiness for a Trigger's editor never names the Trigger being edited", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  await otherProjectWatcher(world, "Docs issues");
+
+  // Act
+  const readiness = await world.f.getTriggerReadiness(world.project.id, "", world.trigger.id);
+
+  // Assert
+  assert(readiness.ok);
+  expect(readiness.value.repositoryWarnings).toMatchObject([
+    {
+      nodeId: "R_atlas",
+      warnings: [
+        {
+          message:
+            "Trigger Docs issues already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+        },
+      ],
+    },
+  ]);
+});
+
+it("readiness for a Trigger's editor still warns about its confirmed repository after the Project's remote moved", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  await otherProjectWatcher(world, "Docs issues");
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+
+  // Act
+  const readiness = await world.f.getTriggerReadiness(world.project.id, "", world.trigger.id);
+
+  // Assert
+  assert(readiness.ok);
+  expect(readiness.value.repositoryWarnings).toMatchObject([
+    { nodeId: "R_other", warnings: [] },
+    {
+      nodeId: "R_atlas",
+      warnings: [
+        {
+          message:
+            "Trigger Docs issues already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+        },
+      ],
+    },
+  ]);
 });
 
 it("readiness reports gh missing from the Factory host", async (c) => {
@@ -427,7 +600,7 @@ it("readiness reports gh missing from the Factory host", async (c) => {
   github.found = false;
 
   // Act
-  const readiness = await f.getTriggerReadiness("", "");
+  const readiness = await f.getTriggerReadiness("", "", "");
 
   // Assert
   assert(readiness.ok);
@@ -447,7 +620,7 @@ it("readiness reports gh signed out on the Factory host", async (c) => {
   github.signedIn = false;
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, "");
+  const readiness = await f.getTriggerReadiness(project.id, "", "");
 
   // Assert
   assert(readiness.ok);
@@ -464,7 +637,7 @@ it("readiness reports a repository the host's login cannot read", async (c) => {
   github.failures.set("repository", { reason: "unreadable", message: "Not Found (HTTP 404)" });
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, "");
+  const readiness = await f.getTriggerReadiness(project.id, "", "");
 
   // Assert
   assert(readiness.ok);
@@ -495,4 +668,69 @@ it("an approved client creates a Trigger over REST that the host lists", async (
     ok: true,
     value: [reply.body.value.trigger],
   });
+});
+
+it("a run check over REST without a body checks whatever is saved", async (c) => {
+  // Arrange
+  const world = await remoteCheckingWorld(c);
+
+  // Act
+  const reply = await world.send("POST", world.runPath);
+
+  // Assert
+  expect(reply.body).toMatchObject({ ok: true, value: { revision: world.trigger.revision } });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
+});
+
+it("a run check over REST with a stale expectedRevision is refused as a conflict and starts nothing", async (c) => {
+  // Arrange
+  const world = await remoteCheckingWorld(c);
+
+  // Act
+  const reply = await world.send("POST", world.runPath, {
+    expectedRevision: world.trigger.revision - 1,
+  });
+
+  // Assert
+  expect(reply.body).toMatchObject({
+    ok: false,
+    error: { code: "conflict", issues: [{ code: "stale_revision" }] },
+  });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a run check over REST whose JSON body is null is refused and starts nothing", async (c) => {
+  // Arrange
+  const world = await remoteCheckingWorld(c);
+
+  // Act
+  const reply = await world.send("POST", world.runPath, null);
+
+  // Assert
+  expect(reply.body).toMatchObject({ ok: false, error: { code: "validation" } });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a run check over REST whose JSON body is an array is refused and starts nothing", async (c) => {
+  // Arrange
+  const world = await remoteCheckingWorld(c);
+
+  // Act
+  const reply = await world.send("POST", world.runPath, [{ expectedRevision: 2 }]);
+
+  // Assert
+  expect(reply.body).toMatchObject({ ok: false, error: { code: "validation" } });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a run check over REST whose JSON body is a number is refused and starts nothing", async (c) => {
+  // Arrange
+  const world = await remoteCheckingWorld(c);
+
+  // Act
+  const reply = await world.send("POST", world.runPath, 2);
+
+  // Assert
+  expect(reply.body).toMatchObject({ ok: false, error: { code: "validation" } });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
