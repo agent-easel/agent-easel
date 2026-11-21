@@ -768,9 +768,9 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
   carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
   missing or removed. There is no fallback to local ids or names.
 
-Export refuses a file another installation could not import. A definition save request is limited to 2 MB, the file to 16 MiB,
-and the version-3 Flow graph to 500 blocks including Finish. A legacy Flow with 500 ordinary blocks can still be saved at that
-size. Export becomes available once the graph has at most 499 ordinary blocks.
+Export refuses a file another installation could not import. A definition save request is limited to 2 MB and the file to 16 MiB.
+Version-3 import and export allow 500 ordinary blocks when Finish has no endings. A Finish with endings counts toward the
+500-block limit. An existing Flow at the former block limit remains editable at that size.
 
 **Format versions.** Import reads versions 1, 2 and 3, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its

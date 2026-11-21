@@ -30,7 +30,8 @@ No Subflow field is stored by the Finish block delivery.
 
 ## Implementation constraints
 
-- The Finish block is always present and counts toward the limit for authored Flows and for version-3 imports and exports.
+- The Finish block is always present and counts toward the limit for authored Flows. In version-3 imports and exports,
+  Finish counts when it has endings. This lets full-size legacy Flows be shared with all their blocks and an empty Finish.
   Version-1 and version-2 imports and already-saved Flows can keep up to 500 ordinary Blocks. An ending delivery has its
   own target identity, so an ordinary Block with the ID `finish` keeps its wires and runtime history. Canvas selection
   and layout identify the Finish block and its ports separately from ordinary Blocks.

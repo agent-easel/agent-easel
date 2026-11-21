@@ -660,7 +660,7 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
         ),
       },
     },
-    reader.finish ? "current" : "legacy",
+    "portable",
   );
   if (!validated.ok)
     return rejected(

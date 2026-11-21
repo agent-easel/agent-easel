@@ -16,11 +16,11 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
-  currentFlowSizeIssue,
   definitionSaveFits,
   hintedSelection,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,
+  portableFlowSizeIssue,
   resolveAgentModel,
 } from "@t3-factory/domain-validation";
 import type { AgentRevision } from "./agent-revisions.ts";
@@ -113,7 +113,7 @@ export function definitionExport<Document extends PortableDocument>(
       : [tooLarge(`agents.${index}`, `Agent "${agent.name}"`)];
   });
   if (flow) {
-    const size = currentFlowSizeIssue(flow.graph);
+    const size = portableFlowSizeIssue(flow.graph);
     if (size) issues.push({ ...size, path: `flow.${size.path}` });
     if (!definitionSaveFits({ name: flow.name, graph: flow.graph, workspace: flow.workspace }))
       issues.push(tooLarge("flow", `Flow "${flow.name}"`));
