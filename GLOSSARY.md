@@ -417,11 +417,12 @@ The card mentions nobody and omits results, report bodies and prompts. See
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
 **Run notice**:
-A new Discord message in a chat-started Run's originating thread only when the Run needs someone: an
-attention notice for new Needs input or Problem matters, or one catch-up per Run for such matters that
-accrued while Factory could not post. On create, it pings the Run's requester while saved Access
-allows that user. Resolving a matter edits the notice in place and removes the mention. A reply to a
+A new Discord message in a chat-started Run's originating thread. An attention notice reports new
+Needs input or Problem matters. A catch-up reports such matters that accrued while Factory could
+not post. A completion notice says a Run became Settled and invites a reply, once per Settled cycle.
+On create, a Run notice pings the Run's requester while saved Access allows that user. Resolving
+a matter edits its attention notice or catch-up in place and removes the mention. A reply to a
 notice from the operating application identifies the Run for a fresh scoped read. See
 [Chat control](docs/chat-control.md#attention-notices).
-_Avoid_: Notices for Block transitions or lifecycle changes; replaying matters that opened and resolved
-while Factory could not post; answer buttons on a notice.
+_Avoid_: Notices for ordinary Block transitions or Archive, replaying matters that opened and resolved
+while Factory could not post, answer buttons on a notice.
