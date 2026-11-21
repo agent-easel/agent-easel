@@ -27,8 +27,6 @@ export default defineConfig({
     include: ["test/*.test.ts"],
     // Parallel workspace runners must not clear or write each other's module cache.
     fsModuleCachePath: fileURLToPath(new URL("./node_modules/.vitest-cache", import.meta.url)),
-    // SQLite, process ownership and frozen upgrade fixtures use real local resources, so each
-    // file runs in its own process with its own temporary home and loopback ports.
     pool: "forks",
     isolate: false,
     testTimeout: 120_000,
