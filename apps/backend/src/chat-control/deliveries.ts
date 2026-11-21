@@ -14,6 +14,7 @@ import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import type { ConfirmationButton, DisabledButton } from "./confirmation-buttons.ts";
+import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 import { catchUpNotices } from "./report-notices.ts";
 import { withApplicationNotice } from "./status-cards.ts";
 
@@ -22,6 +23,12 @@ export interface Destination {
   readonly guildId: string;
   readonly parentChannelId: string;
   readonly threadId: string;
+}
+
+export interface CreateMessageOptions {
+  readonly nonce: string;
+  readonly button?: ConfirmationButton;
+  readonly requesterId?: string;
 }
 
 /**
@@ -36,7 +43,7 @@ export interface DiscordSender {
   readonly create: (
     destination: Destination,
     text: string,
-    options: { readonly nonce: string; readonly button?: ConfirmationButton },
+    options: CreateMessageOptions,
   ) => Promise<string>;
   readonly edit: (destination: Destination, messageId: string, text: string) => Promise<void>;
   readonly disable: (
@@ -94,7 +101,7 @@ const PROBLEMS: Record<SendFailure, string> = {
   transient: "Discord asked Factory to slow down. Factory retries automatically.",
   rejected:
     "Discord refused the message. Check that the thread still exists, is not locked or archived beyond reach, and that the bot can view it and send messages there, then retry.",
-  unknown: "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
+  unknown: UNKNOWN_CREATE_PROBLEM,
 };
 
 /** Corrections Factory can name from Discord's error code; others get the general refusal. */
@@ -180,7 +187,14 @@ export const nonceOf = (...intent: readonly string[]) =>
 /** How one create intent ended: Discord's message ID, or what its failure proves. */
 type Created =
   | { readonly messageId: string }
+  | { readonly withdrawn: true; readonly unproven: boolean }
   | { readonly failure: SendFailure; readonly cause: unknown };
+
+function createRefusal(failure: SendFailure, unproven: boolean): SendFailure | undefined {
+  if (failure === "unknown") return undefined;
+  if (!unproven) return failure;
+  return failure === "rejected" ? "unknown" : undefined;
+}
 
 /**
  * Creates one message under its intent's nonce. When no answer proves whether Discord created it,
@@ -194,22 +208,24 @@ export const createDeduplicated = (
   sender: DiscordSender,
   destination: Destination,
   text: string,
-  nonce: string,
-  button?: ConfirmationButton,
+  options: Omit<CreateMessageOptions, "requesterId">,
+  createAccess: Effect.Effect<
+    Pick<CreateMessageOptions, "requesterId"> | false,
+    unknown
+  > = Effect.succeed({}),
 ) =>
-  Effect.gen(function* (): Effect.fn.Return<Created> {
+  Effect.gen(function* (): Effect.fn.Return<Created, unknown> {
     const firstAt = yield* Clock.currentTimeMillis;
     let unproven = false;
     for (let requests = 1; ; requests++) {
+      const access = yield* createAccess;
+      if (access === false) return { withdrawn: true, unproven };
       const sent = yield* Effect.result(
-        bounded(() =>
-          sender.create(destination, text, { nonce, ...(button === undefined ? {} : { button }) }),
-        ),
+        bounded(() => sender.create(destination, text, { ...options, ...access })),
       );
       if (sent._tag === "Success") return { messageId: sent.success };
-      const failure = sendFailure(sent.failure.cause);
-      if (failure === "rejected" || (failure === "transient" && !unproven))
-        return { failure: unproven ? "unknown" : failure, cause: sent.failure.cause };
+      const refusal = createRefusal(sendFailure(sent.failure.cause), unproven);
+      if (refusal) return { failure: refusal, cause: sent.failure.cause };
       unproven = true;
       const elapsed = (yield* Clock.currentTimeMillis) - firstAt;
       if (requests >= DEDUPLICATED_REQUESTS || elapsed >= DEDUPLICATION_WINDOW_MS)
@@ -224,6 +240,37 @@ const destinationOf = (row: DeliveryRow): Destination => ({
   parentChannelId: row.parent_channel_id,
   threadId: row.thread_id,
 });
+
+const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
+  "attention",
+  "catch-up",
+  "completion",
+];
+
+const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
+  Effect.map(
+    sql<{ user_id: string | null }>`SELECT (
+      SELECT u.user_id FROM chat_run_origins o
+      JOIN chat_actions a ON a.id=o.action_id
+      JOIN chat_proposals p ON p.id=a.proposal_id
+      JOIN chat_access_users u ON u.user_id=p.requester_id
+      WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
+    ) AS user_id FROM chat_deliveries d
+      WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${REVOKED_CREATE}`,
+    ([access]) => {
+      if (!access) return false as const;
+      return access.user_id === null ? {} : { requesterId: access.user_id };
+    },
+  );
+
+export const publishedRun =
+  (sql: SqlClient.SqlClient, applicationId: string) => (threadId: string, messageId: string) =>
+    Effect.map(
+      sql<{ run_id: string }>`SELECT run_id FROM chat_deliveries
+        WHERE purpose IN ${sql.in(["status-card", ...REQUESTER_NOTICE_PURPOSES])}
+        AND thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
+      ([row]) => row?.run_id,
+    );
 
 /**
  * A serving session's wakeable loop: `run` performs `pass`, then waits until the time it returns
@@ -309,7 +356,10 @@ const problemOf = (row: DeliveryRow): ChatDeliveryProblem => ({
  * the host's warned Retry sends it again, one attempt at a time. Delivery is attempted only while a
  * verified session operates, and never changes the action it reports.
  */
-export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
+export const makeChatDeliveries = (
+  sql: SqlClient.SqlClient,
+  cardChanged: (runId: string) => void,
+) =>
   Effect.gen(function* () {
     /** The serving session's dispatcher, while one serves. */
     const dispatcher = wakeableLoop();
@@ -325,7 +375,29 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
         const at = yield* now;
         const problem = fields.problem ?? null;
         yield* sql`UPDATE chat_deliveries SET state=${fields.state},next_attempt_at=${fields.next_attempt_at ?? null},
-          problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id}`;
+          problem=${problem},problem_at=${problem === null ? null : at} WHERE id=${id} AND state='sending'`;
+      });
+
+    const recordUnpostedCreate = (row: DeliveryRow, problem: string | null, retryable = false) =>
+      Effect.gen(function* () {
+        const at = yield* now;
+        const next = retryable
+          ? new Date(Date.parse(at) + backoffMs(row.attempts)).toISOString()
+          : null;
+        const state = problem === null ? "cancelled" : retryable ? "owed" : "failed";
+        const revoked = sql`problem=${REVOKED_CREATE}`;
+        const [updated] = yield* sql<Pick<DeliveryRow, "state" | "run_id">>`UPDATE chat_deliveries
+          SET state=CASE WHEN ${revoked} THEN 'cancelled' ELSE ${state} END,
+            next_attempt_at=CASE WHEN ${revoked} THEN NULL ELSE ${next} END,
+            problem=CASE WHEN ${revoked} THEN NULL ELSE ${problem} END,
+            problem_at=CASE WHEN ${revoked} THEN NULL ELSE ${problem === null ? null : at} END
+          WHERE id=${row.id} AND state='sending' RETURNING state,run_id`;
+        if (
+          row.purpose === "status-card" &&
+          updated?.state === "cancelled" &&
+          updated.run_id !== null
+        )
+          cardChanged(updated.run_id);
       });
 
     /** Owed again after a wait: 1 s doubling to five minutes over consecutive attempts. */
@@ -441,51 +513,68 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
         yield* record(row.id, { state: "failed", problem: correction(edited.failure) });
       });
 
+    const attemptCreate = (sender: DiscordSender, due: DeliveryRow, request: Request) =>
+      Effect.gen(function* () {
+        // Discord accepts posts in a locked thread from a bot holding Manage Threads, but a lock
+        // stops Factory's sends until moderators lift it. An unreadable state leaves the create
+        // to classify its own refusal.
+        const lock = yield* Effect.result(request(() => sender.locked(destinationOf(due))));
+        if (lock._tag === "Success" && lock.success) {
+          const at = yield* now;
+          yield* sql`UPDATE chat_deliveries
+            SET state=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN 'unknown' ELSE 'failed' END,
+            next_attempt_at=NULL,problem=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN problem
+              ELSE ${CORRECTIONS[DISCORD_CODES.locked]!} END,problem_at=${at}
+            WHERE id=${due.id} AND state='owed'`;
+          return;
+        }
+        // Intent before the create: a crash from here on leaves an unknown delivery, never a
+        // silent repeat.
+        const [row] = yield* sql<DeliveryRow>`UPDATE chat_deliveries SET
+          state='sending',attempts=attempts+1
+          WHERE id=${due.id} AND state='owed' RETURNING *`;
+        if (!row) return;
+        const sent = yield* createDeduplicated(
+          sender,
+          destinationOf(row),
+          row.text,
+          { nonce: nonceOf("delivery", row.id) },
+          deliveryCreateAccess(sql, row.id),
+        ).pipe(
+          Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
+        );
+        if ("messageId" in sent) return yield* delivered(row, sent.messageId, sender.applicationId);
+        if (
+          row.problem === UNKNOWN_CREATE_PROBLEM ||
+          ("withdrawn" in sent ? sent.unproven : sent.failure === "unknown")
+        )
+          return yield* record(row.id, { state: "unknown", problem: PROBLEMS.unknown });
+        if ("withdrawn" in sent) return yield* recordUnpostedCreate(row, null);
+        if (sent.failure === "transient")
+          return yield* recordUnpostedCreate(row, PROBLEMS.transient, true);
+        yield* recordUnpostedCreate(row, correction(sent.cause));
+      });
+
     /**
      * One attempt for one owed delivery. A dispatched request finishes even when its session is
      * released meanwhile, so whatever Discord answered is recorded; each request is bounded, and
      * an unanswered create is unknown while an unanswered edit is simply repeated later.
      */
     const attempt = (sender: DiscordSender, row: DeliveryRow) =>
-      Effect.uninterruptible(attemptOnce(sender, row, bounded));
-
-    const attemptOnce = (sender: DiscordSender, row: DeliveryRow, request: Request) =>
-      Effect.gen(function* () {
-        if (!(yield* destinationPermitted(sql, row))) {
-          yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id}`;
-          return;
-        }
-        if (row.message_id !== null)
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          if (!(yield* destinationPermitted(sql, row))) {
+            yield* sql`UPDATE chat_deliveries
+              SET state=CASE WHEN problem=${UNKNOWN_CREATE_PROBLEM} THEN 'unknown' ELSE 'cancelled' END,
+                next_attempt_at=NULL WHERE id=${row.id} AND state='owed'`;
+            return;
+          }
+          if (row.message_id === null) return yield* attemptCreate(sender, row, bounded);
           return yield* row.sent_by_application_id === sender.applicationId
-            ? attemptEdit(sender, row, request)
+            ? attemptEdit(sender, row, bounded)
             : messageRetired(row);
-        // Discord accepts posts in a locked thread from a bot holding Manage Threads, but a lock
-        // stops Factory's sends until moderators lift it. An unreadable state leaves the create
-        // to classify its own refusal.
-        const lock = yield* Effect.result(request(() => sender.locked(destinationOf(row))));
-        if (lock._tag === "Success" && lock.success) {
-          yield* record(row.id, { state: "failed", problem: CORRECTIONS[DISCORD_CODES.locked]! });
-          return;
-        }
-        const attempts = row.attempts + 1;
-        // Intent before the create: a crash from here on leaves an unknown delivery, never a
-        // silent repeat.
-        yield* sql`UPDATE chat_deliveries SET state='sending',attempts=${attempts} WHERE id=${row.id} AND state='owed'`;
-        const sent = yield* createDeduplicated(
-          sender,
-          destinationOf(row),
-          row.text,
-          nonceOf("delivery", row.id),
-        ).pipe(
-          Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
-        );
-        if ("messageId" in sent) return yield* delivered(row, sent.messageId, sender.applicationId);
-        if (sent.failure === "transient") return yield* later(row.id, attempts, PROBLEMS.transient);
-        yield* record(row.id, {
-          state: sent.failure === "rejected" ? "failed" : "unknown",
-          problem: sent.failure === "rejected" ? correction(sent.cause) : PROBLEMS.unknown,
-        });
-      });
+        }),
+      );
 
     /** Attempts every due delivery once; the time of the next due attempt, if any. */
     const deliverDue = (sender: DiscordSender) =>
@@ -557,17 +646,29 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
             ],
           );
         if (!(yield* destinationPermitted(sql, row))) {
+          if (row.purpose !== "completion" && row.state === "unknown")
+            return failure("conflict", "Access no longer permits this destination.");
           yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id}`;
           return failure(
             "conflict",
             "Access no longer permits this destination; the message was cancelled.",
           );
         }
-        yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,problem=NULL,problem_at=NULL
-          WHERE id=${row.id} AND state=${row.state}`;
-        dispatcher.wake();
+        const retainedProblem = row.purpose !== "completion" && row.state === "unknown";
+        const [scheduled] = yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,
+              problem=${retainedProblem ? UNKNOWN_CREATE_PROBLEM : null},
+              problem_at=${retainedProblem ? row.problem_at : null}
+          WHERE id=${row.id} AND state=${row.state} RETURNING id`;
+        if (!scheduled) return failure("conflict", "This message no longer needs a Retry.");
         return { ok: true, value: undefined };
-      });
+      }).pipe(
+        sql.withTransaction,
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.ok) dispatcher.wake();
+          }),
+        ),
+      );
 
     return {
       serve,
