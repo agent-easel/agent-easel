@@ -5,6 +5,7 @@ import { projectOperations, projectServerOperations } from "./project.ts";
 import { connectionOperations } from "./connection.ts";
 import type { AppearanceSource } from "./appearance.ts";
 import { runOperations } from "./run.ts";
+import { privacyOperations } from "./privacy.ts";
 import { chatControlOperations } from "./chat-control.ts";
 import {
   type ClientAccessState,
@@ -26,6 +27,7 @@ export const httpOperations = {
   ...projectServerOperations,
   ...connectionOperations,
   ...runOperations,
+  ...privacyOperations,
   ...chatControlOperations,
   ...triggerOperations,
   ...clientAccessOperations,

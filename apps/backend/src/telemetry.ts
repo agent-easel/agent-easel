@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import type { UpdateChannel } from "@t3-factory/contracts";
+import type { TelemetrySetting, UpdateChannel } from "@t3-factory/contracts";
 
 const bucket = Schema.Literals(["0", "1", "2-5", "6+"]);
 
@@ -36,6 +36,7 @@ export interface TelemetryOptions {
 
 export interface Telemetry {
   readonly enabled: boolean;
+  readonly disabledReason: TelemetrySetting["disabledReason"];
   readonly setPreference: (enabled: boolean) => Effect.Effect<void>;
   readonly record: <K extends EventName>(
     event: K,
@@ -131,6 +132,7 @@ function batchEndpoint(host: string): URL | undefined {
 
 const disabled: Telemetry = {
   enabled: false,
+  disabledReason: "unavailable",
   setPreference: () => Effect.void,
   record: () => Effect.void,
   flush: () => Effect.void,
@@ -186,7 +188,8 @@ export const makeTelemetry = (
   Effect.gen(function* () {
     const env = options.env ?? process.env;
     const override = env.FACTORY_TELEMETRY_ENABLED;
-    if (override === "false" || (override !== "true" && !options.packagedChannel)) return disabled;
+    if (override === "false") return { ...disabled, disabledReason: "environment" } as const;
+    if (override !== "true" && !options.packagedChannel) return disabled;
     const apiKey = (env.FACTORY_POSTHOG_KEY ?? options.packagedKey)?.trim();
     if (!apiKey) return disabled;
     const endpoint = batchEndpoint(env.FACTORY_TELEMETRY_HOST ?? defaultHost);
@@ -332,6 +335,7 @@ export const makeTelemetry = (
       get enabled() {
         return enabled;
       },
+      disabledReason: null,
       setPreference: (preference: boolean) =>
         Effect.sync(() => {
           enabled = preference;

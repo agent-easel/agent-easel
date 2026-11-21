@@ -2,7 +2,7 @@ import { createServer, type Server as HttpsServer } from "node:https";
 import type { Server } from "node:http";
 import { networkInterfaces } from "node:os";
 import type { RemoteAccessStatus, Result } from "@t3-factory/contracts";
-import { saveRemoteAccessEnabled, type Configuration } from "./config.ts";
+import type { Configuration, configurationWriter } from "./config.ts";
 import type { RemoteAccessControl } from "./access-routes.ts";
 import { listen, type Listener } from "./listener.ts";
 import {
@@ -31,6 +31,7 @@ function reachableAddresses(host: string, port: number, allowedHosts: readonly s
 export function remoteAccessController(
   config: Configuration,
   handlerFor: HandlerFor,
+  writeConfiguration: ReturnType<typeof configurationWriter>,
 ): RemoteAccessControl & {
   start(): Promise<void>;
   close(): Promise<void>;
@@ -96,8 +97,16 @@ export function remoteAccessController(
     status,
     setEnabled: (next) =>
       serialized(async (): Promise<Result<RemoteAccessStatus>> => {
-        await saveRemoteAccessEnabled(config.home, next);
-        enabled = next;
+        await writeConfiguration(
+          (saved) => {
+            const current = saved.remoteAccess;
+            const access = typeof current === "object" && current !== null ? current : {};
+            return { ...saved, remoteAccess: { ...access, enabled: next } };
+          },
+          () => {
+            enabled = next;
+          },
+        );
         if (!next) {
           await stopListener();
           problem = null;

@@ -6,6 +6,7 @@ export * from "./operation.ts";
 export * from "./project.ts";
 export * from "./connection.ts";
 export * from "./appearance.ts";
+export * from "./privacy.ts";
 export * from "./run.ts";
 export * from "./chat-control.ts";
 export * from "./trigger.ts";
