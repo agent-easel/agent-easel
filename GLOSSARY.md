@@ -213,7 +213,8 @@ off by default, names a T3 provider instance, model and options. Start decides o
 acceptance: a Run with automatic title provenance accepted while the setting is on captures the
 model, options, built-in prompt version and a deadline 30 seconds after acceptance, and its
 generation is **pending**, or **skipped** when an eligibility check fails (recorded as the setting's
-latest **diagnostic**) or the prompt has no meaningful text. Manual and legacy Runs record none.
+latest **diagnostic**) or the prompt has no meaningful text; a prompt that is only a GitHub issue
+URL or reference is **applied** at once as `Issue #<number>`, with no title thread. Manual and legacy Runs record none.
 Later setting changes affect only future Runs, and there is no regenerate. A pending generation
 launches one top-level **title thread** in the Project checkout beside the Flow, never gating it,
 after rechecking eligibility. It ends in exactly one outcome: **applied**, **dropped** by a

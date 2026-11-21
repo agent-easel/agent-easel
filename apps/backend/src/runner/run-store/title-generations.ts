@@ -101,6 +101,7 @@ export type TitleGenerationPlan = {
     readonly modelLabel: string;
     /** Why no launch will happen; a diagnostic is recorded only for a failed eligibility check. */
     readonly skipped: { readonly reason: string; readonly diagnostic: boolean } | null;
+    readonly derived: { readonly title: string; readonly reason: string } | null;
   } | null;
   /** The version of the title prompt `launch` writes. */
   readonly promptVersion: number;
@@ -150,11 +151,17 @@ export function recordTitleGeneration(
               reason: "Generate Run titles changed while this Run started.",
               diagnostic: false,
             },
+            derived: null,
           };
     if (!capture) return;
-    const { model, skipped } = capture;
+    const { model, skipped, derived } = capture;
     const deadline = new Date(Date.parse(run.time) + RUN_TITLE_DEADLINE_MS).toISOString();
     const id = randomUUID();
+    if (derived) {
+      yield* sql`INSERT INTO run_title_generations(id,run_id,state,reason,provider_instance_id,model_id,model_options_json,model_label,prompt_version,deadline_at,automatic_title,generated_title,created_at,ended_at) VALUES(${id},${run.id},'applied',${derived.reason},${model.providerInstanceId},${model.modelId},${JSON.stringify(model.modelOptions)},${capture.modelLabel},${plan.promptVersion},${deadline},${run.title},${derived.title},${run.time},${run.time})`;
+      yield* sql`UPDATE runs SET title=${derived.title},title_provenance='generated' WHERE id=${run.id}`;
+      return yield* titleEvent(sql, run.id, "applied", run.time);
+    }
     const launch = skipped ? null : plan.launch(id, model, run);
     yield* sql`INSERT INTO run_title_generations(id,run_id,state,reason,provider_instance_id,model_id,model_options_json,model_label,prompt_version,deadline_at,automatic_title,launch_payload_json,created_at,ended_at) VALUES(${id},${run.id},${skipped ? "skipped" : "pending"},${skipped?.reason ?? null},${model.providerInstanceId},${model.modelId},${JSON.stringify(model.modelOptions)},${capture.modelLabel},${plan.promptVersion},${deadline},${run.title},${launch},${run.time},${skipped ? run.time : null})`;
     if (!skipped) return;

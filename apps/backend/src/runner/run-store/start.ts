@@ -173,6 +173,16 @@ function acceptStartRecords(
     const workspace = runWorkspace(plan, number);
     if (workspace.mode === "worktree")
       yield* sql`INSERT INTO run_workspaces(run_id,base_ref,planned_branch,creator_block_id) VALUES(${plan.runId},${workspace.baseRef},${workspace.plannedBranch},${workspace.creatorBlockId})`;
+    yield* appendTimelineEvent(sql, { kind: "started", runId: plan.runId, observedAt: plan.time });
+    // After "started", so a generation skipped at Start follows it on the timeline.
+    yield* recordTitleGeneration(sql, plan.titleGeneration, {
+      id: plan.runId,
+      number,
+      title,
+      time: plan.time,
+      prompt: plan.prompt,
+      project,
+    });
     yield* createEntryLaunches(
       sql,
       {
@@ -186,16 +196,6 @@ function acceptStartRecords(
       },
       startLaunchTargets(plan.definitions, workspace),
     );
-    yield* appendTimelineEvent(sql, { kind: "started", runId: plan.runId, observedAt: plan.time });
-    // After "started", so a generation skipped at Start follows it on the timeline.
-    yield* recordTitleGeneration(sql, plan.titleGeneration, {
-      id: plan.runId,
-      number,
-      title,
-      time: plan.time,
-      prompt: plan.prompt,
-      project,
-    });
     if (commit) {
       const permitted = yield* commit(plan.runId);
       if (!permitted.ok) return yield* Effect.fail(new AcceptanceRefused(permitted));

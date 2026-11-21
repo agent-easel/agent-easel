@@ -168,7 +168,14 @@ and an absolute deadline 30 seconds after acceptance, and records its generation
 - **skipped** with that check's reason when one fails; the reason also becomes the setting's latest diagnostic, with the
   Run and outcome, until a later diagnostic replaces it or a generated title is applied;
 - **skipped** without a diagnostic when the prompt has no letter or digit, counting `[Image N: name]` labels as text, or
-  when the setting changed between these checks and acceptance while staying on.
+  when the setting changed between these checks and acceptance while staying on;
+- **applied** at acceptance, without these checks or a title thread, when the whole prompt is one GitHub issue URL or
+  reference (`https://github.com/<owner>/<repo>/issues/<number>`, `<owner>/<repo>#<number>` or `#<number>`): such a
+  prompt has no language to title in, so Factory titles the Run `Issue #<number>` with the model label **Factory**, and
+  its workers launch with that title.
+
+A title thread writes in the prompt's language, and in English when the prompt has no natural-language text, such as
+only a URL, issue reference or identifier.
 
 The checks run beside the other Start checks; their failure never refuses Start. A replayed Start returns its Run with
 the original provenance and generation and decides nothing again. A Run generates at most once and only at Start; there

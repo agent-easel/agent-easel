@@ -154,6 +154,33 @@ it("a prompt with no meaningful text skips generation without a diagnostic", asy
   expect(setting.value.diagnostic).toBeNull();
 });
 
+it("a bare GitHub issue URL is titled Issue #<number> at Start without launching a title thread", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  await enableRunTitles(fixture.f);
+  const url = "https://github.com/alimek/t3-factory/issues/663";
+  const workerLaunch = fixture.t3.threads.nextLaunch();
+
+  // Act
+  const started = await fixture.f.startRun({ ...fixture.input, input: url, title: url });
+
+  // Assert
+  assert(started.ok);
+  expect(started.value.title).toBe("Issue #663");
+  expect(started.value.titleProvenance).toBe("generated");
+  expect(started.value.titleGeneration).toMatchObject({
+    state: "applied",
+    automaticTitle: url,
+    generatedTitle: "Issue #663",
+    threadLink: null,
+  });
+  expect(titleEvents(started.value)).toStrictEqual([
+    { kind: "title-generation-applied", blockId: null },
+  ]);
+  expect((await workerLaunch).title).toBe("F#1 Entry worker · Issue #663");
+  expect(fixture.t3.threads.launches.size).toBe(1);
+});
+
 it("a replayed Start keeps its pending generation and decides nothing again after the title model is withdrawn", async (c) => {
   // Arrange
   const fixture = await prepared(c);
@@ -289,6 +316,9 @@ it("a pending generation launches one top-level title thread in the Project chec
     message: expect.stringContaining("Improve search\nKeep it accessible."),
   });
   expect(launch.message).toContain("at most 120");
+  expect(launch.message).toContain(
+    "When the prompt has no natural-language text, such as only a URL, issue reference or identifier, write the title in English.",
+  );
 });
 
 it("the title capability reaches only the title thread's prompt, never a Run read, the thread's T3 title or its request key", async (c) => {
