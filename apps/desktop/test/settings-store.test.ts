@@ -58,6 +58,7 @@ it("settings saved before appearance and alerts existed open in System with Noti
     notifications: true,
     dockBadge: true,
     showRunDetails: false,
+    windowBounds: null,
   });
 });
 
@@ -76,4 +77,17 @@ it("turned-off Notifications and Dock badge and shown Run details are still chos
     dockBadge: false,
     showRunDetails: true,
   });
+});
+
+it("the window size and position the user left are restored when the installation opens again", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  const store = await SettingsStore.open(directory);
+  await store.update({ windowBounds: { x: 120, y: 80, width: 1111, height: 777 } });
+
+  // Act
+  const reopened = await SettingsStore.open(directory);
+
+  // Assert
+  expect(reopened.get().windowBounds).toStrictEqual({ x: 120, y: 80, width: 1111, height: 777 });
 });

@@ -17,6 +17,7 @@ import {
   powerMonitor,
   protocol,
   safeStorage,
+  screen,
   session,
   shell,
   Tray,
@@ -53,6 +54,7 @@ import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
+import { restorableBounds } from "./window-bounds.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
 if (process.env.FACTORY_DESKTOP_USER_DATA)
@@ -274,9 +276,12 @@ function openWindow() {
     window.focus();
     return;
   }
+  const saved = restorableBounds(
+    store.get().windowBounds,
+    screen.getAllDisplays().map((display) => display.workArea),
+  );
   const created = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    ...(saved ?? { width: 1400, height: 900 }),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -309,9 +314,14 @@ function openWindow() {
   created.webContents.on("did-navigate", () => {
     routeReceiver = null;
   });
+  const rememberBounds = () =>
+    void store.update({ windowBounds: created.getNormalBounds() }).catch(() => undefined);
+  created.on("resized", rememberBounds);
+  created.on("moved", rememberBounds);
   created.on("close", () => {
     const url = created.webContents.getURL();
     if (url.startsWith(`${appOrigin}/`)) lastView = url;
+    rememberBounds();
   });
   created.on("minimize", broadcast);
   created.on("restore", broadcast);
