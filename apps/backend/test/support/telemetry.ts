@@ -6,6 +6,9 @@ import { json } from "node:stream/consumers";
 import { loadConfiguration } from "../../src/config.ts";
 import { startServer } from "../../src/server.ts";
 import { factoryHarness } from "./factory.ts";
+import { prepared } from "./prepared-runner.ts";
+import { agentBlock, flowInput } from "./scenarios.ts";
+import { ending, placingGraph, savedFlow, toEnding } from "./subflow.ts";
 
 export async function mockIngest(
   context: TestContext,
@@ -54,6 +57,38 @@ export async function mockIngest(
         .filter((entry) => entry.event === name),
     firstRequest,
     disconnected,
+  };
+}
+
+export async function nestedEntry(context: TestContext) {
+  const ingest = await mockIngest(context);
+  const ready = await prepared(context, undefined, { telemetry: { env: ingest.env } });
+  const leaf = await savedFlow(ready.f, {
+    name: "Private leaf Flow",
+    graph: {
+      flowInput: flowInput("same-worker"),
+      blocks: [agentBlock("same-worker", "Private leaf Block", ready.agent.id)],
+      connections: [toEnding("same-worker", "done", "done")],
+      finish: { endings: [ending("done", "Private leaf ending")] },
+    },
+  });
+  const middle = await savedFlow(ready.f, {
+    name: "Private middle Flow",
+    graph: placingGraph(leaf.id),
+  });
+  const root = await savedFlow(ready.f, {
+    name: "Private root Flow",
+    graph: placingGraph(middle.id),
+  });
+  return {
+    ...ready,
+    leaf,
+    middle,
+    root,
+    async closeAndReadEvents(name: string) {
+      await ready.f.close();
+      return ingest.events(name);
+    },
   };
 }
 
