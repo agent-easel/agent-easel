@@ -193,6 +193,10 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
           ),
         ),
     },
+    getSubflowInvocation: {
+      handle: ({ parameters }) =>
+        answer(() => factory.getSubflowInvocation(parameters.runId, parameters.invocationId)),
+    },
     retrySubflowStop: {
       handle: ({ parameters }) =>
         answer(() => factory.retrySubflowStop(parameters.runId, parameters.invocationId)),

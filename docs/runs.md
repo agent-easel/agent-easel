@@ -679,21 +679,38 @@ without a notification; Woke notifies for the new matter as usual. See
 
 ## Subflow evidence
 
-A Run uses the Flows and Agents captured at Start. Its Subflow placement summaries include
-the oldest unfinished invocation, or the newest completed invocation when its queue drains.
-The Run read exposes the invocation's input, inner Block identities, queue count and one
-ending record. Ending evidence shows held, released or cancelled delivery separately from
-each recipient's disposition. The Run keeps one attention surface. A nested matter names its
-invocation and its Block so a client can open the corresponding history.
+The Execution canvas expands each placed Subflow by default. The group shows its captured
+Flow, including the input received by the selected invocation and that input's connections.
+Empty text is shown explicitly. Collapse and Expand change the local view. **Follow active**
+can frame work inside a group. A nested attention link opens the enclosing groups and selects
+the Block and worker visit recorded for that matter.
 
-The invocation history read is
-`GET /api/runs/:runId/subflows/:blockId/invocations`.
-Pages contain 50 invocations by default and accept a limit of 1–100. The first page fixes
-the high-water mark and pages newest first. A cursor continues the same Run and placement in
-the same parent invocation. The Condition evidence read uses the invocation-specific
-Condition Block ID for its own cursor window. Restarting the backend opens a new window.
-An unresolved Stop can be retried on its invocation through
-`POST /api/runs/:runId/invocations/:invocationId/retry-stop`.
+A placement shows its queued count separately from the invocation on display. By default it
+shows the oldest unfinished invocation, then the newest finished invocation when the queue
+drains. The Run inspector pages invocation history newest first. Selecting an invocation
+pauses Follow and keeps that invocation open as new work arrives. Condition arrival pages
+use the selected invocation's Condition identity.
+
+The group, inspector and compact Timeline show the selected invocation and the chosen ending's
+release state. The inspector shows the output, source exit and visit, producing worker, and
+each returned delivery's recipient disposition. **Nothing returned** means the invocation
+finished without reaching an ending. It appears in history and in the settled Run overview.
+A real empty output and **Output missing** have separate labels. During stopping the inspector
+shows each worker's Stop request and its acknowledgment. Release waits for verified stopping.
+An unresolved invocation Stop can be retried in the inspector. The ending remains visible
+when its delivery is permanently cancelled.
+
+Nested **Auto-arrange** is local to the view and arranges the captured revisions bottom-up
+with one 15-second deadline for the composition. It keeps the last displayed layout if the
+attempt fails or times out.
+
+The history read is `GET /api/runs/:runId/subflows/:blockId/invocations`. Pages contain 50
+invocations by default and accept a limit of 1–100. The first page fixes the high-water mark.
+A cursor continues the same Run and placement in the same parent invocation. The Condition
+evidence read uses the invocation-specific Condition Block ID for its own cursor window.
+Restarting the backend opens a new window. The exact invocation read at
+`GET /api/runs/:runId/invocations/:invocationId` supplies its ancestor path and default
+descendant placements. **Retry Stop** uses `POST /api/runs/:runId/invocations/:invocationId/retry-stop`.
 
 ## Reports and attention
 

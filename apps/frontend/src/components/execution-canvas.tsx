@@ -1,3 +1,8 @@
+import { placementKey } from "../subflow-preview.ts";
+import { selectComposedExecutionTargets, type RunSubflows } from "../run-subflows.ts";
+import type { SubflowInvocation } from "@t3-factory/contracts";
+import { SubflowInvocationHeader, invocationOutcome } from "./run-subflow.tsx";
+import { TextLink } from "@/components/ui/text-link";
 import { runResultState, stoppedVisitAt } from "../run-status.ts";
 import { useMemo, type ReactNode } from "react";
 import {
@@ -10,7 +15,7 @@ import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
-import { selectEntryTargets, selectExecutionTargets } from "../execution-focus.ts";
+import { selectEntryTargets } from "../execution-focus.ts";
 import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
 import {
   blockExitRecipients,
@@ -625,6 +630,12 @@ export function ExecutionCanvas({
   onSelect,
   title,
   overlay,
+  subflows,
+  collapsed,
+  setCollapsed,
+  pause,
+  reveal,
+  inspectInvocation,
 }: {
   run: RunDetail;
   selected: CanvasBlockSelection | null;
@@ -635,8 +646,37 @@ export function ExecutionCanvas({
   title: TitleInspection;
   /** Top-left badges and notices (Figma "Overlay · top-left"); they never block panning. */
   overlay?: ReactNode;
+  subflows: RunSubflows;
+  collapsed: ReadonlySet<string>;
+  setCollapsed: (path: string, collapsed: boolean) => void;
+  pause: number;
+  reveal: { readonly path: string; readonly request: number } | null;
+  inspectInvocation: (invocation: SubflowInvocation) => void;
 }) {
-  const targets = selectExecutionTargets(run);
+  const flows = useMemo(
+    () => new Map(run.definitions.subflows?.map((flow) => [flow.id, flow])),
+    [run.definitions.subflows],
+  );
+  const composed = flows.size > 0;
+  const rawTargets = selectComposedExecutionTargets(run, subflows);
+  const visiblePaths = (ids: readonly string[]) =>
+    composed
+      ? ids.flatMap((id) => {
+          const path = subflows.followed.byBlock.get(id)?.path;
+          if (!path) return [];
+          let ancestor = path;
+          for (
+            let parent = ancestor.lastIndexOf("/");
+            parent > 0;
+            parent = ancestor.lastIndexOf("/")
+          ) {
+            ancestor = ancestor.slice(0, parent);
+            if (collapsed.has(ancestor)) return [ancestor];
+          }
+          return [path];
+        })
+      : ids;
+  const targets = [...new Set(visiblePaths(rawTargets))];
   const recordedById = useMemo(
     () => new Map(run.blocks.map((item) => [item.blockId, item])),
     [run.blocks],
@@ -650,6 +690,41 @@ export function ExecutionCanvas({
       executionFooterCount(run, block, recordedById.get(block.id), observationUnavailable),
     [run, recordedById, observationUnavailable],
   );
+  function blockContent(scopePath: string, block: CanvasBlock) {
+    const path = placementKey(scopePath, block.id);
+    const scope = subflows.scopes.get(scopePath);
+    const scoped = scope?.run ?? run;
+    const recorded = composed ? scope?.blocks.get(block.id) : recordedById.get(block.id);
+    const id = recorded?.blockId ?? block.id;
+    const content = executionBlock(
+      scoped,
+      scopePath === "" ? recipients : exitRecipients(scoped.definitions.flow.graph),
+      { ...block, id },
+      recorded,
+      id === selected && (recorded !== undefined || !composed),
+      observationUnavailable,
+      () => recorded && onSelect(id),
+    );
+    const placement = subflows.placements.get(path);
+    if (block.kind !== "subflow") return content;
+    return {
+      ...content,
+      subflowFooter: collapsed.has(path) && (
+        <div className="flex items-center justify-between border-t px-2 py-1 text-xs">
+          {placement?.invocation && (
+            <span>
+              {invocationOutcome(placement.invocation)} · {placement.summary?.queued ?? 0} queued
+            </span>
+          )}
+          <TextLink onClick={() => setCollapsed(path, false)} aria-label={`Expand ${block.name}`}>
+            Expand
+          </TextLink>
+        </div>
+      ),
+      subflowBadge: undefined,
+      press: { ...content.press, covers: "identity" as const },
+    };
+  }
   return (
     <CanvasSurface
       label="Execution canvas"
@@ -659,16 +734,72 @@ export function ExecutionCanvas({
       dimensions={EXECUTION_DIMENSIONS}
       reservedFooters={MAX_FOOTERS}
       flowInput={executionFlowInput(run, () => onSelect(null), title)}
-      block={(block) =>
-        executionBlock(
-          run,
-          recipients,
-          block,
-          recordedById.get(block.id),
-          selected === block.id,
-          observationUnavailable,
-          () => onSelect(block.id),
-        )
+      block={(block) => blockContent("", block)}
+      flows={flows}
+      onCollapseSubflow={(path) => setCollapsed(path, true)}
+      nested={
+        composed
+          ? {
+              rootId: run.definitions.flow.id,
+              collapsed,
+              block: blockContent,
+              header: (path) => {
+                const placement = subflows.placements.get(path);
+                return placement ? (
+                  <SubflowInvocationHeader placement={placement} onInspect={inspectInvocation} />
+                ) : null;
+              },
+              input: (path) => {
+                const scoped = subflows.scopes.get(path)?.run;
+                const input = scoped?.input;
+                return {
+                  port,
+                  label: "Incoming message",
+                  press: (rows) => rows,
+                  prompt: {
+                    kind: "line",
+                    content: (
+                      <p className="truncate px-3 text-xs text-foreground" title={input}>
+                        {input === undefined ? "No invocation yet" : input || "Empty text"}
+                        {scoped?.images.length ? ` · ${scoped.images.length} images` : null}
+                      </p>
+                    ),
+                  },
+                };
+              },
+              finish: (path) => {
+                const scoped = subflows.scopes.get(path)?.run;
+                const placement = subflows.placements.get(path);
+                const invocation = placement?.invocation;
+                const state = scoped?.result
+                  ? finishState(scoped)
+                  : invocation?.completedAt
+                    ? { kind: "none-reached" as const }
+                    : { kind: "pending" as const };
+                return {
+                  state,
+                  className: "border-border",
+                  endingPort: (ending) =>
+                    state.kind === "reached" && state.endingId === ending.id ? reachedPort : port,
+                  press: (rows) =>
+                    invocation ? (
+                      <button
+                        type="button"
+                        className={pressClass}
+                        onClick={() => inspectInvocation(invocation)}
+                      >
+                        {rows}
+                      </button>
+                    ) : (
+                      rows
+                    ),
+                };
+              },
+              reveal,
+              pause,
+              resume: subflows.resumeCurrentInvocations,
+            }
+          : undefined
       }
       blockFooters={blockFooters}
       finish={executionFinish(run, selected === FINISH_SELECTION, () => onSelect(FINISH_SELECTION))}
@@ -676,7 +807,7 @@ export function ExecutionCanvas({
       covered={{ top: BADGES_HEIGHT }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}
       focusTargets={targets}
-      entryTargets={selectEntryTargets(run, targets)}
+      entryTargets={visiblePaths(selectEntryTargets(run, rawTargets))}
       shown={shown}
       onTap={() => onSelect(null)}
       overlay={overlay}

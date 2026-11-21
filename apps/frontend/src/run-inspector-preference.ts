@@ -39,6 +39,10 @@ function setOpen(next: boolean) {
 }
 
 /** Shows or hides the inspector of the Run open in detail; elsewhere there is nothing to toggle. */
+export function openRunInspector() {
+  if (!getOpen()) setOpen(true);
+}
+
 export function toggleRunInspector() {
   if (hosts > 0) setOpen(!getOpen());
 }

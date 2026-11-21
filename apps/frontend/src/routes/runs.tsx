@@ -1,3 +1,4 @@
+import { invocationBlockPath, useRunSubflows } from "../run-subflows.ts";
 import { T3LinksAvailable } from "../components/open-in-t3.tsx";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
@@ -6,7 +7,13 @@ import { RunOriginMeta } from "../components/run-origin.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
+import type {
+  FactoryProject,
+  RunAttention,
+  RunDetail,
+  RunNavigationEntry,
+  SubflowInvocation,
+} from "@t3-factory/contracts";
 import { ChevronRight, Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
@@ -29,7 +36,11 @@ import { ProblemCard } from "../components/problem-card.tsx";
 import { useConnectionState } from "../connection-state.tsx";
 import { RunActionItems, runActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
-import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
+import {
+  useRunInspectorOpen,
+  toggleRunInspector,
+  openRunInspector,
+} from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "../api.ts";
@@ -120,7 +131,14 @@ function useOpenRunActions(entry: RunNavigationEntry | undefined, detail: RunDet
 }
 
 /** What the inspector shows besides the overview: a selected Block, or the Run title, which is not a Block. */
-type Inspected = { readonly blockId: CanvasBlockSelection } | "run-title" | null;
+type Inspected =
+  | {
+      readonly blockId: CanvasBlockSelection;
+      readonly attention?: RunAttention;
+      readonly routedAttentionId?: string;
+    }
+  | "run-title"
+  | null;
 
 /** A desktop route selects its Block, or shows the overview, once per navigation that carries it. */
 function useRoutedInspection(setInspected: (inspected: Inspected) => void) {
@@ -128,10 +146,18 @@ function useRoutedInspection(setInspected: (inspected: Inspected) => void) {
     select: ({ state }) => (state.routedBlock === undefined ? undefined : state.__TSR_key),
   });
   const routedBlock = useLocation({ select: ({ state }) => state.routedBlock ?? null });
+  const routedAttentionId = useLocation({ select: ({ state }) => state.routedAttentionId });
   const [appliedKey, setAppliedKey] = useState<string>();
   if (routedKey !== undefined && routedKey !== appliedKey) {
     setAppliedKey(routedKey);
-    setInspected(routedBlock === null ? null : { blockId: routedBlock });
+    setInspected(
+      routedBlock === null
+        ? null
+        : {
+            blockId: routedBlock,
+            ...(routedAttentionId && { routedAttentionId }),
+          },
+    );
   }
 }
 
@@ -150,6 +176,7 @@ export function RunScreen({ id }: { id: string }) {
     <CanvasLayout>
       {run ? (
         <RunDetailView
+          key={id}
           observed={observed}
           entry={navigationRun}
           run={run}
@@ -174,6 +201,139 @@ export function RunScreen({ id }: { id: string }) {
   );
 }
 
+function useNestedAttention({
+  runId,
+  subflows,
+  navigationRequestRef,
+  reveal,
+  onInspect,
+}: {
+  runId: string;
+  subflows: ReturnType<typeof useRunSubflows>;
+  navigationRequestRef: { current: number };
+  reveal: (path: string) => void;
+  onInspect: (inspected: Inspected) => void;
+}) {
+  const [navigationError, setNavigationError] = useState("");
+  const inspectAttention = (attention: RunAttention) => {
+    const { blockId, invocationId } = attention;
+    if (!blockId || !invocationId) return;
+    const request = ++navigationRequestRef.current;
+    setNavigationError("");
+    const select = (path: string) => {
+      reveal(path);
+      openRunInspector();
+      onInspect({ blockId, attention });
+    };
+    void api.getSubflowInvocation(runId, invocationId).then(
+      (evidence) => {
+        if (navigationRequestRef.current !== request) return;
+        const path = invocationBlockPath(evidence, blockId);
+        if (!path) {
+          setNavigationError("The selected Block is missing from this invocation.");
+          return;
+        }
+        subflows.inspectPath(evidence);
+        select(path);
+      },
+      (cause: unknown) => {
+        if (navigationRequestRef.current === request)
+          setNavigationError(
+            cause instanceof Error ? cause.message : "Could not open the attention item.",
+          );
+      },
+    );
+  };
+  return { inspectAttention, navigationError };
+}
+
+function useRunCanvasInspection(
+  run: RunDetail,
+  inspected: Inspected,
+  onInspect: (inspected: Inspected) => void,
+) {
+  const selected = inspected !== null && inspected !== "run-title" ? inspected.blockId : null;
+  const subflows = useRunSubflows(run);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [pause, setPause] = useState(0);
+  const navigationRequestRef = useRef(0);
+  const [reveal, setReveal] = useState<{ path: string; request: number } | null>(null);
+  const selectedLocation =
+    typeof selected === "string" ? subflows.byBlock.get(selected) : undefined;
+  const placement = selectedLocation && subflows.placements.get(selectedLocation.path);
+  const inspectedInvocation = placement?.invocation ?? selectedLocation?.scope.invocation;
+  const updateCollapsed = (path: string, closed: boolean) =>
+    setCollapsed((previous) => {
+      const next = new Set(previous);
+      if (closed) next.add(path);
+      else next.delete(path);
+      return next;
+    });
+  const onSelect = (blockId: CanvasBlockSelection | null) => {
+    const target = typeof blockId === "string" ? subflows.byBlock.get(blockId) : undefined;
+    const invocation = target && subflows.placements.get(target.path)?.invocation;
+    if (invocation) subflows.inspectInvocation(invocation);
+    selectBlock(blockId);
+  };
+  const selectBlock = (blockId: CanvasBlockSelection | null) => {
+    navigationRequestRef.current += 1;
+    onInspect(blockId === null ? null : { blockId });
+    if (typeof blockId === "string" && subflows.byBlock.has(blockId))
+      setPause((current) => current + 1);
+    setReveal(null);
+  };
+  const inspectInvocation = (invocation: SubflowInvocation) => {
+    subflows.inspectInvocation(invocation);
+    selectBlock(invocation.placementBlockId);
+    openRunInspector();
+  };
+  const { inspectAttention, navigationError } = useNestedAttention({
+    runId: run.id,
+    subflows,
+    navigationRequestRef,
+    onInspect,
+    reveal: (path) => {
+      setCollapsed(
+        (previous) =>
+          new Set([...previous].filter((entry) => entry !== path && !path.startsWith(`${entry}/`))),
+      );
+      setPause((current) => current + 1);
+      setReveal((previous) => ({ path, request: (previous?.request ?? 0) + 1 }));
+    },
+  });
+  const routedAttentionId = inspected !== "run-title" && inspected?.routedAttentionId;
+  const routedAttention = run.attention.find((item) => item.id === routedAttentionId);
+  const routed = useRef<RunAttention | undefined>(undefined);
+  useEffect(() => {
+    if (!routedAttention) {
+      routed.current = undefined;
+      return;
+    }
+    if (routed.current?.id === routedAttention.id) return;
+    routed.current = routedAttention;
+    inspectAttention(routedAttention);
+  }, [routedAttention, inspectAttention]);
+  return {
+    selected,
+    inspectedInvocation,
+    subflows,
+    collapsed,
+    updateCollapsed,
+    pause,
+    reveal,
+    inspectInvocation,
+    onSelect,
+    inspectAttention,
+    navigationError,
+  } as const;
+}
+
+function useRunCanvasShown() {
+  const settings = useSettings();
+  const studio = useStudio();
+  return !settings && !studio;
+}
+
 function RunDetailView({
   observed,
   entry,
@@ -189,13 +349,26 @@ function RunDetailView({
   inspected: Inspected;
   onInspect: (inspected: Inspected) => void;
 }) {
-  const settings = useSettings();
-  const studio = useStudio();
+  const shown = useRunCanvasShown();
   const inspectorOpen = useRunInspectorOpen();
-  const selected = inspected !== null && inspected !== "run-title" ? inspected.blockId : null;
-  const onSelect = (blockId: CanvasBlockSelection | null) =>
-    onInspect(blockId === null ? null : { blockId });
+  const {
+    selected,
+    inspectedInvocation,
+    subflows,
+    collapsed,
+    updateCollapsed,
+    pause,
+    reveal,
+    inspectInvocation,
+    onSelect,
+    inspectAttention,
+    navigationError,
+  } = useRunCanvasInspection(run, inspected, onInspect);
   const inspectedTitle = inspected === "run-title" ? run.titleGeneration : null;
+  const attention = inspected !== "run-title" ? inspected?.attention : undefined;
+  const error = navigationError || subflows.error;
+  const showAttention = !inspectorOpen && attentionPending(run);
+  const waitingForWorkers = entry !== undefined && waitsForWorkerConfirmation(entry);
   const unavailable = observed.unavailable;
   const freshness = runFreshness(run, unavailable);
   const projectUnavailable = entry
@@ -211,13 +384,20 @@ function RunDetailView({
         freshness={freshness}
         inspectorOpen={inspectorOpen}
       />
+      {error && <ProblemCard density="compact" tone="error" title={error} />}
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-72 flex-1">
             <ExecutionCanvas
-              shown={!settings && !studio}
+              shown={shown}
               run={run}
               selected={selected}
+              subflows={subflows}
+              collapsed={collapsed}
+              setCollapsed={updateCollapsed}
+              pause={pause}
+              reveal={reveal}
+              inspectInvocation={inspectInvocation}
               observationUnavailable={unavailable}
               onSelect={onSelect}
               title={{
@@ -234,21 +414,25 @@ function RunDetailView({
               }
             />
           </div>
-          {!inspectorOpen && attentionPending(run) && (
+          {showAttention && (
             <div className="max-h-60 shrink-0 overflow-auto border-t px-4 py-3">
-              <RunAttentionDetails run={run} />
+              <RunAttentionDetails run={run} onInspect={inspectAttention} />
             </div>
           )}
-          <RunTimeline run={run} selectedBlockId={selected} />
+          <RunTimeline run={run} selectedBlockId={selected} invocation={inspectedInvocation} />
         </div>
         {inspectorOpen && (
           <RunInspector
             run={run}
             selected={selected}
             titleGeneration={inspectedTitle}
+            subflows={subflows}
+            attention={attention}
+            onInspectAttention={inspectAttention}
+            onInspectInvocation={inspectInvocation}
             project={observed.project}
             projectUnavailable={projectUnavailable}
-            waitingForWorkers={entry !== undefined && waitsForWorkerConfirmation(entry)}
+            waitingForWorkers={waitingForWorkers}
             observationUnavailable={unavailable}
             onSelect={onSelect}
           />

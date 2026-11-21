@@ -277,7 +277,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     restoreRun: store.restoreRun,
     markRunWokeSeen: store.markRunWokeSeen,
     getRun,
-    /** The HTTP Condition evidence read, whose empty query parameters are absent. */
+    getSubflowInvocation: store.getSubflowInvocation,
     listSubflowInvocations: (runId: string, blockId: string, limit: string, cursor: string) =>
       store.listSubflowInvocations(runId, blockId, queryPageLimit(limit), cursor || undefined),
     retrySubflowStop: (runId: string, invocationId: string) =>
