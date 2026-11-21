@@ -6,22 +6,34 @@ type CanvasExit = EffectiveExit & { readonly unavailable?: "hidden" | "removed" 
 export type CanvasBlock = FlowBlock & { readonly exits: readonly CanvasExit[] };
 export type CanvasGraph = Omit<FlowGraph, "blocks"> & { readonly blocks: readonly CanvasBlock[] };
 
+function wiredExitIds(graph: FlowGraph) {
+  const wired = new Map<string, string[]>();
+  for (const { sourceBlockId, exitId } of graph.connections) {
+    const exits = wired.get(sourceBlockId);
+    if (exits) exits.push(exitId);
+    else wired.set(sourceBlockId, [exitId]);
+  }
+  return wired;
+}
+
 export function canvasGraph(
   graph: FlowGraph,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
 ): CanvasGraph {
+  const wired = wiredExitIds(graph);
   return {
     ...graph,
-    blocks: graph.blocks.map((block) => ({ ...block, exits: canvasExits(graph, block, agents) })),
+    blocks: graph.blocks.map((block) => ({
+      ...block,
+      exits: canvasExits(block, wired.get(block.id) ?? [], agents),
+    })),
   };
 }
 
 export const CONDITION_UNWIRED_PORTS = 8;
 
-function conditionCanvasExits(graph: FlowGraph, exits: EffectiveExit[], blockId: string) {
-  const wired = new Set(
-    graph.connections.flatMap((wire) => (wire.sourceBlockId === blockId ? [wire.exitId] : [])),
-  );
+function conditionCanvasExits(exits: EffectiveExit[], wiredIds: readonly string[]) {
+  const wired = new Set(wiredIds);
   let unwired = 0;
   return exits.filter(
     (exit, index) =>
@@ -30,20 +42,22 @@ function conditionCanvasExits(graph: FlowGraph, exits: EffectiveExit[], blockId:
 }
 
 function canvasExits(
-  graph: FlowGraph,
   block: FlowBlock,
+  wiredIds: readonly string[],
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
 ): CanvasExit[] {
   const effective = effectiveExits(block, agents);
-  if (block.kind === "condition") return conditionCanvasExits(graph, effective, block.id);
+  if (block.kind === "condition") return conditionCanvasExits(effective, wiredIds);
   const exits: CanvasExit[] = effective;
+  const drawn = new Set(exits.map((exit) => exit.id));
   const inherited = inheritedExits(block, agents);
-  for (const wire of graph.connections) {
-    if (wire.sourceBlockId !== block.id || exits.some((exit) => exit.id === wire.exitId)) continue;
-    const hidden = inherited.find((exit) => exit.id === wire.exitId);
+  for (const exitId of wiredIds) {
+    if (drawn.has(exitId)) continue;
+    drawn.add(exitId);
+    const hidden = inherited.find((exit) => exit.id === exitId);
     exits.push({
-      id: wire.exitId,
-      name: hidden?.name ?? wire.exitId,
+      id: exitId,
+      name: hidden?.name ?? exitId,
       description: "",
       messageRequired: hidden?.messageRequired ?? false,
       source: "agent",
