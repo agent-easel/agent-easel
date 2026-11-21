@@ -142,12 +142,8 @@ function checkBlockFields(
       path,
       "Blocks reference saved Agents; local settings and extra fields are not allowed.",
     );
-  if (!isId(block.id) || blockIds.has(block.id) || block.id === FINISH_BLOCK_ID)
-    issue(
-      "invalid_block_id",
-      `${path}.id`,
-      `Block IDs must be non-empty, unique and not "${FINISH_BLOCK_ID}", the Finish block's ID.`,
-    );
+  if (!isId(block.id) || blockIds.has(block.id))
+    issue("invalid_block_id", `${path}.id`, "Block IDs must be non-empty and unique.");
   else blockIds.add(block.id);
   if (!kindFields)
     issue(
@@ -348,6 +344,7 @@ function checkFinish(finish: unknown, issue: IssueReporter): ReadonlySet<string>
  * is a readiness gap, not a save error. */
 function checkFlowInput(
   flowInput: unknown,
+  blockIds: ReadonlySet<string>,
   targetableBlockIds: ReadonlySet<string>,
   issue: IssueReporter,
 ) {
@@ -366,7 +363,7 @@ function checkFlowInput(
     issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
   const targets = new Set<string>();
   flowInput.targetBlockIds.forEach((target, i) => {
-    if (target === FINISH_BLOCK_ID)
+    if (target === FINISH_BLOCK_ID && !blockIds.has(target))
       issue(
         "flow_input_finish",
         `${path}.targetBlockIds.${i}`,
@@ -406,11 +403,11 @@ const validTarget = (
   blockIds: ReadonlySet<string>,
   endingIds: ReadonlySet<string>,
 ) =>
-  edge.targetBlockId === FINISH_BLOCK_ID
-    ? typeof edge.targetEndingId === "string" && endingIds.has(edge.targetEndingId)
-    : edge.targetEndingId === undefined &&
-      typeof edge.targetBlockId === "string" &&
-      blockIds.has(edge.targetBlockId);
+  edge.targetEndingId === undefined
+    ? typeof edge.targetBlockId === "string" && blockIds.has(edge.targetBlockId)
+    : edge.targetBlockId === FINISH_BLOCK_ID &&
+      typeof edge.targetEndingId === "string" &&
+      endingIds.has(edge.targetEndingId);
 
 function checkConnections(
   connections: readonly unknown[],
@@ -441,7 +438,38 @@ function checkConnections(
   });
 }
 
-function checkGraph(graph: unknown, issue: IssueReporter) {
+const PORTABLE_ORDINARY_BLOCK_LIMIT = 500;
+const AUTHORED_ORDINARY_BLOCK_LIMIT = PORTABLE_ORDINARY_BLOCK_LIMIT - 1;
+
+function graphSizeIssue(
+  blocks: number,
+  connections: number,
+  ordinaryBlockLimit: number,
+): ValidationIssue | undefined {
+  if (blocks <= ordinaryBlockLimit && connections <= 5000) return;
+  return {
+    code: "graph_too_large",
+    path: "graph",
+    message:
+      "Use at most 500 blocks, the Finish block included, and 5000 connections. Imported and upgraded Flows can retain 500 ordinary blocks.",
+  };
+}
+
+export function flowEditSizeRefusal(
+  graph: FlowGraphInput,
+  saved: FlowGraphInput,
+): Result<never> | undefined {
+  const issue = graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    Math.max(AUTHORED_ORDINARY_BLOCK_LIMIT, saved.blocks.length),
+  );
+  if (issue)
+    return { ok: false, error: { code: "validation", message: issue.message, issues: [issue] } };
+  return undefined;
+}
+
+function checkGraph(graph: unknown, ordinaryBlockLimit: number, issue: IssueReporter) {
   if (!isRecord(graph) || !Array.isArray(graph.blocks) || !Array.isArray(graph.connections)) {
     issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
     return;
@@ -454,12 +482,12 @@ function checkGraph(graph: unknown, issue: IssueReporter) {
     );
   const blockIds = new Set<string>();
   const exits: ConnectableExits = new Map();
-  if (graph.blocks.length >= 500 || graph.connections.length > 5000)
-    issue(
-      "graph_too_large",
-      "graph",
-      "Use at most 500 blocks, the Finish block included, and 5000 connections.",
-    );
+  const sizeIssue = graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    ordinaryBlockLimit,
+  );
+  if (sizeIssue) issue(sizeIssue.code, sizeIssue.path, sizeIssue.message);
   graph.blocks.forEach((block, i) =>
     checkBlock(block, `graph.blocks.${i}`, blockIds, exits, issue),
   );
@@ -470,7 +498,7 @@ function checkGraph(graph: unknown, issue: IssueReporter) {
         : [],
     ),
   );
-  checkFlowInput(graph.flowInput, targetableBlockIds, issue);
+  checkFlowInput(graph.flowInput, blockIds, targetableBlockIds, issue);
   checkConnections(graph.connections, blockIds, checkFinish(graph.finish, issue), exits, issue);
 }
 
@@ -507,9 +535,8 @@ function checkWorkspace(raw: unknown, issue: IssueReporter): FlowWorkspace | und
   return undefined;
 }
 
-/** A graph supplied at creation is validated exactly as a saved graph. */
 /** Checks a create or save body in one pass, so a reply lists every defect at once. */
-function checkFlowBody(input: unknown, required: boolean) {
+function checkFlowBody(input: unknown, required: boolean, ordinaryBlockLimit: number) {
   const name = validateFlowName(input);
   if (!name.ok) return name;
   const raw = input as Record<string, unknown>;
@@ -520,7 +547,7 @@ function checkFlowBody(input: unknown, required: boolean) {
     (!Number.isSafeInteger(raw.expectedRevision) || (raw.expectedRevision as number) < 1)
   )
     issue("invalid_revision", "expectedRevision", "Include the revision you opened.");
-  if (raw.graph !== undefined) checkGraph(raw.graph, issue);
+  if (raw.graph !== undefined) checkGraph(raw.graph, ordinaryBlockLimit, issue);
   else if (required)
     issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
   const workspace = raw.workspace === undefined ? undefined : checkWorkspace(raw.workspace, issue);
@@ -539,15 +566,22 @@ function checkFlowBody(input: unknown, required: boolean) {
     expectedRevision: raw.expectedRevision as number,
   };
 }
-export function validateCreateFlow(input: unknown): Result<CreateFlowInput> {
-  const checked = checkFlowBody(input, false);
+export function validateCreateFlow(
+  input: unknown,
+  source: "authoring" | "portable" = "authoring",
+): Result<CreateFlowInput> {
+  const checked = checkFlowBody(
+    input,
+    false,
+    source === "authoring" ? AUTHORED_ORDINARY_BLOCK_LIMIT : PORTABLE_ORDINARY_BLOCK_LIMIT,
+  );
   if (!checked.ok) return checked;
   const projectId = parseOwningProject(input);
   if (!projectId.ok) return projectId;
   return { ok: true, value: { ...checked.value, projectId: projectId.value } };
 }
 export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
-  const checked = checkFlowBody(input, true);
+  const checked = checkFlowBody(input, true, PORTABLE_ORDINARY_BLOCK_LIMIT);
   if (!checked.ok) return checked;
   const expectedProjectId = parseExpectedOwner(input);
   if (!expectedProjectId.ok) return expectedProjectId;

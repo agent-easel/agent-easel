@@ -650,15 +650,18 @@ function flowIssue(entry: ValidationIssue, blocks: readonly unknown[]): Validati
 /** The Flow domain validator over the file's Flow, with each Agent block's key in its id's place. */
 function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result<PortableFlow> {
   const blocks = flowBlocks(flow);
-  const validated = validateCreateFlow({
-    ...flow,
-    graph: {
-      ...(flow.graph as Record<string, unknown>),
-      blocks: blocks.map(({ agentKey, ...block }) =>
-        block.kind === "agent" ? { ...block, agentId: agentKey } : block,
-      ),
+  const validated = validateCreateFlow(
+    {
+      ...flow,
+      graph: {
+        ...(flow.graph as Record<string, unknown>),
+        blocks: blocks.map(({ agentKey, ...block }) =>
+          block.kind === "agent" ? { ...block, agentId: agentKey } : block,
+        ),
+      },
     },
-  });
+    "portable",
+  );
   if (!validated.ok)
     return rejected(
       "validation",

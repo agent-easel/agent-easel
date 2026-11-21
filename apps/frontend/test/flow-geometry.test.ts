@@ -81,6 +81,44 @@ it("incoming ports keep Flow input first, then connections in graph order, 18 px
   });
 });
 
+it("the laid-out wires to an ordinary Block and an ending keep separate routes", () => {
+  // Arrange
+  const base = geometryGraph();
+  const graph = {
+    ...base,
+    blocks: [{ ...base.blocks[0]!, id: "finish:done", name: "Review" }, base.blocks[1]!],
+    flowInput: { ...base.flowInput, targetBlockIds: [] },
+    connections: [
+      { sourceBlockId: "source-0", exitId: "done", targetBlockId: "finish:done" },
+      {
+        sourceBlockId: "source-0",
+        exitId: "done",
+        targetBlockId: "finish",
+        targetEndingId: "done",
+      },
+    ],
+    finish: {
+      ...base.finish,
+      endings: [
+        { id: "done", name: "Delivered", output: "none", description: "", outputDescription: "" },
+      ],
+    },
+  } as const;
+  const layout = buildElkGraph(graph, createFlowLayoutDimensions(graph, AUTHORING_DIMENSIONS));
+  const geometry = createCanvasGeometry(graph, AUTHORING_DIMENSIONS, { finish: true });
+
+  // Act
+  const [review, delivered] = exitWires(graph, "orthogonal", geometry, undefined, true);
+
+  // Assert
+  expect(review?.key).not.toBe(delivered?.key);
+  expect([review?.target, delivered?.target]).toStrictEqual(["Review", "Finish · Delivered"]);
+  expect(layout.edges).toMatchObject([
+    { id: review?.key, targets: ["in:finish:done:0"] },
+    { id: delivered?.key, targets: ["ending:0"] },
+  ]);
+});
+
 it("a block grows to hold its last incoming port", () => {
   // Arrange
   const graph = geometryGraph();

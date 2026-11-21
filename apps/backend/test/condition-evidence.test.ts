@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { CONDITION_TIMELINE_ARRIVALS } from "@t3-factory/contracts";
+import { CONDITION_TIMELINE_ARRIVALS, FINISH_BLOCK_ID } from "@t3-factory/contracts";
 import { appliedRun, subscribe, watchRun } from "./support/live.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
@@ -9,6 +9,7 @@ import {
   conditionFlow,
   conditionLoopedThrough,
   conditionSelections,
+  observeFor,
   resultReported,
   selfLoopConditionFlow,
   workerAtWork,
@@ -18,6 +19,63 @@ const workerOrigin = (runId: string, threadId: string) => ({
   runId,
   activationId: expect.any(String),
   threadId,
+});
+
+it("Condition evidence distinguishes ordinary recipients and every ending from the same output", async (c) => {
+  // Arrange
+  const f = await prepared(c, conditionFlow);
+  const { graph } = f.flow;
+  const recipient = { sourceBlockId: "gate", exitId: "otherwise" };
+  const ending = (id: string) =>
+    ({ id, name: id, description: "", output: "none", outputDescription: "" }) as const;
+  const collidingId = "finish/ending:done";
+  const adjusted = await f.f.updateFlow(f.flow.id, {
+    name: f.flow.name,
+    expectedRevision: f.flow.revision,
+    expectedProjectId: f.flow.projectId,
+    graph: {
+      ...graph,
+      blocks: [
+        ...graph.blocks.filter((block) => block.id !== "follow-up"),
+        { id: FINISH_BLOCK_ID, name: "Legacy review", kind: "human", position: { x: 700, y: 0 } },
+        { id: collidingId, name: "Other review", kind: "human", position: { x: 700, y: 250 } },
+      ],
+      connections: [
+        { sourceBlockId: "worker", exitId: "done", targetBlockId: "gate" },
+        { ...recipient, targetBlockId: FINISH_BLOCK_ID },
+        { ...recipient, targetBlockId: collidingId },
+        { ...recipient, targetBlockId: FINISH_BLOCK_ID, targetEndingId: "done" },
+        { ...recipient, targetBlockId: FINISH_BLOCK_ID, targetEndingId: "later" },
+      ],
+      finish: { ...graph.finish, endings: [ending("done"), ending("later")] },
+    },
+  });
+  assert(adjusted.ok);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker, { message: "The worker delivered" });
+
+  // Act
+  const run = await observeFor(
+    "accept the selected ending",
+    f.world,
+    worker.runId,
+    (detail) => detail.result !== null,
+  );
+
+  // Assert
+  expect(run.result?.endingId).toBe("done");
+  expect(run.blocks.map((block) => [block.blockId, block.name])).toContainEqual([
+    FINISH_BLOCK_ID,
+    "Legacy review",
+  ]);
+  const page = await f.f.listConditionArrivals(worker.runId, "gate", "", "");
+  assert(page.ok);
+  expect(page.value.arrivals[0]?.recipients).toStrictEqual([
+    { blockId: FINISH_BLOCK_ID, targetEndingId: null, disposition: "acknowledged" },
+    { blockId: collidingId, targetEndingId: null, disposition: "acknowledged" },
+    { blockId: FINISH_BLOCK_ID, targetEndingId: "done", disposition: "acknowledged" },
+    { blockId: FINISH_BLOCK_ID, targetEndingId: "later", disposition: "cancelled" },
+  ]);
 });
 
 it("a Condition's evidence lists its arrivals in order with source, worker, matched rule or Otherwise and recipients", async (c) => {
@@ -44,7 +102,7 @@ it("a Condition's evidence lists its arrivals in order with source, worker, matc
         sourceBlockId: "worker",
         origin: workerOrigin(first.runId, first.threadId),
         rule: null,
-        recipients: [{ blockId: "final", disposition: "acknowledged" }],
+        recipients: [{ blockId: "final", targetEndingId: null, disposition: "acknowledged" }],
       },
       {
         id: expect.any(String),
@@ -54,7 +112,7 @@ it("a Condition's evidence lists its arrivals in order with source, worker, matc
         sourceBlockId: "second",
         origin: workerOrigin(first.runId, second.threadId),
         rule: { id: "escalate", name: "Escalate" },
-        recipients: [{ blockId: "final", disposition: "acknowledged" }],
+        recipients: [{ blockId: "final", targetEndingId: null, disposition: "acknowledged" }],
       },
     ],
     highWater: 2,
@@ -276,10 +334,10 @@ it("each evidence read shows a recipient's current disposition, not the one at s
   // Assert
   assert(before.ok && after.ok);
   expect(before.value.arrivals[0]?.recipients).toStrictEqual([
-    { blockId: "follow-up", disposition: "pending" },
+    { blockId: "follow-up", targetEndingId: null, disposition: "pending" },
   ]);
   expect(after.value.arrivals[0]?.recipients).toStrictEqual([
-    { blockId: "follow-up", disposition: "cancelled" },
+    { blockId: "follow-up", targetEndingId: null, disposition: "cancelled" },
   ]);
   expect(after.value.arrivals[0]?.acceptedAt).toBe(before.value.arrivals[0]?.acceptedAt);
 });

@@ -2,7 +2,6 @@ import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import {
-  FINISH_BLOCK_ID,
   type FactoryProject,
   type FlowBlock,
   type RunBlock,
@@ -45,6 +44,7 @@ import { InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
 import { RunOriginSection } from "./run-origin.tsx";
+import { FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import { RunFinishView } from "./run-finish-view.tsx";
 import { ResultSection } from "./run-result-section.tsx";
 
@@ -463,14 +463,14 @@ export function RunInspector({
   onSelect,
 }: {
   run: RunDetail;
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   /** The Run title's generation while the Run title is inspected. */
   titleGeneration: RunTitleGeneration | null;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
   waitingForWorkers: boolean;
   observationUnavailable: boolean;
-  onSelect: (blockId: string | null) => void;
+  onSelect: (blockId: CanvasBlockSelection | null) => void;
 }) {
   const block = run.definitions.flow.graph.blocks.find((item) => item.id === selected);
   const recorded = run.blocks.find((item) => item.blockId === selected);
@@ -482,7 +482,7 @@ export function RunInspector({
       <PanelResizeHandle label="Resize Run inspector" side="left" bounds={inspectorBounds} />
       {titleGeneration ? (
         <RunTitleView generation={titleGeneration} onBack={() => onSelect(null)} />
-      ) : selected === FINISH_BLOCK_ID ? (
+      ) : selected === FINISH_SELECTION ? (
         <RunFinishView run={run} onBack={() => onSelect(null)} />
       ) : block && recorded ? (
         <RunBlockView

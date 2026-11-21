@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import { OpenInT3 } from "./open-in-t3.tsx";
-import { FINISH_BLOCK_ID, type RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@t3-factory/contracts";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
+import { blockName, deliveryRecipientName } from "../run-evidence.ts";
 import { clockTime } from "../time-format.ts";
 import type { TechnicalDetail } from "./technical-details.tsx";
 import { AgentTextPreview, AgentTextReader, type ReaderHeading } from "./agent-text.tsx";
@@ -24,11 +25,6 @@ export function resultVersion(run: RunDetail, report: RunReport) {
   return visitResults(run, report).indexOf(report) + 1;
 }
 
-function blockName(run: RunDetail, blockId: string) {
-  if (blockId === FINISH_BLOCK_ID) return "Finish";
-  return run.blocks.find((b) => b.blockId === blockId)?.name ?? blockId;
-}
-
 type Intent = RunDetail["intents"][number];
 
 function intentState(run: RunDetail, intent: Intent) {
@@ -41,15 +37,27 @@ function intentState(run: RunDetail, intent: Intent) {
 /** Where the result went: one phrase per handoff, or why it was not handed off again. */
 function deliveries(run: RunDetail, report: RunReport) {
   const intents = run.intents.filter((i) => i.reportId === report.id);
+  if (intents.length)
+    return intents.map(
+      (intent) =>
+        `${intentState(run, intent)} → ${deliveryRecipientName(run, intent)}${intent.problem ? ` · ${intent.problem}` : ""}`,
+    );
   // A same-exit replacement after hand-off creates no handoffs of its own.
-  if (!intents.length && report.recipients.length)
-    return [
-      `Result updated · not handed off again to ${report.recipients.map((id) => blockName(run, id)).join(", ")}`,
-    ];
-  return intents.map(
-    (intent) =>
-      `${intentState(run, intent)} → ${blockName(run, intent.blockId)}${intent.problem ? ` · ${intent.problem}` : ""}`,
-  );
+  const names = report.recipients.map((id) => blockName(run, id));
+  for (const edge of run.definitions.flow.graph.connections) {
+    if (
+      edge.sourceBlockId === report.blockId &&
+      edge.exitId === report.exitId &&
+      edge.targetEndingId
+    )
+      names.push(
+        deliveryRecipientName(run, {
+          blockId: edge.targetBlockId,
+          targetEndingId: edge.targetEndingId,
+        }),
+      );
+  }
+  return names.length ? [`Result updated · not handed off again to ${names.join(", ")}`] : [];
 }
 
 function resultFacts(run: RunDetail, report: RunReport) {

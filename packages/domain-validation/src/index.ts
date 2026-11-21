@@ -1,5 +1,4 @@
 import {
-  FINISH_BLOCK_ID,
   type AgentCapabilities,
   type AgentDefinition,
   type AgentExecutionSettings,
@@ -352,7 +351,7 @@ function targetLabel(
   blocks: ReadonlyMap<string, FlowBlockInput>,
   edge: FlowGraphInput["connections"][number],
 ) {
-  if (edge.targetBlockId !== FINISH_BLOCK_ID) {
+  if (edge.targetEndingId === undefined) {
     const target = blocks.get(edge.targetBlockId);
     return target ? blockLabel(target) : edge.targetBlockId;
   }
@@ -421,7 +420,7 @@ function conditionOutputReadiness(graph: FlowGraphInput, add: IssueReporter) {
 function finishReadiness(graph: FlowGraphInput, add: IssueReporter) {
   const wired = new Set(
     graph.connections.flatMap((edge) =>
-      edge.targetBlockId === FINISH_BLOCK_ID && edge.targetEndingId ? [edge.targetEndingId] : [],
+      edge.targetEndingId === undefined ? [] : [edge.targetEndingId],
     ),
   );
   const names = new Set<string>();
@@ -449,7 +448,11 @@ function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
   while (changed) {
     changed = false;
     for (const edge of graph.connections)
-      if (reached.has(edge.sourceBlockId) && !reached.has(edge.targetBlockId)) {
+      if (
+        edge.targetEndingId === undefined &&
+        reached.has(edge.sourceBlockId) &&
+        !reached.has(edge.targetBlockId)
+      ) {
         reached.add(edge.targetBlockId);
         changed = true;
       }
@@ -479,7 +482,11 @@ function conditionCycleReadiness(graph: FlowGraphInput, add: IssueReporter) {
   );
   const next = new Map<string, string[]>();
   for (const edge of graph.connections)
-    if (passThrough.has(edge.sourceBlockId) && passThrough.has(edge.targetBlockId))
+    if (
+      edge.targetEndingId === undefined &&
+      passThrough.has(edge.sourceBlockId) &&
+      passThrough.has(edge.targetBlockId)
+    )
       next.set(edge.sourceBlockId, [...(next.get(edge.sourceBlockId) ?? []), edge.targetBlockId]);
   graph.blocks.forEach((block, i) => {
     if (block.kind !== "condition") return;
@@ -528,7 +535,7 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
   while (pending.length) {
     const target = pending.pop()!;
     for (const edge of graph.connections) {
-      if (edge.targetBlockId !== target) continue;
+      if (edge.targetEndingId !== undefined || edge.targetBlockId !== target) continue;
       const source = blocks.get(edge.sourceBlockId);
       if (source?.kind === "agent") sources.add(source.id);
       else if (source && !visited.has(source.id)) {
@@ -550,7 +557,7 @@ export function handoffRecipients(
       connections.flatMap((edge) =>
         edge.sourceBlockId === sourceBlockId &&
         edge.exitId === exitId &&
-        edge.targetBlockId !== FINISH_BLOCK_ID
+        edge.targetEndingId === undefined
           ? [edge.targetBlockId]
           : [],
       ),
@@ -568,8 +575,7 @@ export function handoffEndings(
       connections.flatMap((edge) =>
         edge.sourceBlockId === sourceBlockId &&
         edge.exitId === exitId &&
-        edge.targetBlockId === FINISH_BLOCK_ID &&
-        edge.targetEndingId
+        edge.targetEndingId !== undefined
           ? [edge.targetEndingId]
           : [],
       ),
@@ -709,6 +715,7 @@ export {
   CANVAS_COORD_MAX,
   CANVAS_COORD_MESSAGE,
   CANVAS_COORD_MIN,
+  flowEditSizeRefusal,
   isCanvasPosition,
   validateCreateFlow,
   validateDuplicateFlow,

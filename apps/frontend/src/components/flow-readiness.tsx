@@ -1,18 +1,18 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
-import {
-  FINISH_BLOCK_ID,
-  type FlowGraph,
-  type FlowReadiness,
-  type ValidationIssue,
-} from "@t3-factory/contracts";
+import { type FlowGraph, type FlowReadiness, type ValidationIssue } from "@t3-factory/contracts";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
+import { FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import type { RuleFocus } from "./condition-rules.tsx";
 
-export type IssueSelect = (blockId: string | null, rule?: RuleFocus, ending?: string) => void;
+export type IssueSelect = (
+  blockId: CanvasBlockSelection | null,
+  rule?: RuleFocus,
+  ending?: string,
+) => void;
 
 function issueEnding(path: string, graph: FlowGraph): string | undefined {
   const index = /^graph\.finish\.endings\.(\d+)/.exec(path)?.[1];
@@ -29,10 +29,10 @@ function issueRule(path: string, graph: FlowGraph): RuleFocus | undefined {
 }
 
 /** The block an issue path refers to: null clears the selection, undefined leaves it. */
-function issueSelection(path: string, graph: FlowGraph): string | null | undefined {
+function issueSelection(path: string, graph: FlowGraph): CanvasBlockSelection | null | undefined {
   const block = /^graph\.blocks\.(\d+)/.exec(path)?.[1];
   if (block) return graph.blocks[Number(block)]?.id ?? null;
-  if (path.startsWith("graph.finish")) return FINISH_BLOCK_ID;
+  if (path.startsWith("graph.finish")) return FINISH_SELECTION;
   const connection = /^graph\.connections\.(\d+)/.exec(path)?.[1];
   if (connection) return graph.connections[Number(connection)]?.sourceBlockId ?? null;
   if (!path.startsWith("graph.flowInput")) return undefined;

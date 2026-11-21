@@ -17,6 +17,8 @@ import {
   fileBody,
   flowFile,
   flowUnderCreateLimitBy,
+  fullLegacyFlowFile,
+  importFullLegacyFlow,
   interruptedUpload,
   reviewedCommit,
   withReversedKeys,
@@ -581,10 +583,10 @@ it("retrying a commit with the same request id and content returns the original 
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });
 
-it("a version-1 Flow file from an earlier release still commits as the Flow it holds", async (context) => {
+it("a full-size version-1 Flow still imports with its ordinary finish block and wires", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
-  const file = flowFile({ formatVersion: 1 });
+  const file = fullLegacyFlowFile(1);
 
   // Act
   const committed = await factory.commitImport({
@@ -603,19 +605,21 @@ it("a version-1 Flow file from an earlier release still commits as the Flow it h
     graph: {
       flowInput: file.flow.graph.flowInput,
       connections: file.flow.graph.connections,
-      blocks: [
-        { id: "review", kind: "agent", agentId: committed.value.agents[0]!.id },
-        { id: "approve", kind: "human" },
-      ],
       finish: { endings: [] },
     },
   });
+  expect(flow.graph.blocks).toHaveLength(500);
+  expect(flow.graph.blocks[0]).toMatchObject({
+    id: "finish",
+    kind: "agent",
+    agentId: committed.value.agents[0]!.id,
+  });
 });
 
-it("a version-2 Flow file commits with an empty Finish block placed right of its blocks", async (context) => {
+it("a full-size version-2 Flow imports with an empty Finish block placed right of its blocks", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
-  const file = flowFile();
+  const file = fullLegacyFlowFile();
 
   // Act
   const committed = assertOk(
@@ -628,8 +632,83 @@ it("a version-2 Flow file commits with an empty Finish block placed right of its
 
   // Assert
   const flow = assertOk(await factory.getFlow(committed.flowId!));
+  expect(flow.graph.blocks).toHaveLength(500);
   expect(flow.graph.finish.endings).toStrictEqual([]);
   expect(flow.graph.finish.position.x).toBeGreaterThan(480);
+});
+
+it("renaming a Flow at the former block limit keeps its entire graph", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+
+  // Act
+  const saved = await factory.updateFlow(flow.id, {
+    name: "Renamed full-size Flow",
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+    graph: flow.graph,
+  });
+
+  // Assert
+  expect(saved).toMatchObject({
+    ok: true,
+    value: { name: "Renamed full-size Flow", revision: 2 },
+  });
+  expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
+});
+
+it("a version-3 export of a Flow at the former block limit can still be imported", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+  const { document } = assertOk(await factory.exportFlow(flow.id));
+
+  // Act
+  const copy = await factory.commitImport(reviewedCommit("import-v3", undefined, document));
+
+  // Assert
+  assert(copy.ok);
+  const exported = assertOk(await factory.exportFlow(copy.value.flowId!));
+  expect(exported.document).toMatchObject({ formatVersion: 3, flow: document.flow });
+});
+
+it("newly authored Flows must count the Finish block toward the block limit", async (context) => {
+  // Arrange
+  const { factory, flow } = await importFullLegacyFlow(context);
+
+  // Act
+  const created = await factory.createFlow({ name: "Too many blocks", graph: flow.graph });
+
+  // Assert
+  assert(!created.ok);
+  expect(created.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
+  expect(assertOk(await factory.listFlows())).toHaveLength(1);
+});
+
+it("saving a newly authored Flow cannot exceed the block limit by adding one block", async (context) => {
+  // Arrange
+  const {
+    factory,
+    flow: { graph },
+  } = await importFullLegacyFlow(context);
+  const created = assertOk(
+    await factory.createFlow({
+      name: "At the authoring limit",
+      graph: { ...graph, blocks: graph.blocks.slice(0, -1) },
+    }),
+  );
+
+  // Act
+  const saved = await factory.updateFlow(created.id, {
+    name: created.name,
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph,
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues).toMatchObject([{ code: "graph_too_large", path: "graph" }]);
+  expect(assertOk(await factory.getFlow(created.id)).revision).toBe(created.revision);
 });
 
 it("a version-2 Flow file holding a Finish block is rejected at it, as version 2 has none", async (context) => {
@@ -648,7 +727,7 @@ it("a version-2 Flow file holding a Finish block is rejected at it, as version 2
   ]);
 });
 
-it("a committed version-3 Flow file keeps its endings and the wires entering them", async (context) => {
+it("a committed version-3 Flow file distinguishes an ordinary finish target from a Finish ending", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const coder = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
@@ -675,8 +754,11 @@ it("a committed version-3 Flow file keeps its endings and the wires entering the
       workspace: created.workspace,
       graph: {
         flowInput: flowInput("coder"),
-        blocks: [agentBlock("coder", "Coder", coder.id, { x: 200, y: 20 })],
-        connections: [wire("done", "delivered")],
+        blocks: [
+          agentBlock("coder", "Coder", coder.id, { x: 200, y: 20 }),
+          humanStep("finish", "Review", { x: 400, y: 20 }),
+        ],
+        connections: [connection("coder", "done", "finish"), wire("done", "delivered")],
         finish: { position: { x: 600, y: 20 }, endings: [delivered, gaveUp] },
       },
     }),
@@ -697,21 +779,28 @@ it("a committed version-3 Flow file keeps its endings and the wires entering the
   // Assert
   const flow = assertOk(await factory.getFlow(committed.flowId!));
   expect(flow.graph.finish).toStrictEqual(saved.graph.finish);
-  expect(flow.graph.connections).toStrictEqual([wire("done", "delivered")]);
+  expect(flow.graph.connections).toStrictEqual([
+    connection("coder", "done", "finish"),
+    wire("done", "delivered"),
+  ]);
 });
 
-it("retrying a Flow commit whose file lists the same content with fields reordered returns the original result", async (context) => {
+it("retrying a full-size version-2 Flow commit with fields reordered returns the original result", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const selections = { "agent-1": controlledExecution() };
   const first = assertOk(
-    await factory.commitImport({ requestId: "import-flow", document: flowFile(), selections }),
+    await factory.commitImport({
+      requestId: "import-flow",
+      document: fullLegacyFlowFile(),
+      selections,
+    }),
   );
 
   // Act
   const retried = await factory.commitImport({
     requestId: "import-flow",
-    document: withReversedKeys(flowFile()),
+    document: withReversedKeys(fullLegacyFlowFile()),
     selections,
   });
 

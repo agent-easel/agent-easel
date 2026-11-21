@@ -89,16 +89,20 @@ export function createHandoffs(
     if (endings.length)
       yield* sql`INSERT INTO run_blocks(run_id,block_id,name) VALUES(${runRow.id},${FINISH_BLOCK_ID},'Finish') ON CONFLICT DO NOTHING`;
     const recipients = [
-      ...source.recipients.map((blockId) => ({ blockId, key: blockId, target: { blockId } })),
+      ...source.recipients.map((blockId) => ({
+        blockId,
+        causeSuffix: `recipient:${blockId}`,
+        target: { blockId },
+      })),
       ...endings.map((endingId) => ({
         blockId: FINISH_BLOCK_ID,
-        key: `${FINISH_BLOCK_ID}/ending:${endingId}`,
+        causeSuffix: `ending:${endingId}`,
         target: { blockId: FINISH_BLOCK_ID, endingId },
       })),
     ];
-    for (const { blockId, key, target } of recipients) {
+    for (const { blockId, causeSuffix, target } of recipients) {
       const id = yield* newId,
-        cause = `${source.kind}:${source.id}/recipient:${key}`;
+        cause = `${source.kind}:${source.id}/${causeSuffix}`;
       const payload = JSON.stringify({ message: source.message });
       const inserted =
         yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,binding_id,origin_activation_id)

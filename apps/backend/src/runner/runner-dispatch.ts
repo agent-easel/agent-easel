@@ -8,7 +8,7 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
-import { FINISH_BLOCK_ID, type FactoryOperations } from "@t3-factory/contracts";
+import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Threads } from "../t3/threads.ts";
@@ -63,7 +63,7 @@ function storedTarget(
   return verified(target);
 }
 const targetKind = (runRow: RunRow, handoff: Handoff) =>
-  handoff.block_id === FINISH_BLOCK_ID
+  (JSON.parse(handoff.target_json) as StoredTarget).endingId !== undefined
     ? "finish"
     : runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
 const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>

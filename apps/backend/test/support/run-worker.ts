@@ -167,13 +167,3 @@ export function pauseWorkerReads(t3: ControlledT3, threadId: string) {
     t3.threads.readExecution = read;
   };
 }
-
-export function forgetSettlementAfterEnding(databasePath: string, runId: string) {
-  const database = new DatabaseSync(databasePath);
-  database.prepare("DELETE FROM run_settlement_workers WHERE run_id = ?").run(runId);
-  database.prepare("DELETE FROM run_settlements WHERE run_id = ?").run(runId);
-  database
-    .prepare("DELETE FROM run_events WHERE run_id = ? AND kind = 'settlement-requested'")
-    .run(runId);
-  database.close();
-}

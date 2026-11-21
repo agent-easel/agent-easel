@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { FINISH_BLOCK_ID, type FlowConnection } from "@t3-factory/contracts";
+import type { FlowConnection } from "@t3-factory/contracts";
 import { wireRouteKey } from "@t3-factory/flow-layout";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
@@ -87,8 +87,8 @@ function wireEnds(graph: CanvasGraph, geometry: Geometry, finish: boolean) {
   const endings = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
   const finishBottom = geometry.finishBox.y + geometry.finishBox.height;
   return (connection: FlowConnection): (WireEnd & { name: string }) | null => {
-    if (connection.targetBlockId === FINISH_BLOCK_ID) {
-      const index = endings.get(connection.targetEndingId ?? "");
+    if (connection.targetEndingId !== undefined) {
+      const index = endings.get(connection.targetEndingId);
       if (!finish || index === undefined) return null;
       const name = graph.finish.endings[index]?.name || "Unnamed ending";
       return {

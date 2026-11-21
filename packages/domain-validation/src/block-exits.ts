@@ -133,7 +133,9 @@ export function exitsWithEndings(
     return {
       ...exit,
       messageRequired:
-        exit.messageRequired || endings.some((ending) => ending.output === "required"),
+        exit.messageRequired ||
+        ((block.kind === "agent" || block.kind === "continuation") &&
+          endings.some((ending) => ending.output === "required")),
       endings,
     };
   });

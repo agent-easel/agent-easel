@@ -154,13 +154,17 @@ export function hasWire(graph: FlowGraph, wire: FlowWire) {
   return graph.connections.some((c) => sameWire(connectionWire(c), wire));
 }
 
+export const FINISH_SELECTION = Symbol("Finish block");
+export type CanvasBlockSelection = string | typeof FINISH_SELECTION;
+
 export type WireTarget = Pick<FlowWire, "targetBlockId" | "targetEndingId">;
 
 export function canConnect(graph: FlowGraph, source: WireSource, target: WireTarget) {
   if (hasWire(graph, { source, ...target })) return false;
-  if (target.targetBlockId === FINISH_BLOCK_ID)
+  if (target.targetEndingId !== undefined)
     return (
       source.kind === "exit" &&
+      target.targetBlockId === FINISH_BLOCK_ID &&
       graph.finish.endings.some((ending) => ending.id === target.targetEndingId)
     );
   const block = graph.blocks.find((b) => b.id === target.targetBlockId);
@@ -210,7 +214,9 @@ export function removeBlock(graph: FlowGraph, blockId: string): FlowGraph {
     ...graph,
     blocks: graph.blocks.filter((b) => b.id !== blockId),
     connections: graph.connections.filter(
-      (c) => c.sourceBlockId !== blockId && c.targetBlockId !== blockId,
+      (c) =>
+        c.sourceBlockId !== blockId &&
+        (c.targetEndingId !== undefined || c.targetBlockId !== blockId),
     ),
     flowInput: {
       ...graph.flowInput,
@@ -287,8 +293,8 @@ function recipientNames(graph: FlowGraph) {
   for (const ending of graph.finish.endings)
     if (!endings.has(ending.id)) endings.set(ending.id, ending.name);
   return ({ targetBlockId, targetEndingId }: FlowConnection) => {
-    if (targetBlockId !== FINISH_BLOCK_ID) return names.get(targetBlockId);
-    const ending = endings.get(targetEndingId ?? "");
+    if (targetEndingId === undefined) return names.get(targetBlockId);
+    const ending = endings.get(targetEndingId);
     return ending === undefined ? undefined : `Finish · ${ending || "Unnamed ending"}`;
   };
 }
@@ -331,7 +337,7 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
   );
   const exists = (id: string) => blocks.some((b) => b.id === id);
   const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
-    targetBlockId === FINISH_BLOCK_ID
+    targetEndingId !== undefined
       ? endings.some((ending) => ending.id === targetEndingId)
       : exists(targetBlockId);
   const restored = (graph: FlowGraph, wire: FlowWire) =>

@@ -5,9 +5,16 @@ import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type { PortableAgent, RawBody } from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { ControlledT3 } from "./controlled-t3.ts";
-import { sampleAgentInput } from "./domain-setup.ts";
+import { assertOk, openFactoryWithApprovedT3, sampleAgentInput } from "./domain-setup.ts";
 import { factoryHarness } from "./factory.ts";
-import { blockExit, continuationStep, controlledExecution, flowInput } from "./scenarios.ts";
+import {
+  blockExit,
+  connection,
+  continuationStep,
+  controlledExecution,
+  flowInput,
+  humanStep,
+} from "./scenarios.ts";
 
 /** The Agent another installation exported: its hint names a provider instance this one lacks. */
 export const exportedAgent = (overrides: Partial<PortableAgent> = {}): PortableAgent => ({
@@ -108,6 +115,29 @@ export const flowFile = (envelope: object = {}) => ({
   },
 });
 
+export function fullLegacyFlowFile(formatVersion: 1 | 2 = 2) {
+  const file = flowFile({ formatVersion });
+  const [review, approve] = file.flow.graph.blocks;
+  return {
+    ...file,
+    flow: {
+      ...file.flow,
+      graph: {
+        blocks: [
+          { ...review!, id: "finish" },
+          approve!,
+          ...Array.from({ length: 498 }, (_, index) => humanStep(`review-${index}`, "Review")),
+        ],
+        connections: [
+          connection("finish", "pass", "approve"),
+          connection("approve", "request-changes", "finish"),
+        ],
+        flowInput: flowInput("finish"),
+      },
+    },
+  };
+}
+
 /** The bytes a chosen file sends to review: JSON text as written, or a value as exported. */
 export const fileBody = (content: unknown): RawBody => ({
   mimeType: "application/json",
@@ -126,6 +156,14 @@ export const reviewedCommit = (
   document,
   selections: { "agent-1": execution },
 });
+
+export async function importFullLegacyFlow(context: TestContext) {
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const imported = assertOk(
+    await factory.commitImport(reviewedCommit("import-full", undefined, fullLegacyFlowFile())),
+  );
+  return { factory, flow: assertOk(await factory.getFlow(imported.flowId!)) };
+}
 
 /** The fingerprint release 0.6.0 recorded for `reviewedCommit()` of a version-1 Agent file. */
 const VERSION_1_RECEIPT_FINGERPRINT =

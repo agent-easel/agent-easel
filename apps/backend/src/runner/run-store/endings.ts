@@ -75,9 +75,7 @@ export function openRunEndings(database: RunnerDatabase) {
         if (accepted?.deliveryId === handoff.id) return accepted;
         const arriving = yield* arrivingHandoff(sql, ownerToken, current.id, handoff, generation);
         if (!arriving) return undefined;
-        const { endingId } = JSON.parse(handoff.target_json) as StoredTarget & {
-          endingId: string;
-        };
+        const { endingId } = JSON.parse(arriving.record.target_json) as StoredTarget;
         const ending = current.definitions.flow.graph.finish.endings.find(
           (entry) => entry.id === endingId,
         );
@@ -99,7 +97,7 @@ export function openRunEndings(database: RunnerDatabase) {
         });
         const losers = yield* sql<{
           id: string;
-        }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${CANCELLED_ON_FINISH},reconciled_at=${time} WHERE run_id=${current.id} AND block_id=${FINISH_BLOCK_ID} AND state='pending' RETURNING id`;
+        }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${CANCELLED_ON_FINISH},reconciled_at=${time} WHERE run_id=${current.id} AND kind='handoff' AND json_extract(target_json,'$.endingId') IS NOT NULL AND state='pending' RETURNING id`;
         for (const loser of losers)
           yield* appendTimelineEvent(sql, {
             kind: "operation-cancelled",

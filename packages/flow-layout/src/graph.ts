@@ -1,9 +1,4 @@
-import {
-  FINISH_BLOCK_ID,
-  type AgentDefinition,
-  type FlowBlock,
-  type FlowGraph,
-} from "@t3-factory/contracts";
+import { type AgentDefinition, type FlowBlock, type FlowGraph } from "@t3-factory/contracts";
 import { effectiveExits, inheritedExits, type EffectiveExit } from "@t3-factory/domain-validation";
 
 type CanvasExit = EffectiveExit & { readonly unavailable?: "hidden" | "removed" };
@@ -63,10 +58,11 @@ export type WireSource =
   | { readonly kind: "flow-input" };
 
 export function wireRouteKey(source: WireSource, targetBlockId: string, targetEndingId?: string) {
-  if (source.kind === "flow-input") return `flow-input:${targetBlockId}`;
-  const target =
-    targetEndingId === undefined ? targetBlockId : `${targetBlockId}:${targetEndingId}`;
-  return `${source.sourceBlockId}:${source.exitId}:${target}`;
+  return JSON.stringify(
+    source.kind === "flow-input"
+      ? [source.kind, targetBlockId]
+      : [source.kind, source.sourceBlockId, source.exitId, targetBlockId, targetEndingId ?? null],
+  );
 }
 
 function sourceKey(source: WireSource) {
@@ -89,9 +85,8 @@ export function incomingIndex(graph: FlowGraph): IncomingIndex {
   };
   for (const targetBlockId of new Set(graph.flowInput.targetBlockIds))
     add(targetBlockId, { kind: "flow-input" });
-  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections)
-    if (targetBlockId !== FINISH_BLOCK_ID)
-      add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
+  for (const { sourceBlockId, exitId, targetBlockId, targetEndingId } of graph.connections)
+    if (targetEndingId === undefined) add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
   return {
     wires: (targetBlockId) => incoming.get(targetBlockId)?.wires ?? [],
     portIndex: (targetBlockId, source) =>

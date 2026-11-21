@@ -6,13 +6,15 @@ import {
   type RunDetail,
   type RunResult,
 } from "@t3-factory/contracts";
+import { blockedWorkers } from "../attention-copy.ts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
+import { blockName, capturedEnding } from "../run-evidence.ts";
 import { runResultState } from "../run-status.ts";
 import { clockTime } from "../time-format.ts";
 import { InspectorSection } from "./inspector-section.tsx";
 import { InspectedHeader } from "./run-block-view.tsx";
-import { blockName, NoResult, ResultDetails } from "./run-result-section.tsx";
+import { NoResult, ResultDetails } from "./run-result-section.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails } from "./technical-details.tsx";
 
@@ -24,10 +26,21 @@ function endedText(run: RunDetail, result: RunResult) {
   const reaching = `Reaching ${result.endingName}`;
   const at = clockTime(result.acceptedAt);
   if (run.settlement) {
-    const stopping = [...new Set(run.settlement.workers.map((worker) => worker.blockName))];
-    return stopping.length
-      ? `${reaching} is stopping ${listed(stopping)}. Edits made in the workspace stay.`
-      : `${reaching} is ending the Run.`;
+    const stopping = [
+      ...new Set(
+        run.settlement.workers
+          .filter((worker) => worker.state === "stopping")
+          .map((worker) => worker.blockName),
+      ),
+    ];
+    const unresolved = [...new Set(blockedWorkers(run).map((worker) => worker.blockName))];
+    const progress = stopping.length
+      ? `${reaching} is stopping ${listed(stopping)}.`
+      : `${reaching} closed the Run to new work.`;
+    const problem = unresolved.length
+      ? ` Factory couldn’t confirm the stop for ${listed(unresolved)}.`
+      : "";
+    return `${progress}${problem} Edits made in the workspace stay.`;
   }
   const stopped = run.blocks.filter((block) => block.state === "stopped").map((b) => b.name);
   if (!stopped.length) return `${reaching} ended the Run at ${at}.`;
@@ -54,8 +67,8 @@ function endingLine(ending: FlowEnding, result: RunResult | null) {
 function incomingWires(run: RunDetail) {
   const { graph } = run.definitions.flow;
   return graph.connections.flatMap((connection) => {
-    if (connection.targetBlockId !== FINISH_BLOCK_ID) return [];
-    const ending = graph.finish.endings.find((item) => item.id === connection.targetEndingId);
+    if (!connection.targetEndingId) return [];
+    const ending = capturedEnding(run, connection.targetEndingId);
     const exit = capturedExits(run.definitions, connection.sourceBlockId).find(
       (item) => item.id === connection.exitId,
     );

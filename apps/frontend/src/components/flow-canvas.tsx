@@ -17,6 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 import {
   addWire,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
   canConnect,
   exitRecipients,
   type BlockPosition,
@@ -49,8 +51,6 @@ export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | nul
 
 /** The selection id of the Flow input, whose settings hold its targets. */
 export const FLOW_INPUT = "flow-input";
-
-export const FINISH = FINISH_BLOCK_ID;
 
 /** Space the floating readiness summary covers above the graph. */
 const READINESS_HEIGHT = 64;
@@ -112,12 +112,12 @@ function useConnectDrag(
     if (!hit || !surface.current?.contains(hit) || port.current?.contains(hit)) return null;
     const targetBlockId = hit.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
     const targetEndingId = hit.closest<HTMLElement>("[data-ending-id]")?.dataset.endingId;
-    if (!targetBlockId) return null;
-    let target: WireTarget = { targetBlockId };
-    if (targetBlockId === FINISH_BLOCK_ID) {
-      if (!targetEndingId) return null;
-      target = { targetBlockId, targetEndingId };
-    }
+    const target: WireTarget | null = targetEndingId
+      ? { targetBlockId: FINISH_BLOCK_ID, targetEndingId }
+      : targetBlockId
+        ? { targetBlockId }
+        : null;
+    if (!target) return null;
     return canConnect(graph, source, target) ? target : null;
   }
   return {
@@ -593,7 +593,8 @@ function blockGesture(drag: MoveDrag | null, connect: ConnectDrag | null, blockI
   const source = connect?.source;
   return {
     dragging: drag?.node.kind === "block" && drag.node.blockId === blockId,
-    connectTarget: connect?.target?.targetBlockId === blockId,
+    connectTarget:
+      connect?.target?.targetEndingId === undefined && connect?.target?.targetBlockId === blockId,
     connectingExitId:
       source?.kind === "exit" && source.sourceBlockId === blockId ? source.exitId : null,
   };
@@ -605,17 +606,17 @@ type FlowCanvasProps = {
   agents: readonly AgentDefinition[];
   /** Where readiness issues mark the Flow input, Blocks and Condition outputs. */
   marks: ReadinessMarks;
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   selectedWire: FlowWire | null;
   /** Blocks the view keeps visible: the selected Block and the next one. */
-  reveal: readonly string[];
+  reveal: readonly CanvasBlockSelection[];
   /** Scopes the view: a new Flow opens at its entry view. */
   flowId: string;
   savedGraph: FlowGraph | undefined;
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
   placementRef: RefObject<DropAt | null>;
-  onSelect: (blockId: string | null) => void;
+  onSelect: (blockId: CanvasBlockSelection | null) => void;
   onSelectWire: (wire: FlowWire) => void;
   onDeleteWire: (wire: FlowWire) => void;
   onEdit: (block: FlowBlock) => void;
@@ -669,11 +670,11 @@ function authoringContent({
     }),
     finish: authoringFinish({
       marks,
-      selected: selected === FINISH,
+      selected: selected === FINISH_SELECTION,
       dragging: move.drag?.node.kind === "finish",
-      connectTarget: connect.connect?.target?.targetBlockId === FINISH,
+      connectTarget: connect.connect?.target?.targetEndingId !== undefined,
       pendingSource: connect.connect?.source ?? null,
-      onSelect: () => onSelect(FINISH),
+      onSelect: () => onSelect(FINISH_SELECTION),
       drag: move.handlers({ kind: "finish" }),
     }),
     block: (block: CanvasBlock) =>

@@ -7,9 +7,10 @@ import {
   type RunAttention,
   type RunDetail,
 } from "@t3-factory/contracts";
-import { capturedExits } from "../flow-graph.ts";
+import { capturedExits, FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
 import { clockTime, dayAndTime, fullDateTime } from "../time-format.ts";
+import { capturedEnding, deliveryRecipientName } from "../run-evidence.ts";
 import { BLOCK_KINDS } from "../block-kind.ts";
 import { conditionOutputName, countText } from "../condition-arrivals.ts";
 import { TitleMark, titleOutcome, titleStateLabel } from "./run-title-generation.tsx";
@@ -22,7 +23,7 @@ type RunEvent = RunDetail["events"][number];
 
 /** One timeline row in words: who acted, what happened, and the exit route a report took. */
 interface EventPhrase {
-  readonly actorId: string | null;
+  readonly actorId: CanvasBlockSelection | null;
   readonly text: string;
   readonly route?: { readonly exit: string; readonly recipients: string };
   /** Arrival rows link to the block's T3 thread (Figma "T3 thread"). */
@@ -33,13 +34,13 @@ interface EventPhrase {
   readonly title?: boolean;
 }
 
-function nameOf(run: RunDetail, blockId: string | null) {
+function nameOf(run: RunDetail, blockId: CanvasBlockSelection | null) {
   if (!blockId) return "Run";
-  if (blockId === FINISH_BLOCK_ID) return "Finish";
+  if (blockId === FINISH_SELECTION) return "Finish";
   return (
     run.blocks.find((block) => block.blockId === blockId)?.name ??
     run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name ??
-    blockId
+    (blockId === FINISH_BLOCK_ID ? "Finish" : blockId)
   );
 }
 
@@ -86,7 +87,7 @@ function handedOff(run: RunDetail, event: RunEvent): EventPhrase {
   if (!intent?.sourceBlockId) return { actorId: event.blockId, text: "received a handoff" };
   return {
     actorId: intent.sourceBlockId,
-    text: `handed off to ${nameOf(run, event.blockId)}${viaExit(run, intent.sourceBlockId, intent.exitId)}`,
+    text: `handed off to ${deliveryRecipientName(run, intent)}${viaExit(run, intent.sourceBlockId, intent.exitId)}`,
   };
 }
 
@@ -203,8 +204,15 @@ function attentionSettled(run: RunDetail, event: RunEvent): EventPhrase {
 }
 
 function operationCancelled(run: RunDetail, event: RunEvent): EventPhrase {
-  const kind = intentOf(run, event)?.kind ?? "operation";
-  return { actorId: event.blockId, text: `pending ${kind} cancelled · automatic delivery ended` };
+  const intent = intentOf(run, event);
+  const kind = intent?.kind ?? "operation";
+  const ending = intent?.targetEndingId;
+  return {
+    actorId: ending ? FINISH_SELECTION : event.blockId,
+    text: ending
+      ? `pending handoff to ending ${capturedEnding(run, ending)?.name ?? ending} cancelled`
+      : `pending ${kind} cancelled · automatic delivery ended`,
+  };
 }
 
 function operationUnresolved(run: RunDetail, event: RunEvent): EventPhrase {
@@ -244,16 +252,28 @@ function said(text: string) {
   return (_run: RunDetail, event: RunEvent): EventPhrase => ({ actorId: event.blockId, text });
 }
 
+function handoffStatus(text: string) {
+  return (run: RunDetail, event: RunEvent): EventPhrase => {
+    const ending = intentOf(run, event)?.targetEndingId;
+    return ending
+      ? {
+          actorId: FINISH_SELECTION,
+          text: `ending ${capturedEnding(run, ending)?.name ?? ending} · ${text}`,
+        }
+      : { actorId: event.blockId, text };
+  };
+}
+
 const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> = {
   started: (run) => ({ actorId: null, text: `started · “${run.title}”` }),
   "launch-acknowledged": (run, event) => entered(run, event, "new"),
   "send-acknowledged": (run, event) => entered(run, event, "same"),
   "prepared-worker-activated": (run, event) => entered(run, event, "prepared"),
   "handoff-created": handedOff,
-  "handoff-held": said(
+  "handoff-held": handoffStatus(
     "handoff held · awaiting fresh source completion and clear queue/native requests",
   ),
-  "handoff-released": said("handoff released · source completion checks passed"),
+  "handoff-released": handoffStatus("handoff released · source completion checks passed"),
   "report-accepted": reported,
   "working-reported": said("still working · not a final result"),
   "source-completion-confirmed": said(
@@ -320,12 +340,12 @@ function ActorIcon({
   title,
 }: {
   run: RunDetail;
-  actorId: string | null;
+  actorId: CanvasBlockSelection | null;
   title: boolean;
 }) {
   if (title) return <TitleMark className="text-link" />;
   const kind = run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
-  const Icon = actorId && actorId !== FINISH_BLOCK_ID ? BLOCK_KINDS[kind ?? "agent"].Icon : Flag;
+  const Icon = kind ? BLOCK_KINDS[kind].Icon : Flag;
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }
 
@@ -384,7 +404,7 @@ export function RunTimeline({
   selectedBlockId,
 }: {
   run: RunDetail;
-  selectedBlockId: string | null;
+  selectedBlockId: CanvasBlockSelection | null;
 }) {
   const [expanded, toggle] = useTimelineOpen();
   const [filter, setFilter] = useTimelineFilter();
@@ -483,7 +503,7 @@ function StatusUpdates({
 }: {
   run: RunDetail;
   row: Extract<TimelineRow, { kind: "status-updates" }>;
-  selectedBlockId: string | null;
+  selectedBlockId: CanvasBlockSelection | null;
 }) {
   const [open, setOpen] = useState(false);
   const first = row.events[0];
@@ -558,7 +578,7 @@ function TimelineEvent({
 }: {
   run: RunDetail;
   event: RunEvent;
-  selectedBlockId: string | null;
+  selectedBlockId: CanvasBlockSelection | null;
 }) {
   const { actorId, text, route, thread, threadLink, title = false } = phrase(run, event);
   const link =
@@ -567,7 +587,9 @@ function TimelineEvent({
     event.kind === "report-accepted"
       ? run.reports.find((r) => r.id === event.causeId && r.activationId)
       : undefined;
-  const selected = !!actorId && actorId === selectedBlockId;
+  const selected =
+    (actorId !== null && actorId === selectedBlockId) ||
+    (event.kind === "ending-reached" && selectedBlockId === FINISH_SELECTION);
   return (
     <li
       className={cn(

@@ -83,7 +83,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_condition_arrivals",
     description:
-      "Read one page of a Condition's numbered arrivals in your Block's Run, oldest first: each arrival's number, acceptance time, source block and worker, matched rule {id, name} or null for Otherwise, selected output, and each recipient's current disposition (pending, acknowledged or cancelled; none when the output is unwired). A selected route is not proof its recipient received it. The first page fixes the window at the highest arrival number then; pass its nextCursor to continue that window, and omit cursor to see newer arrivals. Read-only and safe to repeat.",
+      "Read one page of a Condition's numbered arrivals in your Block's Run, oldest first: each arrival's number, acceptance time, source block and worker, matched rule {id, name} or null for Otherwise, selected output, and each recipient's blockId, targetEndingId (null for an ordinary block), and current disposition (pending, acknowledged or cancelled; none when the output is unwired). A selected route is not proof its recipient received it. The first page fixes the window at the highest arrival number then; pass its nextCursor to continue that window, and omit cursor to see newer arrivals. Read-only and safe to repeat.",
     inputSchema: {
       type: "object",
       properties: {

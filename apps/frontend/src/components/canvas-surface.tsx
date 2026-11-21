@@ -13,12 +13,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import {
-  FINISH_BLOCK_ID,
-  type AgentDefinition,
-  type FlowEnding,
-  type FlowGraph,
-} from "@t3-factory/contracts";
+import { type AgentDefinition, type FlowEnding, type FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
   authoringEntryView,
@@ -32,6 +27,7 @@ import { createCanvasGeometry } from "../flow-geometry.ts";
 import {
   addWire,
   canvasGraph,
+  type CanvasBlockSelection,
   type BlockPosition,
   type CanvasBlock,
   type CanvasGraph,
@@ -303,7 +299,6 @@ function SurfaceFinish({
     <article
       aria-label="Finish block"
       data-finish
-      data-block-id={FINISH_BLOCK_ID}
       className={cn("absolute flex flex-col rounded-lg bg-card", content.className)}
       style={{ left: box.x, top: box.y, width: rows.width, borderWidth: rows.border }}
     >
@@ -488,7 +483,7 @@ function targetPoint(
   geometry: Geometry,
   { source, target, pointer }: Extract<CanvasGesture, { kind: "connect" }>,
 ) {
-  if (target?.targetBlockId === FINISH_BLOCK_ID) {
+  if (target?.targetEndingId !== undefined) {
     const index = graph.finish.endings.findIndex((e) => e.id === target.targetEndingId);
     return index < 0 ? pointer : geometry.endingPoint(index);
   }
@@ -561,7 +556,7 @@ type CanvasSurfaceProps = {
    * Blocks to keep in view, such as a selected Block and the next one; a change pans the least
    * distance that shows them whole.
    */
-  reveal?: readonly string[];
+  reveal?: readonly CanvasBlockSelection[];
   /** Whether the canvas is shown rather than covered by another screen. */
   shown?: boolean;
   /** Where an explicit arrangement is committed; without it an arrangement stays local. */
@@ -718,9 +713,7 @@ function SurfaceLayer({
           geometry={drawn}
           dimensions={dimensions}
           content={finish}
-          pendingEnding={
-            pending?.targetBlockId === FINISH_BLOCK_ID ? (pending.targetEndingId ?? null) : null
-          }
+          pendingEnding={pending?.targetEndingId ?? null}
         />
       )}
       {graph.blocks.map((item) => (
@@ -731,7 +724,7 @@ function SurfaceLayer({
           dimensions={dimensions}
           content={content(item)}
           pendingInput={
-            pending?.targetBlockId === item.id
+            pending?.targetEndingId === undefined && pending?.targetBlockId === item.id
               ? drawn.incomingPortIndex(item.id, pending.source)
               : null
           }
@@ -840,8 +833,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
   });
   const { view, reveal } = viewport;
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
-  const revealed = props.reveal?.join("\n") ?? "";
-  const revealBounds = revealed ? geometry.focusBounds(revealed.split("\n")) : null;
+  const revealBounds = props.reveal?.length ? geometry.focusBounds(props.reveal) : null;
   const revealKey = revealBounds && JSON.stringify(revealBounds);
   useLayoutEffect(() => {
     if (!revealKey) return;

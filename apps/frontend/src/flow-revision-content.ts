@@ -1,4 +1,4 @@
-import { FINISH_BLOCK_ID, type AgentDefinition, type FlowBlock } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowBlock } from "@t3-factory/contracts";
 import { effectiveExits } from "@t3-factory/domain-validation";
 import { BLOCK_KINDS } from "./block-kind.ts";
 import type { FlowContent } from "./flow-draft.ts";
@@ -77,6 +77,14 @@ export function comparedFlowLines(
       `    Position  ${positionLabel(block.position)}`,
       ...blockSettings(block, agentFor(block)),
     ]),
+    "  Finish",
+    `    Position  ${positionLabel(graph.finish.position)}`,
+    ...graph.finish.endings.flatMap((ending) => [
+      revisionLine(`    Ending  ${ending.name || "Unnamed ending"}`, ending.id),
+      ...textLines("Description", ending.description),
+      `    Output  ${ending.output}`,
+      ...textLines("Output description", ending.outputDescription),
+    ]),
     "",
     "Connections",
     ...graph.flowInput.targetBlockIds.map((id) =>
@@ -91,8 +99,8 @@ export function comparedFlowLines(
           ? "Output"
           : "Unavailable exit");
       const target =
-        wire.targetBlockId === FINISH_BLOCK_ID
-          ? `Finish · ${endings.get(wire.targetEndingId ?? "") || "Unnamed ending"}`
+        wire.targetEndingId !== undefined
+          ? `Finish · ${endings.get(wire.targetEndingId) || "Unnamed ending"}`
           : blockName(blocks.get(wire.targetBlockId));
       return revisionLine(`  ${blockName(source)} · ${output} → ${target}`, wire);
     }),

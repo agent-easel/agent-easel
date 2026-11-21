@@ -1,11 +1,13 @@
 import { assert, expect, it } from "@effect/vitest";
+import { promptSent } from "./support/continuation.ts";
 import { prepared } from "./support/prepared-runner.ts";
-import { forgetSettlementAfterEnding } from "./support/run-worker.ts";
 import {
   allTurnsEnd,
+  endingBesidePendingWorkFlow,
   endingBesideReviewFlow,
   endingReached,
   finishedReport,
+  launchedWorkers,
   optionalEndingFlow,
   racingEndingsFlow,
   report,
@@ -13,6 +15,7 @@ import {
   resultReleasedToHumanReview,
   resultReported,
   reviewedEndingFlow,
+  sentTurnBegins,
   silentEndingFlow,
   turnBegins,
   twoWorkersStarted,
@@ -132,6 +135,32 @@ it("the Run result is kept through Archive", async (c) => {
   expect(run.value.result).toStrictEqual(reached.result);
 });
 
+it("Archive cancels a pending ending delivery before it can record a Run result", async (c) => {
+  // Arrange
+  const f = await prepared(c, optionalEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultHeld(f.world, worker, { message: "https://example.test/pull/42" });
+  const pending = await f.f.getRun(worker.runId);
+  assert(pending.ok);
+  expect(pending.value.intents).toContainEqual(
+    expect.objectContaining({ blockId: "finish", targetEndingId: "delivered", state: "pending" }),
+  );
+
+  // Act
+  const archived = await f.f.archiveRun(worker.runId);
+
+  // Assert
+  assert(archived.ok);
+  expect(archived.value).toMatchObject({ lifecycle: "archived", gateOpen: false, result: null });
+  expect(archived.value.intents.find((intent) => intent.blockId === "finish")).toMatchObject({
+    state: "cancelled",
+    problem: "cancelled-on-Archive",
+  });
+  expect(archived.value.events.filter((event) => event.kind === "ending-reached")).toStrictEqual(
+    [],
+  );
+});
+
 it("a confirmed Settle that closes the gate before the delivery is accepted records no Run result", async (c) => {
   // Arrange
   const f = await prepared(c, optionalEndingFlow);
@@ -244,14 +273,101 @@ it("settling after an ending cancels the Run's pending Human occurrence with rea
   expect(f.t3.threads.threadStops).toStrictEqual([]);
 });
 
-it("a reached ending whose stop and settle starts after a restart under a replaced T3 authorization raises Settle could not stop workers", async (c) => {
+it("settling after an ending cancels pending Wait, Condition and Continuation work", async (c) => {
+  // Arrange
+  const f = await prepared(c, endingBesidePendingWorkFlow);
+  const started = await f.f.startRun(f.input);
+  assert(started.ok);
+  const {
+    workers: [first, second, third],
+  } = await launchedWorkers(f.world, started.value.id);
+  assert(first && second && third);
+  f.t3.contract.support.launch = false;
+  await resultReported(f.world, second, { message: "For the parallel branch." });
+  await promptSent(f.world, second);
+  sentTurnBegins(f.world, second);
+  await resultReported(f.world, third, { message: "Review notes for the prompt." });
+  assert((await f.f.reconcileRuns()).ok);
+  const pending = await f.f.getRun(first.runId);
+  assert(pending.ok);
+  expect(pending.value.waitArrivals).toMatchObject([{ state: "pending" }]);
+  expect(pending.value.intents).toContainEqual(
+    expect.objectContaining({
+      blockId: "follow-up",
+      state: "pending",
+    }),
+  );
+  const arrivals = await f.f.listConditionArrivals(first.runId, "gate", "", "");
+  assert(arrivals.ok);
+  expect(arrivals.value.arrivals).toMatchObject([
+    { arrivalNumber: 1, recipients: [{ blockId: "follow-up", disposition: "pending" }] },
+  ]);
+  expect(pending.value.continuationVisits).toMatchObject([
+    { kind: "prompt", state: "sent" },
+    { kind: "pass-through", state: "queued" },
+  ]);
+  await resultHeld(f.world, first, { message: "https://example.test/pull/42" });
+  f.t3.threads.stopsEndThreads();
+
+  // Act
+  allTurnsEnd(f.world, first, "completed");
+  assert((await f.f.reconcileRuns()).ok);
+
+  // Assert
+  const run = await f.f.getRun(first.runId);
+  assert(run.ok);
+  expect(run.value).toMatchObject({ lifecycle: "settled", result: { endingId: "delivered" } });
+  expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
+  expect(run.value.waitArrivals).toMatchObject([
+    { id: pending.value.waitArrivals[0]!.id, state: "cancelled", forwardedBy: null, message: null },
+  ]);
+  expect(run.value.continuationVisits).toMatchObject([
+    { kind: "prompt", state: "cancelled" },
+    { kind: "pass-through", state: "cancelled" },
+  ]);
+  expect(run.value.intents.filter((intent) => intent.blockId === "follow-up")).toMatchObject([
+    { state: "cancelled", problem: "cancelled-on-Finish" },
+  ]);
+  const cancelled = await f.f.listConditionArrivals(first.runId, "gate", "", "");
+  assert(cancelled.ok);
+  expect(cancelled.value.arrivals).toMatchObject([
+    { arrivalNumber: 1, recipients: [{ blockId: "follow-up", disposition: "cancelled" }] },
+  ]);
+  expect(f.t3.threads.launches.size).toBe(3);
+  expect(f.t3.threads.sends.size).toBe(1);
+});
+
+it("after restart a held ending reaches Finish once its worker's completed turn is observed", async (c) => {
+  // Arrange
+  const f = await prepared(c, optionalEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultHeld(f.world, worker, { message: "https://example.test/pull/42" });
+  await f.f.close();
+  allTurnsEnd(f.world, worker, "completed");
+
+  // Act
+  const reopened = await f.h.open({ t3: f.t3, connectionRetryMs: 60_000 });
+
+  // Assert
+  const run = await reopened.getRun(worker.runId);
+  assert(run.ok);
+  expect(run.value).toMatchObject({
+    lifecycle: "settled",
+    gateOpen: false,
+    result: { endingId: "delivered", output: "https://example.test/pull/42" },
+  });
+  expect(run.value.events.filter((event) => event.kind === "ending-reached")).toHaveLength(1);
+  expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
+});
+
+it("restarting under a replaced T3 authorization leaves an in-progress Finish settlement unresolved without another Stop", async (c) => {
   // Arrange
   const f = await prepared(c, racingEndingsFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
   await resultReported(f.world, first, { message: "https://example.test/pull/42" });
   const reached = await endingReached(f.world, first.runId);
+  expect(reached.settlement?.state).toBe("stopping");
   await f.f.close();
-  forgetSettlementAfterEnding(f.h.databasePath, first.runId);
   f.t3.connection.approve("replacement-grant");
   const stops = [...f.t3.threads.threadStops];
 
@@ -268,12 +384,17 @@ it("a reached ending whose stop and settle starts after a restart under a replac
     settlement: {
       state: "unresolved",
       workers: expect.arrayContaining([
-        expect.objectContaining({ threadId: second.threadId, state: "unresolved" }),
+        expect.objectContaining({
+          threadId: second.threadId,
+          problem: "The T3 connection is unavailable or its authorization changed.",
+          stopOutcome: "acknowledged",
+        }),
       ]),
     },
   });
   expect(
     run.value.attention.filter((matter) => matter.settledAt === null).map((m) => m.kind),
   ).toStrictEqual(["settlement-unresolved"]);
+  expect(run.value.events.filter((event) => event.kind === "settlement-requested")).toHaveLength(1);
   expect(f.t3.threads.threadStops).toStrictEqual(stops);
 });

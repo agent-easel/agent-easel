@@ -1,5 +1,5 @@
 import type { ELK, ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
-import { FINISH_BLOCK_ID, type FlowBlock, type FlowGraph } from "@t3-factory/contracts";
+import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, isCanvasPosition } from "@t3-factory/domain-validation";
 import { exitRows, incomingIndex, wireRouteKey, type IncomingIndex } from "./graph.ts";
 
@@ -53,7 +53,7 @@ const ROOT_LAYOUT = {
 } as const;
 
 function exitPortId(blockId: string, exitId: string) {
-  return `out:${blockId}:${exitId}`;
+  return `out:${JSON.stringify([blockId, exitId])}`;
 }
 
 function flowInputPortId() {
@@ -144,6 +144,7 @@ function orderedBlocks<B extends LayoutBlock>(graph: LayoutGraph<B>): B[] {
   const byId = new Map(graph.blocks.map((block) => [block.id, block]));
   const successors = new Map<string, string[]>();
   for (const connection of graph.connections) {
+    if (connection.targetEndingId !== undefined) continue;
     const targets = successors.get(connection.sourceBlockId) ?? [];
     targets.push(connection.targetBlockId);
     successors.set(connection.sourceBlockId, targets);
@@ -223,7 +224,7 @@ function edgeLabeller<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLa
     const source = blocks.get(connection.sourceBlockId);
     if (!dims.labels || source?.kind === "continuation") return [];
     const target =
-      connection.targetBlockId === FINISH_BLOCK_ID
+      connection.targetEndingId !== undefined
         ? `Finish · ${endings.get(connection.targetEndingId ?? "") || "Unnamed ending"}`
         : blocks.get(connection.targetBlockId)?.name || "Unnamed block";
     const row = rows(connection.sourceBlockId, connection.exitId);
@@ -252,10 +253,10 @@ function buildEdges<B extends LayoutBlock>(
   }
   const endingPorts = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
   for (const connection of graph.connections) {
-    const { sourceBlockId, exitId, targetBlockId } = connection;
+    const { sourceBlockId, exitId, targetBlockId, targetEndingId } = connection;
     const source = { kind: "exit", sourceBlockId, exitId } as const;
     const target =
-      targetBlockId === FINISH_BLOCK_ID
+      targetEndingId !== undefined
         ? finishPortId(endingPorts.get(connection.targetEndingId ?? "") ?? 0)
         : elkInputPortId(targetBlockId, incoming.portIndex(targetBlockId, source));
     edges.push({

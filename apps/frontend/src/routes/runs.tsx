@@ -20,6 +20,7 @@ import {
   type RunFreshness,
 } from "../run-status.ts";
 import { GeneratingTitle } from "../components/run-title-generation.tsx";
+import type { CanvasBlockSelection } from "../flow-graph.ts";
 import { RunTimeline } from "../components/run-timeline.tsx";
 import { ExecutionCanvas } from "../components/execution-canvas.tsx";
 import { clockTime, dayAndTime } from "../time-format.ts";
@@ -119,7 +120,7 @@ function useOpenRunActions(entry: RunNavigationEntry | undefined, detail: RunDet
 }
 
 /** What the inspector shows besides the overview: a selected Block, or the Run title, which is not a Block. */
-type Inspected = { readonly blockId: string } | "run-title" | null;
+type Inspected = { readonly blockId: CanvasBlockSelection } | "run-title" | null;
 
 /** A desktop route selects its Block, or shows the overview, once per navigation that carries it. */
 function useRoutedInspection(setInspected: (inspected: Inspected) => void) {
@@ -192,7 +193,8 @@ function RunDetailView({
   const studio = useStudio();
   const inspectorOpen = useRunInspectorOpen();
   const selected = inspected !== null && inspected !== "run-title" ? inspected.blockId : null;
-  const onSelect = (blockId: string | null) => onInspect(blockId === null ? null : { blockId });
+  const onSelect = (blockId: CanvasBlockSelection | null) =>
+    onInspect(blockId === null ? null : { blockId });
   const inspectedTitle = inspected === "run-title" ? run.titleGeneration : null;
   const unavailable = observed.unavailable;
   const freshness = runFreshness(run, unavailable);
@@ -355,8 +357,10 @@ function RunFlowName({ run }: { run: RunDetail }) {
 }
 
 function lifecycleText(run: RunDetail) {
-  if (run.result && run.settlement)
-    return `Reached ${run.result.endingName} ${clockTime(run.result.acceptedAt)} · Stopping`;
+  if (run.result && run.settlement) {
+    const state = run.settlement.state === "stopping" ? "Stopping" : "Stop unresolved";
+    return `Reached ${run.result.endingName} ${clockTime(run.result.acceptedAt)} · ${state}`;
+  }
   if (run.settlement) return `Settle requested ${dayAndTime(run.settlement.requestedAt)}`;
   if (run.lifecycle === "active") return `Started ${dayAndTime(run.startedAt)}`;
   const archived = run.lifecycle === "archived";

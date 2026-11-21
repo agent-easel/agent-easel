@@ -500,10 +500,12 @@ fixed Human exits their old exits were mapped to.
   closed **Technical details** section at the bottom. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.
 - The overview's **Result** section names the ending the Run reached with the flag icon, then its output (none for an
-  ending whose output is None), and **From** (the source block, its exit and visit), **Worker** with **Open in T3** for an
-  Agent's result or **By** for a Human step's answer, and **At**. A Required ending reached with blank text shows the
+  ending whose output is None), and **From** (the source block, its exit and visit), **By** when the author differs from
+  the worker, **Worker** with **Open in T3** when the worker is known, and **At**. A forwarded Human answer names the Human
+  step as its author and keeps the originating worker. A Required ending reached with blank text shows the
   **Output missing** tag and which block sent no message. While the Run stops its other workers after the ending, the
-  section shows **Stopping** and the meta line **Reached *ending* *time* · Stopping**. Before a result it reads **No result
+  section shows **Stopping** and the meta line **Reached *ending* *time* · Stopping**. If a stop is unresolved, the meta
+  line says **Stop unresolved** and the existing settlement Problem provides the next action. Before a result it reads **No result
   yet** while the Run can still reach an ending, and **No result** once it was settled or archived without one. A Run whose
   captured Flow has no endings, including every Run started before endings existed, shows no Result section. The sidebar
   Run row, the Run list and Chat control do not show the result. Selecting the Finish block shows **Finish** with
@@ -820,12 +822,14 @@ A first page fixes its window at the highest arrival number committed at that re
 only that window, so arrivals numbered later never shift a page; reading without a cursor opens a new window that includes them.
 A cursor is opaque, signed by the running server and bound to its Run and Condition: one for another Run or Condition, one
 whose content was changed in any way (including a validly re-encoded window), one issued before the server restarted or one
-beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
-selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
+beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, one per Block or
+ending the selected output is wired to. An ending recipient includes its captured ending ID. Deliveries still waiting at the
+Condition for their number are not listed; the summary counts them.
 
 Selecting a Condition shows this evidence in the inspector: the latest selection, then its arrivals in ascending number,
 each with acceptance time, source block and producing worker, the matched rule or **No rule matched** (Otherwise), the
-selected output, and each recipient with its delivery's disposition when that page was read; an arrival whose output is
+selected output, and each recipient with its delivery's disposition when that page was read. Ending recipients are labelled
+**Finish · *ending name*** here and in Agent report delivery details. An arrival whose output is
 not connected says it ends there. A selection is only the route, so the list never shows a recipient as having received
 it until its delivery is acknowledged. The first page opens once the Condition has an arrival; **Load more** continues
 that window and **Refresh** opens a new one. When live Run updates count arrivals after the window, the list says so and

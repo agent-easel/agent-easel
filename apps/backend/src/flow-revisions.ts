@@ -163,10 +163,10 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
   yield* Effect.forEach(
     graph.connections,
     (connection, ordinal) => {
-      const toFinish = connection.targetBlockId === FINISH_BLOCK_ID;
+      const toFinish = connection.targetEndingId !== undefined;
       return sql`INSERT INTO flow_revision_connections (flow_revision_id, ordinal, source_block_id, exit_id, target_block_id, target_ending_id)
         VALUES (${revisionId}, ${ordinal}, ${connection.sourceBlockId}, ${connection.exitId},
-          ${toFinish ? null : connection.targetBlockId}, ${toFinish ? connection.targetEndingId! : null})`;
+          ${toFinish ? null : connection.targetBlockId}, ${connection.targetEndingId ?? null})`;
     },
     { discard: true },
   );

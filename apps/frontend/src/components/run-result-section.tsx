@@ -3,20 +3,13 @@ import { Flag } from "lucide-react";
 import type { RunDetail, RunResult } from "@t3-factory/contracts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
+import { blockName, capturedEnding, deliveryWorker } from "../run-evidence.ts";
 import { runResultState } from "../run-status.ts";
 import { dayAndTime } from "../time-format.ts";
 import { AgentTextPreview } from "./agent-text.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-
-export function blockName(run: RunDetail, blockId: string) {
-  return run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name ?? blockId;
-}
-
-function capturedEnding(run: RunDetail, endingId: string) {
-  return run.definitions.flow.graph.finish.endings.find((ending) => ending.id === endingId);
-}
 
 function fromText(run: RunDetail, result: RunResult) {
   const exit = capturedExits(run.definitions, result.sourceBlockId).find(
@@ -41,13 +34,11 @@ function authorKind(run: RunDetail, result: RunResult) {
   return run.definitions.flow.graph.blocks.find((block) => block.id === result.authorBlockId)?.kind;
 }
 
-function workerLink(run: RunDetail, result: RunResult) {
-  const threadId = result.origin?.threadId;
-  return (
-    run.threadBindings.find((binding) => binding.threadId === threadId)?.link ??
-    run.blocks.find((block) => block.blockId === result.authorBlockId)?.link ??
-    null
-  );
+function resultWorker(run: RunDetail, result: RunResult) {
+  if (result.origin) return deliveryWorker(run, result.origin);
+  return authorKind(run, result) === "agent"
+    ? run.blocks.find((block) => block.blockId === result.authorBlockId)
+    : undefined;
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -63,18 +54,18 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 function ResultFacts({ run, result }: { run: RunDetail; result: RunResult }) {
   const kind = authorKind(run, result);
-  const link = kind === "agent" ? workerLink(run, result) : null;
+  const author = blockName(run, result.authorBlockId);
+  const worker = resultWorker(run, result);
   return (
     <dl className="flex min-w-0 flex-col gap-1">
       <Fact label="From">{fromText(run, result)}</Fact>
-      {kind === "agent" ? (
+      {worker?.blockId !== result.authorBlockId && (
+        <Fact label="By">{kind === "human" ? `${author} · Human step` : author}</Fact>
+      )}
+      {worker && (
         <Fact label="Worker">
-          <span className="min-w-0">{blockName(run, result.authorBlockId)}</span>
-          {link && <OpenInT3 href={link} className="text-sm" />}
-        </Fact>
-      ) : (
-        <Fact label="By">
-          {kind === "human" ? "You · Human step" : blockName(run, result.authorBlockId)}
+          <span className="min-w-0">{blockName(run, worker.blockId)}</span>
+          {worker.link && <OpenInT3 href={worker.link} className="text-sm" />}
         </Fact>
       )}
       <Fact label="At">{dayAndTime(result.acceptedAt)}</Fact>
@@ -96,7 +87,7 @@ function ResultOutput({ run, result }: { run: RunDetail; result: RunResult }) {
         kind: "result",
         title: `${result.endingName} · result`,
         provenance: fromText(run, result),
-        t3Link: workerLink(run, result),
+        t3Link: resultWorker(run, result)?.link ?? null,
       }}
     />
   );
@@ -146,7 +137,7 @@ export function ResultSection({ run }: { run: RunDetail }) {
     <section className="flex min-w-0 flex-col gap-2" aria-label="Run result">
       <div className="flex min-w-0 items-center gap-1.5">
         <InspectorHeading title="Result" />
-        {run.result && run.settlement && (
+        {run.result && run.settlement?.state === "stopping" && (
           <StatusBadge kind="working" className="ml-auto">
             Stopping
           </StatusBadge>

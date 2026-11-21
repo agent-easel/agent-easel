@@ -38,6 +38,7 @@ import {
   duplicateTreatment,
   executionForProject,
   flowAgentRevisions,
+  flowEditSizeRefusal,
   flowReadiness,
   mayPlaceAgent,
   parsePortableFile,
@@ -602,8 +603,10 @@ export const makeDefinitions = (
             Effect.gen(function* () {
               // Readiness depends on the owner, so an answer judged under another one is stale.
               if (flow.projectId !== validated.value.expectedProjectId) return staleOwner("Flow");
-              const agents = yield* readinessAgents;
               const { graph } = validated.value;
+              const sizeRefusal = flowEditSizeRefusal(graph, flow.graph);
+              if (sizeRefusal) return sizeRefusal;
+              const agents = yield* readinessAgents;
               return {
                 ok: true as const,
                 value: {
@@ -627,6 +630,8 @@ export const makeDefinitions = (
             // Refuse a missing or stale Flow before any layout, so the refusal names the real cause.
             const current = yield* savedFlowFor(id, expected);
             if (!current.ok) return current;
+            const sizeRefusal = flowEditSizeRefusal(validated.value.graph, current.value.graph);
+            if (sizeRefusal) return sizeRefusal;
             const positioned = yield* positionGraph(validated.value.graph);
             if (!positioned.ok) return positioned;
             return yield* sql.withTransaction(

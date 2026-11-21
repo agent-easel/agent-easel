@@ -16,7 +16,6 @@ import { readRunResult } from "./endings.ts";
 import {
   CONDITION_OTHERWISE_ID,
   CONDITION_TIMELINE_ARRIVALS,
-  FINISH_BLOCK_ID,
   type Result,
   type RunAttention,
   type RunDetail,
@@ -176,13 +175,17 @@ function humanOccurrence(
 }
 
 /** A delivery as Run detail reads it, with its bound worker's thread for the public origin. */
-type IntentRow = DeliveryRecord & { origin_thread_id: string | null };
+type IntentRow = DeliveryRecord & {
+  origin_thread_id: string | null;
+  target_ending_id: string | null;
+};
 
 function runIntent(intent: IntentRow): RunDetail["intents"][number] {
   return {
     id: intent.id,
     kind: intent.kind,
     blockId: intent.block_id,
+    targetEndingId: intent.target_ending_id,
     reportId: intent.report_id,
     occurrenceId: intent.occurrence_id,
     sourceBlockId: intent.source_block_id,
@@ -277,9 +280,9 @@ export function openRunQueries(database: RunnerDatabase) {
         if (!saved) return failure("not_found", "This Run does not exist.");
         const runRow: RunRow = { ...saved, definitions: yield* readRunDefinitions(sql, saved) };
         const blocks =
-          yield* sql<BlockRow>`SELECT * FROM run_blocks WHERE run_id=${id} AND block_id!=${FINISH_BLOCK_ID} ORDER BY rowid`;
+          yield* sql<BlockRow>`SELECT b.* FROM run_blocks b JOIN flow_revision_blocks f ON f.flow_revision_id=${saved.flow_revision_id} AND f.block_id=b.block_id WHERE b.run_id=${id} ORDER BY b.rowid`;
         const intents =
-          yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
+          yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id,json_extract(i.target_json,'$.endingId') AS target_ending_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
         // A Condition's selections grow with every arrival, so a Run read keeps only its latest
         // ones; the bounded evidence page reaches the rest.
         const events =

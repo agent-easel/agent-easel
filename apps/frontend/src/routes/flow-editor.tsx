@@ -55,7 +55,7 @@ import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration, type BlockAgents } from "../components/block-inspector.tsx";
 import { PanelHeading, TargetSelect } from "../components/block-exit-configuration.tsx";
 import { BlockLibrary, NewAgentLink } from "../components/block-library.tsx";
-import { FINISH, FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
+import { FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
 import { FinishSettings } from "../components/finish-settings.tsx";
 import {
   IssueLink,
@@ -81,6 +81,8 @@ import { Page } from "../components/page.tsx";
 import {
   addEnding,
   addWire,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
   hasWire,
   newBlock,
   removeBlock,
@@ -303,7 +305,7 @@ function useCanvasSelection(
   registerEscape: (handler: () => void) => () => void,
 ) {
   const { graph } = draft;
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<CanvasBlockSelection | null>(null);
   const [selectedWire, setSelectedWire] = useState<FlowWire | null>(null);
   const wire = selectedWire && hasWire(graph, selectedWire) ? selectedWire : null;
   if (selectedWire && !wire) setSelectedWire(null);
@@ -311,12 +313,12 @@ function useCanvasSelection(
   if (
     selected !== null &&
     selected !== FLOW_INPUT &&
-    selected !== FINISH &&
+    selected !== FINISH_SELECTION &&
     !graph.blocks.some((block) => block.id === selected)
   )
     setSelected(null);
   /** Selects a block or the Flow input, or with null clears every selection. */
-  const select = useCallback((blockId: string | null) => {
+  const select = useCallback((blockId: CanvasBlockSelection | null) => {
     setSelected(blockId);
     setSelectedWire(null);
   }, []);
@@ -343,7 +345,7 @@ function useCanvasSelection(
     draft.remove(removeBlock(graph, blockId));
     select(null);
   }
-  return { selected, wire, select, selectWire, deleteWire, deleteBlock };
+  return { selected, wire, select, selectWire, deleteWire, deleteBlock } as const;
 }
 
 const noAgents: readonly AgentDefinition[] = [];
@@ -447,20 +449,20 @@ function useLiveReadiness(draft: FlowDraftModel, due: number | null) {
 const READINESS_DEBOUNCE_MS = 400;
 
 function useRuleFocus(
-  select: (blockId: string | null) => void,
+  select: (blockId: CanvasBlockSelection | null) => void,
   thresholds: ReturnType<typeof useThresholdEntries>,
 ) {
   const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
   const [endingFocus, setEndingFocus] = useState<{ endingId: string } | null>(null);
   const selectIssue: IssueSelect = (blockId, rule, ending) => {
     select(blockId);
-    setRuleFocus(blockId && rule ? { blockId, rule } : null);
+    setRuleFocus(typeof blockId === "string" && rule ? { blockId, rule } : null);
     setEndingFocus(ending ? { endingId: ending } : null);
   };
   return {
     selectIssue,
     endingFocus,
-    selectBlock(blockId: string | null) {
+    selectBlock(blockId: CanvasBlockSelection | null) {
       setRuleFocus(null);
       setEndingFocus(null);
       select(blockId);
@@ -474,10 +476,15 @@ function useRuleFocus(
 }
 
 /** The selected Block and the next one it connects to, which the canvas keeps in view. */
-function revealed(graph: FlowGraph, selected: string | null): readonly string[] {
+function revealed(
+  graph: FlowGraph,
+  selected: CanvasBlockSelection | null,
+): readonly CanvasBlockSelection[] {
   if (selected === null || selected === FLOW_INPUT) return [];
-  if (selected === FINISH) return [FINISH];
-  const next = graph.connections.find((c) => c.sourceBlockId === selected)?.targetBlockId;
+  if (selected === FINISH_SELECTION) return [FINISH_SELECTION];
+  const connection = graph.connections.find((c) => c.sourceBlockId === selected);
+  const next =
+    connection?.targetEndingId === undefined ? connection?.targetBlockId : FINISH_SELECTION;
   return next && next !== selected ? [selected, next] : [selected];
 }
 
@@ -726,7 +733,7 @@ function EditorSettings({
   onWireChange,
   onRemove,
 }: {
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   graph: FlowGraph;
   agents: BlockAgents;
   marks: ReturnType<typeof readinessMarks>;
@@ -759,7 +766,7 @@ function EditorSettings({
         </section>
       </SettingsPanel>
     );
-  if (selected === FINISH)
+  if (selected === FINISH_SELECTION)
     return (
       <SettingsPanel
         label="Finish settings"

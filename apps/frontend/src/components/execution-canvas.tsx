@@ -1,7 +1,6 @@
 import { runResultState, stoppedVisitAt } from "../run-status.ts";
 import type { ReactNode } from "react";
 import {
-  FINISH_BLOCK_ID,
   type FlowBlock,
   type RunAttention,
   type RunBlock,
@@ -18,6 +17,8 @@ import {
   capturedExits,
   exitRecipients,
   type CanvasBlock,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
 } from "../flow-graph.ts";
 import { blockStateKind, chosenExitIds } from "../run-block-state.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
@@ -613,10 +614,10 @@ export function ExecutionCanvas({
   overlay,
 }: {
   run: RunDetail;
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   observationUnavailable: boolean;
   shown: boolean;
-  onSelect: (blockId: string | null) => void;
+  onSelect: (blockId: CanvasBlockSelection | null) => void;
   /** The Run title line; inspecting it selects no Block and leaves following unchanged. */
   title: TitleInspection;
   /** Top-left badges and notices (Figma "Overlay · top-left"); they never block panning. */
@@ -638,7 +639,7 @@ export function ExecutionCanvas({
           onSelect(block.id),
         )
       }
-      finish={executionFinish(run, selected === FINISH_BLOCK_ID, () => onSelect(FINISH_BLOCK_ID))}
+      finish={executionFinish(run, selected === FINISH_SELECTION, () => onSelect(FINISH_SELECTION))}
       wires={{ kind: "orthogonal", label: "Configured connections" }}
       covered={{ top: BADGES_HEIGHT }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}

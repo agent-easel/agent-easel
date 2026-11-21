@@ -5,8 +5,13 @@ import {
   type CanvasDimensions,
   type GeometryFacts,
 } from "@t3-factory/flow-layout";
-import { FINISH_BLOCK_ID, type FlowBlock } from "@t3-factory/contracts";
-import type { CanvasBlock, CanvasGraph } from "./flow-graph.ts";
+import type { FlowBlock } from "@t3-factory/contracts";
+import {
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
+  type CanvasBlock,
+  type CanvasGraph,
+} from "./flow-graph.ts";
 import { EXECUTION_DIMENSIONS } from "./components/canvas-dimensions.ts";
 import { mergeGraphBounds } from "./canvas-fit.ts";
 
@@ -54,11 +59,11 @@ export function createCanvasGeometry(
       source,
       ...inputPoint(block, index),
     }));
-  const focusBounds = (targetIds: readonly string[]) => {
+  const focusBounds = (targetIds: readonly CanvasBlockSelection[]) => {
     const ids = new Set(targetIds);
     const [first, ...rest] = [
       ...graph.blocks.filter((block) => ids.has(block.id)).map(blockBox),
-      ...(ids.has(FINISH_BLOCK_ID) ? finishBoxes : []),
+      ...(ids.has(FINISH_SELECTION) ? finishBoxes : []),
     ];
     return first ? mergeGraphBounds(first, rest) : bounds();
   };

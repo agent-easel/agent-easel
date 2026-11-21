@@ -510,6 +510,7 @@ export interface RunDetail extends RunSummary {
   readonly intents: readonly {
     readonly id: string;
     readonly blockId: string;
+    readonly targetEndingId: string | null;
     readonly reportId: string | null;
     readonly occurrenceId: string | null;
     readonly sourceBlockId: string | null;
@@ -795,6 +796,7 @@ export interface ConditionArrivalEvidence extends ConditionSelection {
   /** Every recipient of the selected output; empty when that output is unwired. */
   readonly recipients: readonly {
     readonly blockId: string;
+    readonly targetEndingId: string | null;
     readonly disposition: ConditionRecipientDisposition;
   }[];
 }

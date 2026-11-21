@@ -1238,6 +1238,31 @@ export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
     finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
 
+export const endingBesidePendingWorkFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending beside pending work", (agentId) => ({
+    flowInput: flowInput("worker", "second", "parallel-block"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      parallelWork(agentId),
+      coolDown(),
+      gate(),
+      specStep,
+      followUp(agentId),
+    ],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      connection("second", "done", "cool-down"),
+      connection("second", "done", "gate"),
+      connection("second", "done", "spec"),
+      connection("parallel-block", "done", "spec"),
+      connection("cool-down", WAIT_OUTPUT, "follow-up"),
+      connection("gate", OTHERWISE, "follow-up"),
+      connection("spec", "output", "follow-up"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
+  }));
+
 export const reviewedEndingFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Reviewed ending", (agentId) => ({
     flowInput: flowInput("worker"),
