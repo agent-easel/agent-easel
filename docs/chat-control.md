@@ -275,11 +275,28 @@ admitted invocation is answered.
 
 Discord's own author flag decides which list applies: a bot account acts only through **Bot IDs** and
 a person only through Users, so a bot ID among the Users or a person's ID among the Bot IDs admits
-nothing. A listed bot's message is admitted only when its own text mentions Factory's bot, or when it
-is a Discord Reply to the last message of the bot's own review (its [confirmation](#confirmation)
-attempt). A reply's ping is not a mention: a bot's other replies, to Factory's messages or to someone
-else's review, are dropped before any model request, and nothing is posted for them. Bot messages
-never answer the [access test](#access-test).
+nothing. A listed bot can invoke Factory with an explicit mention in the message text. A bot's Reply
+to a status card, Run notice or action receipt is silently dropped even if the text mentions Factory.
+A Reply to a review is admitted only if it contains the exact phrase and references the persisted
+last message of the bot's own pending Start review in the same thread. Bot messages never answer the
+[access test](#access-test).
+
+- Each bot can have one pending Start per thread. A second proposal is refused and leaves the
+  original review available for confirmation. A review holds the slot while it is being prepared,
+  while its confirmation phrase is live, or while Factory is resolving its acceptance.
+- Factory admits up to three consecutive bot turns in a thread, shared across bots. The next bot
+  request gets one refusal without a mention. Further requests stay silent until a human posts in
+  the thread, Factory accepts a Start there, or five minutes pass since the last admitted bot turn.
+  A human message can clear the breaker without mentioning Factory.
+- Across all threads, each bot gets six model requests per minute and two Start proposals per five
+  minutes. Model requests include follow-ups after tool calls. Each window starts with the bot's
+  first use of that budget. The first request blocked by either limit gets one refusal without a
+  mention. Later requests stay silent until the exhausted budgets clear. A new backend process
+  starts with fresh counters.
+
+An exact-phrase Reply to the bot's own pending Start still takes the deterministic confirmation path
+while conversational requests are paused. It requires the same Access and review checks as any
+confirmation and spends neither budget.
 
 An admitted bot gets the same conversation, Run reads and Start proposals as a person, with the same
 review and typed confirmation. It cannot propose or confirm a Human answer or an Archive: Factory

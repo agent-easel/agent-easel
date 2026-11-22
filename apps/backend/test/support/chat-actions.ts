@@ -49,13 +49,13 @@ export type StartingWorld = Pick<
  * The same operating world as `startingWorld`, built inside the test's Effect scope so TestClock
  * drives consent expiry and every other backend deadline. Operations return Effects.
  */
-export const clockedStartingWorld = (c: TestContext) =>
+export const clockedStartingWorld = (c: TestContext, bots: readonly string[] = []) =>
   Effect.gen(function* () {
     const worlds = yield* Effect.promise(() => chatWorlds(c));
     const { factory, project, flow, t3 } = yield* preparedService(c, undefined, {
       discordApiUrl: worlds.discord.apiUrl,
     });
-    yield* operatingService(factory, worlds, project.id);
+    yield* operatingService(factory, worlds, project.id, bots);
     return { ...worlds, factory, project, flow, t3 };
   });
 

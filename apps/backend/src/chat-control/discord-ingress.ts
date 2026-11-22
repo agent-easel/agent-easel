@@ -27,6 +27,7 @@ import { grantedProjects } from "./access.ts";
 import type { RequesterKind } from "./requesters.ts";
 import { isAccessTestMessage, recordReached } from "./access-test.ts";
 import type { ChatActions } from "./actions.ts";
+import { BOT_LOOP_REFUSAL, BOT_RATE_REFUSAL, type BotGuards } from "./bot-guards.ts";
 import type { ConversationGenerations, ConversationKey } from "./conversations.ts";
 import {
   BUSY_REPLY,
@@ -71,14 +72,11 @@ interface IngressSession {
   /** The reply target the current MESSAGE_CREATE payload carried, taken once. */
   readonly referenced: (messageId: string) => ReferencedMessage | undefined;
   readonly confirmations: Pick<ChatActions, "confirmationTarget" | "confirm">;
-  /**
-   * The Run a message this application published in `threadId` identifies, if Factory recorded
-   * one for it. Only the identity is returned: the message's content is never imported.
-   */
-  readonly publishedRun: (
+  readonly botGuards: BotGuards;
+  readonly publishedDelivery: (
     threadId: string,
     messageId: string,
-  ) => Effect.Effect<string | undefined, unknown>;
+  ) => Effect.Effect<{ readonly runId: string | null } | undefined, unknown>;
 }
 
 const RESET_REPLIES = {
@@ -137,25 +135,25 @@ export const registerCommands = (client: Client<true>, applicationId: string) =>
 
 type Access = "permitted" | "denied" | "unavailable";
 
-function explicitInvocation(message: Message<true>, botUserId: string) {
+function messageRequester(message: Message<true>, botUserId: string): RequesterKind | undefined {
   if (message.webhookId !== null || message.system || message.author.id === botUserId)
     return undefined;
   if (message.type !== MessageType.Default && message.type !== MessageType.Reply) return undefined;
+  return message.author.bot ? "bot" : "human";
+}
+
+function explicitInvocation(message: Message<true>, botUserId: string, kind: RequesterKind) {
   const invoked =
-    message.mentions.users.has(botUserId) || message.mentions.repliedUser?.id === botUserId;
+    message.mentions.users.has(botUserId) ||
+    message.mentions.repliedUser?.id === botUserId ||
+    (kind === "bot" && message.type === MessageType.Reply);
   if (!invoked) return undefined;
-  const kind: RequesterKind = message.author.bot ? "bot" : "human";
-  const requester = {
-    kind,
-    named: new RegExp(`<@!?${botUserId}>`).test(message.content),
-  };
+  const named = new RegExp(`<@!?${botUserId}>`).test(message.content);
   const channel = message.channel;
   if (channel.isThread())
-    return channel.parentId
-      ? { thread: channel, parentId: channel.parentId, requester }
-      : undefined;
+    return channel.parentId ? { thread: channel, parentId: channel.parentId, named } : undefined;
   return channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement
-    ? { thread: null, parentId: channel.id, requester }
+    ? { thread: null, parentId: channel.id, named }
     : undefined;
 }
 
@@ -301,8 +299,10 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           target.channel_id === threadId &&
           target.webhook_id === undefined &&
           (target.type === MessageType.Default || target.type === MessageType.Reply);
-        const runId = ordinary ? yield* session.publishedRun(threadId, target.id) : undefined;
-        return runId === undefined ? { kind: "none" } : { kind: "run", runId };
+        const delivery = ordinary
+          ? yield* session.publishedDelivery(threadId, target.id)
+          : undefined;
+        return delivery?.runId ? { kind: "run", runId: delivery.runId } : { kind: "none" };
       }
       return selectedReply(target, threadId);
     });
@@ -357,8 +357,12 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     requesterKind: RequesterKind,
   ) =>
     Effect.gen(function* () {
-      if (!(yield* permittedProjects(message.author.id, requesterKind, parentId))) return undefined;
       if (!(yield* firstDelivery(message.id))) return undefined;
+      const refusal =
+        requesterKind === "bot"
+          ? botRefusal(message.author.id, thread, yield* Clock.currentTimeMillis)
+          : undefined;
+      if (refusal === "drop") return undefined;
       const token = evidence.token(message.guildId);
       const threadId =
         thread?.id ??
@@ -373,6 +377,16 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         threadId,
       };
       const generation = yield* generations.open(conversation);
+      const stillPermitted = permitted(
+        conversation,
+        message.author.id,
+        requesterKind,
+        generation,
+        token,
+        thread?.type === ChannelType.PrivateThread,
+      );
+      if (refusal)
+        return { kind: "refusal" as const, conversation, permitted: stillPermitted, text: refusal };
       const invocation: AdmittedInvocation = {
         conversation,
         generation,
@@ -382,16 +396,9 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         text: message.content,
         replyTarget: yield* replyTarget(message, threadId),
         admittedAt: yield* Clock.currentTimeMillis,
-        permitted: permitted(
-          conversation,
-          message.author.id,
-          requesterKind,
-          generation,
-          token,
-          thread?.type === ChannelType.PrivateThread,
-        ),
+        permitted: stillPermitted,
       };
-      yield* Effect.acquireRelease(
+      const reservation = yield* Effect.acquireRelease(
         Effect.map(interpreter.reserve(invocation), (reservation) => {
           pending.set(message.id, { invocation, reservation });
           return reservation;
@@ -409,8 +416,19 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
               : Effect.void,
           ),
       );
-      return invocation;
+      if (requesterKind === "bot" && reservation !== "busy")
+        session.botGuards.takeTurn(threadId, invocation.admittedAt);
+      return { kind: "invocation" as const, conversation };
     });
+
+  const botRefusal = (requesterId: string, thread: ThreadChannel | null, at: number) => {
+    const rate = session.botGuards.rate(requesterId, at);
+    if (rate !== "allow") return rate === "drop" ? rate : BOT_RATE_REFUSAL;
+    if (!thread) return undefined;
+    const loop = session.botGuards.checkThread(thread.id, at);
+    if (loop !== "allow") return loop === "drop" ? loop : BOT_LOOP_REFUSAL;
+    return undefined;
+  };
 
   const requesterAccess = (
     user: {
@@ -495,16 +513,21 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
 
   const ownMention = new RegExp(`<@!?${botUserId}>`, "g");
 
+  const replyMessageId = (message: Message<true>, threadId: string) => {
+    const reference = message.type === MessageType.Reply ? message.reference : null;
+    return reference && (reference.type ?? 0) === 0 && reference.channelId === threadId
+      ? reference.messageId
+      : undefined;
+  };
+
   const confirmationAttempt = (
     message: Message<true>,
     thread: ThreadChannel,
-    parentId: string,
-    requester: { readonly kind: RequesterKind; readonly named: boolean },
+    requesterKind: RequesterKind,
   ) =>
     Effect.gen(function* () {
       const text = message.content.replace(ownMention, "").trim();
-      const repliedTo =
-        message.type === MessageType.Reply ? message.reference?.messageId : undefined;
+      const repliedTo = replyMessageId(message, thread.id);
       const target = yield* session.confirmations.confirmationTarget(
         applicationId,
         thread.id,
@@ -513,12 +536,15 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       );
       if (!target) return undefined;
       session.referenced(message.id);
-      const ownReply = repliedTo !== undefined && target.requesterId === message.author.id;
-      if (requester.kind === "bot" && !requester.named && !ownReply) return "ignored" as const;
-      if (!(yield* permittedProjects(message.author.id, requester.kind, parentId)))
+      if (
+        requesterKind === "bot" &&
+        (!target.botCanConfirm ||
+          target.requesterId !== message.author.id ||
+          text !== message.content)
+      )
         return "ignored" as const;
       if (!(yield* firstDelivery(message.id))) return "ignored" as const;
-      return { proposalId: target.proposalId, text, repliedTo, requesterKind: requester.kind };
+      return { proposalId: target.proposalId, text, repliedTo, requesterKind };
     });
 
   const confirmation = (
@@ -563,37 +589,76 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   // Queue places are taken here too, so each conversation's queue follows admission order.
   const gate = Semaphore.makeUnsafe(1);
 
+  const botRepliesToDelivery = (message: Message<true>, thread: ThreadChannel) => {
+    const repliedTo = replyMessageId(message, thread.id);
+    return repliedTo === undefined
+      ? Effect.succeed(false)
+      : Effect.map(session.publishedDelivery(thread.id, repliedTo), Boolean);
+  };
+
+  const receiveThreadMessage = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    parentId: string,
+    kind: RequesterKind,
+  ) =>
+    Effect.gen(function* () {
+      if (kind === "bot" && (yield* botRepliesToDelivery(message, thread)))
+        return "ignored" as const;
+      const attempt = yield* confirmationAttempt(message, thread, kind);
+      if (attempt === "ignored" || attempt === undefined) return attempt;
+      return { kind: "confirmation" as const, thread, parentId, attempt };
+    });
+
+  const receive = (message: Message<true>) =>
+    Effect.gen(function* () {
+      const kind = messageRequester(message, botUserId);
+      if (!kind) return;
+      if (kind === "human" && message.channel.isThread())
+        session.botGuards.resetThread(message.channel.id);
+      const place = explicitInvocation(message, botUserId, kind);
+      if (!place) return;
+      const { thread, parentId, named } = place;
+      if (kind === "human") {
+        const answered = yield* answerAccessTest(message, thread, parentId);
+        if (answered) return answered === "reached" ? { kind: "react" as const } : undefined;
+      }
+      if (!(yield* permittedProjects(message.author.id, kind, parentId))) return;
+      const received = thread && (yield* receiveThreadMessage(message, thread, parentId, kind));
+      if (received) return received;
+      if (kind === "bot" && !named) return;
+      return yield* admitMessage(message, thread, parentId, kind);
+    });
+
   return {
     message: (message: Message) =>
       Effect.scoped(
         Effect.gen(function* () {
           if (!session.operating() || !message.inGuild()) return;
-          const place = explicitInvocation(message, botUserId);
-          if (!place) return;
-          const { thread, parentId, requester } = place;
-          if (requester.kind === "human") {
-            const answered = yield* gate.withPermits(1)(
-              answerAccessTest(message, thread, parentId),
-            );
+          const received = yield* gate.withPermits(1)(receive(message));
+          if (!received || received === "ignored") return;
+          if (received.kind === "react") {
             // The reaction is an external send, which never happens while Chat control is Off.
-            if (answered === "reached" && session.operating())
+            if (session.operating())
               yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
-            if (answered) return;
+            return;
           }
-          if (thread) {
-            const attempt = yield* gate.withPermits(1)(
-              confirmationAttempt(message, thread, parentId, requester),
+          if (received.kind === "confirmation")
+            return yield* confirmation(
+              message,
+              received.thread,
+              received.parentId,
+              received.attempt,
             );
-            if (attempt === "ignored") return;
-            if (attempt) return yield* confirmation(message, thread, parentId, attempt);
+          if (received.kind === "refusal") {
+            if (yield* received.permitted)
+              yield* Effect.ignore(
+                Effect.tryPromise(() => session.post(received.conversation, received.text)),
+              );
+            return;
           }
-          if (requester.kind === "bot" && !requester.named) return;
-          const invocation = yield* gate.withPermits(1)(
-            admitMessage(message, thread, parentId, requester.kind),
-          );
-          if (!invocation) return;
           yield* Effect.promise(() =>
-            session.handOff(session.encodeThreadId(invocation.conversation), message),
+            session.handOff(session.encodeThreadId(received.conversation), message),
           );
         }),
       ),
