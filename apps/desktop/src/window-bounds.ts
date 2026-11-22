@@ -15,6 +15,12 @@ export interface WindowBoundsSnapshot {
   getNormalBounds(): WindowBounds;
 }
 
+export interface RevealableWindow extends WindowBoundsSnapshot {
+  maximize(): void;
+  restore(): void;
+  show(): void;
+}
+
 const isInteger = (value: unknown): value is number => Number.isInteger(value);
 
 export function parseWindowBounds(value: unknown): WindowBounds | null {
@@ -50,4 +56,57 @@ export function restorableBounds(
   if (!saved) return null;
   const titleBar = { ...saved, height: Math.min(titleBarHeight, saved.height) };
   return workAreas.some((area) => overlaps(titleBar, area)) ? saved : null;
+}
+
+export class WindowBoundsTracker {
+  private saved: WindowBounds | null;
+  private ready = false;
+  private pendingMaximize = false;
+
+  constructor(saved: WindowBounds | null) {
+    this.saved = saved;
+  }
+
+  prepareOpen(workAreas: readonly WindowBounds[]): WindowBounds | null {
+    const restorable = restorableBounds(this.saved, workAreas);
+    if (!restorable) this.saved = null;
+    this.ready = false;
+    this.pendingMaximize = restorable?.maximized === true && !restorable.fullScreen;
+    return restorable;
+  }
+
+  reveal(target: RevealableWindow): boolean {
+    if (this.ready) {
+      if (target.isMinimized()) target.restore();
+      target.show();
+      return false;
+    }
+    if (this.pendingMaximize) {
+      this.pendingMaximize = false;
+      if (!target.isMaximized() && !target.isFullScreen()) target.maximize();
+    }
+    if (target.isMinimized()) target.restore();
+    target.show();
+    this.ready = true;
+    if (this.saved === null) {
+      this.saved = captureWindowBounds(target, null);
+      return true;
+    }
+    return false;
+  }
+
+  revealInitial(target: RevealableWindow): boolean {
+    if (this.ready) return false;
+    return this.reveal(target);
+  }
+
+  capture(target: WindowBoundsSnapshot | null): WindowBounds | null {
+    if (target && this.ready) this.saved = captureWindowBounds(target, this.saved);
+    return this.saved;
+  }
+
+  closed(): void {
+    this.ready = false;
+    this.pendingMaximize = false;
+  }
 }
