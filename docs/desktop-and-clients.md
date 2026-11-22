@@ -223,31 +223,39 @@ Every connection and startup gate has an **Application settings** entry, includi
 browsers, and the preference works while offline. Visual rules are in the
 [design system](design-system.md#light-and-dark).
 
-When the T3 connection shares [T3 theme colors](t3-integration.md#theme-colors), the server delivers one
-presentation with a Light and a Dark half to approved clients and the host panel through live
-delivery. Each client uses the palette for its effective mode and falls back to Factory's
-colors when that palette is missing or rejected. The **Appearance** header shows **Following T3** when
-at least one mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise.
-The **T3 theme** card shows the theme name and which modes use its colors. Connection and access
-gates and unapproved clients
-receive no theme colors and use Factory's colors.
+Each desktop installation and each browser profile may also apply one custom color theme JSON in
+**Settings → Appearance** (pasted or uploaded as a `.json` file). The config uses T3's color theme
+format v1 (`appearance`, `canvas`, `accent`, `colors`, `variants`; unknown fields such as `css` are
+ignored) and is resolved, mapped onto Factory's color tokens and validated under the
+[contrast policy](design-system.md#custom-theme-colors) directly on the device. Each mode
+(`light` / `dark`) applies its custom colors independently and falls back to Factory's colors when
+missing or unreadable. The **Appearance** header shows **Custom colors** when at least one mode
+uses custom colors and **Factory colors** otherwise. **Reset to Factory** removes the custom config
+and restores Factory's colors. The source JSON is stored locally in the browser profile or desktop
+installation (`localStorage`), re-validated on load and across browser tabs of the same origin, and
+never travels to or through the Factory server. If a browser blocks storage, the custom colors apply
+until the tab closes and Settings explains why.
 
-Each client caches the last presentation its server published: one snapshot with both halves, in the
-storage of the browser profile for that Factory address, or of the desktop installation's bundled
-page. It holds colors, the theme name and the source and resolver identifiers, never a credential. The snapshot is bound to the identity of the Factory server and to
-its current theme-color source (the connection's T3 environment and the resolver pin), both of which the server tells only the host panel and approved clients. A client reads it
-only after that answer, for the same server and exactly that source, and when it is still exactly a
-sanitized presentation; after another T3 source it shows Factory's colors until live delivery answers. The same holds for a client that
-stays open through a reconnect: when the access check after it declares another source, the colors
-it was showing end there and return only with a later delivery from the server, not with the one
-the client already held. A matching snapshot is shown
-until live delivery answers and while offline. Appearance changes switch palettes immediately.
-Whatever the server publishes next replaces the snapshot, and a
-presentation without colors (another T3 source, no inherited theme) removes it. A client whose Factory access is missing, pending, denied or revoked deletes it without
-reading it. The first paint, every gate screen and the desktop window background always use
-Factory's colors for the effective mode. A browser cannot open
-at all while its Factory server is unreachable; the desktop app opens its unreachable screen in
-Factory's colors.
+Support limits of custom theme configs:
+
+- **Format.** T3's theme file version 1 only (at most 128 KB UTF-8): `appearance` (`light` or
+  `dark`), optional `name` (1–48 characters, defaulting to `Custom theme`), optional `#rgb`/`#rrggbb`
+  `canvas` and `accent` seeds, and `colors`/`variants` records mapping up to 256 role names to color
+  strings of at most 64 characters. Unknown extra fields (such as `css`) are ignored.
+- **Base palette and variants.** The declared `appearance` starts from the palette generated from
+  `canvas` and `accent` when both seeds are given, or from T3 Chat's base palette for that mode
+  otherwise (including when only one seed is given), with `colors` overlaid on top. The opposite
+  mode exists only when `variants[other]` is declared: T3 Chat's base palette for that mode with the
+  variant's colors on top, never the seeds. Without that variant the opposite mode keeps Factory's
+  colors.
+- **Mapped roles.** Factory reads the twelve T3 roles it maps (`canvas`, `text`, `textMuted`,
+  `placeholder`, `surfaceRaised`, `border`, `input`, `focus`, `accent`, `accentForeground`,
+  `sidebar`, `sidebarForeground`) and ignores every other role. A config with neither seed pair nor
+  any readable T3 role color is rejected.
+- **Color syntax and translucency.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with
+  channels in 0–255, and `oklch()` with numbers or percentages. Unparseable color strings (such as
+  named colors or `hsl()`) are ignored and reported, leaving the role at its base value. A mapped
+  role resolving to a translucent color (alpha < 1) rejects that mode to Factory's colors.
 
 - On **desktop**, Factory saves the preference with the installation's other settings.
   The effective mode drives native window chrome, dialogs and the window background.
@@ -418,7 +426,13 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **24**. The server and the Desktop and browser clients require protocol **24**.
+The current protocol is **25**. The server and the Desktop and browser clients require protocol **25**.
+
+Protocol 25 removes the `WatchAppearance` live RPC and `ClientScope.appearanceSource` because
+custom color themes are configured per device rather than polled from T3. Protocol 24 and older
+clients would subscribe to the removed RPC, and protocol 24 servers do not match this contract;
+both sides are refused at handshake and told to update. Existing approvals and credentials carry
+forward, and migration `125` drops the retired `appearance_snapshot` table on startup.
 
 Protocol 24 makes the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
 Protocol 23 clients assume every graph has one, and protocol 23 servers would add it back on save.

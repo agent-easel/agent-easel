@@ -95,71 +95,10 @@ the current one and keep mismatches unresolved: reauthorization is never permiss
 
 ## Theme colors
 
-Factory uses the color palette of the **environment default theme** of the T3 connection's environment
-(`t3 theme set`), not the theme an individual T3 window shows. Each client keeps its own
-[appearance preference](desktop-and-clients.md#appearance) and uses the T3 palette for its
-effective Light or Dark mode.
-T3 keeps owning theme selection and editing; Factory has no theme catalog or editor.
-
-**Reading the default.** Factory reads the theme with T3's `t3_theme_read` MCP tool over the authorized T3
-connection, so theme colors need no pairing or credential of their own. Each pass lists T3's tools, reads the
-environment identity and the default theme id, and, when that id names a published theme, reads that theme's file.
-It keeps only the environment id, the default theme id and that definition. Factory reads on startup, whenever the
-saved endpoint or its authorization context changes, and on every connection-check interval; a change made in T3
-appears by the next interval, since the tool pushes no updates. A T3 that lists no `t3_theme_read` (builds before
-November 2026) uses Factory’s colors and shows **Update T3 to follow its theme**. Factory once paired a separate `orchestration:read`
-session for theme colors; a backend deletes any token of that session it still stores, and T3 keeps the session
-until it expires or the owner revokes it (`t3 auth session revoke`). Hosts and approved clients see
-the same read-only theme and color sources in [Appearance](desktop-and-clients.md#appearance).
-
-**Resolution.** Built-in T3 themes (`t3-chat`, `grove`, `ocean`, `ember`, `iris` and their legacy aliases) and
-published theme definitions resolve through one bounded resolver ported from T3 Code (MIT, © 2026 T3 Tools Inc.)
-at revision
-[`d2c25950b4d9`](https://github.com/pingdotgg/t3code/tree/d2c25950b4d9183ea342d5d5fc14c326b9e0172a); the
-ported source keeps the license notice, and parity tests compare it with output of the upstream resolver at that
-revision. Factory maps the roles by meaning and validates each mode under the
-[contrast policy](design-system.md#t3-theme-colors), then publishes one presentation with both halves and their
-availability. Factory does not claim compatibility with T3 revisions other than the pin.
-
-A published definition resolves as T3 resolves it. Its declared appearance takes the palette T3 generates from its
-`canvas` and `accent` seeds, or T3 Chat's palette for that appearance when it has no seeds, with its `colors` on top.
-The other mode exists only when the definition declares a variant for it: T3 Chat's palette for that mode with the
-variant's colors on top, never the seeds. Without that variant the mode keeps Factory's colors and Settings says
-so; Factory never inverts colors, derives an opposite theme or shows the declared appearance in the other mode. A
-built-in id or legacy alias always names the built-in, whatever a published definition is called.
-
-Support limits of published definitions:
-
-- **Format.** T3's theme file version 1 only: a `light` or `dark` appearance, `#rgb`/`#rrggbb` seeds, and color
-  records of role names to texts of at most 64 characters, in a set of at most 32 definitions. A named definition
-  in any other structure is not followed and Settings names it; unknown extra fields are ignored.
-- **Roles.** Factory reads the twelve T3 roles it maps and ignores every other role, known to T3 or not. A
-  definition without seeds and without any readable color of a T3 role is not a theme.
-- **Color syntax.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with channels in 0–255, and `oklch()`
-  with numbers or percentages. T3 itself accepts more CSS color syntax (named colors, `hsl()`, `lab()` and others);
-  Factory ignores such a color as T3 ignores an unparseable one, so the role keeps its seed-generated or T3 Chat
-  value. Clients receive color values formatted by Factory.
-- **Translucent colors.** A mapped role resolving to a color with alpha rejects that mode to Factory's colors.
-- **Parity.** Verified against upstream output for seeds in both appearances, overrides, partial and complete
-  colors and variants, to the six decimals T3 writes; other inputs are not claimed.
-
-**Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
-`t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
-and a mismatched environment all use Factory’s colors for the effective mode. Appearance explains
-an unreadable theme or a connection problem and identifies each mode’s color source when the theme is applied.
-During a transient outage the last presentation of the same endpoint and environment stays.
-A changed endpoint or connection environment discards it at once. Theme colors
-never change connection readiness, Start, execution or Run attention.
-
-**Stored snapshot.** The backend keeps the presentation it publishes as one snapshot in its database, with both
-modes together and no credential, and deletes it whenever it stops publishing one (another endpoint or
-environment, no inherited default, a T3 without `t3_theme_read`). A starting backend adopts that snapshot before
-T3 answers only when it was stored for the saved endpoint and still carries the connection's environment and the
-current resolver pin; so a host restarted while T3 is unreachable keeps its colors. Nothing is adopted later in
-the process: returning to an earlier endpoint never brings its old colors back. Migration `096` removed the grant reference that
-snapshots stored while theme colors used a paired grant; their colors are kept. On reconnection Factory reads T3's
-current default and publishes the resulting presentation as one revision. Each client also
-[caches the presentation](desktop-and-clients.md#appearance) it received.
+Factory no longer reads themes from T3 over `t3_theme_read`. Custom color themes are configured per
+device in [Appearance](desktop-and-clients.md#appearance) using JSON color configs compatible with
+T3's theme format (`appearance`, `canvas`, `accent`, `colors`, `variants`). Migration `125` drops
+the retired `appearance_snapshot` table.
 
 ## Agent reporting
 
@@ -269,8 +208,6 @@ in a native client remains a live compatibility check.
 | `POST /api/connection/authorization/open` | Open consent on the host for the saved endpoint (host and approved clients) |
 | `GET /api/setup` | Read [First-run setup](#first-run-setup) status (host and approved clients) |
 | `POST /api/setup/complete` | Record that First-run setup is completed (host only) |
-
-Theme-color status and presentation reach clients through live delivery only.
 
 The authorization context tracks grant continuity, not verified user identity or server
 retention of deduplication keys. Refresh preserves it; a new approval replaces it.

@@ -3,7 +3,6 @@ import { Rpc, RpcGroup } from "effect/rpc";
 import type { OperationError } from "./result.ts";
 import {
   RUN_VIEW_LIMIT,
-  type AppearanceLiveMessage,
   type ConnectionLiveMessage,
   type LaunchChoicesLiveMessage,
   type LiveEnvelope,
@@ -40,12 +39,6 @@ export class FactoryLive extends RpcGroup.make(
   }),
   Rpc.make("WatchLaunchChoices", {
     success: trusted<LiveEnvelope<LaunchChoicesLiveMessage>>(),
-    error: LiveError,
-    stream: true,
-  }),
-  /** Protocol 10: servers that declare an older protocol do not serve it. */
-  Rpc.make("WatchAppearance", {
-    success: trusted<LiveEnvelope<AppearanceLiveMessage>>(),
     error: LiveError,
     stream: true,
   }),

@@ -10,32 +10,31 @@ import { FirstRunSetupGate } from "./first-run-setup.tsx";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { startAppearance } from "./appearance.ts";
+import { startCustomTheme } from "./custom-theme.ts";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { InheritedColors } from "./components/inherited-colors.tsx";
 import "./styles.css";
 
 if (desktopBridge()) document.documentElement.dataset.desktop = "true";
 startAppearance();
+startCustomTheme();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <TooltipProvider delayDuration={300}>
       <DesktopShell>
         <ClientGate>
-          <InheritedColors>
-            <ConnectionStateProvider>
-              <ReportingStateProvider>
-                <FirstRunSetupGate>
-                  <RouterProvider router={router} />
-                  <TanStackRouterDevtools
-                    router={router}
-                    initialIsOpen={false}
-                    position="bottom-right"
-                  />
-                </FirstRunSetupGate>
-              </ReportingStateProvider>
-            </ConnectionStateProvider>
-          </InheritedColors>
+          <ConnectionStateProvider>
+            <ReportingStateProvider>
+              <FirstRunSetupGate>
+                <RouterProvider router={router} />
+                <TanStackRouterDevtools
+                  router={router}
+                  initialIsOpen={false}
+                  position="bottom-right"
+                />
+              </FirstRunSetupGate>
+            </ReportingStateProvider>
+          </ConnectionStateProvider>
         </ClientGate>
       </DesktopShell>
     </TooltipProvider>

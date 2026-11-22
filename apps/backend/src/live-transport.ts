@@ -23,7 +23,6 @@ export async function startLiveTransport(live: LiveStreams) {
           WatchConnection: () => live.watchConnection(),
           WatchRunView: (view) => live.watchRunView(view),
           WatchLaunchChoices: () => live.watchLaunchChoices(),
-          WatchAppearance: () => live.watchAppearance(),
           WatchStudio: () => live.watchStudio(),
         }),
       ),

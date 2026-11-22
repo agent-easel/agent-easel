@@ -71,7 +71,6 @@ export async function oauthT3(
     capabilities?: (args: Record<string, unknown>) => unknown;
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
     attachments?: boolean;
-    themeRead?: (args: Record<string, unknown>) => unknown;
     updateSchema?: Record<string, unknown>;
     update?: (args: Record<string, unknown>) => unknown;
     /** Protected-resource metadata always answers with a server error; the SDK treats it as
@@ -238,14 +237,6 @@ export async function oauthT3(
     ...(options.updateSchema
       ? [{ name: "t3_thread_update", inputSchema: options.updateSchema }]
       : []),
-    ...(options.themeRead
-      ? [
-          {
-            name: "t3_theme_read",
-            inputSchema: { type: "object", properties: { themeId: { type: "string" } } },
-          },
-        ]
-      : []),
     ...(options.attachments
       ? [
           {
@@ -307,7 +298,6 @@ export async function oauthT3(
     ["t3_thread_wait", structuredTool(options.wait)],
     ["t3_thread_read", structuredTool(options.runtimeActivity)],
     ["orchestrator_capabilities", structuredTool(options.capabilities)],
-    ["t3_theme_read", structuredTool(options.themeRead)],
     [
       "t3_attachment_prepare_upload",
       options.attachments ? structuredTool(prepareUpload) : undefined,
