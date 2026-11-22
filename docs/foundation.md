@@ -195,16 +195,16 @@ Packaged Release and Beta builds use the public PostHog EU project token embedde
 
 ## Live delivery
 
-Run detail, sidebar navigation, shared T3 connection status, [theme colors](t3-integration.md#theme-colors),
+Run detail, sidebar navigation, shared T3 connection status,
 the Run composer's launch choices and Studio's saved definitions use typed Effect RPC streams over WebSocket at `/api/live`;
 commands and other reads remain HTTP operations. A window holds one connection-status subscription,
-one theme-color subscription (it never disables mutations or shows synchronizing), one view
+one view
 subscription carrying navigation and its open Runs, and, while the composer is shown, one
 launch-choices subscription carrying the Project catalog and Flows with their readiness.
 Servers also serve a Studio subscription carrying every current saved Agent, every
 current Flow with its readiness and every Trigger with its latest check and problem; Agent usage is derived from those
 Flows. A window holds it for its lifetime, because Agent reporting state and the command palette
-read it outside Studio; those reads never gate mutations or show synchronizing, like theme colors.
+read it outside Studio; those reads never gate mutations or show synchronizing.
 While Studio is open its hold gates the window's mutations like every other gating scope, so Studio
 writes, and other product writes, wait while it is unsynchronized; drafts stay editable. A refused or failed subscription stays
 synchronizing, with no HTTP fallback, and HTTP answers never mark the scope synchronized. Each read of a view covers navigation and those Runs in one

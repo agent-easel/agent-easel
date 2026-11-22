@@ -1,9 +1,4 @@
-import {
-  APPEARANCE_COLOR_TOKENS,
-  type AppearanceColorToken,
-  type AppearanceModeResult,
-  type CustomThemePresentation,
-} from "@t3-factory/contracts";
+import type { CustomThemePresentation } from "@t3-factory/contracts";
 import { presentThemeModes } from "./theme/palette-mapping.ts";
 import {
   resolveCustomThemeDefinition,
@@ -11,12 +6,11 @@ import {
   type T3ThemeColors,
 } from "./theme/t3-theme-palettes.ts";
 
-const COLOR = /^(#[0-9a-f]{6}|rgb\(\d{1,3} \d{1,3} \d{1,3} \/ (0|1|0?\.\d{1,6})\))$/;
-const TEXT_LIMIT = 512;
-const MAX_JSON_BYTES = 131_072;
+export const MAX_THEME_JSON_BYTES = 131_072;
 const MAX_THEME_COLORS = 256;
 const THEME_SEED = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const THEME_ROLE = /^[a-zA-Z][a-zA-Z0-9]{0,63}$/;
+const utf8Encoder = new TextEncoder();
 
 export type CustomThemeParseResult =
   | {
@@ -38,8 +32,6 @@ export interface StoredCustomTheme {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const isText = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= TEXT_LIMIT;
 
 function readColorRecord(value: unknown): T3ThemeColors | undefined {
   if (!isRecord(value)) return undefined;
@@ -74,16 +66,11 @@ function parseSeeds(
   rawCanvas: unknown,
   rawAccent: unknown,
 ): FieldResult<{ readonly canvas: string; readonly accent: string } | null> {
-  const hasCanvas = rawCanvas !== undefined;
-  const hasAccent = rawAccent !== undefined;
-  if (!hasCanvas && !hasAccent) return { ok: true, value: null };
-  if (hasCanvas !== hasAccent)
-    return { ok: false, message: 'Provide both "canvas" and "accent" hex colors, or neither.' };
-  const canvas = readSeed(rawCanvas);
-  const accent = readSeed(rawAccent);
-  if (!canvas || !accent)
+  const canvas = rawCanvas === undefined ? null : readSeed(rawCanvas);
+  const accent = rawAccent === undefined ? null : readSeed(rawAccent);
+  if (canvas === undefined || accent === undefined)
     return { ok: false, message: '"canvas" and "accent" must be #rgb or #rrggbb hex colors.' };
-  return { ok: true, value: { canvas, accent } };
+  return { ok: true, value: canvas && accent ? { canvas, accent } : null };
 }
 
 function parseVariants(
@@ -139,7 +126,7 @@ function parseDefinition(raw: Record<string, unknown>):
 export function parseCustomThemeJson(rawJson: string): CustomThemeParseResult {
   if (rawJson.trim().length === 0)
     return { ok: false, message: "Paste or upload a theme JSON config first." };
-  if (rawJson.length > MAX_JSON_BYTES)
+  if (utf8Encoder.encode(rawJson).byteLength > MAX_THEME_JSON_BYTES)
     return { ok: false, message: "Theme config is larger than the 128 KB limit." };
   let parsed: unknown;
   try {
@@ -174,36 +161,13 @@ export function parseCustomThemeJson(rawJson: string): CustomThemeParseResult {
   };
 }
 
-function parseMode(value: unknown): AppearanceModeResult | null {
-  if (!isRecord(value)) return null;
-  if (value.kind === "baseline")
-    return isText(value.explanation) ? { kind: "baseline", explanation: value.explanation } : null;
-  if (value.kind !== "custom" || !isRecord(value.colors)) return null;
-  const colors: Partial<Record<AppearanceColorToken, string>> = {};
-  for (const token of APPEARANCE_COLOR_TOKENS) {
-    const color = value.colors[token];
-    if (typeof color !== "string" || !COLOR.test(color)) return null;
-    colors[token] = color;
-  }
-  return { kind: "custom", colors: colors as Record<AppearanceColorToken, string> };
-}
-
 export function parseStoredCustomTheme(value: unknown): StoredCustomTheme | null {
-  if (!isRecord(value) || value.version !== 1) return null;
-  if (
-    typeof value.rawJson !== "string" ||
-    value.rawJson.length === 0 ||
-    value.rawJson.length > MAX_JSON_BYTES
-  )
-    return null;
-  if (!isRecord(value.presentation) || !isRecord(value.presentation.modes)) return null;
-  const { name, modes } = value.presentation;
-  const light = parseMode(modes.light);
-  const dark = parseMode(modes.dark);
-  if (!isText(name) || !light || !dark) return null;
+  if (!isRecord(value) || value.version !== 1 || typeof value.rawJson !== "string") return null;
+  const parsed = parseCustomThemeJson(value.rawJson);
+  if (!parsed.ok) return null;
   return {
     version: 1,
     rawJson: value.rawJson,
-    presentation: { name, modes: { light, dark } },
+    presentation: parsed.presentation,
   };
 }

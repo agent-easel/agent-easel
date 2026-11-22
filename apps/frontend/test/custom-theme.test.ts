@@ -1,5 +1,28 @@
 import { assert, expect, it } from "vite-plus/test";
-import { parseCustomThemeJson, parseStoredCustomTheme } from "@t3-factory/domain-validation";
+import {
+  MAX_THEME_JSON_BYTES,
+  parseCustomThemeJson,
+  parseStoredCustomTheme,
+} from "@t3-factory/domain-validation";
+
+function hexLuminance(hex: string): number {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * channel((n >> 16) & 0xff) +
+    0.7152 * channel((n >> 8) & 0xff) +
+    0.0722 * channel(n & 0xff)
+  );
+}
+
+function contrastRatio(a: string, b: string): number {
+  const la = hexLuminance(a);
+  const lb = hexLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
 
 it("a dark seed theme generates custom dark colors and keeps Factory light colors", () => {
   // Arrange
@@ -45,6 +68,25 @@ it("a dark theme with a light variant generates custom colors for both modes", (
   expect(result.presentation.modes.light.kind).toBe("custom");
 });
 
+it("a T3 v1 config with one valid seed and explicit colors applies the colors to the base palette", () => {
+  // Arrange
+  const json = JSON.stringify({
+    appearance: "dark",
+    canvas: "#111111",
+    colors: {
+      accent: "#9d6cff",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  expect(result.presentation.name).toBe("Custom theme");
+  expect(result.presentation.modes.dark.kind).toBe("custom");
+});
+
 it("a theme whose canvas does not match its declared polarity is rejected", () => {
   // Arrange
   const json = JSON.stringify({
@@ -74,19 +116,24 @@ it("malformed JSON is rejected without throwing", () => {
   expect(result.message).toBe("Theme config is not valid JSON.");
 });
 
-it("a theme with only one seed color is rejected", () => {
+it("UTF-8 payloads exceeding the 128 KB byte limit are rejected even when UTF-16 length is below the limit", () => {
   // Arrange
-  const json = JSON.stringify({
+  const multibyte = "ą".repeat(MAX_THEME_JSON_BYTES / 2 + 10);
+  const raw = JSON.stringify({
+    name: "Large",
     appearance: "dark",
     canvas: "#14121f",
+    accent: "#9d6cff",
+    extra: multibyte,
   });
 
   // Act
-  const result = parseCustomThemeJson(json);
+  const result = parseCustomThemeJson(raw);
 
   // Assert
   assert(!result.ok);
-  expect(result.message).toBe('Provide both "canvas" and "accent" hex colors, or neither.');
+  expect(raw.length).toBeLessThan(MAX_THEME_JSON_BYTES);
+  expect(result.message).toBe("Theme config is larger than the 128 KB limit.");
 });
 
 it("unreadable color values on mapped roles are ignored and counted while keeping the generated base", () => {
@@ -110,7 +157,109 @@ it("unreadable color values on mapped roles are ignored and counted while keepin
   expect(result.presentation.modes.dark.kind).toBe("custom");
 });
 
-it("a stored custom theme snapshot round-trips and rejects tampered color values", () => {
+it("section labels maintain at least 3:1 contrast against sidebar as well as canvas and card surfaces", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "SidebarLabels",
+    appearance: "dark",
+    colors: {
+      canvas: "#000000",
+      surfaceRaised: "#000000",
+      sidebar: "#606060",
+      placeholder: "#606060",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.dark.kind === "custom");
+  const c = result.presentation.modes.dark.colors;
+  expect(contrastRatio(c["subtle-foreground"], c.sidebar)).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(c["subtle-foreground"], c.background)).toBeGreaterThanOrEqual(3);
+  expect(contrastRatio(c["subtle-foreground"], c.card)).toBeGreaterThanOrEqual(3);
+});
+
+it("foreground, secondary text, sidebar text and status colors are adjusted to meet WCAG contrast on hover and sidebar surfaces", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "LowContrast",
+    appearance: "dark",
+    colors: {
+      canvas: "#121218",
+      surfaceRaised: "#1c1c26",
+      sidebar: "#181822",
+      text: "#22222c",
+      textMuted: "#262632",
+      sidebarForeground: "#20202a",
+      accent: "#6d28d9",
+      accentForeground: "#6d28d9",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.dark.kind === "custom");
+  const c = result.presentation.modes.dark.colors;
+  expect(contrastRatio(c.foreground, c.background)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c.foreground, c.accent)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["muted-foreground"], c.sidebar)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["muted-foreground"], c["sidebar-accent"])).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["sidebar-foreground"], c.sidebar)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["sidebar-foreground"], c["sidebar-accent"])).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c.destructive, c.sidebar)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["status-working"], c.background)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["primary-foreground"], c.primary)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["primary-foreground"], c["primary-hover"])).toBeGreaterThanOrEqual(4.5);
+});
+
+it("a mid-lightness accent lightens on hover when darkening would make action labels unreadable", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "MidAccent",
+    appearance: "dark",
+    canvas: "#121218",
+    accent: "#7c7c7c",
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.dark.kind === "custom");
+  const c = result.presentation.modes.dark.colors;
+  expect(hexLuminance(c["primary-hover"])).toBeGreaterThan(hexLuminance(c.primary));
+  expect(contrastRatio(c["primary-foreground"], c.primary)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c["primary-foreground"], c["primary-hover"])).toBeGreaterThanOrEqual(4.5);
+});
+
+it("a translucent color on a mapped role rejects that mode to Factory baseline", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "Translucent",
+    appearance: "dark",
+    canvas: "#14121f",
+    accent: "#9d6cff",
+    colors: {
+      sidebar: "rgba(20, 18, 31, 0.5)",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.details).toContain("colors Factory cannot read");
+});
+
+it("stored custom themes are re-derived from rawJson so tampered presentations cannot bypass WCAG checks", () => {
   // Arrange
   const rawJson = JSON.stringify({
     name: "Nightfall",
@@ -120,10 +269,10 @@ it("a stored custom theme snapshot round-trips and rejects tampered color values
   });
   const parsed = parseCustomThemeJson(rawJson);
   assert(parsed.ok);
-  const validStored = { version: 1, rawJson, presentation: parsed.presentation };
   assert(parsed.presentation.modes.dark.kind === "custom");
-  const tampered = {
-    ...validStored,
+  const tamperedPresentation = {
+    version: 1,
+    rawJson,
     presentation: {
       ...parsed.presentation,
       modes: {
@@ -132,18 +281,29 @@ it("a stored custom theme snapshot round-trips and rejects tampered color values
           kind: "custom",
           colors: {
             ...parsed.presentation.modes.dark.colors,
-            background: "url(javascript:alert(1))",
+            foreground: parsed.presentation.modes.dark.colors.background,
           },
         },
       },
     },
   };
+  const invalidJsonStored = {
+    version: 1,
+    rawJson: JSON.stringify({
+      name: "Bad",
+      appearance: "dark",
+      canvas: "#ffffff",
+      accent: "#000000",
+    }),
+    presentation: parsed.presentation,
+  };
 
   // Act
-  const restored = parseStoredCustomTheme(validStored);
-  const rejected = parseStoredCustomTheme(tampered);
+  const restored = parseStoredCustomTheme(tamperedPresentation);
+  const rejected = parseStoredCustomTheme(invalidJsonStored);
 
   // Assert
-  expect(restored).toStrictEqual(validStored);
+  assert(restored !== null);
+  expect(restored.presentation).toStrictEqual(parsed.presentation);
   expect(rejected).toBeNull();
 });

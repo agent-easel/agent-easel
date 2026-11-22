@@ -231,10 +231,31 @@ ignored) and is resolved, mapped onto Factory's color tokens and validated under
 (`light` / `dark`) applies its custom colors independently and falls back to Factory's colors when
 missing or unreadable. The **Appearance** header shows **Custom colors** when at least one mode
 uses custom colors and **Factory colors** otherwise. **Reset to Factory** removes the custom config
-and restores Factory's colors. The validated presentation and source JSON are stored locally in the
-browser profile or desktop installation (`localStorage`), sync across browser tabs of the same
-origin, and never travel to or through the Factory server. If a browser blocks storage, the custom
-colors apply until the tab closes and Settings explains why.
+and restores Factory's colors. The source JSON is stored locally in the browser profile or desktop
+installation (`localStorage`), re-validated on load and across browser tabs of the same origin, and
+never travels to or through the Factory server. If a browser blocks storage, the custom colors apply
+until the tab closes and Settings explains why.
+
+Support limits of custom theme configs:
+
+- **Format.** T3's theme file version 1 only (at most 128 KB UTF-8): `appearance` (`light` or
+  `dark`), optional `name` (1–48 characters, defaulting to `Custom theme`), optional `#rgb`/`#rrggbb`
+  `canvas` and `accent` seeds, and `colors`/`variants` records mapping up to 256 role names to color
+  strings of at most 64 characters. Unknown extra fields (such as `css`) are ignored.
+- **Base palette and variants.** The declared `appearance` starts from the palette generated from
+  `canvas` and `accent` when both seeds are given, or from T3 Chat's base palette for that mode
+  otherwise (including when only one seed is given), with `colors` overlaid on top. The opposite
+  mode exists only when `variants[other]` is declared: T3 Chat's base palette for that mode with the
+  variant's colors on top, never the seeds. Without that variant the opposite mode keeps Factory's
+  colors.
+- **Mapped roles.** Factory reads the twelve T3 roles it maps (`canvas`, `text`, `textMuted`,
+  `placeholder`, `surfaceRaised`, `border`, `input`, `focus`, `accent`, `accentForeground`,
+  `sidebar`, `sidebarForeground`) and ignores every other role. A config with neither seed pair nor
+  any readable T3 role color is rejected.
+- **Color syntax and translucency.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with
+  channels in 0–255, and `oklch()` with numbers or percentages. Unparseable color strings (such as
+  named colors or `hsl()`) are ignored and reported, leaving the role at its base value. A mapped
+  role resolving to a translucent color (alpha < 1) rejects that mode to Factory's colors.
 
 - On **desktop**, Factory saves the preference with the installation's other settings.
   The effective mode drives native window chrome, dialogs and the window background.
@@ -405,7 +426,13 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **24**. The server and the Desktop and browser clients require protocol **24**.
+The current protocol is **25**. The server and the Desktop and browser clients require protocol **25**.
+
+Protocol 25 removes the `WatchAppearance` live RPC and `ClientScope.appearanceSource` because
+custom color themes are configured per device rather than polled from T3. Protocol 24 and older
+clients would subscribe to the removed RPC, and protocol 24 servers do not match this contract;
+both sides are refused at handshake and told to update. Existing approvals and credentials carry
+forward, and migration `125` drops the retired `appearance_snapshot` table on startup.
 
 Protocol 24 makes the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
 Protocol 23 clients assume every graph has one, and protocol 23 servers would add it back on save.

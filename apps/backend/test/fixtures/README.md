@@ -30,26 +30,6 @@ id. Those lifecycle states were not captured live and do not prove live harness 
 schemas) construct synthetic transport responses, served by `support/oauth-t3.ts` through
 `support/boundaries-setup.ts`. They are not captured live sessions.
 
-## T3 built-in theme provenance
-
-[`t3-builtin-themes.json`](t3-builtin-themes.json) is the output of T3 Code's own resolver
-(`apps/web/src/themePalette.ts`, `getThemeColorsForMode`) for every built-in theme in both modes at
-upstream revision `d2c25950b4d9183ea342d5d5fc14c326b9e0172a` (MIT, © 2026 T3 Tools Inc.), produced on
-2026-11-11 by bundling that unmodified upstream code with stubs only for its React atom registry and
-server-state atom and running it outside T3. It records all 61 roles; Factory's parity tests compare
-the roles its pinned port reads. Regenerating it for another pin is part of moving the resolver to that
-pin; the harness and its logs stay outside Git.
-
-[`t3-published-themes.json`](t3-published-themes.json) comes from the same harness, revision and date for
-published theme definitions (`publishedThemeDefinitions` and `getThemeColorsForMode`). `themes` holds each
-definition exactly as T3 streams it (`input`) and the 61 roles upstream resolved for both modes (`resolved`,
-null where the definition has no colors for a mode): dark and light seeds, seeds with color overrides that
-include an unknown role and an unparseable color, dark seeds with a sparse Light variant, partial colors with a
-partial Dark variant and no seeds, and a definition giving every role a color. `filtered` holds two definitions
-upstream drops, one under a built-in id and one without a usable color. `canonicalColors` maps color texts to
-upstream's canonical `oklch()` text (`toCanonicalThemeColor`). The controlled UI fixture publishes the dark-seed
-and Light-variant definitions as its T3 owner's theme files.
-
 ## Upgrade fixtures
 
 Keep one representative released baseline: [`v0.2.0-upgrade-data.json`](v0.2.0-upgrade-data.json). A second capture,
@@ -64,11 +44,10 @@ Retain genuine schema, migration ledger, snapshots, keys, payloads, fingerprints
 simulate an old release. A replacement baseline must come from the public operations of that released version on disposable data. Keep only the representative rows and observations its assertions
 need; exclude transient process ownership, real credentials and user data. Raw capture scripts and logs stay outside Git.
 
-[`appearance-grant-upgrade-data.json`](appearance-grant-upgrade-data.json) holds the theme-color snapshot of a
-host that followed a separately paired grant, which the baseline lacks; migration `096` removes that grant from the
-stored presentation. [`migration-appearance-upgrade.test.ts`](../migration-appearance-upgrade.test.ts) checks that the
-migration keeps the snapshot's endpoint, environment, resolver pin, theme and both modes without the grant, and that
-the upgraded host shows those colors and declares that source from its first status while T3 is unreachable.
+[`appearance-grant-upgrade-data.json`](appearance-grant-upgrade-data.json) holds the retired
+`appearance_snapshot` table from a host that followed a separately paired grant.
+[`migration-appearance-upgrade.test.ts`](../migration-appearance-upgrade.test.ts) checks that
+upgrading through migration `125` cleanly drops the retired `appearance_snapshot` table.
 
 [`optional-finish-upgrade-data.json`](optional-finish-upgrade-data.json) holds Finish blocks with and without endings, which the
 baseline predates; migration `124` hides those without endings and preserves their stored positions. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)

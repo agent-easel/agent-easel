@@ -150,7 +150,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
     muted: formatHex(muted),
     "muted-foreground": formatHex(mutedForeground),
     "subtle-foreground": formatHex(
-      readable(t3.placeholder, surfaces, NON_TEXT_CONTRAST, "section labels"),
+      readable(t3.placeholder, [...surfaces, sidebar], NON_TEXT_CONTRAST, "section labels"),
     ),
     "emphasis-foreground": formatHex(emphasis),
     accent: formatHex(hover),

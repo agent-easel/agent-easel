@@ -113,10 +113,6 @@ type Entry = {
   established: boolean;
 };
 
-/**
- * The connection status subscription, the one view subscription for navigation and Runs, the
- * composer's launch choices, Studio's saved definitions and theme colors.
- */
 type Channel = "connection" | "view" | "launchChoices" | "studio";
 const channels: readonly Channel[] = ["connection", "view", "launchChoices", "studio"];
 

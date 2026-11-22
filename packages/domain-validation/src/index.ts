@@ -276,6 +276,7 @@ export {
   type StartPrompt,
 } from "./run-prompt.ts";
 export {
+  MAX_THEME_JSON_BYTES,
   parseCustomThemeJson,
   parseStoredCustomTheme,
   type CustomThemeParseResult,

@@ -1,4 +1,5 @@
 import "vite-plus/test/config";
+import { readFileSync } from "node:fs";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { fileURLToPath } from "node:url";
 import { defaultServerConditions, defineConfig } from "vite-plus";
@@ -21,6 +22,16 @@ export default defineConfig(({ command }) => ({
           type: "asset",
           fileName: uiBuildSignatureFile,
           source: uiBuildSignature(fileURLToPath(new URL("../../", import.meta.url))),
+        });
+        this.emitFile({
+          type: "asset",
+          fileName: "LICENSE-T3.md",
+          source: readFileSync(
+            fileURLToPath(
+              new URL("../../packages/domain-validation/src/theme/LICENSE-T3.md", import.meta.url),
+            ),
+            "utf8",
+          ),
         });
       },
     },
