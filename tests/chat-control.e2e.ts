@@ -529,10 +529,11 @@ test("the host can save a bot in Bots after correcting a wrong-list warning", as
   await app.open("/settings/chat-control/discord");
   const access = screen.getByRole("region", "Access");
   const bots = screen.getByRole("region", "Bots");
+  const save = screen.getByRole("button", "Save", { exact: true });
   await expect(bots.getByText(/^Bots may talk to Factory and start Runs/)).toBeVisible();
   await access.getByLabel("Users").fill(`200000000000000001, ${ATLAS}`);
   await bots.getByLabel("Bot IDs").fill(HERMES);
-  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await save.tap();
   await screen.getByRole("button", "Check connection").tap();
   await expect(bots.getByText(/^Hermes/)).toBeVisible({ timeout: 15_000 });
   await expect(bots.getByText("Bot", { exact: true })).toBeVisible();
@@ -554,7 +555,7 @@ test("the host can save a bot in Bots after correcting a wrong-list warning", as
   await bots.getByLabel("Bot IDs").fill(`${HERMES}, ${ATLAS}`);
 
   // Act
-  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await save.tap();
 
   // Assert
   await expect(screen.getByRole("button", "Discard", { exact: true })).toHaveCount(0);
