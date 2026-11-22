@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { inventory } from "./check-comments.mjs";
 
 await test("excludes executable hashbang lines while keeping real comments", () => {
@@ -36,4 +41,19 @@ await test("fails explicitly when a fatal syntax error prevents complete comment
     () => inventory("scripts/broken.ts", source),
     /scripts\/broken\.ts:1:1 \[parse-error\]/,
   );
+});
+
+await test("dispatches CLI commands when invoked through a symlinked entry point", (t) => {
+  // Arrange
+  const dir = mkdtempSync(join(tmpdir(), "check-comments-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const symlink = join(dir, "check-comments.mjs");
+  symlinkSync(fileURLToPath(new URL("./check-comments.mjs", import.meta.url)), symlink);
+
+  // Act
+  const result = spawnSync(process.execPath, [symlink, "--unknown-flag"], { encoding: "utf8" });
+
+  // Assert
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage: node scripts\/check-comments\.mjs/);
 });
