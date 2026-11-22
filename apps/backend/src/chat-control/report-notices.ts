@@ -29,7 +29,6 @@ const NOTICE_TEXT_LIMIT = MESSAGE_LIMIT - "<@99999999999999999999> ".length;
 
 const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversation-waiting"]);
 
-/** Where a pending matter is acted on: in the Discord thread, in T3 or in Factory. */
 type ActPlace = "thread" | "t3" | "factory";
 const ACT_TEXT: Record<ActPlace, string> = {
   thread: "ask here to answer it",
@@ -37,7 +36,6 @@ const ACT_TEXT: Record<ActPlace, string> = {
   factory: "check it in Factory",
 };
 
-/** What each matter is, and where it is acted on. */
 const MATTERS: Record<MatterKind, { what: (block: string) => string; act: ActPlace }> = {
   human: { what: (block) => `Human step ${block} waits for an answer`, act: "thread" },
   "native-request": { what: (block) => `${block} has a T3 request`, act: "t3" },
@@ -67,18 +65,12 @@ const SETTLEMENT_TEXT: Record<SettlementKind, string> = {
   finish: "Settled at a Finish ending.",
 };
 
-/**
- * The one machine-readable line closing an attention, completion or Archive notice: a versioned
- * JSON record in an inline code span. A backtick or `@` inside a string is escaped, so a name can
- * neither end the span nor read as a mention, and parsing restores it exactly.
- */
 const MACHINE_VERSION = 1;
 const machineLine = (record: Record<string, unknown>) =>
   `\`${JSON.stringify({ v: MACHINE_VERSION, ...record })
     .replaceAll("`", "\\u0060")
     .replaceAll("@", "\\u0040")}\``;
 
-/** The Run a notice's record names. */
 const machineRun = (notice: Pick<NoticeRow, "run_id" | "number">) => ({
   runId: notice.run_id,
   runNumber: notice.number,
@@ -113,7 +105,6 @@ const matterLine = (matter: MatterRow) => {
   return `• ${what} — ${ACT_TEXT[kind.act]}`;
 };
 
-/** The record of an attention notice: its matters, each with where to act. */
 const attentionRecord = (notice: NoticeRow, matters: readonly MatterRow[]) =>
   machineLine({
     event: "attention",
@@ -212,7 +203,6 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
     origin: ReportOrigin,
     report: RunReport,
     purpose: MatterNoticePurpose | "completion" | "archive",
-    /** The notice's text from its event ID, which the machine line carries. */
     textOf: (eventId: string) => string = () => "",
   ) =>
     Effect.gen(function* () {
@@ -308,8 +298,6 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
           AND g.project_id=${report.run.project.id}
         WHERE c.run_id=${origin.runId} AND r.completion_sequence IS NOT c.sequence`;
       if (!cycle) return;
-      // Only a Finish settlement names an ending: another settlement of a Run that earlier
-      // reached one is not settled at it.
       const ending = cycle.reason === "finish" ? report.endingName : null;
       const settlement =
         ending === null
@@ -334,7 +322,6 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       yield* sql`UPDATE chat_run_reporting SET completion_sequence=${cycle.sequence} WHERE run_id=${origin.runId}`;
     });
 
-  /** An Archived Run posts one Archive notice; a Run archived while not granted posts none. */
   const capturedArchive = (origin: ReportOrigin, report: RunReport) =>
     Effect.gen(function* () {
       if (report.run.state !== "archived") return;

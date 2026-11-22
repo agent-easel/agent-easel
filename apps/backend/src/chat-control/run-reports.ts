@@ -44,7 +44,6 @@ export interface RunReport {
   readonly run: RunIdentity;
   /** A confirmed manual settlement still in progress; the Run is Active meanwhile. */
   readonly settlement: Overview["run"]["settlement"];
-  /** The name of the Finish ending the Run reached, once it reached one. */
   readonly endingName: string | null;
   readonly blocks: readonly ReportBlock[];
   readonly needsInput: Overview["lists"]["needsInput"];

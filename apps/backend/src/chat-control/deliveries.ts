@@ -233,7 +233,6 @@ const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
   "archive",
 ];
 
-/** Notices that are one message never edited: no unknown-create hold, a revocation cancels them. */
 const ONE_SHOT_PURPOSES: readonly DeliveryRow["purpose"][] = ["completion", "archive"];
 
 const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>

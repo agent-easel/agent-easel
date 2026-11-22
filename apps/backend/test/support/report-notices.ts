@@ -46,10 +46,8 @@ export async function noticeCreated(discord: ControlledDiscord, ordinal = 1) {
   return noticesIn(discord)[ordinal - 1]!;
 }
 
-/** A notice's text without the machine line that closes it. */
 export const prose = (content: string) => content.split("\n").slice(0, -1).join("\n");
 
-/** The versioned record on the single machine line that closes an attention, completion or Archive notice. */
 export function machineRecord(content: string) {
   const line = content.split("\n").at(-1)!;
   assert(/^`\{.*\}`$/.test(line), `no machine line closes: ${content}`);
