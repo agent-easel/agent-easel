@@ -1,7 +1,7 @@
 import { useId, useRef } from "react";
 import { Bot } from "lucide-react";
 import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed, useOfflineReason } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -174,6 +174,38 @@ function ImportFileContent({
   );
 }
 
+function ImportReviewActions({
+  committing,
+  blocked,
+  onCancel,
+  onConfirm,
+}: {
+  committing: boolean;
+  blocked: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const allowed = useMutationsAllowed();
+  const offline = useOfflineReason();
+  const beside = blocked || offline;
+  return (
+    <>
+      {beside && <p className="mr-auto text-sm text-destructive">{beside}</p>}
+      <Button type="button" variant="outline" disabled={committing} onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        variant={committing || (!blocked && allowed) ? "default" : "outline"}
+        disabled={committing || Boolean(blocked) || !allowed}
+        onClick={onConfirm}
+      >
+        {committing ? "Importing…" : "Import"}
+      </Button>
+    </>
+  );
+}
+
 function ImportReviewContent({
   model,
   state,
@@ -201,25 +233,12 @@ function ImportReviewContent({
       closeDisabled={state.committing}
       title={<>Import “{state.file?.name}”</>}
       actions={
-        <>
-          {blocked && <p className="mr-auto text-sm text-destructive">{blocked}</p>}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={state.committing}
-            onClick={model.cancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant={state.committing || !blocked ? "default" : "outline"}
-            disabled={state.committing || Boolean(blocked)}
-            onClick={onConfirm}
-          >
-            {state.committing ? "Importing…" : "Import"}
-          </Button>
-        </>
+        <ImportReviewActions
+          committing={state.committing}
+          blocked={blocked}
+          onCancel={model.cancel}
+          onConfirm={onConfirm}
+        />
       }
     >
       <OwnerPicker

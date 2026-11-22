@@ -111,7 +111,7 @@ under **Technical details**.
 | Incompatible | Which side to update; product operations are blocked, the protocol is rechecked automatically, and local Application settings remain available |
 | Synchronizing | The connection is open while active live scopes obtain fresh snapshots; retained data stays visible, mutations are disabled, browsing and navigation remain available. When catching up takes over 500 ms, the sidebar footer shows **Synchronizing…** with a neutral dot |
 | Connected | The normal application with active live scopes synchronized |
-| Offline after connecting | The last observed view stays; the sidebar footer shows **Offline** in the Error colour with its observation time (**Offline** alone when none was recorded), and nothing overlays the window controls, title strip or page headers. Mutations are disabled and never sent or queued, browsing and navigation remain available, and Factory reconnects automatically and synchronizes |
+| Offline after connecting | The last observed view stays; the sidebar footer shows **Offline** in the Error colour with its observation time (**Offline** alone when none was recorded), and nothing overlays the window controls, title strip or page headers. Mutations are disabled and never sent or queued, Studio's blocked primary actions show **Offline** as their reason, browsing and navigation remain available, and Factory reconnects automatically and synchronizes |
 
 A command whose response was lost is not repeated as new work: Start retries reuse
 the original request key and resolve to the same Run, and Settle or Archive is never

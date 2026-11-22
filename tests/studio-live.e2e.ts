@@ -206,12 +206,15 @@ test("a reconnect snapshot preserves the Flow draft and viewport", async ({
   await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
   const save = screen.getByRole("button", "Save", { exact: true });
   await expect(save).toBeDisabled();
+  const reason = screen.getByRole("dialog", "Studio").getByText("Offline", { exact: true });
+  await expect(reason).toBeVisible();
   await delayLiveSnapshots(app, 1500);
 
   // Act
   await fixture.remoteAccess.online();
 
   // Assert
+  await expect(reason).toHaveCount(0);
   await expect(save).toBeEnabled();
   await expect(name).toHaveValue("Offline Flow draft");
   await expectStudioViewport(viewport);

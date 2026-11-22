@@ -305,6 +305,10 @@ export function useFactoryConnectionNotice(): FactoryConnectionNotice | null {
   return synchronizing && noticeable ? { kind: "synchronizing" } : null;
 }
 
+export function useOfflineReason() {
+  return useFactoryConnectionNotice()?.kind === "offline" ? "Offline" : "";
+}
+
 /** Product writes wait for every held live scope; local browsing stays available. */
 export function useMutationsAllowed() {
   const current = useTransport();
