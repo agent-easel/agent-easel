@@ -185,6 +185,11 @@ const REFUSED_ATTEMPTS: readonly {
     answer: ANSWERS.wrongPhrase,
   },
   {
+    name: "the phrase surrounded by spaces",
+    options: (confirmation) => ({ text: ` ${confirmation.phrase} ` }),
+    answer: ANSWERS.wrongPhrase,
+  },
+  {
     name: "the exact phrase without a Reply",
     options: () => ({ asReply: false }),
     answer: ANSWERS.notReply,

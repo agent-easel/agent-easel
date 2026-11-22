@@ -621,7 +621,7 @@ A review's **confirmation phrase** is `confirm` followed by a one-time code of f
 an alphabet without easily confused characters (no 0/O, 1/I/L, 2/Z, 5/S, 8/B, U/V or G/6). Each new
 review gets a fresh code, and live reviews in one thread never share one. Only the requester's
 Discord Reply bound to the review's last message by its recorded ID, in the review's thread, whose
-text is exactly the phrase (Factory's own mention and surrounding spaces aside; letter case counts)
+text is exactly the phrase, including case and spacing,
 within the lifetime confirms. A plain "yes", any other text, a wrong code, a message that is not a
 Reply to that message, someone else's reply, a reply after expiry and a reused phrase confirm
 nothing. There is no button and no setting that skips the phrase.

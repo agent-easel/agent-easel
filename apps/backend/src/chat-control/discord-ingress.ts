@@ -526,13 +526,13 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     requesterKind: RequesterKind,
   ) =>
     Effect.gen(function* () {
-      const text = message.content.replace(ownMention, "").trim();
+      const candidate = message.content.replace(ownMention, "").trim();
       const repliedTo = replyMessageId(message, thread.id);
       const target = yield* session.confirmations.confirmationTarget(
         applicationId,
         thread.id,
         repliedTo,
-        text,
+        candidate,
       );
       if (!target) return undefined;
       session.referenced(message.id);
@@ -540,11 +540,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         requesterKind === "bot" &&
         (!target.botCanConfirm ||
           target.requesterId !== message.author.id ||
-          text !== message.content)
+          candidate !== message.content)
       )
         return "ignored" as const;
       if (!(yield* firstDelivery(message.id))) return "ignored" as const;
-      return { proposalId: target.proposalId, text, repliedTo, requesterKind };
+      return { proposalId: target.proposalId, text: message.content, repliedTo, requesterKind };
     });
 
   const confirmation = (
