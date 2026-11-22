@@ -29,6 +29,7 @@ const PURPOSE_LABELS: Record<ChatDeliveryProblem["purpose"], string> = {
   attention: "Attention notice",
   "catch-up": "Catch-up notice",
   completion: "Completion notice",
+  archive: "Archive notice",
 };
 
 const OPERATION_LABELS: Record<ChatActionOperation, string> = {

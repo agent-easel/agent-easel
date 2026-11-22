@@ -230,7 +230,11 @@ const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
   "attention",
   "catch-up",
   "completion",
+  "archive",
 ];
+
+/** Notices that are one message never edited: no unknown-create hold, a revocation cancels them. */
+const ONE_SHOT_PURPOSES: readonly DeliveryRow["purpose"][] = ["completion", "archive"];
 
 const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
   Effect.map(
@@ -631,7 +635,7 @@ export const makeChatDeliveries = (
             ],
           );
         if (!(yield* destinationPermitted(sql, row))) {
-          if (row.purpose !== "completion" && row.state === "unknown")
+          if (!ONE_SHOT_PURPOSES.includes(row.purpose) && row.state === "unknown")
             return failure("conflict", "Access no longer permits this destination.");
           yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id}`;
           return failure(
@@ -639,7 +643,7 @@ export const makeChatDeliveries = (
             "Access no longer permits this destination; the message was cancelled.",
           );
         }
-        const retainedProblem = row.purpose !== "completion" && row.state === "unknown";
+        const retainedProblem = !ONE_SHOT_PURPOSES.includes(row.purpose) && row.state === "unknown";
         const [scheduled] = yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,
               problem=${retainedProblem ? UNKNOWN_CREATE_PROBLEM : null},
               problem_at=${retainedProblem ? row.problem_at : null}
