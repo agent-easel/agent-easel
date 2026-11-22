@@ -161,21 +161,18 @@ export function raiseHumanAttention(
   });
 }
 
-/** A Condition's integrity refusal latches one workerless Problem for the Run's Condition, keeping
- * the refusal's `reason`. It has no execution and no T3 thread, so no report or recovery settles it;
- * only manual settlement or Archive does. A refusal already latched records nothing. Answers
- * whether this one latched it. */
-export function latchConditionIntegrityProblem(
+export function latchIntegrityProblem(
   sql: SqlClient.SqlClient,
   runId: string,
   blockId: string,
+  kind: "condition-integrity" | "join-integrity",
   reason: string,
   time: string,
 ) {
   return Effect.gen(function* () {
     const id = yield* newId;
     const latched =
-      yield* sql`INSERT INTO run_attention(id,run_id,block_id,execution_id,kind,source_key,appeared_at,message) VALUES(${id},${runId},${blockId},'','condition-integrity',${"condition-integrity:" + blockId},${time},${reason}) ON CONFLICT(run_id,source_key) DO NOTHING RETURNING id`;
+      yield* sql`INSERT INTO run_attention(id,run_id,block_id,execution_id,kind,source_key,appeared_at,message) VALUES(${id},${runId},${blockId},'',${kind},${kind + ":" + blockId},${time},${reason}) ON CONFLICT(run_id,source_key) DO NOTHING RETURNING id`;
     if (!latched.length) return false;
     yield* appendTimelineEvent(sql, {
       kind: "attention-appeared",

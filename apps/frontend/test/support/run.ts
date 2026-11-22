@@ -119,6 +119,7 @@ export function runDetail(): RunDetail {
     waitArrivals: [],
     continuationVisits: [],
     conditions: [],
+    joins: [],
     attention: [],
     intents: [],
     rootWork: [],

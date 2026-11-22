@@ -40,8 +40,20 @@ const READ_FIELDS = {
   run: [],
   image: ["imageId"],
   conditionArrivals: ["conditionBlockId", "limit", "cursor"],
+  join: ["joinBlockId"],
   subflowInvocations: ["placementBlockId", "limit", "cursor"],
 } as const satisfies Record<string, readonly string[]>;
+
+const EVIDENCE_READS: Partial<
+  Record<
+    keyof typeof READ_FIELDS,
+    (
+      store: RunStore,
+      publicId: string,
+      fields: Readonly<Record<string, unknown>>,
+    ) => Effect.Effect<RuntimeReply, unknown>
+  >
+> = { conditionArrivals: readConditionArrivals, join: readJoin };
 
 /** Block, Run, image and Condition evidence reads addressed by the Block id from the worker's
  * message; a Condition evidence read names a Condition of that Block's Run. */
@@ -58,8 +70,8 @@ export function openBlockTools(
       const publicId = blockIdArgument(input, READ_FIELDS[kind]);
       if (typeof publicId !== "string") return reportDiagnostic(publicId);
       const fields = (input as { arguments: Record<string, unknown> }).arguments;
-      if (kind === "conditionArrivals")
-        return yield* readConditionArrivals(store, publicId, fields);
+      const evidence = EVIDENCE_READS[kind];
+      if (evidence) return yield* evidence(store, publicId, fields);
       if (kind === "image") {
         if (!("imageId" in fields)) return reportDiagnostic({ code: "IMAGE_ID_REQUIRED" });
         if (typeof fields.imageId !== "string" || !fields.imageId)
@@ -181,6 +193,20 @@ function readConditionArrivals(
         cursor as string | undefined,
       ),
     );
+  });
+}
+
+function readJoin(store: RunStore, publicId: string, fields: Readonly<Record<string, unknown>>) {
+  return Effect.gen(function* () {
+    if (!("joinBlockId" in fields)) return reportDiagnostic({ code: "JOIN_BLOCK_ID_REQUIRED" });
+    if (typeof fields.joinBlockId !== "string")
+      return reportDiagnostic({ code: "INVALID_ARGUMENT" });
+    const block = yield* store.locateBlock(publicId);
+    if (!block) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
+    const detail = yield* store.getRunJoin(block.run_id, fields.joinBlockId);
+    return detail.ok
+      ? ({ code: "JOIN", join: detail.value } satisfies RuntimeReply)
+      : reportDiagnostic({ code: "UNKNOWN_JOIN" });
   });
 }
 
@@ -318,6 +344,7 @@ function runView(detail: RunDetail): RuntimeReply {
     state: detail.lifecycle,
     startedAt: detail.startedAt,
     conditions: detail.conditions,
+    joins: detail.joins,
     ...(detail.subflows ? { definitions: detail.definitions, subflows: detail.subflows } : {}),
     result: detail.result,
     blocks: detail.blocks.map((block) => ({

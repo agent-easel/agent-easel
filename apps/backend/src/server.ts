@@ -232,6 +232,10 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
           ),
         ),
     },
+    getRunJoin: {
+      handle: ({ parameters }) =>
+        answer(() => factory.getRunJoin(parameters.runId, parameters.blockId)),
+    },
     listAttention: {
       handle: () => answer(() => factory.listAttention()),
     },

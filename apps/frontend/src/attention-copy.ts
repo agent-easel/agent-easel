@@ -163,6 +163,11 @@ export function matterCopy(item: RunAttention): { title: string; next: string | 
         title: `${block} can’t count new arrivals`,
         next: "It accepts no more arrivals. Settle or archive the Run to end it.",
       };
+    case "join-integrity":
+      return {
+        title: `${block} can’t forward its next round`,
+        next: "It accepts no more arrivals. Settle or archive the Run to end it.",
+      };
     case "report-problem":
       return {
         title: `${block} ${reportRejection(item.message)}`,

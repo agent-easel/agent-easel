@@ -42,6 +42,14 @@ const REJECTIONS: Readonly<Record<string, readonly [string, string]>> = {
     "This cursor does not continue this Condition's arrivals in your Block's Run.",
     "Omit cursor to read the first page again, then pass only the nextCursor it returns.",
   ],
+  JOIN_BLOCK_ID_REQUIRED: [
+    "Factory needs the Join's block id to read its sources.",
+    "Pass joinBlockId from the joins factory_get_run lists.",
+  ],
+  UNKNOWN_JOIN: [
+    "Your Block's Run has no Join with this block id.",
+    "Pass joinBlockId from the joins factory_get_run lists.",
+  ],
   UNKNOWN_SUBFLOW: [
     "Your Block’s Run has no Subflow placement with this id.",
     "Pass placementBlockId from factory_get_run or a parent invocation’s Blocks.",

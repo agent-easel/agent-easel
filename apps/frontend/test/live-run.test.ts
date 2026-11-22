@@ -150,3 +150,32 @@ it("a held Run whose Condition advances past its Timeline window keeps the windo
     next.events.map((entry) => entry.condition?.arrivalNumber ?? entry.sequence),
   ).toStrictEqual([1, ...arrivalRange(54, 103)]);
 });
+
+const roundOutcome = (round: number): RunDetail["events"][number] => ({
+  ...event(200 + round),
+  kind: "join-round-forwarded",
+  blockId: "merge",
+  join: { round },
+});
+
+it("a held Run whose Join forwards more rounds keeps each Join's latest rounds a fresh read lists", () => {
+  // Arrange
+  const run: RunDetail = {
+    ...runDetail(),
+    events: [event(1), ...arrivalRange(1, 50).map(roundOutcome)],
+  };
+
+  // Act
+  const next = runScope(run.id).apply(run, {
+    _tag: "changed",
+    header: headerOf(run),
+    entities: {},
+    events: arrivalRange(51, 53).map(roundOutcome),
+  });
+
+  // Assert
+  expect(next.events.map((entry) => entry.join?.round ?? entry.sequence)).toStrictEqual([
+    1,
+    ...arrivalRange(4, 53),
+  ]);
+});

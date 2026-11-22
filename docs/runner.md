@@ -507,6 +507,18 @@ The first line reads `Join round N`. Each section names its captured source and 
 
 Queues pair arrivals in order. If one source can bypass a review round, the paired reviews can describe different revisions. For revision-sensitive work, include the revision in each review and have the recipient check that they agree.
 
+A Join accepts a released Handoff in one transaction under the Condition's guards: the owner, an open gate, a live authorization context and the release generation. The transaction records the arrival with its source, actual exit and acceptance time, acknowledges the Handoff and, when every source then has an arrival, takes the oldest arrival of each, commits the round, creates the outgoing Handoffs, clears the consumed messages and appends `join-round-forwarded`. A redelivery finds its Handoff acknowledged and changes nothing. A failure before commit rolls everything back and the next dispatch pass retries; it records no Problem and never leaves a round half consumed. The Join shows waiting while any arrival waits for its round and finished otherwise.
+
+A partial round is owed work although its Handoffs are acknowledged: it holds automatic settlement and keeps its Subflow invocation open. It raises no Needs input, Dock badge or Snooze wake and has no deadline or timer.
+
+#### Join cutoffs
+
+Finish, [manual settlement](#manual-settlement) and [Archive](#archive) cancel every arrival still waiting for its round without forwarding it: each affected Join clears the retained messages of those arrivals, keeps the arrivals as cancelled and records one cancellation of its current round with a `join-round-cancelled` event. A Handoff to a Join that a cutoff cancelled is never accepted. Forwarded rounds stay history with their identities; Archive also clears the message a forwarded round still retained for its recipients. A Finish inside a Subflow invocation cuts off only that invocation's Joins, and a Finish of the Run cuts off every Join. A last arrival and a cutoff in either order leave exactly one outcome for the round: a cutoff that commits first cancels it, and a round that commits first stays forwarded while its unsent outgoing Handoffs are cancelled like any other.
+
+#### Join integrity Problems
+
+Before an arrival is recorded, Factory checks that the captured block is still a Join, every wire into it leaves a captured source by an exit that source has, no Flow input feeds it, it has at least two sources, every wire leaving it uses its output and reaches a captured recipient or Finish ending, and the delivery is an unconsumed Handoff from a wired source and exit with an intact message. It also checks that every waiting arrival still matches its acknowledged Handoff with a retained message, also while the round is incomplete, and that the round a delivery completes has a number within 9,007,199,254,740,991. A failed check commits no arrival or round and, in the same transaction, latches one pending `join-integrity` Problem for that Join, recording the reason. Like a [Condition integrity Problem](#condition-integrity-problems), it has no worker, execution or T3 thread, no report or Request report settles it, dispatch no longer offers Handoffs to the Join and every later delivery waits unaccepted. Storage failures are not inconsistencies and are retried. Only manual settlement or Archive settles the Problem, cancelling the waiting arrivals under [Join cutoffs](#join-cutoffs).
+
 ### Condition arrivals
 
 A [Condition arrival](../GLOSSARY.md#condition-arrival) is one distinct delivery a Condition accepts. Its number counts from 1

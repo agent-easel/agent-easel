@@ -77,7 +77,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_run",
     description:
-      "Read the Run your Block belongs to (id, number, title, input, state, startedAt), with each Block's state and latest result, each Condition's summary {blockId, arrivals, pending, latest} without its arrival history, and the Run result once the Run reached an ending: result {endingId, endingName, output (null when the ending takes no output), outputMissing, sourceBlockId, exitId, authorBlockId, origin, deliveryId, acceptedAt}, else null.",
+      "Read the Run your Block belongs to (id, number, title, input, state, startedAt), with each Block's state and latest result, each Condition's summary {blockId, arrivals, pending, latest} without its arrival history, each Join's summary {blockId, round, sources, arrived, queued, latest {round, outcome forwarded or cancelled, at}} without its rounds or arrivals, and the Run result once the Run reached an ending: result {endingId, endingName, output (null when the ending takes no output), outputMissing, sourceBlockId, exitId, authorBlockId, origin, deliveryId, acceptedAt}, else null.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },
@@ -110,6 +110,23 @@ const tools: Tool[] = [
         },
       },
       required: ["blockId", "conditionBlockId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_get_join",
+    description:
+      "Read one Join of your Block's Run: the round it is collecting and, for each captured source in order, its name, its oldest waiting arrival {exitId, exitName, arrivedAt} or null while that source is still pending, the count of later queued arrivals and the oldest of them, plus the Join's latest outcome {round, outcome forwarded or cancelled, at}. No message text is returned: a forwarded round's combined message reaches its recipients as their feedback. Read-only and safe to repeat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        blockId: blockIdProperty,
+        joinBlockId: {
+          type: "string",
+          description: "The Join's blockId from the joins factory_get_run lists.",
+        },
+      },
+      required: ["blockId", "joinBlockId"],
       additionalProperties: false,
     },
   },
@@ -155,6 +172,7 @@ const operations = {
   factory_get_run_image: "image",
   factory_get_subflow_invocations: "subflowInvocations",
   factory_get_condition_arrivals: "conditionArrivals",
+  factory_get_join: "join",
   factory_set_run_title: "title",
 } as const;
 
@@ -166,6 +184,7 @@ export interface RuntimeTools {
   image(input: unknown): Promise<RuntimeReply>;
   subflowInvocations(input: unknown): Promise<RuntimeReply>;
   conditionArrivals(input: unknown): Promise<RuntimeReply>;
+  join(input: unknown): Promise<RuntimeReply>;
   title(input: unknown): Promise<RuntimeReply>;
 }
 

@@ -2,6 +2,8 @@ import type {
   BlockExit,
   ConditionArrivalEvidence,
   ConditionSummary,
+  JoinDetail,
+  JoinSummary,
   FlowEnding,
   RunImageMimeType,
   RunResult,
@@ -77,6 +79,8 @@ export type RuntimeReply = {
   readonly subflows?: readonly SubflowPlacementSummary[];
   readonly invocations?: SubflowInvocationPage["invocations"];
   readonly conditions?: readonly ConditionSummary[];
+  readonly joins?: readonly JoinSummary[];
+  readonly join?: JoinDetail;
   readonly result?: RunResult | null;
   /** One Condition evidence page: its arrivals, window high-water and next cursor. */
   readonly arrivals?: readonly ConditionArrivalEvidence[];
@@ -101,6 +105,7 @@ export const SUCCESS_CODES: readonly string[] = [
   "RUN",
   "IMAGE",
   "CONDITION_ARRIVALS",
+  "JOIN",
   "SUBFLOW_INVOCATIONS",
   "INVOCATION_CLOSED",
   "TITLE_APPLIED",

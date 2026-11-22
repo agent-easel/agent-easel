@@ -193,6 +193,7 @@ export function currentRun(
     // Released Flows had no Continuation or Condition blocks.
     continuationVisits: [],
     conditions: [],
+    joins: [],
     coordinationActions: actions,
   };
 }

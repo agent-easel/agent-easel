@@ -1140,6 +1140,48 @@ export const joinedEndingFlow: ReadyFlowShape = (world) =>
     finish: { endings: [SHIPPED_ENDING("required")] },
   }));
 
+export const skippedSourceJoinFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Skipped source join", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock(
+        "second",
+        "Second entry",
+        agentId,
+        undefined,
+        [],
+        [blockExit("skip", "Skip", "Finish without arriving")],
+      ),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("second", "done", "merge"),
+      connection("merge", "output", "review"),
+    ],
+  }));
+
+export const joinBesideEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Join beside ending", (agentId) => ({
+    flowInput: flowInput("worker", "second", "third"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      agentBlock("third", "Third entry", agentId),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("second", "done", "merge"),
+      connection("merge", "output", "review"),
+      endingConnection("third", "done", "delivered"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
+  }));
+
 const terminalConditionGraph = (agentId: string) => ({
   flowInput: flowInput("worker"),
   blocks: [
