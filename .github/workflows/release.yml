@@ -206,6 +206,23 @@ jobs:
             --jq '.[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' | sort -k2 > uploaded.txt
           (cd downloads && sha256sum -- *) | sort -k2 > local.txt
           diff -u local.txt uploaded.txt
+      - name: Add GitHub contributor notes
+        run: |
+          body=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body)
+          if grep -q '^\*\*Full Changelog\*\*' <<<"$body"; then
+            exit 0
+          fi
+          # Compare with the previous stable release, not the latest beta.
+          previous=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select((.draft | not) and (.prerelease | not) and .tag_name != \"$RELEASE_TAG\" and (.tag_name | test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"))) | .tag_name" \
+            | head -n 1)
+          args=(-f tag_name="$RELEASE_TAG" -f target_commitish="$RELEASE_SHA")
+          if [[ -n "$previous" ]]; then
+            args+=(-f previous_tag_name="$previous")
+          fi
+          notes=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${args[@]}" --jq .body)
+          printf '%s\n\n%s\n' "$body" "$notes" > release-body.md
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-body.md
       - name: Publish
         run: |
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
