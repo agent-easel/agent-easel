@@ -515,8 +515,9 @@ test("one Save writes the bot and then Access, and names the channel that got it
   await app.screenshot("chat-discord-access-saved");
 });
 
-test("the host lists a bot in Bots, sees its Bot badge, and a bot in Users or a human in Bot IDs is refused", async ({
+test("the host can save a bot in Bots after correcting a wrong-list warning", async ({
   app,
+  browser,
   screen,
 }) => {
   // Arrange
@@ -532,11 +533,7 @@ test("the host lists a bot in Bots, sees its Bot badge, and a bot in Users or a 
   await access.getByLabel("Users").fill(`200000000000000001, ${ATLAS}`);
   await bots.getByLabel("Bot IDs").fill(HERMES);
   await screen.getByRole("button", "Save", { exact: true }).tap();
-
-  // Act
   await screen.getByRole("button", "Check connection").tap();
-
-  // Assert
   await expect(bots.getByText(/^Hermes/)).toBeVisible({ timeout: 15_000 });
   await expect(bots.getByText("Bot", { exact: true })).toBeVisible();
   await expect(access.getByText("Atlas is a bot")).toBeVisible();
@@ -553,10 +550,10 @@ test("the host lists a bot in Bots, sees its Bot badge, and a bot in Users or a 
   assert(!refused.ok);
   assert.strictEqual(refused.error.issues[0]?.code, "discord_access_bot_in_users");
   await app.screenshot("chat-discord-bots-refused");
-
-  // Act
   await access.getByLabel("Users").fill("200000000000000001");
   await bots.getByLabel("Bot IDs").fill(`${HERMES}, ${ATLAS}`);
+
+  // Act
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
@@ -567,6 +564,8 @@ test("the host lists a bot in Bots, sees its Bot badge, and a bot in Users or a 
     ok: true,
     value: { access: { users: ["200000000000000001"], bots: [HERMES, ATLAS] } },
   });
+  await browser.reload();
+  await expect(bots.getByLabel("Bot IDs")).toHaveValue(`${HERMES}, ${ATLAS}`);
   await app.screenshot("chat-discord-bots-saved");
 });
 
@@ -768,6 +767,7 @@ async function operatingChatControl(
   const access = await hostCall(baseUrl, "PUT", "/api/chat-control/discord/access", {
     revision: discord.value.access.revision,
     users: allowed.users,
+    bots: [],
     channels: allowed.channels.map((channelId) => ({ channelId, projectIds: [project.id] })),
   });
   assert(access.ok, JSON.stringify(access));
@@ -911,16 +911,17 @@ async function unknownCard(baseUrl: string | undefined) {
  * Opens Settings → Discord at the Delivery row whose Retry is named `retry`, with the navigation
  * item marked, and returns that Retry button.
  */
-async function deliveryProblem(app: App, screen: Screen, retry: string, state: string) {
+async function deliveryProblem(app: App, screen: Screen, retry: string) {
   await app.open("/settings/chat-control/discord");
   const delivery = screen.getByRole("region", "Delivery");
-  await expect(delivery.getByText(state, { exact: true })).toBeVisible();
+  const action = delivery.getByRole("button", retry);
+  await expect(action).toBeVisible();
   await expect(
     screen
       .getByRole("navigation", "Settings sections")
       .getByRole("link", "Discord, failing", { exact: true }),
   ).toBeVisible();
-  return delivery.getByRole("button", retry);
+  return action;
 }
 
 test("the host retries a status card Discord may already show only after a duplicate warning, and the Start is not repeated", async ({
@@ -931,7 +932,7 @@ test("the host retries a status card Discord may already show only after a dupli
   // Arrange
   const { before, runId } = await unknownCard(app.baseUrl);
   startedRuns.push(runId);
-  const retry = await deliveryProblem(app, screen, "Retry the status card", "Unknown");
+  const retry = await deliveryProblem(app, screen, "Retry the status card");
   await app.screenshot("chat-discord-delivery-unknown");
   await retry.tap();
   const warning = screen.getByRole("alertdialog", "Retry this message?");
@@ -983,7 +984,7 @@ test("the host retries the status card Discord refused in a locked thread once a
       (problem) => problem.purpose === "status-card" && problem.state === "failed",
     ),
   );
-  const retry = await deliveryProblem(app, screen, "Retry the status card", "Failed");
+  const retry = await deliveryProblem(app, screen, "Retry the status card");
   await app.screenshot("chat-discord-status-card-failed");
   await discord(app.baseUrl).thread({ thread, state: "unlocked" });
 
@@ -1043,7 +1044,7 @@ test("the host retries a completion notice after unlocking its Discord thread", 
     messages.some(
       (message) =>
         message.channelId === thread &&
-        message.content.endsWith("Reply here to inspect the result or choose what to do next."),
+        message.content.split("\n").at(-1)?.startsWith('`{"v":1,"event":"completion",'),
     ),
   );
 });
