@@ -208,7 +208,7 @@ function ThemeNoticeCard({
   if (!notice) return null;
   return (
     <ProblemCard
-      id={notice.target ? errorCardId : undefined}
+      {...(notice.target ? { id: errorCardId } : {})}
       tone={notice.tone}
       title={notice.title}
       details={notice.details}
