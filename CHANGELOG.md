@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.10.0](https://github.com/alimek/t3-factory/compare/v0.9.0...v0.10.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **flows:** Compose and run saved Flows as Subflows ([#677](https://github.com/alimek/t3-factory/issues/677))
+
+### Features
+
+* add anonymous Factory analytics and Vercel landing deployment ([#673](https://github.com/alimek/t3-factory/issues/673)) ([bae76ed](https://github.com/alimek/t3-factory/commit/bae76edc87e377171bc408fca57e3ed52bdd0d9a))
+* **appearance:** replace T3 theme polling with per-device JSON color themes ([#686](https://github.com/alimek/t3-factory/issues/686)) ([1771a5e](https://github.com/alimek/t3-factory/commit/1771a5ed7f2eb05a15d1bff978f62c3270a21d3a))
+* **chat:** show Discord Run progress and notify requesters ([#662](https://github.com/alimek/t3-factory/issues/662)) ([573e7bd](https://github.com/alimek/t3-factory/commit/573e7bd07ea067dd8ed5cab901e4b718e9f914b6))
+* **clients:** show Factory Offline and Synchronizing in the sidebar footer instead of a banner ([#682](https://github.com/alimek/t3-factory/issues/682)) ([44e432a](https://github.com/alimek/t3-factory/commit/44e432a9b0ab20b6a1b8ba5db7aaa0b536684a28))
+* **flows:** Compose and run saved Flows as Subflows ([#677](https://github.com/alimek/t3-factory/issues/677)) ([d08d986](https://github.com/alimek/t3-factory/commit/d08d986e79a43fb9e7e460f3ac309634faa16062))
+* **join:** synchronize parallel branches with a Join block ([#695](https://github.com/alimek/t3-factory/issues/695)) ([8112a08](https://github.com/alimek/t3-factory/commit/8112a0867630aa5b42017995de75558f9f814a31))
+* **runs:** copy the Run number and Run ID from Run menus ([#660](https://github.com/alimek/t3-factory/issues/660)) ([4368383](https://github.com/alimek/t3-factory/commit/436838374f669ba1d43c4f76bca72b4590511ce0))
+
+
+### Bug Fixes
+
+* **definitions:** replay historical Flow import receipts ([#664](https://github.com/alimek/t3-factory/issues/664)) ([c98beb0](https://github.com/alimek/t3-factory/commit/c98beb0e3da539d773d3e0c7b994eb49b3f40b3a))
+* **desktop:** restore maximized and full-screen window state on reopen ([#683](https://github.com/alimek/t3-factory/issues/683)) ([84f979c](https://github.com/alimek/t3-factory/commit/84f979cd9e23584833d5830cfea64906dd3815ca))
+* **desktop:** restore the window's last size and position ([#655](https://github.com/alimek/t3-factory/issues/655)) ([7a9de93](https://github.com/alimek/t3-factory/commit/7a9de93e28deac8462a9428360b20bb2b83f5c45))
+* **desktop:** stop live client before rewriting settings in packaged probe ([#680](https://github.com/alimek/t3-factory/issues/680)) ([8f75f61](https://github.com/alimek/t3-factory/commit/8f75f61ccda1c7af2d94e0b98b8690af04346d71))
+* **flows:** make the Finish block optional ([#672](https://github.com/alimek/t3-factory/issues/672)) ([75d02a8](https://github.com/alimek/t3-factory/commit/75d02a8751308ae0a50a1497039b6995c1fa0f13))
+* **runner:** treat waiting threads and awaited background tasks as unfinished ([#679](https://github.com/alimek/t3-factory/issues/679)) ([a8981b9](https://github.com/alimek/t3-factory/commit/a8981b98dbd8470f650129d2e99c08730f466834))
+* **runs:** title bare GitHub issue references without a title thread ([#678](https://github.com/alimek/t3-factory/issues/678)) ([8e10257](https://github.com/alimek/t3-factory/commit/8e10257cd2860cb337319da069b0c7affc6c8276))
+* **subflow:** emphasize inner canvas wires on hover and settle finished inner Block threads ([#694](https://github.com/alimek/t3-factory/issues/694)) ([8207110](https://github.com/alimek/t3-factory/commit/8207110f4df0666f9fabeb00e32f0cf995d1c6e7))
+
+
+### Performance Improvements
+
+* **frontend:** cull shared Studio and Runs canvas by viewport ([#671](https://github.com/alimek/t3-factory/issues/671)) ([04a18d1](https://github.com/alimek/t3-factory/commit/04a18d12ea8034cc2472b164b3e33649339dee8b))
+
 ## [0.9.0](https://github.com/alimek/t3-factory/compare/v0.8.0...v0.9.0) (2026-11-21)
 
 
