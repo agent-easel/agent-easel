@@ -9,6 +9,7 @@ import { now } from "../../time.ts";
 import { openRunActivations } from "./activations.ts";
 import { openRunArchive } from "./archive.ts";
 import { openRunJoins } from "./joins.ts";
+import { openJoinEvidence } from "./join-evidence.ts";
 import { openRunConditions } from "./conditions.ts";
 import { openConditionEvidence } from "./condition-evidence.ts";
 import { openRunContinuations } from "./continuations.ts";
@@ -93,6 +94,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     ...openRunInvocations(database),
     ...openInvocationReads(database),
     ...openConditionEvidence(database),
+    ...openJoinEvidence(database),
     ...openRunDeliveries(database),
     ...openWorkerTitles(database),
     ...openRunStart(database),

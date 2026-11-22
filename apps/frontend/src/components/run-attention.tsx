@@ -369,7 +369,7 @@ function ProblemMatter({
         (!item.bindingId || execution.bindingId === item.bindingId),
     )?.problem ?? block?.problem;
   const action =
-    item.kind === "condition-integrity" ? (
+    item.kind === "condition-integrity" || item.kind === "join-integrity" ? (
       <SettleRunAction run={run} />
     ) : (
       item.link && <OpenInT3 href={item.link} variant="button" />
@@ -387,7 +387,7 @@ function ProblemMatter({
         // A failure that recorded only its kind adds nothing to the Reason row.
         [
           "Detail",
-          item.kind === "condition-integrity"
+          item.kind === "condition-integrity" || item.kind === "join-integrity"
             ? item.message
             : recorded !== item.kind
               ? recorded

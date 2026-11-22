@@ -11,12 +11,14 @@ import { recoveryRows } from "./recovery-read.ts";
 import { waitArrival, type WaitArrivalRow } from "./waits.ts";
 import { workerProvenance } from "./handoffs.ts";
 import { readConditionSummaries } from "./conditions.ts";
+import { readJoinSummaries } from "./join-evidence.ts";
 import { readSubflowSummaries } from "./invocation-reads.ts";
 import { runBlock } from "./run-block-view.ts";
 import { readRunResult } from "./endings.ts";
 import {
   CONDITION_OTHERWISE_ID,
   CONDITION_TIMELINE_ARRIVALS,
+  JOIN_TIMELINE_ROUNDS,
   type Result,
   type RunAttention,
   type RunDetail,
@@ -49,6 +51,7 @@ type RunEventRow = {
   /** Set only for `condition-selected`, from its arrival. */
   arrival_number: number | null;
   output_id: string | null;
+  join_round: number | null;
   kind: string;
   observed_at: string;
   block_id: string | null;
@@ -202,6 +205,7 @@ function runEvent(event: RunEventRow): RunDetail["events"][number] {
     ...(event.arrival_number === null || event.output_id === null
       ? {}
       : { condition: { arrivalNumber: event.arrival_number, outputId: event.output_id } }),
+    ...(event.join_round === null ? {} : { join: { round: event.join_round } }),
   };
 }
 
@@ -283,7 +287,13 @@ export function openRunQueries(database: RunnerDatabase) {
         // A Condition's selections grow with every arrival, so a Run read keeps only its latest
         // ones; the bounded evidence page reaches the rest.
         const events =
-          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id WHERE e.run_id=${id} AND (e.kind<>'condition-selected' OR c.arrival_number>(SELECT k.arrivals FROM condition_counters k WHERE k.run_id=c.run_id AND k.block_id=c.block_id)-${CONDITION_TIMELINE_ARRIVALS}) ORDER BY e.sequence`;
+          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id,COALESCE(jr.number,jc.round_number) AS join_round
+          FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id
+          LEFT JOIN join_rounds jr ON e.kind='join-round-forwarded' AND jr.id=e.cause_id
+          LEFT JOIN join_cancellations jc ON e.kind='join-round-cancelled' AND jc.id=e.cause_id
+          WHERE e.run_id=${id} AND (e.kind<>'condition-selected' OR c.arrival_number>(SELECT k.arrivals FROM condition_counters k WHERE k.run_id=c.run_id AND k.block_id=c.block_id)-${CONDITION_TIMELINE_ARRIVALS})
+          AND (e.kind NOT IN ('join-round-forwarded','join-round-cancelled') OR (SELECT COUNT(*) FROM run_events n WHERE n.run_id=e.run_id AND n.block_id=e.block_id AND n.kind IN ('join-round-forwarded','join-round-cancelled') AND n.sequence>e.sequence)<${JOIN_TIMELINE_ROUNDS})
+          ORDER BY e.sequence`;
         const reports =
           yield* sql<ResultRecord>`SELECT * FROM runtime_reports WHERE run_id=${id} ORDER BY rowid`;
         const executions = yield* sql<ExecutionRow>`SELECT x.*,
@@ -360,6 +370,7 @@ export function openRunQueries(database: RunnerDatabase) {
               id,
               new Set(blocks.map((block) => block.block_id)),
             ),
+            joins: yield* readJoinSummaries(sql, runRow, blocks),
             continuationVisits: continuationVisits.map((visit) => ({
               id: visit.id,
               blockId: visit.block_id,

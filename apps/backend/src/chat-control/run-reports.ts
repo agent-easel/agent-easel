@@ -30,6 +30,7 @@ interface ReportBlock {
   readonly needsInput: "T3" | "Human" | null;
   readonly problem: RunAttention["kind"] | null;
   readonly wait: { readonly deadlineAt: string; readonly count: number } | null;
+  readonly join: { readonly arrived: number; readonly sources: number } | null;
 }
 
 /**
@@ -92,6 +93,7 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
     detail.waitArrivals.filter((arrival) => arrival.state === "pending"),
     (arrival) => arrival.blockId,
   );
+  const joins = new Map(detail.joins.map((summary) => [summary.blockId, summary]));
   return orderedBlocks(detail.definitions.flow.graph).map(({ id, name, kind }) => {
     const block = recorded.get(id);
     const pending = attention.get(id) ?? [];
@@ -101,6 +103,7 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
     );
     const reviewInT3 = block !== undefined && awaitsReviewInT3(block);
     const wait = waits.get(id);
+    const join = joins.get(id);
     return {
       name,
       kind,
@@ -125,6 +128,10 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
             count: wait.length,
           }
         : null,
+      join:
+        join && block?.state === "waiting" && join.arrived > 0
+          ? { arrived: join.arrived, sources: join.sources }
+          : null,
     };
   });
 }

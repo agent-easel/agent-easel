@@ -85,6 +85,11 @@ export type TimelineEvent = { readonly runId: string; readonly observedAt: strin
       readonly conditionArrivalId: string;
     }
   | {
+      readonly kind: "join-round-forwarded" | "join-round-cancelled";
+      readonly blockId: string;
+      readonly joinRoundId: string;
+    }
+  | {
       readonly kind: "handoff-released" | "operation-unresolved";
       readonly blockId: string;
       readonly intentId: string;
@@ -179,6 +184,15 @@ const storedWaitEvent = (event: WaitEvent): StoredEvent => ({
   executionId: null,
   sourceKey: `${event.kind}:${event.arrivalId}`,
   causeId: event.arrivalId,
+});
+
+type JoinEvent = Extract<TimelineEvent, { readonly joinRoundId: string }>;
+
+const storedJoinEvent = (event: JoinEvent): StoredEvent => ({
+  blockId: event.blockId,
+  executionId: null,
+  sourceKey: `${event.kind}:${event.joinRoundId}`,
+  causeId: event.joinRoundId,
 });
 
 /** Events about the Run's lifecycle: settling, returning to Active, archiving, and the
@@ -285,7 +299,7 @@ function storedInvocationEvent(event: Extract<TimelineEvent, { readonly invocati
 function stored(
   event: Exclude<
     TimelineEvent,
-    WaitEvent | Extract<TimelineEvent, { readonly invocationId: string }>
+    WaitEvent | JoinEvent | Extract<TimelineEvent, { readonly invocationId: string }>
   >,
 ) {
   return Effect.gen(function* (): Effect.fn.Return<StoredEvent> {
@@ -382,9 +396,11 @@ export function appendTimelineEvent(sql: SqlClient.SqlClient, event: TimelineEve
     const { blockId, executionId, bindingId, engineStatus, sourceKey, causeId } =
       "arrivalId" in event
         ? storedWaitEvent(event)
-        : "invocationId" in event
-          ? yield* storedInvocationEvent(event)
-          : yield* stored(event);
+        : "joinRoundId" in event
+          ? storedJoinEvent(event)
+          : "invocationId" in event
+            ? yield* storedInvocationEvent(event)
+            : yield* stored(event);
     yield* sql`INSERT INTO run_events(run_id,block_id,execution_id,binding_id,kind,source_key,cause_id,observed_at,engine_status) VALUES(${event.runId},${blockId},${executionId},${bindingId ?? null},${event.kind},${sourceKey},${causeId},${event.observedAt},${engineStatus ?? null}) ${event.kind === "handoff-released" ? sql`ON CONFLICT DO NOTHING` : sql``}`;
   });
 }

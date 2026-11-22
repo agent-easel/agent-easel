@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: join_rounds
+-- Newest applied migration: join_lifecycle
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -323,7 +323,7 @@ CREATE TABLE "chat_report_matters" (
   matter_id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id),
   notice_id TEXT REFERENCES chat_report_notices(delivery_id),
-  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'settlement-unresolved', 'condition-integrity')),
+  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'settlement-unresolved', 'condition-integrity', 'join-integrity')),
   -- NULL for a Run-level matter.
   block TEXT,
   appeared_at TEXT NOT NULL,
@@ -738,6 +738,16 @@ CREATE INDEX join_pending_slots ON join_arrivals(run_id,block_id,source_block_id
 WHERE round_id IS NULL AND cancelled_at IS NULL
 ;
 
+CREATE TABLE join_cancellations (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL CHECK (round_number BETWEEN 1 AND 9007199254740991),
+  cancelled_at TEXT NOT NULL,
+  UNIQUE(run_id,block_id,round_number),
+  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
+);
+
 CREATE TABLE join_rounds (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL,
@@ -996,6 +1006,10 @@ WHERE kind IN ('execution-observed','report-accepted','working-reported','human-
 
 CREATE INDEX run_events_settled ON run_events(run_id,sequence)
 WHERE kind='run-settled'
+;
+
+CREATE INDEX run_join_events ON run_events(run_id,block_id,sequence)
+WHERE kind IN ('join-round-forwarded','join-round-cancelled')
 ;
 
 CREATE TABLE "run_executions" (

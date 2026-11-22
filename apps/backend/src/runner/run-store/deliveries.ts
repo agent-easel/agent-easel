@@ -88,15 +88,12 @@ export function openRunDeliveries(database: RunnerDatabase) {
         }>`SELECT id FROM runs WHERE archived_at IS NULL AND (settled_at IS NULL OR (gate_open=1 AND (EXISTS(SELECT 1 FROM operation_intents i WHERE i.run_id=runs.id AND i.state IN ('pending','reserved','uncertain')) OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=runs.id AND w.state='pending')))) ORDER BY started_at,id`,
     );
 
-  /** The Run's Handoffs not yet turned into deliveries and its deliveries not yet acknowledged or
-   * cancelled, in the order they were recorded. A pending integrity Problem stops its Condition's
-   * acceptance, so Handoffs to that Condition wait unnumbered and are not retried. */
   const dispatchable = (run: Pick<RunRow, "id">) =>
     database.transaction(
       (sql) =>
         sql<
           Handoff | Delivery
-        >`SELECT * FROM operation_intents i WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') AND (json_extract(i.target_json,'$.endingId') IS NOT NULL OR NOT EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=i.run_id AND a.block_id=i.block_id AND a.kind='condition-integrity' AND a.settled_at IS NULL)) ORDER BY rowid`,
+        >`SELECT * FROM operation_intents i WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') AND (json_extract(i.target_json,'$.endingId') IS NOT NULL OR NOT EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=i.run_id AND a.block_id=i.block_id AND a.kind IN ('condition-integrity','join-integrity') AND a.settled_at IS NULL)) ORDER BY rowid`,
     );
 
   /** Notes a Handoff or delivery unresolved with `message`; a reserved delivery becomes

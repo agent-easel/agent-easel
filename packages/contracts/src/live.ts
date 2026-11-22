@@ -2,7 +2,12 @@ import type { AgentDefinition } from "./agent.ts";
 import type { FlowDraft } from "./flow.ts";
 import type { OperationError } from "./result.ts";
 import type { ProjectCatalog } from "./project.ts";
-import { CONDITION_TIMELINE_ARRIVALS, type RunDetail, type RunNavigationEntry } from "./run.ts";
+import {
+  CONDITION_TIMELINE_ARRIVALS,
+  JOIN_TIMELINE_ROUNDS,
+  type RunDetail,
+  type RunNavigationEntry,
+} from "./run.ts";
 import type { T3Connection } from "./connection.ts";
 import type { T3Appearance } from "./appearance.ts";
 import type { TriggerDefinition } from "./trigger.ts";
@@ -61,6 +66,7 @@ export const runEntityKeys = {
   waitArrivals: (arrival: Entity<"waitArrivals">) => arrival.id,
   continuationVisits: (visit: Entity<"continuationVisits">) => visit.id,
   conditions: (condition: Entity<"conditions">) => condition.blockId,
+  joins: (join: Entity<"joins">) => join.blockId,
   attention: (matter: Entity<"attention">) => matter.id,
   executions: (execution: Pick<Entity<"executions">, "bindingId" | "executionId">) =>
     JSON.stringify([execution.bindingId, execution.executionId]),
@@ -134,16 +140,23 @@ function replaceEntities<K extends RunEntityCollection>(
   ) as RunDetail[K];
 }
 
-/** `events` without Condition selections that have left their Condition's window; the same array
- * when none has. */
-function withinConditionWindows(run: RunDetail, events: RunDetail["events"]) {
+function withinWindows(run: RunDetail, events: RunDetail["events"]) {
   const counts = new Map(run.conditions.map((summary) => [summary.blockId, summary.arrivals]));
-  const kept = events.filter(
-    ({ blockId, condition }) =>
-      !blockId ||
-      !condition ||
-      condition.arrivalNumber > (counts.get(blockId) ?? 0) - CONDITION_TIMELINE_ARRIVALS,
-  );
+  const joinRounds = new Map<string, number>();
+  const newestFirst = events.toReversed().filter(({ blockId, join }) => {
+    if (!blockId || !join) return true;
+    const seen = (joinRounds.get(blockId) ?? 0) + 1;
+    joinRounds.set(blockId, seen);
+    return seen <= JOIN_TIMELINE_ROUNDS;
+  });
+  const kept = newestFirst
+    .toReversed()
+    .filter(
+      ({ blockId, condition }) =>
+        !blockId ||
+        !condition ||
+        condition.arrivalNumber > (counts.get(blockId) ?? 0) - CONDITION_TIMELINE_ARRIVALS,
+    );
   return kept.length === events.length ? events : kept;
 }
 
@@ -168,7 +181,7 @@ export function applyRunChange(
       return true;
     });
     const appended = events.length ? [...run.events, ...events] : run.events;
-    const windowed = withinConditionWindows(next, appended);
+    const windowed = withinWindows(next, appended);
     if (windowed !== run.events) next.events = windowed;
     return next;
   }

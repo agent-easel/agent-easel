@@ -155,6 +155,7 @@ const attentionWords: Record<RunAttention["kind"], string> = {
   "report-problem": "problem · report needs a fix",
   "execution-failed": "problem · T3 execution failed",
   "condition-integrity": "problem · Condition cannot number its next arrival",
+  "join-integrity": "problem · Join cannot forward its next round",
   "subflow-stop-unresolved": "problem · Subflow could not stop its workers",
   "settlement-unresolved": "problem · Settle could not stop workers",
 };

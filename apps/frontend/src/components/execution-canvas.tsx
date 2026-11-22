@@ -182,6 +182,7 @@ function outcomeText(run: RunDetail, block: FlowBlock) {
 const MATTER_LINES: Partial<Record<RunAttention["kind"], (at: string) => string>> = {
   "execution-failed": (at) => `Failed in T3 · ${at}`,
   "condition-integrity": (at) => `Can’t count arrivals · ${at}`,
+  "join-integrity": (at) => `Can’t forward its round · ${at}`,
   "native-request": (at) => `Waiting for permission in T3 · since ${at}`,
 };
 

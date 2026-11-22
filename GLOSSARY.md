@@ -198,7 +198,7 @@ An explicit, non-final `working` report an Agent sends when it starts its Block 
 _Avoid_: progress report, heartbeat.
 
 **Problem**:
-A pending execution, report, integrity or settlement issue already recorded as attention: a missing report, an execution failure, a report problem, a Condition integrity Problem, which only manual settlement or Archive settles, or **Settle could not stop workers** when a confirmed manual Settle is unresolved. The settlement Problem is about the Run rather than one Block, and is distinct from the execution failure that stopping never raises. A Problem is distinct from block execution state and from stale or unavailable observations.
+A pending execution, report, integrity or settlement issue already recorded as attention: a missing report, an execution failure, a report problem, a Condition or Join integrity Problem, which only manual settlement or Archive settles, or **Settle could not stop workers** when a confirmed manual Settle is unresolved. The settlement Problem is about the Run rather than one Block, and is distinct from the execution failure that stopping never raises. A Problem is distinct from block execution state and from stale or unavailable observations.
 
 **Inbox**:
 The set of Run attention matters awaiting a response or action. Factory presents pending and settled matters on the Run they belong to. There is no separate global Inbox. The desktop Dock badge and the Run list's **Needs you** filter count and list Runs, not matters, and are not an Inbox.

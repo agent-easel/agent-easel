@@ -37,6 +37,7 @@ import {
   longEntryNamesFlow,
   missingReport,
   observeFor,
+  parallelJoinFlow,
   parallelWaitFlow,
   racingEndingsFlow,
   resultReleasedToHumanReview,
@@ -44,8 +45,10 @@ import {
   settled,
   settleUnresolved,
   statusCardFlow,
+  workerHandle,
   workingReportedIdle,
 } from "./support/scenarios.ts";
+import { queuedJoinMessageLost } from "./support/join-storage.ts";
 import {
   cardProblem,
   messageShows,
@@ -1056,4 +1059,45 @@ it("a card's Run in a Project the thread no longer permits reads as not found", 
   expect(toolResults(world.model, requests + 1)).toStrictEqual([
     expect.objectContaining({ error: "not_found" }),
   ]);
+});
+
+it("a Join with a partial round shows one Waiting row with its arrived sources until the round is forwarded", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, parallelJoinFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { run } = await launchedWorkers(world.world, runId);
+  const [first, second] = ["worker", "second"].map((id) => workerHandle(world.world, run, id));
+
+  // Act
+  await resultReported(world.world, first!, { message: "A1" });
+  const waiting = (
+    await messageShows(world.discord, card, /Merge — Waiting · 1\/2 sources/)
+  ).content.split("\n");
+  await resultReported(world.world, second!, { message: "B1" });
+  const forwarded = await messageShows(world.discord, card, /✅ Merge — finished/);
+
+  // Assert
+  expect(waiting.filter((row) => row.includes("Merge"))).toEqual([
+    "⏳ Merge — Waiting · 1/2 sources",
+  ]);
+  expect(forwarded.content).not.toContain("Waiting · ");
+});
+
+it("a latched Join Problem takes precedence over its Waiting row", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, parallelJoinFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { run } = await launchedWorkers(world.world, runId);
+  const [first, second] = ["worker", "second"].map((id) => workerHandle(world.world, run, id));
+  await resultReported(world.world, first!, { message: "A1" });
+  await messageShows(world.discord, card, /Merge — Waiting · 1\/2 sources/);
+  queuedJoinMessageLost(world.harness.databasePath);
+
+  // Act
+  await resultReported(world.world, second!, { message: "B1" });
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /Join cannot forward its next round/);
+  expect(shown.content.split("\n")).toContain("⚠️ **Merge** — Join cannot forward its next round");
+  expect(shown.content).not.toContain("Waiting · ");
 });

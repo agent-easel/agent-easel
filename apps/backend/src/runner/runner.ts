@@ -298,6 +298,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       }),
     listConditionArrivals: (runId: string, blockId: string, limit: string, cursor: string) =>
       store.listConditionArrivals(runId, blockId, queryPageLimit(limit), cursor || undefined),
+    getRunJoin: (runId: string, blockId: string) => store.getRunJoin(runId, blockId),
     listAttention,
     getRunCreationPolicy: () =>
       Effect.succeed({ ok: true as const, value: { ready: true as const } }),

@@ -168,11 +168,7 @@ export function clearSpentArrivalMessages(sql: SqlClient.SqlClient, runId: strin
   );
 }
 
-/** The pending Handoff a Human occurrence or Wait arrival is recorded from, with its stored
- * message, once the guards hold: owner, open gate, the Handoff's authorization context is live and
- * `generation` (a source release the caller read), when given, holds. Undefined when a guard fails
- * or the Handoff is no longer pending; a message that cannot be verified fails. */
-export function arrivingHandoff(
+export function pendingHandoff(
   sql: SqlClient.SqlClient,
   ownerToken: string,
   runId: string,
@@ -188,7 +184,24 @@ export function arrivingHandoff(
     });
     const [pending] =
       yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${handoff.id} AND state='pending'`;
-    if (!held || !pending) return undefined;
+    return held ? pending : undefined;
+  });
+}
+
+/** The pending Handoff a Human occurrence or Wait arrival is recorded from, with its stored
+ * message, once the guards hold: owner, open gate, the Handoff's authorization context is live and
+ * `generation` (a source release the caller read), when given, holds. Undefined when a guard fails
+ * or the Handoff is no longer pending; a message that cannot be verified fails. */
+export function arrivingHandoff(
+  sql: SqlClient.SqlClient,
+  ownerToken: string,
+  runId: string,
+  handoff: Handoff,
+  generation: number | undefined,
+) {
+  return Effect.gen(function* () {
+    const pending = yield* pendingHandoff(sql, ownerToken, runId, handoff, generation);
+    if (!pending) return undefined;
     if (!intactPayload(pending)) return yield* Effect.fail(Error("Invalid arrival message"));
     return {
       record: pending,

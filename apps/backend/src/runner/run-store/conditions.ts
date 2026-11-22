@@ -12,7 +12,7 @@ import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
 import type { Checked, RunRow } from "../runner-types.ts";
 import { unverified, verified } from "../runner-utils.ts";
-import { latchConditionIntegrityProblem } from "./attention.ts";
+import { latchIntegrityProblem } from "./attention.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { guardsHold } from "./guards.ts";
@@ -114,10 +114,11 @@ function numberPendingArrivals(
       if (!next.ok)
         return {
           numbered,
-          latched: yield* latchConditionIntegrityProblem(
+          latched: yield* latchIntegrityProblem(
             sql,
             runRow.id,
             blockId,
+            "condition-integrity",
             next.problem,
             time,
           ),
