@@ -12,6 +12,57 @@ import { assertOk, discoveredClones, sampleAgentInput } from "./domain-setup.ts"
 import { agentBlock, connection, flowInput, launchedWorkers } from "./scenarios.ts";
 import { prepared } from "./prepared-runner.ts";
 
+export async function parallelReleasePanel(context: TestContext) {
+  const setup = await prepared(context);
+  const { f, input, agent, world } = setup;
+  const child = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
+  const parent = await savedFlow(f, {
+    name: "Release",
+    graph: {
+      flowInput: flowInput("panel"),
+      blocks: [
+        subflowBlock("panel", "Review panel", child.id),
+        agentBlock("notes", "Release notes", agent.id, { x: 400, y: 0 }),
+      ],
+      connections: [connection("panel", "approved", "notes"), toEnding("notes", "done", "done")],
+      finish: { position: { x: 800, y: 0 }, endings: [ending("done", "Done")] },
+    },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const {
+    workers: [security, style],
+  } = await launchedWorkers(world, started.id);
+  const reply = await f.runtime.submit({
+    arguments: { blockId: style!.blockId, to: "finished", exit: "done", message: "Style done" },
+  });
+  assert(reply.code === "ACCEPTED");
+  return { ...setup, runId: started.id, security: security!, style: style! };
+}
+
+export function loseStopReplyAfterInterrupt(
+  t3: Awaited<ReturnType<typeof prepared>>["t3"],
+  onInterrupt: () => void,
+) {
+  const original = t3.threads.stopThread.bind(t3.threads);
+  t3.threads.stopThread = async (target, payload) => {
+    await original(target, payload);
+    onInterrupt();
+    throw Error("Lost Stop reply after remote interruption");
+  };
+}
+
+export function omitRecentRunsOnActiveRead(
+  t3: Awaited<ReturnType<typeof prepared>>["t3"],
+  threadId: string,
+) {
+  const original = t3.threads.readExecution.bind(t3.threads);
+  t3.threads.readExecution = async (target, id) => {
+    const read = await original(target, id);
+    if (id !== threadId || !read.activeRunId) return read;
+    return { ...read, recentRuns: [] };
+  };
+}
+
 export async function parallelFinish(context: TestContext) {
   const setup = await prepared(context);
   const { f, input, agent, world } = setup;

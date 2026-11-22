@@ -621,7 +621,7 @@ unconfirmed launches and sends Stop to workers that a fresh read shows unfinishe
 acknowledgement holds the result and the queue until fresh reads verify completion. Unresolved
 Stop raises one Problem at that invocation. Retry starts a fresh authorized repair attempt.
 Closure leaves the threads Run-owned and requests no T3 thread settlement on behalf of
-the invocation.
+the invocation; finished Blocks inside the invocation still follow [per-Block thread settlement](#native-thread-organization).
 
 Verified closure releases one result through the matching ending ID, retaining the producing
 worker and activation through forwarding Blocks. Output None releases empty text. Blank
