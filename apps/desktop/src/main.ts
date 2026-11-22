@@ -55,7 +55,7 @@ import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
-import { restorableBounds, type WindowBounds } from "./window-bounds.ts";
+import { WindowBoundsTracker } from "./window-bounds.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
 if (process.env.FACTORY_DESKTOP_USER_DATA)
@@ -90,7 +90,7 @@ let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
-let windowBounds: WindowBounds | null = null;
+let windowBounds = new WindowBoundsTracker(null);
 /** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
 let routeReceiver: WebContents | null = null;
 let pendingRoute: DesktopRoute | null = null;
@@ -102,6 +102,9 @@ let tray: Tray | null = null;
 let menuState: DesktopMenuState | null = null;
 /** Set only after the local user confirmed and the backend stopped in order. */
 let quitting = false;
+let started = false;
+let pendingOpen = false;
+let pendingActivate = false;
 let installingUpdate = false;
 /** An approved client's install request was accepted and starts on the next tick. */
 let serverInstallAccepted = false;
@@ -274,17 +277,18 @@ function activateNotification(id: string) {
 
 function openWindow() {
   if (window) {
-    if (window.isMinimized()) window.restore();
-    window.show();
+    if (windowBounds.reveal(window)) void saveWindowBounds();
     window.focus();
     return;
   }
-  const saved = restorableBounds(
-    windowBounds,
+  const saved = windowBounds.prepareOpen(
     screen.getAllDisplays().map((display) => display.workArea),
   );
   const created = new BrowserWindow({
-    ...(saved ?? { width: 1400, height: 900 }),
+    ...(saved
+      ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
+      : { width: 1400, height: 900 }),
+    ...(saved?.fullScreen ? { fullscreen: true } : {}),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -312,7 +316,9 @@ function openWindow() {
   created.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
-  created.once("ready-to-show", () => created.show());
+  created.once("ready-to-show", () => {
+    if (windowBounds.revealInitial(created)) void saveWindowBounds();
+  });
   // A reload replaces the page and its route listener; in-page navigation keeps both.
   created.webContents.on("did-navigate", () => {
     routeReceiver = null;
@@ -320,6 +326,10 @@ function openWindow() {
   const rememberBounds = () => void saveWindowBounds();
   created.on("resized", rememberBounds);
   created.on("moved", rememberBounds);
+  created.on("maximize", rememberBounds);
+  created.on("unmaximize", rememberBounds);
+  created.on("enter-full-screen", rememberBounds);
+  created.on("leave-full-screen", rememberBounds);
   created.on("close", () => {
     const url = created.webContents.getURL();
     if (url.startsWith(`${appOrigin}/`)) lastView = url;
@@ -330,6 +340,7 @@ function openWindow() {
   // Closing the window never stops the backend; the Dock and the optional tray reopen it.
   created.on("closed", () => {
     window = null;
+    windowBounds.closed();
     routeReceiver = null;
     attention.focus(false);
     applyMenuState(withoutOpenRun(menuState));
@@ -339,8 +350,7 @@ function openWindow() {
 }
 
 function saveWindowBounds(): Promise<unknown> {
-  if (window) windowBounds = window.getNormalBounds();
-  return store.update({ windowBounds }).catch(() => undefined);
+  return store.update({ windowBounds: windowBounds.capture(window) }).catch(() => undefined);
 }
 
 function persistWindowBounds(): Promise<void> {
@@ -709,9 +719,16 @@ function registerUi() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", openWindow);
+  app.on("second-instance", () => {
+    if (started) openWindow();
+    else pendingOpen = true;
+  });
   // A Dock click: an open window only comes forward; otherwise the window opens where attention waits.
   app.on("activate", () => {
+    if (!started) {
+      pendingActivate = true;
+      return;
+    }
     const windowOpen = window !== null;
     openWindow();
     void attention.dock(windowOpen).then(openRoute);
@@ -751,7 +768,7 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
-  windowBounds = store.get().windowBounds;
+  windowBounds = new WindowBoundsTracker(store.get().windowBounds);
   applyNativeAppearance(store.get().appearance);
   nativeTheme.on("updated", updateWindowBackground);
   // A newly issued credential replaces the attention subscription at once.
@@ -834,9 +851,15 @@ async function start() {
   updates.start(updateChannel());
   applyMenuBarIcon();
   refreshTray();
+  started = true;
   const settings = store.get();
   // Launch at login starts in the background with the remembered role.
-  const background = settings.role !== null && app.getLoginItemSettings().wasOpenedAtLogin;
+  const background =
+    !pendingOpen &&
+    !pendingActivate &&
+    settings.role !== null &&
+    app.getLoginItemSettings().wasOpenedAtLogin;
   if (!background) openWindow();
+  if (pendingActivate) void attention.dock(false).then(openRoute);
   if (store.problem) void dialog.showMessageBox({ type: "warning", message: store.problem });
 }
