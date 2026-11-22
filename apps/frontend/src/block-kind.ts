@@ -1,7 +1,8 @@
-import { Bot, CornerDownLeft, Hourglass, Split, User, Workflow } from "lucide-react";
+import { Bot, CornerDownLeft, Hourglass, Merge, Split, User, Workflow } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@t3-factory/contracts";
-import type { EffectiveExit, ExitSource } from "@t3-factory/domain-validation";
+import { joinSlots, type EffectiveExit, type ExitSource } from "@t3-factory/domain-validation";
 import { continuedThread } from "./flow-graph.ts";
+import { joinSummary } from "./components/join-block.tsx";
 import { waitDurationText } from "./wait-display.ts";
 
 /**
@@ -100,6 +101,17 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     singleOutput: false,
     observed: { references: false, freshness: false },
   },
+  join: {
+    Icon: Merge,
+    label: "JOIN",
+    executionLabel: "JOIN",
+    panelLabel: "JOIN",
+    name: "Join",
+    workerThread: false,
+    dashedFrame: false,
+    singleOutput: true,
+    observed: { references: false, freshness: false },
+  },
 };
 
 /** The kind of block each exit source belongs to: Agent and Flow-local exits leave Agent blocks. */
@@ -108,6 +120,7 @@ const EXIT_SOURCE_KINDS: Record<ExitSource, FlowBlock["kind"]> = {
   local: "agent",
   human: "human",
   wait: "wait",
+  join: "join",
   continuation: "continuation",
   condition: "condition",
   ending: "subflow",
@@ -205,6 +218,16 @@ export function blockReference(
         header: kind,
       };
     }
+    case "join":
+      return {
+        card: {
+          label: "",
+          value: joinSummary(joinSlots(graph, block.id).length),
+          tone: "continued",
+        },
+        line: { text: `${kind} · waits for every source`, tone: "plain" },
+        header: `${kind} · waits for every source`,
+      };
   }
 }
 

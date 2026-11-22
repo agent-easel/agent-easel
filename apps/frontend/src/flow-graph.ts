@@ -48,6 +48,7 @@ const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {
   agent: "Agent block",
   human: "Human step",
   wait: "Wait",
+  join: "Join",
   continuation: "Continuation",
   condition: "Condition",
   subflow: "Subflow",

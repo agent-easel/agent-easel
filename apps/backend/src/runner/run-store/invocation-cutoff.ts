@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { settleAttention } from "./attention.ts";
 import { clearSpentArrivalMessages } from "./handoffs.ts";
+import { cancelJoinArrivals } from "./joins.ts";
 
 export const invocationTree = (sql: SqlClient.SqlClient, invocationId: string) => sql`
   WITH RECURSIVE tree(id) AS (
@@ -34,11 +35,12 @@ export function cancelInvocationWork(
       WHERE run_id=${runId} AND block_id IN (${blocks}) AND state='pending'`;
     yield* sql`UPDATE condition_arrivals SET state='cancelled',cancelled_at=${time}
       WHERE run_id=${runId} AND block_id IN (${blocks}) AND state='pending'`;
+    yield* cancelJoinArrivals(sql, runId, blocks, time);
     yield* sql`UPDATE continuation_visits SET state='cancelled'
       WHERE run_id=${runId} AND block_id IN (${blocks}) AND state IN ('queued','sent')`;
     const matters = yield* sql<{ id: string; blockId: string; executionId: string }>`
       SELECT id,block_id AS blockId,execution_id AS executionId FROM run_attention
-      WHERE run_id=${runId} AND block_id IN (${blocks}) AND settled_at IS NULL`;
+      WHERE run_id=${runId} AND block_id IN (${blocks}) AND settled_at IS NULL AND kind<>'join-integrity'`;
     yield* settleAttention(
       sql,
       matters.map((matter) => ({ ...matter, runId })),

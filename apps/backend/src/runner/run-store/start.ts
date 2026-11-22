@@ -136,7 +136,7 @@ function startConfigurationConflict(sql: SqlClient.SqlClient, plan: StartPlan) {
 
 /** Only blocks a worker reports for get a public Block id; a Human step and a Condition have none. */
 const workerless = (block: RunDefinitions["flow"]["graph"]["blocks"][number]) =>
-  block.kind === "human" || block.kind === "condition";
+  block.kind === "human" || block.kind === "condition" || block.kind === "join";
 
 /** A worktree Run's first Flow-input target creates the worktree on the Run's own branch. */
 function runWorkspace(plan: StartPlan, number: number, creatorBlockId: string): RunWorkspace {

@@ -12,6 +12,8 @@ import {
   endingReached,
   launchedWorkers,
   racingEndingsFlow,
+  parallelJoinFlow,
+  observeFor,
   twoWorkersStarted,
   turnBegins,
   workerFinal,
@@ -327,4 +329,31 @@ it("archiving while Finish is settling the other worker reports completion", asy
   // Assert
   expect(ingest.events("run.cancelled")).toHaveLength(0);
   expect(ingest.events("run.finished")).toMatchObject([{ properties: { status: "completed" } }]);
+});
+
+it("a Join counts as the sixth distinct executed Block in the completion metric", async (c) => {
+  // Arrange
+  const ingest = await mockIngest(c);
+  const f = await prepared(c, parallelJoinFlow, { telemetry: { env: ingest.env } });
+  const [a, b] = await twoWorkersStarted(f.world, f.input);
+  await resultReported(f.world, a);
+  await resultReported(f.world, b);
+  await observeFor(
+    "all recipients reached",
+    f.world,
+    a.runId,
+    (r) =>
+      r.humanOccurrences.length === 2 &&
+      r.blocks.some((block) => block.blockId === "follow-up" && block.threadId),
+  );
+
+  // Act
+  const archived = await f.f.archiveRun(a.runId);
+
+  // Assert
+  assertOk(archived);
+  await f.f.close();
+  expect(ingest.events("run.finished")).toMatchObject([
+    { properties: { executedBlockCount: "6+" } },
+  ]);
 });

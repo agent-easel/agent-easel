@@ -121,6 +121,7 @@ function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind
   const latest = visits.at(-1);
   const attention = attentionActivityText(run, block, recorded);
   if (attention) return attention;
+  if (block.kind === "join") return blockActivityText(run, block, recorded);
   if (recorded.state === "stopped") return stoppedProgress(run, latest?.end);
   if (block.kind === "condition") return conditionActivityText(run, block.id);
   if (kind === "needs-input")

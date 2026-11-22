@@ -52,6 +52,13 @@ export const CONTINUATION_EXIT: BlockExit = {
   messageRequired: true,
 };
 
+export const JOIN_OUTPUT: BlockExit = {
+  id: "output",
+  name: "",
+  description: "Every source's message of one round, combined.",
+  messageRequired: false,
+};
+
 /** A Condition's fixed last output, selected when no rule matches. It is not an error route. */
 export const CONDITION_OTHERWISE: BlockExit = {
   id: CONDITION_OTHERWISE_ID,
@@ -67,6 +74,7 @@ export type ExitSource =
   | "local"
   | "human"
   | "wait"
+  | "join"
   | "continuation"
   | "condition"
   | "ending";
@@ -109,6 +117,7 @@ export function effectiveExits(
   }
   if (block.kind === "human") return HUMAN_EXITS.map((exit) => ({ ...exit, source: "human" }));
   if (block.kind === "wait") return [{ ...WAIT_OUTPUT, source: "wait" }];
+  if (block.kind === "join") return [{ ...JOIN_OUTPUT, source: "join" }];
   if (block.kind === "continuation") return [{ ...CONTINUATION_EXIT, source: "continuation" }];
   if (block.kind === "condition")
     return [

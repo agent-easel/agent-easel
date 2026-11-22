@@ -28,7 +28,7 @@ function blockUpdate(input: unknown): { publicId: string; report: RuntimeReport 
 export function createRuntime(
   update: (publicId: string, report: RuntimeReport) => Effect.Effect<RuntimeReply, unknown>,
   read: (
-    kind: "block" | "run" | "image" | "conditionArrivals" | "subflowInvocations",
+    kind: "block" | "run" | "image" | "conditionArrivals" | "join" | "subflowInvocations",
     input: unknown,
   ) => Effect.Effect<RuntimeReply, unknown>,
   setRunTitle: (input: unknown) => Effect.Effect<RuntimeReply, unknown>,
@@ -40,6 +40,7 @@ export function createRuntime(
     image: (input: unknown) => read("image", input),
     subflowInvocations: (input: unknown) => read("subflowInvocations", input),
     conditionArrivals: (input: unknown) => read("conditionArrivals", input),
+    join: (input: unknown) => read("join", input),
     submit: Effect.fn(function* (input: unknown) {
       const call = blockUpdate(input);
       if ("code" in call) return reportDiagnostic(call);

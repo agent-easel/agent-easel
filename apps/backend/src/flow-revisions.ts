@@ -204,6 +204,7 @@ const toBlock = (
 ): FlowBlock => {
   const base = { id: row.block_id, name: row.name, position: { x: row.x, y: row.y } };
   if (row.kind === "human") return { ...base, kind: "human" };
+  if (row.kind === "join") return { ...base, kind: "join" };
   if (row.kind === "subflow") return { ...base, kind: "subflow", flowId: row.flow_id };
   if (row.kind === "condition")
     return {

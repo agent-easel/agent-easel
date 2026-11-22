@@ -681,10 +681,13 @@ the captured Flow revision has one row, in breadth-first order from the Flow inp
 Any remaining Blocks follow in canvas order from left to right, then top to bottom, with Block ID
 breaking ties.
 
-A Block's pending Problem takes precedence over Needs input, a pending Wait, working or
-Continuation sent, stopped, finished, and not started. Native T3 requests and workers awaiting
-review direct the reader to T3. When several arrivals are waiting on a Block, its row shows the
-earliest deadline as a relative Discord timestamp and counts the pending arrivals. Observation
+A Block's pending Problem takes precedence over Needs input, a pending Wait, a waiting Join,
+working or Continuation sent, stopped, finished, and not started. Native T3 requests and workers
+awaiting review direct the reader to T3. When several arrivals are waiting on a Block, its row shows the
+earliest deadline as a relative Discord timestamp and counts the pending arrivals. A Join with a
+partial round shows one text row, **Waiting · *n*/*m* sources**, with the sources that have arrived
+of those it waits for; it is not attention and posts no notice, while a Join integrity Problem
+replaces it with the Problem row. An inner Finish shows the Join as cancelled as soon as the cutoff commits, including while workers stop. An unresolved Join Problem keeps its row when a later invocation replaces that Join or its ancestor. Observation
 staleness and observations that have yet to be made appear on the relevant Block rows. Settled and
 Archived Runs retain their final Block states. Use Read Run for Finish endings, results, report
 bodies and prompts.
@@ -740,8 +743,8 @@ stays unknown. Rotating the same application's token keeps editing the same card
 
 Factory posts an attention notice in a chat-started Run's originating thread when the Run has new
 Needs input or Problem matters. Attention follows the Run's own attention: a pending Human step or native T3
-question or permission is Needs input, and a missing report, an execution failure, a report problem or a
-Condition integrity Problem or a confirmed Settle that could not stop workers
+question or permission is Needs input, and a missing report, an execution failure, a report problem, a
+Condition or Join integrity Problem or a confirmed Settle that could not stop workers
 ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
 observation is never reported as a Problem. A native T3 request is marked to be answered in T3. A Human
 notice names the Human step and points to asking Factory in the thread: it has no answer buttons, and

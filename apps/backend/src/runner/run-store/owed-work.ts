@@ -7,6 +7,7 @@ import { settleAttention } from "./attention.ts";
 import { CANCELLED_ON_FINISH } from "./endings.ts";
 import { writeBlockState } from "./blocks.ts";
 import { clearSpentArrivalMessages } from "./handoffs.ts";
+import { cancelJoinArrivals } from "./joins.ts";
 import type { DeliveryRecord } from "./records.ts";
 import type { DeliveryState } from "./states.ts";
 import { appendTimelineEvent } from "./steps.ts";
@@ -76,11 +77,12 @@ export function cancelOwedWork(
       });
     }
     yield* sql`UPDATE condition_arrivals SET state='cancelled',cancelled_at=${time} WHERE run_id=${id} AND state='pending'`;
+    yield* cancelJoinArrivals(sql, id, null, time);
     const attention = yield* sql<{
       id: string;
       block_id: string;
       execution_id: string;
-    }>`SELECT id,block_id,execution_id FROM run_attention WHERE run_id=${id} AND settled_at IS NULL`;
+    }>`SELECT id,block_id,execution_id FROM run_attention WHERE run_id=${id} AND settled_at IS NULL AND (${cutoff}<>'finish' OR kind<>'join-integrity')`;
     yield* settleAttention(
       sql,
       attention.map((matter) => ({
@@ -100,11 +102,10 @@ export function cancelOwedWork(
       { keep: ["not-started", "finished", "pass-through"], otherwise: "stopped" },
       { problem: null },
     );
-    // Archive clears every Wait and Condition message, including those kept for their recipients;
-    // numbers, selections and identities stay.
     if (cutoff === "archive") {
       yield* sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${id}`;
       yield* sql`UPDATE condition_arrivals SET message=NULL WHERE run_id=${id}`;
+      yield* sql`UPDATE join_rounds SET message=NULL WHERE run_id=${id}`;
     } else yield* clearSpentArrivalMessages(sql, id);
   });
 }

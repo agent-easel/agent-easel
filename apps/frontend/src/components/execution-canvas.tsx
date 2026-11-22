@@ -44,6 +44,15 @@ import { ContinueNow } from "./wait-arrivals.tsx";
 import { FlowInputTitleLine } from "./run-title-generation.tsx";
 import { executionStateLabel } from "./execution-state.tsx";
 import { clockTime, dayAndTime } from "../time-format.ts";
+import {
+  isCancelledJoin,
+  joinActivityText,
+  joinReferenceText,
+  joinSourceText,
+  joinSummaryOf,
+} from "../join-display.ts";
+import { useJoinDetails, type JoinReads } from "../use-join-details.ts";
+import { joinSources } from "./join-block.tsx";
 
 /** Not-started blocks were never observed. Stale and unknown apply only after a block starts. */
 function blockObservation(block: RunBlock, unavailable: boolean) {
@@ -182,6 +191,7 @@ function outcomeText(run: RunDetail, block: FlowBlock) {
 const MATTER_LINES: Partial<Record<RunAttention["kind"], (at: string) => string>> = {
   "execution-failed": (at) => `Failed in T3 · ${at}`,
   "condition-integrity": (at) => `Can’t count arrivals · ${at}`,
+  "join-integrity": (at) => `Can’t forward its round · ${at}`,
   "native-request": (at) => `Waiting for permission in T3 · since ${at}`,
 };
 
@@ -240,7 +250,19 @@ export function blockActivityText(
     attentionActivityText(run, block, recorded) ??
     (block.kind === "condition"
       ? conditionActivityText(run, block.id)
-      : visitActivityText(run, block, recorded))
+      : block.kind === "join"
+        ? joinActivity(run, block.id)
+        : visitActivityText(run, block, recorded))
+  );
+}
+
+function joinActivity(run: RunDetail, blockId: string) {
+  return joinActivityText(
+    joinSummaryOf(run, blockId),
+    blockExitRecipients(
+      run.definitions.flow.graph,
+      blockId,
+    )("output").filter((name): name is string => !!name),
   );
 }
 
@@ -289,7 +311,9 @@ function ExecutionExit({
           chosen ? "text-foreground" : "text-muted-foreground",
         )}
       >
-        {exit.source === "continuation" ? "Response" : exitDisplayName(exit)}
+        {exit.source === "continuation"
+          ? "Response"
+          : exitDisplayName(exit, exit.source === "join" ? "output" : "")}
       </span>
       <span className="sr-only">
         {chosen ? "chosen" : "not chosen"} · configured → {recipients || "finish here"}
@@ -305,9 +329,11 @@ type BlockObservation = ReturnType<typeof blockObservation>;
 function ExecutionBlockHeader({
   kind,
   state,
+  label,
 }: {
   kind: FlowBlock["kind"];
   state: RunStateKind | null;
+  label?: string | undefined;
 }) {
   const { Icon: KindIcon, executionLabel } = BLOCK_KINDS[kind];
   return (
@@ -320,7 +346,7 @@ function ExecutionBlockHeader({
       <span className="flex-1 truncate text-2xs leading-3 font-semibold tracking-section text-subtle-foreground">
         {executionLabel}
       </span>
-      {state && <StatusBadge kind={state} />}
+      {state && <StatusBadge kind={state}>{label}</StatusBadge>}
     </span>
   );
 }
@@ -369,10 +395,19 @@ function ExecutionBlockTitle({
 }) {
   const state = recorded?.state ?? "not-started";
   const activity = activityLine(run, block, recorded, observation);
-  const reference = blockReference(block, {
-    graph: run.definitions.flow.graph,
-    agents: run.definitions.agents,
-  }).line;
+  const reference =
+    block.kind === "join"
+      ? {
+          text: joinReferenceText(
+            joinSummaryOf(run, recorded?.blockId ?? block.id),
+            joinSources(run.definitions.flow.graph, block.id).length,
+          ),
+          tone: "continued" as const,
+        }
+      : blockReference(block, {
+          graph: run.definitions.flow.graph,
+          agents: run.definitions.agents,
+        }).line;
   return (
     <span className="flex flex-1 flex-col gap-0.75 pt-1 pr-2.5 pb-2 pl-3">
       <span className="flex h-5 min-w-0 items-center gap-1.5">
@@ -417,6 +452,18 @@ function continuableArrival(run: RunDetail, block: FlowBlock) {
   return others.length ? undefined : only;
 }
 
+function joinProblem(run: RunDetail, block: FlowBlock, recorded: RunBlock | undefined) {
+  return (
+    block.kind === "join" &&
+    run.attention.some(
+      (item) =>
+        item.kind === "join-integrity" &&
+        item.blockId === (recorded?.blockId ?? block.id) &&
+        !item.settledAt,
+    )
+  );
+}
+
 /** Independent footers: Continue now and observation strips never encode the state, which the
  * Block's badge, outline and activity line show. */
 function executionFooters(
@@ -426,6 +473,13 @@ function executionFooters(
   observation: BlockObservation,
 ) {
   const footers: ReactNode[] = [];
+  if (joinProblem(run, block, recorded))
+    footers.push(
+      <span className={cn(footerClass, "bg-muted text-muted-foreground")}>
+        <StatusBadge kind="problem" />
+        <span className="truncate">Join state is inconsistent</span>
+      </span>,
+    );
   const continuable = continuableArrival(run, block);
   if (continuable)
     footers.push(
@@ -520,6 +574,7 @@ function executionFooterCount(
 ) {
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
   return (
+    (joinProblem(run, block, recorded) ? 1 : 0) +
     (continuableArrival(run, block) ? 1 : 0) +
     (observation === "stale" || observation === "unknown" ? 1 : 0)
   );
@@ -533,8 +588,12 @@ function executionBlock(
   selected: boolean,
   unavailable: boolean,
   onSelect: () => void,
+  joinReads: JoinReads,
 ): CanvasBlockContent {
   const state = blockStateKind(run, recorded);
+  const join = block.kind === "join" ? joinSummaryOf(run, block.id) : undefined;
+  const cancelled = state === "stopped" && isCancelledJoin(join);
+  const badgeLabel = cancelled ? "Cancelled" : join && state === "problem" ? "Error" : undefined;
   const workingMessage = recorded?.state === "working" ? recorded.workingMessage : null;
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
   const chosen = chosenExitIds(run, block, recorded);
@@ -552,7 +611,7 @@ function executionBlock(
         <button
           type="button"
           className={pressClass}
-          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${state ? RUN_STATE_LABELS[state] : "Not started"}${workingMessage ? ` · ${workingMessage}` : ""}`}
+          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${badgeLabel ?? (state ? RUN_STATE_LABELS[state] : "Not started")}${workingMessage ? ` · ${workingMessage}` : ""}`}
           aria-pressed={selected}
           onClick={onSelect}
         >
@@ -560,7 +619,7 @@ function executionBlock(
         </button>
       ),
     },
-    header: <ExecutionBlockHeader kind={block.kind} state={state} />,
+    header: <ExecutionBlockHeader kind={block.kind} state={state} label={badgeLabel} />,
     title: (
       <ExecutionBlockTitle run={run} block={block} recorded={recorded} observation={observation} />
     ),
@@ -575,6 +634,7 @@ function executionBlock(
     exitPort: () => port,
     incomingPort: () => port,
     footers: executionFooters(run, block, recorded, observation),
+    joinSource: (_source, slot) => joinSourceText(join, joinReads.get(block.id)?.detail, slot),
   };
 }
 
@@ -685,6 +745,7 @@ export function ExecutionCanvas({
     () => exitRecipients(run.definitions.flow.graph),
     [run.definitions.flow.graph],
   );
+  const joinReads = useJoinDetails(run.id, subflows.joins);
   const blockFooters = useMemo(
     () => (block: CanvasBlock) =>
       executionFooterCount(run, block, recordedById.get(block.id), observationUnavailable),
@@ -704,6 +765,7 @@ export function ExecutionCanvas({
       id === selected && (recorded !== undefined || !composed),
       observationUnavailable,
       () => recorded && onSelect(id),
+      joinReads,
     );
     const placement = subflows.placements.get(path);
     if (block.kind !== "subflow") return content;

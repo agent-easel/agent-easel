@@ -5,19 +5,23 @@ import type {
   AgentDefinition,
   AgentRevisitContext,
   FlowBlock,
+  FlowDraft,
   FlowGraph,
   ValidationIssue,
   WaitUnit,
 } from "@t3-factory/contracts";
+import { effectiveExits, joinSlots } from "@t3-factory/domain-validation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Surface } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { TextLink } from "@/components/ui/text-link";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { FlowAgentLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
+import { exitDisplayName } from "./flow-block.tsx";
 import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
-import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
+import { BlockExitConfiguration, PanelHeading } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
 import { SubflowBlockSettings, type BlockFlows } from "./subflow-inspector.tsx";
 import { fieldAria } from "./field-state.ts";
@@ -30,6 +34,7 @@ import type { FlowWire } from "../flow-graph.ts";
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
 type WaitBlock = Extract<FlowBlock, { kind: "wait" }>;
 type ContinuationBlock = Extract<FlowBlock, { kind: "continuation" }>;
+type JoinBlock = Extract<FlowBlock, { kind: "join" }>;
 
 /** The Agents a block may name: every saved Agent, and those this Flow may place. */
 export type BlockAgents = {
@@ -96,6 +101,9 @@ export function BlockConfiguration({
           problem={problem("prompt")}
           onEdit={onEdit}
         />
+      )}
+      {block.kind === "join" && (
+        <JoinSourcesField block={block} graph={graph} agents={agents.all} flows={flows.all} />
       )}
       {block.kind === "condition" ? (
         <ConditionOutputs
@@ -395,5 +403,59 @@ function ContinuationBlockSettings({
         </p>
       </section>
     </>
+  );
+}
+
+function JoinSourcesField({
+  block,
+  graph,
+  agents,
+  flows,
+}: {
+  block: JoinBlock;
+  graph: FlowGraph;
+  agents: readonly AgentDefinition[];
+  flows: readonly FlowDraft[];
+}) {
+  const flowMap = new Map(flows.map((flow) => [flow.id, flow]));
+  const blocks = new Map(graph.blocks.map((item) => [item.id, item]));
+  const slots = joinSlots(graph, block.id);
+  const sources = slots.flatMap((slot) => {
+    const source = blocks.get(slot.sourceBlockId);
+    if (!source) return [];
+    const exits = new Map(
+      effectiveExits(source, agents, flowMap).map((exit) => [
+        exit.id,
+        exitDisplayName(exit, "Output"),
+      ]),
+    );
+    return [
+      {
+        id: source.id,
+        name: source.name || "Unnamed block",
+        exits: slot.exitIds.map((exitId) => exits.get(exitId) || exitId).join(" · "),
+      },
+    ];
+  });
+  return (
+    <section aria-label="Sources" className="grid gap-2">
+      <PanelHeading>{`Sources · ${slots.length === 1 ? "1 block" : `${slots.length} blocks`}`}</PanelHeading>
+      {sources.length > 0 ? (
+        <Surface tone="group" asChild>
+          <ul>
+            {sources.map((source) => (
+              <li key={source.id} className="grid gap-0.5 px-3 py-2">
+                <span className="truncate text-sm font-medium text-foreground">{source.name}</span>
+                <span className="truncate text-xs text-muted-foreground">{source.exits}</span>
+              </li>
+            ))}
+          </ul>
+        </Surface>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          No sources yet. Connect two or more blocks to this Join on the canvas.
+        </p>
+      )}
+    </section>
   );
 }

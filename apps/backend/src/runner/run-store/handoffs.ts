@@ -41,7 +41,7 @@ export const workerProvenance = (row: {
     : null;
 
 export type OutgoingHandoffs = {
-  readonly kind: "report" | "human" | "wait" | "condition" | "pass" | "subflow";
+  readonly kind: "report" | "human" | "wait" | "condition" | "pass" | "subflow" | "join";
   readonly id: string;
   readonly blockId: string;
   readonly exitId: string | null;
@@ -74,7 +74,8 @@ function originatingSubflow(sql: SqlClient.SqlClient, source: OutgoingHandoffs) 
     condition: "condition_arrivals",
     pass: "continuation_visits",
   } as const;
-  if (source.kind === "report" || source.kind === "human") return Effect.succeed(null);
+  if (source.kind === "report" || source.kind === "human" || source.kind === "join")
+    return Effect.succeed(null);
   return Effect.map(
     sql<{ subflow_invocation_id: string | null }>`
     SELECT i.subflow_invocation_id FROM ${sql(arrivals[source.kind])} a
@@ -123,8 +124,8 @@ export function createHandoffs(
         cause = `${source.kind}:${source.id}/${causeSuffix}`;
       const payload = JSON.stringify({ message: source.message });
       const inserted =
-        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,binding_id,origin_activation_id,subflow_invocation_id)
-          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), ...target })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${ref("condition")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null},${subflowResult}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
+        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,join_round_id,binding_id,origin_activation_id,subflow_invocation_id)
+          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), ...target })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${ref("condition")},${ref("join")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null},${subflowResult}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
       if (inserted.length)
         yield* appendTimelineEvent(sql, {
           kind: source.kind === "report" ? "handoff-held" : "handoff-created",
@@ -148,23 +149,26 @@ export function createHandoffs(
  * input). Outcome, deadline, number, selection and identity stay.
  */
 export function clearSpentArrivalMessages(sql: SqlClient.SqlClient, runId: string) {
-  return Effect.gen(function* () {
-    yield* sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${runId} AND state='forwarded' AND message IS NOT NULL
-      AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE i.wait_arrival_id=wait_arrivals.id AND i.kind='handoff' AND i.state='pending')
+  const sources = [
+    ["wait_arrivals", "wait_arrival_id", sql`state='forwarded'`],
+    ["condition_arrivals", "condition_arrival_id", sql`state='selected'`],
+    ["join_rounds", "join_round_id", sql`1`],
+  ] as const;
+  return Effect.forEach(
+    sources,
+    ([table, column, spent]) => {
+      const source = sql(table);
+      const matches = sql`i.${sql(column)}=${source}.id`;
+      return sql`UPDATE ${source} SET message=NULL WHERE run_id=${runId} AND ${spent} AND message IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE ${matches} AND i.kind='handoff' AND i.state='pending')
       AND NOT EXISTS(SELECT 1 FROM operation_intents i JOIN run_activations a ON a.run_id=i.run_id AND a.cause=i.cause
-        WHERE i.wait_arrival_id=wait_arrivals.id AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
-    yield* sql`UPDATE condition_arrivals SET message=NULL WHERE run_id=${runId} AND state='selected' AND message IS NOT NULL
-      AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE i.condition_arrival_id=condition_arrivals.id AND i.kind='handoff' AND i.state='pending')
-      AND NOT EXISTS(SELECT 1 FROM operation_intents i JOIN run_activations a ON a.run_id=i.run_id AND a.cause=i.cause
-        WHERE i.condition_arrival_id=condition_arrivals.id AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
-  });
+        WHERE ${matches} AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
+    },
+    { discard: true },
+  );
 }
 
-/** The pending Handoff a Human occurrence or Wait arrival is recorded from, with its stored
- * message, once the guards hold: owner, open gate, the Handoff's authorization context is live and
- * `generation` (a source release the caller read), when given, holds. Undefined when a guard fails
- * or the Handoff is no longer pending; a message that cannot be verified fails. */
-export function arrivingHandoff(
+export function pendingHandoff(
   sql: SqlClient.SqlClient,
   ownerToken: string,
   runId: string,
@@ -180,7 +184,24 @@ export function arrivingHandoff(
     });
     const [pending] =
       yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${handoff.id} AND state='pending'`;
-    if (!held || !pending) return undefined;
+    return held ? pending : undefined;
+  });
+}
+
+/** The pending Handoff a Human occurrence or Wait arrival is recorded from, with its stored
+ * message, once the guards hold: owner, open gate, the Handoff's authorization context is live and
+ * `generation` (a source release the caller read), when given, holds. Undefined when a guard fails
+ * or the Handoff is no longer pending; a message that cannot be verified fails. */
+export function arrivingHandoff(
+  sql: SqlClient.SqlClient,
+  ownerToken: string,
+  runId: string,
+  handoff: Handoff,
+  generation: number | undefined,
+) {
+  return Effect.gen(function* () {
+    const pending = yield* pendingHandoff(sql, ownerToken, runId, handoff, generation);
+    if (!pending) return undefined;
     if (!intactPayload(pending)) return yield* Effect.fail(Error("Invalid arrival message"));
     return {
       record: pending,

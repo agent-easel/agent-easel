@@ -30,6 +30,8 @@ type ContinuationShape = Extract<FlowBlock, { kind: "continuation" }>;
 export type ScenarioContinuation = { [Key in keyof ContinuationShape]: ContinuationShape[Key] };
 type ConditionShape = Extract<FlowBlock, { kind: "condition" }>;
 export type ScenarioCondition = { [Key in keyof ConditionShape]: ConditionShape[Key] };
+type JoinShape = Extract<FlowBlock, { kind: "join" }>;
+export type ScenarioJoin = { [Key in keyof JoinShape]: JoinShape[Key] };
 type Position = FlowBlock["position"];
 export const blockExit = (
   id: string,
@@ -391,6 +393,12 @@ export const conditionBlock = (
 });
 /** The fixed last output every Condition has. */
 export const OTHERWISE = "otherwise";
+export const joinBlock = (
+  id: string,
+  name: string,
+  position: Position = { x: 0, y: 0 },
+): ScenarioJoin => ({ id, name, kind: "join", position });
+export const JOIN_OUTPUT = "output";
 export const connection = (
   sourceBlockId: string,
   exitId: string,
@@ -739,6 +747,16 @@ const parallelWork = (agentId: string) => agentBlock("parallel-block", "Parallel
 const followUp = (agentId: string) => agentBlock("follow-up", "Follow-up", agentId);
 const reviewStep = humanStep("review", "Review", { x: 400, y: 0 });
 
+export const independentRevisits: ReadyFlowShape = (world) =>
+  workerShape(world, "Independent revisits", (agentId) => ({
+    flowInput: flowInput("worker", "parallel-block"),
+    blocks: [entryWorker(agentId), parallelWork(agentId)],
+    connections: [
+      connection("worker", "done", "worker"),
+      connection("parallel-block", "done", "parallel-block"),
+    ],
+  }));
+
 const specStep = continuationStep("spec", "Spec", "Write the spec from what we agreed.");
 
 const instructedWorker = (agentId: string) =>
@@ -1082,6 +1100,96 @@ export const conditionFlow: ReadyFlowShape = (world) =>
     flowInput: flowInput("worker"),
     blocks: [entryWorker(agentId), gate(), followUp(agentId)],
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
+  }));
+
+export const parallelJoinFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Parallel join", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId, [blockExit("revise", "Revise", "Revise")]),
+      agentBlock(
+        "second",
+        "Second entry",
+        agentId,
+        undefined,
+        [],
+        [blockExit("revise", "Revise", "Revise")],
+      ),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+      agentBlock("follow-up", "Follow-up", agentId, undefined, [], [], "Compare the revisions."),
+      gate(),
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("worker", "revise", "merge"),
+      connection("second", "done", "merge"),
+      connection("second", "revise", "merge"),
+      connection("merge", "output", "review"),
+      connection("merge", "output", "follow-up"),
+      connection("merge", "output", "gate"),
+      connection("gate", OTHERWISE, "review"),
+    ],
+  }));
+
+export const joinedEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Reviewed ending", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [
+      entryWorker(agentId),
+      humanStep("review", "Entry worker"),
+      joinBlock("merge", "Merge"),
+    ],
+    connections: [
+      connection("worker", "done", "review"),
+      connection("worker", "done", "merge"),
+      connection("review", "approve", "merge"),
+      connection("review", "request-changes", "merge"),
+      shippedWire("merge", "output"),
+    ],
+    finish: { endings: [SHIPPED_ENDING("required")] },
+  }));
+
+export const skippedSourceJoinFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Skipped source join", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock(
+        "second",
+        "Second entry",
+        agentId,
+        undefined,
+        [],
+        [blockExit("skip", "Skip", "Finish without arriving")],
+      ),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("second", "done", "merge"),
+      connection("merge", "output", "review"),
+    ],
+  }));
+
+export const joinBesideEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Join beside ending", (agentId) => ({
+    flowInput: flowInput("worker", "second", "third"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      agentBlock("third", "Third entry", agentId),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("second", "done", "merge"),
+      connection("merge", "output", "review"),
+      endingConnection("third", "done", "delivered"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
 
 const terminalConditionGraph = (agentId: string) => ({

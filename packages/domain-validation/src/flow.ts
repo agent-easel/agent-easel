@@ -21,6 +21,7 @@ import {
   CONTINUATION_EXIT,
   checkExits,
   HUMAN_EXITS,
+  JOIN_OUTPUT,
   WAIT_OUTPUT,
   isId,
   isRecord,
@@ -87,6 +88,7 @@ const KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
   ["continuation", ["prompt"]],
   ["condition", ["rules", "otherwise"]],
   ["subflow", ["flowId"]],
+  ["join", []],
 ]);
 
 function checkKindFields(block: Record<string, unknown>, path: string, issue: IssueReporter) {
@@ -170,7 +172,7 @@ function checkBlockFields(
     issue(
       "invalid_block_kind",
       `${path}.kind`,
-      "Use an Agent, Human, Wait, Continuation, Condition or Subflow block.",
+      "Use an Agent, Human, Wait, Continuation, Condition, Subflow or Join block.",
     );
   if (typeof block.name !== "string" || block.name.length > 200)
     issue("invalid_block_name", `${path}.name`, "Use a block name up to 200 characters.");
@@ -264,6 +266,7 @@ type ConnectableExits = Map<string, ReadonlySet<string> | "inherited">;
 const FIXED_EXIT_IDS: ReadonlyMap<unknown, ReadonlySet<string>> = new Map([
   ["human", new Set(HUMAN_EXITS.map((exit) => exit.id))],
   ["wait", new Set([WAIT_OUTPUT.id])],
+  ["join", new Set([JOIN_OUTPUT.id])],
   ["continuation", new Set([CONTINUATION_EXIT.id])],
 ]);
 const CONTINUATION_PROMPT_LIMIT = 120_000;
@@ -280,7 +283,7 @@ function checkBlock(
     issue(
       "invalid_block",
       path,
-      "Supply an Agent, Human, Wait, Continuation, Condition or Subflow block.",
+      "Supply an Agent, Human, Wait, Continuation, Condition, Subflow or Join block.",
     );
     return;
   }
@@ -365,6 +368,7 @@ function checkFlowInput(
   flowInput: unknown,
   blockIds: ReadonlySet<string>,
   targetableBlockIds: ReadonlySet<string>,
+  joinBlockIds: ReadonlySet<string>,
   issue: IssueReporter,
 ) {
   const path = "graph.flowInput";
@@ -387,6 +391,12 @@ function checkFlowInput(
         "flow_input_finish",
         `${path}.targetBlockIds.${i}`,
         "The Flow input cannot connect to Finish: a Run cannot end before any work happens.",
+      );
+    else if (joinBlockIds.has(target))
+      issue(
+        "flow_input_join",
+        `${path}.targetBlockIds.${i}`,
+        "The Flow input cannot connect to a Join: a Join has no worker and nothing to wait for before any work happens.",
       );
     else if (!isId(target) || targets.has(target) || !targetableBlockIds.has(target))
       issue(
@@ -542,7 +552,12 @@ function checkGraph(graph: unknown, blockLimit: BlockLimit, issue: IssueReporter
         : [],
     ),
   );
-  checkFlowInput(graph.flowInput, blockIds, targetableBlockIds, issue);
+  const joinBlockIds = new Set(
+    graph.blocks.flatMap((block) =>
+      isRecord(block) && block.kind === "join" && isId(block.id) ? [block.id] : [],
+    ),
+  );
+  checkFlowInput(graph.flowInput, blockIds, targetableBlockIds, joinBlockIds, issue);
   checkConnections(graph.connections, blockIds, checkFinish(graph.finish, issue), exits, issue);
 }
 

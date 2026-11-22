@@ -16,7 +16,9 @@ import {
   type IssueReporter,
 } from "./block-exits.ts";
 import { checkCondition } from "./flow.ts";
+import { joinSlots } from "./join.ts";
 import { mayPlaceAgent, mayPlaceFlow, type OwningProject } from "./placement.ts";
+import { continuationsWithoutWorker } from "./worker-binding.ts";
 
 export interface ReadinessAgent extends Pick<
   AgentDefinition,
@@ -393,11 +395,18 @@ function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
   });
 }
 
-function conditionCycleReadiness(graph: FlowGraphInput, add: IssueReporter) {
+function workerlessCycleReadiness(
+  graph: FlowGraphInput,
+  add: IssueReporter,
+  rule: {
+    readonly code: string;
+    readonly kinds: ReadonlySet<FlowBlockInput["kind"]>;
+    readonly start: FlowBlockInput["kind"];
+    readonly through: string;
+  },
+) {
   const passThrough = new Map(
-    graph.blocks.flatMap((block) =>
-      block.kind === "condition" || block.kind === "continuation" ? [[block.id, block]] : [],
-    ),
+    graph.blocks.flatMap((block) => (rule.kinds.has(block.kind) ? [[block.id, block]] : [])),
   );
   const next = new Map<string, string[]>();
   for (const edge of graph.connections)
@@ -408,14 +417,64 @@ function conditionCycleReadiness(graph: FlowGraphInput, add: IssueReporter) {
     )
       next.set(edge.sourceBlockId, [...(next.get(edge.sourceBlockId) ?? []), edge.targetBlockId]);
   graph.blocks.forEach((block, i) => {
-    if (block.kind !== "condition") return;
+    if (block.kind !== rule.start) return;
     const cycle = shortestCycle(block.id, next);
     if (!cycle) return;
     const names = cycle.map((id) => blockLabel(passThrough.get(id)!));
     add(
-      "condition_cycle",
+      rule.code,
       `graph.blocks.${i}`,
-      `${blockLabel(block)} loops back to itself through only Conditions and Continuations (${[...names, names[0]].join(" → ")}). Route the loop through an Agent, Human step or Wait.`,
+      `${blockLabel(block)} loops back to itself through only ${rule.through} (${[...names, names[0]].join(" → ")}). Route the loop through an Agent, Human step or Wait.`,
+    );
+  });
+}
+
+const CONDITION_CYCLE_RULE = {
+  code: "condition_cycle",
+  kinds: new Set<FlowBlockInput["kind"]>(["condition", "continuation"]),
+  start: "condition",
+  through: "Conditions and Continuations",
+} as const;
+
+const JOIN_CYCLE_RULE = {
+  code: "join_cycle",
+  kinds: new Set<FlowBlockInput["kind"]>(["join", "condition", "continuation"]),
+  start: "join",
+  through: "Joins, Conditions and Continuations",
+} as const;
+
+function joinReadiness(graph: FlowGraphInput, add: IssueReporter) {
+  const wired = new Set(graph.connections.map((edge) => edge.sourceBlockId));
+  graph.blocks.forEach((block, i) => {
+    if (block.kind !== "join") return;
+    const label = blockLabel(block);
+    if (joinSlots(graph, block.id).length < 2)
+      add(
+        "join_sources_required",
+        `graph.blocks.${i}`,
+        `${label} needs at least two different blocks wired into it. Connect another block, or remove the Join.`,
+      );
+    if (!wired.has(block.id))
+      add(
+        "join_output_unconnected",
+        `graph.blocks.${i}`,
+        `${label}: connect its output. A Join output cannot end a branch.`,
+      );
+  });
+}
+
+function continuationWorkerReadiness(
+  graph: FlowGraphInput,
+  flows: ReadinessFlows,
+  add: IssueReporter,
+) {
+  const unbound = continuationsWithoutWorker(graph, flows);
+  graph.blocks.forEach((block, i) => {
+    if (!unbound.has(block.id)) return;
+    add(
+      "continuation_worker_required",
+      `graph.blocks.${i}`,
+      `${blockLabel(block)} can receive a message that has no worker thread, such as a Join's output. Route that path through an Agent first.`,
     );
   });
 }
@@ -487,7 +546,10 @@ export function flowReadiness(
   );
   connectionReadiness(graph, agents, flows, add);
   conditionOutputReadiness(graph, add);
-  conditionCycleReadiness(graph, add);
+  workerlessCycleReadiness(graph, add, CONDITION_CYCLE_RULE);
+  workerlessCycleReadiness(graph, add, JOIN_CYCLE_RULE);
+  joinReadiness(graph, add);
+  continuationWorkerReadiness(graph, flows, add);
   finishReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
   return { ready: issues.length === 0, issues };

@@ -13,6 +13,7 @@ function textLines(label: string, text: string): string[] {
 function blockSettings(block: FlowBlock, agent: AgentDefinition | undefined): RevisionLine[] {
   switch (block.kind) {
     case "human":
+    case "join":
       return [];
     case "subflow":
       return [revisionLine(`    Flow  ${block.flowId ?? "No Flow"}`, block.flowId)];

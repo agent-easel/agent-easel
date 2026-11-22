@@ -80,6 +80,7 @@ export type FlowBlock = BlockBase &
         readonly kind: "subflow";
         readonly flowId: string | null;
       }
+    | { readonly kind: "join" }
   );
 export interface FlowConnection {
   readonly sourceBlockId: string;

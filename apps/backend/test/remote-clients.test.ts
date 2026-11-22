@@ -102,9 +102,10 @@ it.for([
   [22, serverUpdate],
   [23, serverUpdate],
   [24, serverUpdate],
-  [25, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [25, serverUpdate],
+  [26, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which drops WatchAppearance, refuses a protocol %i server only when it predates 25",
+  "the current client, which needs Join summaries, refuses a protocol %i server only when it predates 26",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: protocol } });
@@ -125,6 +126,22 @@ it("a protocol 20 client, which would skip the host's First-run setup, is told t
 
   // Act
   const reply = await old.send("GET", "/api/client-access");
+
+  // Assert
+  expect(reply.status).toBe(426);
+  assert(!reply.body.ok);
+  expect(reply.body.error.message).toMatch(/Update this client/);
+});
+
+it("a protocol 25 client, which cannot draw a Join, is told to update itself while the current client is served", async (c) => {
+  // Arrange
+  const server = await remoteServer(c);
+  const current = await server.approved("Laptop");
+  assert((await current.send("GET", "/api/flows")).body.ok);
+  const old = server.client("desktop", { protocol: 25, minimum: 25 });
+
+  // Act
+  const reply = await old.send("GET", "/api/flows");
 
   // Assert
   expect(reply.status).toBe(426);

@@ -40,8 +40,20 @@ const READ_FIELDS = {
   run: [],
   image: ["imageId"],
   conditionArrivals: ["conditionBlockId", "limit", "cursor"],
+  join: ["joinBlockId"],
   subflowInvocations: ["placementBlockId", "limit", "cursor"],
 } as const satisfies Record<string, readonly string[]>;
+
+const EVIDENCE_READS: Partial<
+  Record<
+    keyof typeof READ_FIELDS,
+    (
+      store: RunStore,
+      publicId: string,
+      fields: Readonly<Record<string, unknown>>,
+    ) => Effect.Effect<RuntimeReply, unknown>
+  >
+> = { conditionArrivals: readConditionArrivals, join: readJoin };
 
 /** Block, Run, image and Condition evidence reads addressed by the Block id from the worker's
  * message; a Condition evidence read names a Condition of that Block's Run. */
@@ -58,8 +70,8 @@ export function openBlockTools(
       const publicId = blockIdArgument(input, READ_FIELDS[kind]);
       if (typeof publicId !== "string") return reportDiagnostic(publicId);
       const fields = (input as { arguments: Record<string, unknown> }).arguments;
-      if (kind === "conditionArrivals")
-        return yield* readConditionArrivals(store, publicId, fields);
+      const evidence = EVIDENCE_READS[kind];
+      if (evidence) return yield* evidence(store, publicId, fields);
       if (kind === "image") {
         if (!("imageId" in fields)) return reportDiagnostic({ code: "IMAGE_ID_REQUIRED" });
         if (typeof fields.imageId !== "string" || !fields.imageId)
@@ -115,10 +127,9 @@ function readBlockView(store: RunStore, detail: RunDetail, block: BlockRow) {
     const manifest = yield* store.blockImages(block.run_id);
     const definitions = yield* store.definitionsAtBlock(detail, block.block_id);
     const cause = visitCause(detail, block.block_id);
-    const routedId = conditionArrivalId(cause);
     const returned = /^subflow:([^/]+)/.exec(cause)?.[1];
-    const routed = routedId
-      ? yield* store.conditionArrivalMessage(block.run_id, routedId)
+    const routed = routedArrival(cause)
+      ? yield* store.routedMessage(block.run_id, cause)
       : returned
         ? yield* store.subflowReturnMessage(block.run_id, returned)
         : null;
@@ -185,6 +196,20 @@ function readConditionArrivals(
   });
 }
 
+function readJoin(store: RunStore, publicId: string, fields: Readonly<Record<string, unknown>>) {
+  return Effect.gen(function* () {
+    if (!("joinBlockId" in fields)) return reportDiagnostic({ code: "JOIN_BLOCK_ID_REQUIRED" });
+    if (typeof fields.joinBlockId !== "string")
+      return reportDiagnostic({ code: "INVALID_ARGUMENT" });
+    const block = yield* store.locateBlock(publicId);
+    if (!block) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
+    const detail = yield* store.getRunJoin(block.run_id, fields.joinBlockId);
+    return detail.ok
+      ? ({ code: "JOIN", join: detail.value } satisfies RuntimeReply)
+      : reportDiagnostic({ code: "UNKNOWN_JOIN" });
+  });
+}
+
 function conditionArrivalsReply(page: Result<ConditionArrivalPage>): RuntimeReply {
   if (page.ok) return { code: "CONDITION_ARRIVALS", ...page.value };
   if (page.error.code === "not_found") return reportDiagnostic({ code: "UNKNOWN_CONDITION" });
@@ -200,10 +225,8 @@ function visitCause(detail: RunDetail, blockId: string) {
   );
 }
 
-/** The Condition arrival a visit's cause names, if a Condition routed the visit. */
-const conditionArrivalId = (cause: string) => /^condition:([^/]+)/.exec(cause)?.[1];
+const routedArrival = (cause: string) => /^(join|condition):/.test(cause);
 
-/** `routed` is the message of the Condition arrival that started the current visit, if one did. */
 function blockView(
   detail: RunDetail,
   definitions: ExecutionDefinitions,
@@ -249,7 +272,7 @@ function blockView(
 }
 
 function arrivalFeedback(detail: RunDetail, cause: string, routed: string | null) {
-  return conditionArrivalId(cause) || cause.startsWith("subflow:")
+  return routedArrival(cause) || cause.startsWith("subflow:")
     ? routed
     : visitFeedback(detail, cause);
 }
@@ -269,6 +292,7 @@ function visitReason(cause: string) {
   if (cause.startsWith("start:")) return "first";
   if (cause.startsWith("human:")) return "Human answer";
   if (cause.startsWith("wait:")) return "Wait";
+  if (cause.startsWith("join:")) return "Join";
   if (cause.startsWith("condition:")) return "Condition";
   return "feedback";
 }
@@ -320,6 +344,7 @@ function runView(detail: RunDetail): RuntimeReply {
     state: detail.lifecycle,
     startedAt: detail.startedAt,
     conditions: detail.conditions,
+    joins: detail.joins,
     ...(detail.subflows ? { definitions: detail.definitions, subflows: detail.subflows } : {}),
     result: detail.result,
     blocks: detail.blocks.map((block) => ({

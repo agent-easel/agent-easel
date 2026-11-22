@@ -36,7 +36,11 @@ type Source =
   | { readonly kind: "none" };
 
 function sourceOf(record: Handoff | Delivery): Source {
-  if (record.cause.startsWith("start:") || record.cause.startsWith("subflow:"))
+  if (
+    record.cause.startsWith("start:") ||
+    record.cause.startsWith("subflow:") ||
+    record.cause.startsWith("join:")
+  )
     return { kind: "committed" };
   if (record.report_id) return { kind: "result", reportId: record.report_id };
   if (

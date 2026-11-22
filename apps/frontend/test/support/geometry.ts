@@ -128,3 +128,31 @@ export function sizeLimitConditionGraph(): CanvasGraph {
     [],
   );
 }
+
+const reviewerBlock = (id: string, y: number): FlowBlock => ({
+  id,
+  name: `Reviewer ${id}`,
+  kind: "human",
+  position: { x: 0, y },
+});
+
+export function joinGraph(): CanvasGraph {
+  return canvasGraph(
+    {
+      flowInput: { position: { x: -300, y: 0 }, targetBlockIds: [] },
+      blocks: [
+        reviewerBlock("code", 0),
+        reviewerBlock("security", 200),
+        { id: "join", name: "Join", kind: "join", position: { x: 400, y: 100 } },
+      ],
+      connections: [
+        { sourceBlockId: "security", exitId: "approve", targetBlockId: "join" },
+        { sourceBlockId: "code", exitId: "request-changes", targetBlockId: "join" },
+        { sourceBlockId: "security", exitId: "request-changes", targetBlockId: "join" },
+        { sourceBlockId: "code", exitId: "approve", targetBlockId: "join" },
+        { sourceBlockId: "join", exitId: "output", targetBlockId: "code" },
+      ],
+    },
+    [],
+  );
+}

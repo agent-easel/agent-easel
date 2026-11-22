@@ -56,6 +56,7 @@ import {
   nestedWiresReach,
   type WirePresentation,
 } from "./flow-wires.tsx";
+import { JoinSourceList, joinExitCount, joinSources, type JoinSource } from "./join-block.tsx";
 import { SubflowGroup } from "./subflow-group.tsx";
 import {
   computeSubflowPreviews,
@@ -130,6 +131,7 @@ export type CanvasBlockContent = {
   readonly footers: readonly ReactNode[];
   readonly subflowFooter?: ReactNode;
   readonly subflowBadge?: ReactNode;
+  readonly joinSource?: (source: JoinSource, slot: number) => string;
 };
 
 /**
@@ -330,12 +332,14 @@ function SurfaceFinish({
 
 function SurfaceBlock({
   block,
+  sources,
   geometry,
   dimensions,
   content,
   pendingInput,
 }: {
   block: CanvasBlock;
+  sources: readonly JoinSource[];
   geometry: Geometry;
   dimensions: Dimensions;
   content: CanvasBlockContent;
@@ -345,8 +349,31 @@ function SurfaceBlock({
   const rows = dimensions.block;
   const border = rows.border;
   const identity = <IdentityRows rows={rows} header={content.header} title={content.title} />;
+  const inputPort = (index: number, center: number) => {
+    const graphY = geometry.inputPoint(block, index).y - block.position.y;
+    return (
+      <SurfacePort
+        key={index}
+        side="left"
+        center={center}
+        border={border}
+        port={dimensions.port}
+        look={content.incomingPort(index === pendingInput)}
+        graphY={graphY}
+      />
+    );
+  };
+  const join = block.kind === "join";
   const body = (
     <>
+      {join && (
+        <JoinSourceList
+          sources={sources}
+          detail={content.joinSource ?? joinExitCount}
+          rows={rows}
+          renderPort={(index) => inputPort(index, rows.exitRow / 2)}
+        />
+      )}
       <span className="bg-border" style={{ height: rows.divider }} />
       <ul style={{ paddingTop: rows.exitPaddingTop, paddingBottom: rows.exitPaddingBottom }}>
         {block.exits.map((exit) => (
@@ -401,20 +428,10 @@ function SurfaceBlock({
           {body}
         </>
       )}
-      {Array.from({ length: inputs }, (_, index) => {
-        const graphY = geometry.inputPoint(block, index).y - block.position.y;
-        return (
-          <SurfacePort
-            key={index}
-            side="left"
-            center={graphY - border}
-            border={border}
-            port={dimensions.port}
-            look={content.incomingPort(index === pendingInput)}
-            graphY={graphY}
-          />
-        );
-      })}
+      {!join &&
+        Array.from({ length: inputs }, (_, index) =>
+          inputPort(index, geometry.inputPoint(block, index).y - block.position.y - border),
+        )}
     </article>
   );
 }
@@ -789,10 +806,12 @@ function pinnedBlockIds(gesture: CanvasGesture | null, focused: string | null) {
 }
 
 const EMPTY_PREVIEW_AGENTS: readonly AgentDefinition[] = [];
+const NO_SOURCES: readonly JoinSource[] = [];
 const EMPTY_PREVIEW_FLOWS: ReadonlyMap<string, CanvasFlow> = new Map();
 
 function SurfaceBlockItem({
   block,
+  graph,
   drawn,
   content,
   pendingInput,
@@ -802,6 +821,7 @@ function SurfaceBlockItem({
   area = null,
 }: {
   block: CanvasBlock;
+  graph: CanvasGraph;
   drawn: Geometry;
   content: CanvasBlockContent;
   pendingInput: number | null;
@@ -817,6 +837,7 @@ function SurfaceBlockItem({
     return (
       <SurfaceBlock
         block={block}
+        sources={block.kind === "join" ? joinSources(graph, block.id) : NO_SOURCES}
         geometry={drawn}
         dimensions={dimensions}
         content={content}
@@ -974,6 +995,7 @@ function SurfaceLayer({
         <SurfaceBlockItem
           key={item.id}
           block={item}
+          graph={graph}
           drawn={drawn}
           content={content(item)}
           pendingInput={pendingBlockInput(pending, drawn, item.id)}
@@ -1104,6 +1126,7 @@ function NestedScopeLayer({
         <SurfaceBlockItem
           key={item.id}
           block={item}
+          graph={innerGraph}
           drawn={innerGeometry}
           content={nested.block(path, item)}
           pendingInput={null}

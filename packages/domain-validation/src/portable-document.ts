@@ -145,14 +145,22 @@ const VERSION_5: FormatReader = {
 
 const VERSION_6: FormatReader = {
   ...VERSION_5,
-  version: PORTABLE_DOCUMENT_VERSION,
+  version: 6,
   finish: "optional",
 };
 
-const isBundleVersion = (version: unknown): version is 5 | 6 => version === 5 || version === 6;
+const VERSION_7: FormatReader = {
+  ...VERSION_6,
+  version: PORTABLE_DOCUMENT_VERSION,
+  kindFields: new Map([...VERSION_6.kindFields, ["join", []]]),
+  kindChoice: "an Agent, Human, Wait, Continuation, Condition, Subflow or Join block",
+};
+
+const isBundleVersion = (version: unknown): version is 5 | 6 | 7 =>
+  version === 5 || version === 6 || version === 7;
 
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5, VERSION_6].map((reader) => [
+  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5, VERSION_6, VERSION_7].map((reader) => [
     reader.version,
     reader,
   ]),

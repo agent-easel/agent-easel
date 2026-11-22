@@ -38,6 +38,8 @@ import { ResultCard } from "./run-result.tsx";
 import { WorkingReport } from "./agent-text.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
 import { ConditionArrivals } from "./condition-arrivals.tsx";
+import { JoinInspection, WorkerlessNote } from "./run-join-view.tsx";
+import { isCancelledJoin, joinSummaryOf } from "../join-display.ts";
 
 type Visits = ReturnType<typeof blockVisits>;
 
@@ -178,6 +180,14 @@ function ExitRow({
 
 function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
   const recipients = blockExitRecipients(run.definitions.flow.graph, block.id);
+  if (block.kind === "join")
+    return (
+      <InspectorSection title="Output">
+        <ul className="flex flex-col gap-2.5">
+          <ExitRow name="output" recipients={recipients("output")} />
+        </ul>
+      </InspectorSection>
+    );
   if (block.kind === "continuation")
     return (
       <InspectorSection title="Output">
@@ -537,6 +547,8 @@ export function RunBlockView({
         <RunAttentionDetails run={run} blockId={block.id} />
         {block.kind === "continuation" ? (
           <ContinuationHistory run={run} block={block} recorded={recorded} />
+        ) : block.kind === "join" ? (
+          <JoinInspection run={run} block={{ ...block, id: recorded.blockId }} />
         ) : (
           <BlockNow run={run} block={block} recorded={recorded} />
         )}
@@ -552,6 +564,7 @@ export function RunBlockView({
         <CapturedRevisitInstruction block={block} />
         <BlockExits run={run} block={block} />
         <div aria-hidden className="flex-1" />
+        {block.kind === "join" && <WorkerlessNote />}
         <ResolvedAttention run={run} blockId={block.id} />
         <BlockTechnicalDetails
           run={run}
@@ -568,5 +581,9 @@ export function RunBlockView({
 /** The Block's canonical state, as its canvas card shows it. */
 function BlockStateBadge({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
   const kind = blockStateKind(run, recorded);
+  const join = joinSummaryOf(run, recorded.blockId);
+  if (join && kind === "problem") return <StatusBadge kind="problem">Error</StatusBadge>;
+  const cancelled = kind === "stopped" && isCancelledJoin(join);
+  if (cancelled) return <StatusBadge kind="stopped">Cancelled</StatusBadge>;
   return kind ? <StatusBadge kind={kind} /> : <ExecutionStateBadge state={recorded.state} />;
 }

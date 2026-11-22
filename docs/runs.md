@@ -372,6 +372,7 @@ Mutations also need `X-Factory-Request: 1` ([Configuration and storage](installa
 | `POST /api/runs/:id/archive` | [Archive](#archive) a Run |
 | `POST /api/runs/:runId/request-report` | [Request report](#reports-and-attention) for one Block |
 | `GET /api/runs/:runId/conditions/:blockId/arrivals` | Read a [Condition](#conditions)'s arrivals |
+| `GET /api/runs/:runId/joins/:blockId` | Read a [Join](#joins)'s sources and arrivals |
 
 
 ## Live viewing
@@ -616,7 +617,7 @@ menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission, or an Agent to review in T3 (see
   **Conversation** below).
-  **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
+  **Problem**: a pending missing report, execution failure, report problem or Condition or Join integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip. A Run whose project T3 no longer reports shows a neutral
   **Not in T3** tag on its row and after the Project in the meta line. Its saved Run stays listed, and the Run page
   hides T3 thread links. An Active Run with finished work and nothing pending shows the green Finished check without
@@ -697,7 +698,7 @@ A placement shows its queued count separately from the invocation on display. By
 shows the oldest unfinished invocation, then the newest finished invocation when the queue
 drains. The Run inspector pages invocation history newest first. Selecting an invocation
 pauses Follow and keeps that invocation open as new work arrives and its recipient statuses change. Condition arrival pages
-use the selected invocation's Condition identity.
+use the selected invocation's Condition identity, and Join reads its Join identity.
 
 The group summary, inspector and compact Timeline show the selected invocation's release state,
 producing worker and visit, and the recipient dispositions. The inspector also shows the output
@@ -739,7 +740,7 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   **handoff released** (dispatch reserved); the recipient's launch or send acknowledgement is separate.
 - A first visit launches the block's own top-level worker with its task; no T3 thread exists for a block before it is
   reached. In a worktree Run that worker joins the bound worktree ([Run workspace](runner.md#run-workspace)). Later visits
-  queue independent turns on that same worker, each as its own activation. Two Reviewers returning corrections create two Worker turns, with no Join or agreement on a revision.
+  queue independent turns on that same worker, each as its own activation. Two Reviewers returning corrections create two Worker turns, with no agreement on a revision, unless their branches are wired into a [Join](#joins).
   Partial fan-out survives restart; an unresolved launch holds later arrivals to that block only.
 - Block state, report, engine status and freshness are separate: a finished report can appear while T3 still works; a finished
   worker thread without a report is a **missing-report Problem**, also after a notification or reply turn; a worker waiting on
@@ -784,7 +785,7 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   **Request report** with Open in T3 as a link; until T3 confirms the Agent idle, Request report is disabled with **Waiting for
   T3 to confirm the Agent is idle**; after a request the card reads **Report requested at HH:MM. The Agent is checking its
   work.** with no button; and when that turn ends without a valid report it reads ***Block* finished without a valid report**
-  and offers Request report again. A Condition integrity Problem offers **Settle…**. A fresh
+  and offers Request report again. A Condition or Join integrity Problem offers **Settle…**. A fresh
   read showing none records `withdrawn`; unavailable reads keep matters pending and mark the observation stale.
 - **Timeline** entries are plain sentences derived from recorded facts ("entered · new T3 thread", "handed off to Reviewer via
   Review", "finished → Approved", "result version 2 replaces the earlier result", "you answered → Approve", "settled by you",
@@ -836,6 +837,43 @@ early. A forwarded arrival keeps its message only while its recipients still nee
 **forwarded early by you** and **wait cancelled** with the Wait icon. A pending Wait is visible work, never
 Needs input or a Problem, and does not wake a Snoozed Run. A Continuation after a Wait continues the thread of the worker
 whose message waited.
+
+## Joins
+
+A [Join](studio.md#canvas-and-block-configuration) forwards the oldest waiting arrival of every source as one combined message once
+each source has one ([Runner](runner.md#join-rounds)). Run detail carries one constant-size summary per Join, not its
+history: `round`, the round being collected (the latest forwarded or cancelled round plus one), `sources`, the captured
+sources, `arrived`, the sources with an arrival for this round, `queued`, the later arrivals kept for following rounds, and
+`latest`, the most recent outcome (round, `forwarded` or `cancelled`, and time). A Join no source has reached has `arrived` 0
+and shows Not started; with a partial round it shows **Waiting · *n*/*m* sources** and the arrived and pending sources,
+then **round *N* forwarded** or **round *N* cancelled** (the Stopped badge labelled **Cancelled**) with the exits that
+round took. Selecting it shows its round, arrived sources, queued arrivals, a card per source for the round with the
+latest forwarded or cancelled round, its output target, and that it is workerless: Settle or Archive ends a round that
+never completes. Recipients and the Finish result show the combined message as Markdown. A waiting Join is visible work,
+never Needs input or a Problem: it raises no attention and no Snooze wake, and it holds
+[automatic settlement](#settled-runs) and keeps its Subflow invocation open.
+
+The per-source details are a separate bounded read of one Run and Join (`GET /api/runs/:runId/joins/:blockId`), available to
+every client that can read the Run. It lists the captured sources in Flow block order with each source's name, its oldest
+waiting arrival (exit id, exit name, arrival time) or null while it is pending, the count of its later arrivals and the oldest
+20 of them, and its arrival in the `latest` round (the one that round forwarded, or the oldest one its cancellation
+cancelled; null when it had none), plus the same `round` and `latest`. It carries no message text: the combined message reaches recipients as their
+feedback or context, and Archive clears it. An unknown Run or a block that is not a Join of the Run is `not_found`. Inside
+a Subflow, use the invocation's own Join Block ID; each invocation keeps its own queues and round numbers. Selecting a past invocation loads its Join summaries so its canvas and inspector can show the sources and outcome from that invocation.
+
+At the safe integer limit, the first further delivery latches an integrity Problem. The summary and detail keep `round` at the limit. A cutoff clears any overflow queue already present and preserves the last valid numbered outcome.
+
+The timeline records **round *N* forwarded** and **round *N* cancelled** rows with the Join icon (`join-round-forwarded` and
+`join-round-cancelled`, each with the round's `join.round`). A Run read carries only each Join's latest 50 of these events,
+chosen in the query, and an open Run keeps that window as the Join advances; the summary's counts stay complete. Finish,
+Settle and Archive cancel a partial round without forwarding it and record one **round *N* cancelled** row for each affected
+Join whose next round number is representable; an inner Finish cancels only its own invocation's Joins.
+
+When Factory cannot trust a Join's captured topology or its waiting arrivals, or its next round number would pass
+9,007,199,254,740,991, it records one **Join integrity Problem** on the Join with the reason, as a Problem like any other, and accepts
+no further delivery there. No report, **Request report**, Retry or repair clears it; **Settle** or **Archive** settles it
+([Runner](runner.md#join-integrity-problems)). A [Chat control status card](chat-control.md#status-cards) shows a waiting Join as
+**Waiting · *n*/*m* sources**.
 
 ## Conditions
 
@@ -902,7 +940,7 @@ Continuation and cancels waiting messages; its worker thread is interrupted with
 ## Settled Runs
 
 A Run **settles** automatically when every visited Block's current visit has its worker's accepted final result and no later
-working report, every Human step is answered, no Wait arrival is pending, no delivery waits at a Condition, no delivery, launch, handoff or send is outstanding, no attention is pending, and
+working report, every Human step is answered, no Wait arrival is pending, no delivery waits at a Condition, no Join arrival waits for its round, no delivery, launch, handoff or send is outstanding, no attention is pending, and
 a fresh read finds every worker thread finished in T3. Never-visited branches need not run. A report or T3 completion alone keeps
 the Run Active. T3 reads are not an atomic cutoff, so direct T3 activity can arrive just before the Run settles; settling does not
 certify result quality or one reviewed revision.
@@ -946,9 +984,9 @@ the Run's other attention when settlement succeeds (`manual-settlement`) or the 
 attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-notices).
 
 Settling cancels unsent launches, sends and handoffs (held or released), unsent Request report turns, pending Human occurrences
-without inventing answers, pending Wait arrivals, deliveries waiting at a Condition for their number and messages waiting at a
+without inventing answers, pending Wait arrivals, deliveries waiting at a Condition for their number, arrivals waiting at a Join for their round and messages waiting at a
 Continuation; a cancelled Wait never forwards, also after restart. A Condition keeps the arrivals it already numbered, and their
-selections, as history. Pending attention settles as `manual-settlement`, activated
+selections, as history, and a Join keeps its forwarded rounds. Pending attention settles as `manual-settlement`, activated
 Blocks without a Final result show stopped, and a send whose T3 reply was lost stays uncertain: Factory never resends it and
 keeps no copy of its message. The Run moves to
 **Settled**, Snooze and Woke clear, and Factory best-effort settles the worker threads in T3. The timeline records the
@@ -972,7 +1010,7 @@ Runs. History, input, captured definitions and events remain; no transcript or r
 and tells you how to find the Run again by number or title. The Archived Run shows its lifecycle in the meta line.
 Archiving closes the handoff gate, cancels unsent launches and handoffs, cancels pending Human steps without inventing answers,
 cancels pending Wait arrivals so no deadline forwards afterwards, cancels deliveries waiting at a Condition for their number
-(numbered arrivals stay history), clears every Wait and Condition arrival's message, settles pending attention
+(numbered arrivals stay history), cancels arrivals waiting at a Join for their round (forwarded rounds stay history), clears every Wait, Condition and Join message, settles pending attention
 as `archived` and shows activated blocks that had not finished, including waiting Waits, as stopped. Factory then asks T3 once to
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.

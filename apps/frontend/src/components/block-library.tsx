@@ -30,6 +30,7 @@ const STEPS = [
   { kind: "wait", name: "Wait", detail: "Pauses, then continues" },
   { kind: "continuation", name: "Continuation", detail: "Same thread, new prompt" },
   { kind: "condition", name: "Condition", detail: "Routes by arrival number" },
+  { kind: "join", name: "Join", detail: "Waits for every source" },
 ] as const satisfies readonly { kind: FlowBlock["kind"]; name: string; detail: string }[];
 
 const FINISH_STEP = {
@@ -455,6 +456,7 @@ const LIBRARY_ICON_TILES: Record<LibraryKind, string> = {
   agent: "bg-brand-soft text-link",
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
+  join: "border bg-muted text-brand-cyan",
   continuation: "border bg-muted text-brand-cyan",
   condition: "border bg-muted text-muted-foreground",
   finish: "border bg-muted text-muted-foreground",

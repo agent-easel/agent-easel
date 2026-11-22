@@ -69,7 +69,6 @@ const targetKind = (runRow: RunRow, handoff: Handoff) =>
     : runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
 const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>
   attempt.pipe(
-    Effect.asVoid,
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.void,
     ),
@@ -115,6 +114,10 @@ export function openRunnerDispatch(
           arrivalGeneration(release),
         );
         if (arrival) yield* scheduleWait(arrival);
+        return;
+      }
+      if (kind === "join") {
+        yield* store.handoffToJoinArrival(current, handoff, arrivalGeneration(release));
         return;
       }
       if (kind === "condition") {
@@ -183,28 +186,21 @@ export function openRunnerDispatch(
           yield* observe(runRow, block, contextId);
         return;
       }
-      const target = saved.kind === "handoff" ? targetKind(runRow, saved) : undefined;
-      if (saved.kind === "handoff" && (target === "condition" || target === "finish"))
-        return yield* retriedNextPass(prepareHandoff(runRow, saved));
-      let intent: Handoff | Delivery = saved;
+      const intent = saved.kind === "handoff" ? yield* prepareHandoff(runRow, saved) : saved;
+      if (!intent) return;
+      if (intent.kind === "launch") {
+        yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
+        return;
+      }
+      const checked = yield* verifyDispatch(runRow, intent, snapshot);
+      if (!checked.ok) {
+        yield* store.noteUnresolved(intent, checked.problem);
+        return;
+      }
+      const { payload, retryScope } = checked.value;
+      if (!(yield* reserveSend(runRow, intent, retryScope))) return;
       return yield* recoverOperation(
         Effect.gen(function* () {
-          if (intent.kind === "handoff") {
-            const prepared = yield* prepareHandoff(runRow, intent);
-            if (!prepared) return;
-            intent = prepared;
-          }
-          if (intent.kind === "launch") {
-            yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
-            return;
-          }
-          const checked = yield* verifyDispatch(runRow, intent, snapshot);
-          if (!checked.ok) {
-            yield* store.noteUnresolved(intent, checked.problem);
-            return;
-          }
-          const { payload, retryScope } = checked.value;
-          if (!(yield* reserveSend(runRow, intent, retryScope))) return;
           const reference = yield* Effect.tryPromise({
             try: () => t3.sendMessage(runTarget(runRow), payload),
             catch: (error) => error,
@@ -219,7 +215,7 @@ export function openRunnerDispatch(
             yield* store.noteUnresolved(intent, SEND_UNCERTAIN);
           }),
       );
-    });
+    }).pipe(retriedNextPass);
   }
   function reserveSend(runRow: RunRow, intent: Delivery, retryScope: string | null) {
     return Effect.gen(function* () {

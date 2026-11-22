@@ -270,8 +270,8 @@ export function openRunnerStart(
   ) {
     if (telemetry.enabled) {
       const { blocks } = flow.graph;
-      const blockTypes = (["agent", "condition", "wait", "subflow"] as const).filter((kind) =>
-        blocks.some((block) => block.kind === kind),
+      const blockTypes = (["agent", "condition", "join", "wait", "subflow"] as const).filter(
+        (kind) => blocks.some((block) => block.kind === kind),
       );
       yield* telemetry.record("run.started", {
         source,

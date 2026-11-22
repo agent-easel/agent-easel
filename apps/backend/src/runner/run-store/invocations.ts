@@ -141,6 +141,7 @@ export function openRunInvocations(database: RunnerDatabase) {
           OR EXISTS(SELECT 1 FROM operation_intents w WHERE w.run_id=b.run_id AND w.block_id=b.block_id AND w.state IN ('pending','reserved','uncertain'))
           OR EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=b.run_id AND h.block_id=b.block_id AND h.state='pending')
           OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=b.run_id AND w.block_id=b.block_id AND w.state='pending')
+          OR EXISTS(SELECT 1 FROM join_arrivals j WHERE j.run_id=b.run_id AND j.block_id=b.block_id AND j.round_id IS NULL AND j.cancelled_at IS NULL)
           OR EXISTS(SELECT 1 FROM continuation_visits v WHERE v.run_id=b.run_id AND v.block_id=b.block_id AND v.state IN ('queued','sent'))
           OR EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=b.run_id AND a.block_id=b.block_id AND a.settled_at IS NULL)
         )) ORDER BY i.rowid DESC LIMIT 1`;

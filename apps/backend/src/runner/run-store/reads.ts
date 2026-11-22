@@ -37,6 +37,17 @@ export function openRunReads(database: RunnerDatabase) {
           ([row]) => row,
         ),
       ),
+    routedMessage: (runId: string, cause: string) =>
+      transaction((sql) =>
+        Effect.map(
+          sql<{
+            message: string | null;
+          }>`SELECT COALESCE(j.message,c.message) AS message FROM operation_intents i
+        LEFT JOIN join_rounds j ON j.id=i.join_round_id LEFT JOIN condition_arrivals c ON c.id=i.condition_arrival_id
+        WHERE i.run_id=${runId} AND i.cause=${cause}`,
+          ([row]) => row?.message ?? null,
+        ),
+      ),
     subflowReturnMessage: (runId: string, invocationId: string) =>
       transaction((sql) =>
         Effect.map(
@@ -55,6 +66,7 @@ export function openRunReads(database: RunnerDatabase) {
           sql<{ count: number }>`SELECT COUNT(*) AS count FROM (
             SELECT block_id FROM run_activations WHERE run_id=${runId}
             UNION SELECT block_id FROM human_occurrences WHERE run_id=${runId}
+            UNION SELECT block_id FROM join_arrivals WHERE run_id=${runId}
             UNION SELECT block_id FROM wait_arrivals WHERE run_id=${runId}
             UNION SELECT block_id FROM continuation_visits WHERE run_id=${runId}
             UNION SELECT block_id FROM condition_counters WHERE run_id=${runId} AND arrivals>0

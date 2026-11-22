@@ -64,7 +64,7 @@ function finishedBlockCandidates(sql: SqlClient.SqlClient, runId: string) {
 
 /** Work that must finish locally before automatic settlement can advance. */
 export function pendingRunWork(sql: SqlClient.SqlClient, runId: Fragment) {
-  return sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND state!='acknowledged' AND NOT (state='cancelled' AND kind IN ('handoff','prepare')) UNION ALL SELECT id FROM human_occurrences WHERE run_id=${runId} AND state='pending' UNION ALL SELECT id FROM wait_arrivals WHERE run_id=${runId} AND state='pending' UNION ALL SELECT run_id FROM run_workspaces WHERE run_id=${runId} AND state='preparing' UNION ALL SELECT id FROM continuation_visits WHERE run_id=${runId} AND state IN ('sent','queued') UNION ALL SELECT id FROM subflow_invocations WHERE run_id=${runId} AND state IN ('active','queued','stopping')`;
+  return sql`SELECT id FROM operation_intents WHERE run_id=${runId} AND state!='acknowledged' AND NOT (state='cancelled' AND kind IN ('handoff','prepare')) UNION ALL SELECT id FROM human_occurrences WHERE run_id=${runId} AND state='pending' UNION ALL SELECT id FROM wait_arrivals WHERE run_id=${runId} AND state='pending' UNION ALL SELECT ordinal FROM join_arrivals WHERE run_id=${runId} AND round_id IS NULL AND cancelled_at IS NULL UNION ALL SELECT run_id FROM run_workspaces WHERE run_id=${runId} AND state='preparing' UNION ALL SELECT id FROM continuation_visits WHERE run_id=${runId} AND state IN ('sent','queued') UNION ALL SELECT id FROM subflow_invocations WHERE run_id=${runId} AND state IN ('active','queued','stopping')`;
 }
 
 export function openRunSettlement(database: RunnerDatabase) {

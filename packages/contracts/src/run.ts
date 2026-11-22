@@ -259,6 +259,7 @@ export interface SubflowPlacementSummary {
 }
 
 export interface SubflowInvocationPath {
+  readonly joins: readonly JoinSummary[];
   readonly ancestors: readonly SubflowInvocation[];
   readonly invocation: SubflowInvocation;
   readonly placements: readonly SubflowPlacementSummary[];
@@ -568,6 +569,7 @@ export interface RunDetail extends RunSummary {
   readonly continuationVisits: readonly ContinuationVisit[];
   /** One constant-size summary per captured Condition, not its arrival history. */
   readonly conditions: readonly ConditionSummary[];
+  readonly joins: readonly JoinSummary[];
   readonly attention: readonly RunAttention[];
   readonly executions: readonly {
     readonly bindingId: string;
@@ -625,6 +627,10 @@ export interface RunDetail extends RunSummary {
     readonly blockId: string | null;
     /** Only on `condition-selected`: the arrival's number and the output it selected. */
     readonly condition?: ConditionSelection;
+    readonly join?: {
+      readonly round: number;
+      readonly scope?: { readonly flowId: string; readonly templateBlockId: string };
+    };
   }[];
 }
 
@@ -649,6 +655,7 @@ export interface RunAttention {
     | "execution-failed"
     | "report-problem"
     | "condition-integrity"
+    | "join-integrity"
     | "settlement-unresolved"
     | "subflow-stop-unresolved";
   readonly nativeRequestId: string | null;
@@ -708,6 +715,7 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "execution-failed":
     case "report-problem":
     case "condition-integrity":
+    case "join-integrity":
     case "settlement-unresolved":
     case "subflow-stop-unresolved":
       return "problem";
@@ -853,6 +861,48 @@ export interface ConditionSummary {
   readonly latest: (ConditionSelection & { readonly acceptedAt: string }) | null;
 }
 
+export type JoinOutcomeKind = "forwarded" | "cancelled";
+
+export interface JoinOutcome {
+  readonly round: number;
+  readonly outcome: JoinOutcomeKind;
+  readonly at: string;
+}
+
+export interface JoinSummary {
+  readonly blockId: string;
+  readonly round: number;
+  readonly sources: number;
+  readonly arrived: number;
+  readonly queued: number;
+  readonly latest: JoinOutcome | null;
+}
+
+export interface JoinArrival {
+  readonly exitId: string;
+  readonly exitName: string;
+  readonly arrivedAt: string;
+}
+
+export interface JoinSourceDetail {
+  readonly sourceBlockId: string;
+  readonly name: string;
+  readonly arrived: JoinArrival | null;
+  readonly queued: number;
+  readonly extras: readonly JoinArrival[];
+  readonly latestArrival: JoinArrival | null;
+}
+
+export interface JoinDetail {
+  readonly blockId: string;
+  readonly round: number;
+  readonly sources: readonly JoinSourceDetail[];
+  readonly latest: JoinOutcome | null;
+}
+
+export const JOIN_TIMELINE_ROUNDS = 50;
+export const JOIN_QUEUED_LISTED = 20;
+
 /** Condition evidence page sizes: the default and the largest allowed; the smallest is 1. */
 export const CONDITION_ARRIVAL_PAGE_DEFAULT = 50;
 export const CONDITION_ARRIVAL_PAGE_MAX = 100;
@@ -983,6 +1033,10 @@ export const runOperations = {
     method: "GET",
     path: "/api/runs/:runId/conditions/:blockId/arrivals",
     query: ["limit", "cursor"],
+  }),
+  getRunJoin: operation<never, JoinDetail>()({
+    method: "GET",
+    path: "/api/runs/:runId/joins/:blockId",
   }),
   listSubflowInvocations: operation<never, SubflowInvocationPage>()({
     method: "GET",

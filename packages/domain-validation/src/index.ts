@@ -225,6 +225,7 @@ export function resolveAgentModel(
 }
 
 export { connectionKey } from "./flow.ts";
+export { joinSlots, type JoinSlot } from "./join.ts";
 export {
   agentCaptureBytes,
   compositionReadiness,
@@ -248,6 +249,7 @@ export {
   exitsWithEndings,
   inheritedExits,
   HUMAN_EXITS,
+  JOIN_OUTPUT,
   WAIT_OUTPUT,
   type EffectiveExit,
   type ExitFlows,

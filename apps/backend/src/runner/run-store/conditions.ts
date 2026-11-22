@@ -12,7 +12,7 @@ import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
 import type { Checked, RunRow } from "../runner-types.ts";
 import { unverified, verified } from "../runner-utils.ts";
-import { latchConditionIntegrityProblem } from "./attention.ts";
+import { latchIntegrityProblem } from "./attention.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { guardsHold } from "./guards.ts";
@@ -114,10 +114,11 @@ function numberPendingArrivals(
       if (!next.ok)
         return {
           numbered,
-          latched: yield* latchConditionIntegrityProblem(
+          latched: yield* latchIntegrityProblem(
             sql,
             runRow.id,
             blockId,
+            "condition-integrity",
             next.problem,
             time,
           ),
@@ -258,17 +259,5 @@ export function openRunConditions(database: RunnerDatabase) {
     );
   }
 
-  /** The message Condition arrival `arrivalId` of Run `runId` still keeps for its recipients;
-   * null once cleared. */
-  const conditionArrivalMessage = (runId: string, arrivalId: string) =>
-    database.transaction((sql) =>
-      Effect.map(
-        sql<{
-          message: string | null;
-        }>`SELECT message FROM condition_arrivals WHERE id=${arrivalId} AND run_id=${runId}`,
-        ([row]) => row?.message ?? null,
-      ),
-    );
-
-  return { handoffToConditionArrival, conditionArrivalMessage };
+  return { handoffToConditionArrival };
 }

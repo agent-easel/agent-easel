@@ -106,12 +106,19 @@ export async function prepared(
     async reopenWithCapturedOutputUnwired(blockId: string, exitId: string) {
       await result.f.close();
       capturedConditionOutputUnwired(h.databasePath, blockId, exitId);
-      const reopened = await h.open(options);
-      c.onTestFinished(() => reopened.close());
-      result.f = reopened;
-      (ready.world as { factory: ScenarioWorld["factory"] }).factory = reopened;
+      await reopen();
+    },
+    async reopen() {
+      await result.f.close();
+      await reopen();
     },
   };
+  async function reopen() {
+    const reopened = await h.open(options);
+    c.onTestFinished(() => reopened.close());
+    result.f = reopened;
+    (ready.world as { factory: ScenarioWorld["factory"] }).factory = reopened;
+  }
   return result;
 }
 

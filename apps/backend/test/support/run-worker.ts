@@ -1,9 +1,14 @@
-import { assert } from "@effect/vitest";
+import { prepared } from "./prepared-runner.ts";
+import { assert, type TestContext } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
 import { T3Failure } from "../../src/t3/connection.ts";
 import type { ControlledT3 } from "./controlled-t3.ts";
 import {
   launchBlockId,
+  independentRevisits,
+  twoWorkersStarted,
+  resultReported,
+  resultReleasedToSameWorker,
   report,
   workingReport,
   type ScenarioWorld,
@@ -166,4 +171,16 @@ export function pauseWorkerReads(t3: ControlledT3, threadId: string) {
   return () => {
     t3.threads.readExecution = read;
   };
+}
+
+export async function pendingRevisits(context: TestContext) {
+  const { f, h, t3, world, input } = await prepared(context, independentRevisits);
+  const [first, second] = await twoWorkersStarted(world, input);
+  t3.contract.support.send = false;
+  await resultReleasedToSameWorker(world, await resultReported(world, first));
+  await resultReleasedToSameWorker(world, await resultReported(world, second));
+  await f.close();
+  t3.contract.support.send = true;
+  const restore = pauseWorkerReads(t3, first.threadId);
+  return { h, t3, first, second, restore };
 }

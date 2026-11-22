@@ -4,6 +4,7 @@ import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-pro
 import {
   blockLaunch,
   failNextThreadRead,
+  pendingRevisits,
   clearStoredExecution,
   launchedBlockId,
   workerMessage,
@@ -909,6 +910,39 @@ it("a prepared revisit is not sent while its worker thread has started another r
   assert(run.ok);
   expect(run.value.intents.find((intent) => intent.kind === "send")?.state).toBe("pending");
   expect(f.t3.threads.sends.size).toBe(0);
+});
+it("startup retries persisted revisits independently when one target cannot be read", async (c) => {
+  // Arrange
+  const { h, t3, first, second } = await pendingRevisits(c);
+
+  // Act
+  const reopened = await h.open({ t3 });
+
+  // Assert
+  c.onTestFinished(() => reopened.close());
+  const stalled = await reopened.getRun(first.runId);
+  assert(stalled.ok);
+  expect(stalled.value.intents.find((intent) => intent.kind === "send")?.state).toBe("pending");
+  expect([...t3.threads.sends.values()].map((send) => send.payload.threadId)).toStrictEqual([
+    second.threadId,
+  ]);
+});
+it("the next reconciliation sends a pending revisit once its target can be read again", async (c) => {
+  // Arrange
+  const { h, t3, first, second, restore } = await pendingRevisits(c);
+  const reopened = await h.open({ t3 });
+  c.onTestFinished(() => reopened.close());
+  restore();
+
+  // Act
+  const reconciled = await reopened.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok);
+  expect([...t3.threads.sends.values()].map((send) => send.payload.threadId)).toStrictEqual([
+    second.threadId,
+    first.threadId,
+  ]);
 });
 it("restart preserves the worker binding without replaying accepted work", async (c) => {
   // Arrange

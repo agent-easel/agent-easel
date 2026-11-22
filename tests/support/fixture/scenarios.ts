@@ -50,11 +50,11 @@ import type { Host } from "./host.ts";
 type Context = SeedContext;
 
 const workerOf = (context: Context, run: RunDetail) => workerHandle(context, run, "worker");
-const exitOf = (run: RunDetail) => {
-  const block = run.definitions.flow.graph.blocks.find((item) => item.id === "worker");
+const exitOf = (run: RunDetail, blockId = "worker") => {
+  const block = run.definitions.flow.graph.blocks.find((item) => item.id === blockId);
   assert(block);
   const exits = effectiveExits(block, run.definitions.agents);
-  assert.equal(exits.length, 1, "Journey worker must have one exit");
+  assert.equal(exits.length, 1, `Journey ${blockId} must have one exit`);
   return exits[0]!.id;
 };
 
@@ -960,6 +960,23 @@ export async function scenariosFixture(host: Host) {
       /** The worker of Run `id` reports results until its Flow's Condition numbered `through`. */
       async arriveAtCondition({ id, through }: { id: string; through: number }) {
         await conditionArrivalsThrough(context, id, through);
+      },
+      async reportFrom({
+        id,
+        blockId,
+        message,
+        exit,
+      }: {
+        id: string;
+        blockId: string;
+        message: string;
+        exit?: string;
+      }) {
+        const run = requireSuccess(await factory.getRun(id));
+        await resultReported(context, workerHandle(context, run, blockId), {
+          exit: exit ?? exitOf(run, blockId),
+          message,
+        });
       },
       async elapseWait({ id }: { id: string }) {
         const run = requireSuccess(await factory.getRun(id));

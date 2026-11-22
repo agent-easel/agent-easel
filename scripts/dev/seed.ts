@@ -34,6 +34,7 @@ import {
   reviewApproved,
   settled,
   snoozed,
+  turnBegins,
   twoWorkersStarted,
   waitContinuedNow,
   woke,
@@ -255,6 +256,8 @@ export async function seedScenario(
     );
     return first.runId;
   }
+  if (scenario.state === "Join round forwarded, next round partial")
+    return joinRoundPartial(context, await workerAtWork(context, start), scenario);
   if (scenario.state === "ending reached") {
     const [first] = await twoWorkersStarted(context, start);
     await resultReported(context, first, scenario.result);
@@ -272,6 +275,41 @@ export async function seedScenario(
 }
 
 type Worker = Awaited<ReturnType<typeof workerAtWork>>;
+
+async function joinRoundPartial(
+  context: SeedContext,
+  worker: Worker,
+  scenario: Extract<SeedScenario, { state: "Join round forwarded, next round partial" }>,
+) {
+  const reviewers = await resultReleasedToTwoWorkers(
+    context,
+    await resultReported(context, worker, scenario.implementation),
+  );
+  const reviewer = (blockId: string) => {
+    const found = reviewers.find((item) => item.flowBlockId === blockId);
+    if (!found) throw Error(`Development Run has no ${blockId} worker.`);
+    return found;
+  };
+  const code = reviewer("reviewer");
+  const accessibility = reviewer("accessibility");
+  await resultReported(context, code, scenario.firstRound[0]);
+  await resultReported(context, accessibility, scenario.firstRound[1]);
+  const review = await resultReleasedToHumanReview(context, code);
+  const correcting = await changesRequested(context, review, worker, scenario.correction);
+  await resultReported(context, correcting, scenario.corrected);
+  const codeAgain = await resultReturnedToEarlierWorker(context, code);
+  const accessibilityAgain = await resultReturnedToEarlierWorker(context, accessibility);
+  await workingReported(context, accessibilityAgain, scenario.stillReviewing);
+  await resultReported(context, codeAgain, scenario.secondReview);
+  await observeFor("second Join round partial", context, worker.runId, (run) =>
+    run.joins.some((join) => join.round === 2 && join.arrived === 1),
+  );
+  await resultReported(context, turnBegins(context, codeAgain, "code-recheck"), scenario.recheck);
+  await observeFor("recheck queued for round 3", context, worker.runId, (run) =>
+    run.joins.some((join) => join.round === 2 && join.queued === 1),
+  );
+  return worker.runId;
+}
 
 /**
  * Generate Run titles is on only while this Run starts, so other demo Runs and the owner's new Runs
@@ -333,6 +371,7 @@ async function finishScenario(
         | "Run worktree bound"
         | "results released to a Wait"
         | "results released to a Condition"
+        | "Join round forwarded, next round partial"
         | "ending reached"
         | "subflow closing"
         | "subflow returned"

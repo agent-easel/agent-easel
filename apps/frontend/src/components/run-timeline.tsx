@@ -1,3 +1,4 @@
+import { joinSlots } from "@t3-factory/domain-validation";
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
@@ -7,7 +8,12 @@ import {
   type RunAttention,
   type RunDetail,
 } from "@t3-factory/contracts";
-import { capturedExits, FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
+import {
+  blockExitRecipients,
+  capturedExits,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
+} from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
 import { clockTime, dayAndTime, fullDateTime } from "../time-format.ts";
 import { capturedEnding, deliveryRecipientName } from "../run-evidence.ts";
@@ -24,6 +30,7 @@ type RunEvent = RunDetail["events"][number];
 /** One timeline row in words: who acted, what happened, and the exit route a report took. */
 interface EventPhrase {
   readonly actorId: CanvasBlockSelection | null;
+  readonly actorName?: string | undefined;
   readonly text: string;
   readonly route?: { readonly exit: string; readonly recipients: string };
   /** Arrival rows link to the block's T3 thread (Figma "T3 thread"). */
@@ -133,6 +140,42 @@ function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
   };
 }
 
+function joinEventBlock(run: RunDetail, event: RunEvent) {
+  const scope = event.join?.scope;
+  const graph = scope
+    ? run.definitions.subflows?.find((flow) => flow.id === scope.flowId)?.graph
+    : run.definitions.flow.graph;
+  const id = scope?.templateBlockId ?? event.blockId;
+  if (!id || !graph) return undefined;
+  return { id, graph, name: graph.blocks.find((b) => b.id === id)?.name };
+}
+
+function joinRoundForwarded(run: RunDetail, event: RunEvent): EventPhrase {
+  const round = event.join?.round;
+  const block = joinEventBlock(run, event);
+  const sources = block && joinSlots(block.graph, block.id).length;
+  const recipients = block
+    ? blockExitRecipients(block.graph, block.id)("output").filter(Boolean)
+    : [];
+  return {
+    actorId: event.blockId,
+    actorName: block?.name,
+    text: [
+      `round ${round ?? "?"} forwarded`,
+      sources ? ` · ${sources}/${sources} sources` : "",
+      recipients.length ? ` → ${recipients.join(", ")}` : "",
+    ].join(""),
+  };
+}
+
+function joinRoundCancelled(run: RunDetail, event: RunEvent): EventPhrase {
+  return {
+    actorId: event.blockId,
+    actorName: joinEventBlock(run, event)?.name,
+    text: `round ${event.join?.round ?? "?"} cancelled · not forwarded`,
+  };
+}
+
 /**
  * Conditions whose earlier selections a Run read leaves out: each with the last arrival number
  * missing from the Timeline, which the Condition's arrivals details still list.
@@ -155,6 +198,7 @@ const attentionWords: Record<RunAttention["kind"], string> = {
   "report-problem": "problem · report needs a fix",
   "execution-failed": "problem · T3 execution failed",
   "condition-integrity": "problem · Condition cannot number its next arrival",
+  "join-integrity": "problem · Join cannot forward its next round",
   "subflow-stop-unresolved": "problem · Subflow could not stop its workers",
   "settlement-unresolved": "problem · Settle could not stop workers",
 };
@@ -322,6 +366,8 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
     text: "Report received after invocation closed",
   }),
   "condition-selected": conditionSelected,
+  "join-round-forwarded": joinRoundForwarded,
+  "join-round-cancelled": joinRoundCancelled,
   "operation-unresolved": operationUnresolved,
   "settlement-requested": said("settlement requested · automatic work held"),
   "worker-stop-requested": said("worker Stop requested · awaiting completion confirmation"),
@@ -357,13 +403,17 @@ function ActorIcon({
   run,
   actorId,
   title,
+  join,
 }: {
+  join?: boolean;
   run: RunDetail;
   actorId: CanvasBlockSelection | null;
   title: boolean;
 }) {
   if (title) return <TitleMark className="text-link" />;
-  const kind = run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
+  const kind = join
+    ? "join"
+    : run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
   const Icon = kind ? BLOCK_KINDS[kind].Icon : Flag;
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }
@@ -605,7 +655,7 @@ function TimelineEvent({
   event: RunEvent;
   selectedBlockId: CanvasBlockSelection | null;
 }) {
-  const { actorId, text, route, thread, threadLink, title = false } = phrase(run, event);
+  const { actorId, actorName, text, route, thread, threadLink, title = false } = phrase(run, event);
   const link =
     thread && (threadLink ?? run.blocks.find((block) => block.blockId === actorId)?.link);
   const report =
@@ -630,8 +680,10 @@ function TimelineEvent({
       >
         {clockTime(event.observedAt)}
       </time>{" "}
-      <ActorIcon run={run} actorId={actorId} title={title} />
-      <span className="shrink-0 font-medium whitespace-nowrap">{nameOf(run, actorId)}</span>{" "}
+      <ActorIcon run={run} actorId={actorId} title={title} join={!!event.join} />
+      <span className="shrink-0 font-medium whitespace-nowrap">
+        {actorName ?? nameOf(run, actorId)}
+      </span>{" "}
       <span className="min-w-0 flex-1 truncate text-muted-foreground">{text}</span>{" "}
       {report && (
         <div className="w-full py-2 pl-11">

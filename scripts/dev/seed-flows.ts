@@ -10,6 +10,8 @@ import {
   conditionBlock,
   conditionRule,
   OTHERWISE,
+  joinBlock,
+  JOIN_OUTPUT,
 } from "../../apps/backend/test/support/scenarios.ts";
 import { FINISH_BLOCK_ID } from "../../packages/contracts/src/index.ts";
 import type { Factory } from "../../apps/backend/src/index.ts";
@@ -152,7 +154,39 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     ...(await createWaitFlows(factory, agents)),
     ...(await createConditionFlows(factory, agents)),
     endings: await createEndingsFlow(factory, agents),
+    joinReview: await createJoinFlow(factory, agents),
   };
+}
+
+async function createJoinFlow(factory: Factory, agents: DemoAgents) {
+  const changes = [blockExit("changes", "Changes requested", "List each requested change.")];
+  return saveFlow(factory, "Demo · Parallel review joined for your decision", {
+    flowInput: flowInput(["worker"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 }),
+      agentBlock("reviewer", "Code review", agents.reviewer, { x: 700, y: 40 }, [], changes),
+      agentBlock(
+        "accessibility",
+        "Accessibility review",
+        agents.accessibility,
+        { x: 700, y: 320 },
+        [],
+        changes,
+      ),
+      joinBlock("results", "Review results", { x: 1080, y: 180 }),
+      humanStep("decision", "Your decision", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "reviewer"),
+      connection("worker", "review", "accessibility"),
+      connection("reviewer", "approved", "results"),
+      connection("reviewer", "changes", "results"),
+      connection("accessibility", "approved", "results"),
+      connection("accessibility", "changes", "results"),
+      connection("results", JOIN_OUTPUT, "decision"),
+      connection("decision", "request-changes", "worker"),
+    ],
+  });
 }
 
 function createEndingsFlow(factory: Factory, agents: DemoAgents) {

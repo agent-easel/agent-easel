@@ -361,7 +361,7 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 The editor's toolbar holds the owner badge (Global or the owning Project), the Flow name as an inline field, the save status
 (**Saved**, **Unsaved changes**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, **Join**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the
 search filters steps, Agents and Flows by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps**, **Flows** (placeable Flows under the placement rule, with any Flow that would form a cycle disabled with its reason and Flows without a reachable ending tagged **No reachable ending**), and each owner's name (**Global**,
 the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**.
@@ -438,6 +438,17 @@ exits **Approve** and **Request changes**, which carries a **Message required** 
 Flow-local name and **Wait for** a number and a unit (**minutes**, **hours** or **days**) in one row, such as 1.5 hours; an empty amount saves a draft without
 a duration. It has one input and one output (**after the wait**) whose **Output** row holds its target select. A Wait has no Agent, prompt, execution settings, reports or worker, and the Flow input cannot connect to
 it.
+
+**Join.** A Join waits until every block wired into it has sent something, then forwards their messages together through its
+one output; its library row reads **Join · Waits for every source**. On the canvas it reads **Join · *N* sources** and draws one
+row per source block, in the Flow's block order, each with its own input port: every exit of that block wired into the Join lands
+on its row, which reads ***N* exits**, so a reviewer's **Approve** and **Request changes** fill one slot. Dragging a wire from a
+block not yet wired in adds its row; before any is wired, one hint row (**Connect the blocks to wait for**) holds the port. Below
+the rows sits its one output row (**output**). Its panel holds **Name**, the read-only **Sources · *N* blocks** (each block with its
+connected exits, such as **Approve · Request changes**; a Wait's or Continuation's reads **Output**) and **Output** with its target
+select; sources change only by wiring. **Needs 2 sources** marks its source ports and **Not connected** its output row and port in
+the error colour, with the issue in the readiness list. The Flow input cannot connect to it. The rules are in
+[Validation](#validation).
 
 **Subflow.** A [Subflow](../GLOSSARY.md#subflow) places another saved Flow by its `flowId` (`kind: "subflow"`). Its exits are the referenced Flow's Finish endings by ending ID, so renaming an ending keeps every wire while removing an ending leaves a repairable broken wire (`subflow_exit_missing`); it has no Flow-local exits, hidden exits, Revisit instruction or workspace override (the top-level Run workspace applies). On the canvas, an expandable Subflow renders as a [`SubflowGroup`](design-system.md#which-component-for-which-pattern): a read-only in-place preview of the referenced Flow showing its inner Flow input (**Incoming message**) wired to its targets, its inner blocks and Finish, drawn-only ending routes to the outer right border, interactive outer left and right ports and a **Collapse** control in its header. Collapsing turns it into a compact block card with **Expand** and **Open Flow**; cyclic, over-budget, missing or unset Subflows auto-collapse with an error badge. Selecting a Subflow opens its settings panel with **Name**, the **Flow** picker (placeable Flows with cycle candidates disabled), **Open Flow**, read-only disclosures (**Workspace**, **Revision**, **Blocks inside**), **Exits** with target selects and ending expectations, **Broken wires** (one-click **Remove** repair) and **Issues inside** (linking directly to each affected nested Flow). The **Flow input** may connect to Subflows as well as Agent blocks, and Subflow exits may connect to any block or parent Finish ending. Removing a Flow is still allowed when another Flow places it: referencing parent Flows report `subflow_flow_missing` and keep their repairable wires.
 
@@ -684,12 +695,12 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 6, whatever the definition holds:
+Every export writes portable document format version 7, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 6,
+  "formatVersion": 7,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -750,7 +761,7 @@ An Agent block uses `agentKey` and a Subflow block uses `flowKey`. The key names
 
 The file and import request each have a 16 MiB UTF-8 limit. A file can bundle up to 500 unique Flows (including the root) and 500 unique Agents. Each prospective definition save can use up to 2,000,000 bytes, measured with new IDs substituted for keys. A Flow can hold 500 ordinary blocks with no Finish or with an empty Finish or 499 with a nonempty Finish, and up to 5,000 connections. For an existing Flow at the former block limit, Studio still allows edits at that size. Export names the limit and affected definitions if it cannot produce a complete file. These limits apply to portability. Start has its own capture and expansion budgets.
 
-**Format versions.** Import reads versions 1–6 with strict rules for each version. Flow files from versions 1–4 hold a single `flow` and reject Subflow blocks and version-5 fields. Version 2 added Conditions. Version 3 added Finish and its ending connections. Flows from versions 1–2 arrive without Finish. Version 4 added `revisitContext`. In versions 1–3 it defaults to `"keep"`. Version 5 added bundled Subflows and requires Finish on every Flow. Version 6 makes Finish optional in the bundle. New exports require a Factory that reads version 6. A newer version asks the importer to update Factory before retrying. The file retains its decoded format version for matching existing receipts.
+**Format versions.** Import reads versions 1–7 with strict rules for each version. Flow files from versions 1–4 hold a single `flow` and reject Subflow blocks and version-5 fields. Version 2 added Conditions. Version 3 added Finish and its ending connections. Flows from versions 1–2 arrive without Finish. Version 4 added `revisitContext`. In versions 1–3 it defaults to `"keep"`. Version 5 added bundled Subflows and requires Finish on every Flow. Version 6 makes Finish optional in the bundle. Version 7 adds Join blocks, which versions 1–6 reject as an unknown block kind. New exports require a Factory that reads version 7. A newer version asks the importer to update Factory before retrying. The file retains its decoded format version for matching existing receipts.
 
 ### Import
 
@@ -816,12 +827,12 @@ no exit fields. A Wait block adds `duration`: `{amount, unit}` with any finite n
 `messageRequired` is true. A Condition adds `rules`, an ordered array of `{id, name, fromArrival}`, and
 `otherwise: {id: "otherwise"}`. A rule `name` is stored trimmed and may be blank in a draft; `fromArrival` is a whole number from 1 to
 9,007,199,254,740,991, the largest integer JSON numbers and the stored definition hold exactly, or `null` while the draft has none. Its
-outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. A `subflow` block carries `flowId` (a saved Flow ID or `null` in an unfinished draft) and no Agent, Wait, Continuation or Condition fields; its exits are the referenced Flow's Finish endings by ending ID, and `flowInput.targetBlockIds` admits both Agent blocks and Subflows. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, a Subflow's exit is resolved against its referenced Flow's Finish endings by readiness, and an Agent block's
+outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. A `join` block (`kind: "join"`) carries no field beyond `id`, `name` and `position`: it is configured by its name only, has one fixed, unnamed exit with ID `output` and allows ordinary fan-out, and its sources are derived from the connections that enter it. Each distinct block wired into it is one **slot**, and every exit or output of that block that is wired in fills that one slot, so mutually exclusive exits never deadlock it; slots are ordered by the Flow's block array, not by wire order. Start freezes the Flow revision, so a later rename changes neither the slots nor their labels in a Run. A Join waits for every slot. A `subflow` block carries `flowId` (a saved Flow ID or `null` in an unfinished draft) and no Agent, Wait, Continuation or Condition fields; its exits are the referenced Flow's Finish endings by ending ID, and `flowInput.targetBlockIds` admits both Agent blocks and Subflows. Connections identify source block, exit ID and target block, and for a wire into the [Finish block](#finish-block) also the ending (`targetEndingId`): a Human block's exit is `approve` or `request-changes`, a Wait's, Join's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, a Subflow's exit is resolved against its referenced Flow's Finish endings by readiness, and an Agent block's
 exit is resolved against its Agent by readiness, not by the save. No block execution settings or prompt overrides are accepted.
 
 #### Flow input block
 
-Every graph carries exactly one `flowInput`: a canvas `position` and the `targetBlockIds` of the Agent blocks it feeds (each at most once). It has no work execution state; on a Run's [execution canvas](runs.md#execution-canvas) the Flow input card may carry the Run's [title generation](runs.md#run-title-generation) line, which describes the Run's title, not Block work, and Studio's Flow editor shows nothing of it. Targets are distinct Agent blocks; Human, Continuation and Condition targets are rejected. A Wait target saves but is a readiness gap (`flow_input_wait`): a Wait never starts a Run. Every path a Run can take into a Continuation or Condition therefore passes an Agent. A new Flow has no Flow input targets; removing a block also removes its target reference. Reachability starts at every Flow input target. Initial activations are independent, are not Handoffs and receive the same prompt; a failed or uncertain activation creates its own Problem while other branches can continue.
+Every graph carries exactly one `flowInput`: a canvas `position` and the `targetBlockIds` of the Agent blocks it feeds (each at most once). It has no work execution state; on a Run's [execution canvas](runs.md#execution-canvas) the Flow input card may carry the Run's [title generation](runs.md#run-title-generation) line, which describes the Run's title, not Block work, and Studio's Flow editor shows nothing of it. Targets are distinct Agent blocks; Human, Continuation, Condition and Join targets are rejected (a Join with `flow_input_join`). A Wait target saves but is a readiness gap (`flow_input_wait`): a Wait never starts a Run. Every path a Run can take into a Continuation or Condition therefore passes an Agent, a Subflow or a Join; only an Agent's result is bound to a worker thread ([readiness](#validation)). A new Flow has no Flow input targets; removing a block also removes its target reference. Reachability starts at every Flow input target. Initial activations are independent, are not Handoffs and receive the same prompt; a failed or uncertain activation creates its own Problem while other branches can continue.
 
 #### Finish block
 
@@ -839,11 +850,11 @@ already at 500 blocks cannot add one. Upgrading hides legacy Finish blocks witho
 ### Validation
 
 Structural failures return `Result` errors with `code`, `path` and `message`: invalid or duplicate IDs and names,
-positions, Flow input targets, dangling or duplicate edges, a Human or Wait connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit), and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. The Finish block is refused for a missing,
+positions, Flow input targets, dangling or duplicate edges, a Human, Wait or Join connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit), and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. The Finish block is refused for a missing,
 blank or repeated ending ID (`invalid_ending_id`), an ending name over 200 characters after trimming, a description or output
 description over 4,000 characters, an unknown output setting, extra Finish or ending fields, a wire into Finish without one of its
 ending IDs or a `targetEndingId` on a wire into a block (`invalid_connection`), two wires from the same exit into the same ending
-(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. A `revisitContext` that is not `"keep"` or `"fresh"`, or is on a block other than an Agent block, is refused at that block's `revisitContext` path. Limits: 500 blocks with a Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
+(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`) or to a Join (`flow_input_join`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. A `revisitContext` that is not `"keep"` or `"fresh"`, or is on a block other than an Agent block, is refused at that block's `revisitContext` path. Limits: 500 blocks with a Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
 A Condition has no rule or output quota of its own and does not borrow the Agent exit limit: it counts as one block, each actual wire
 from any of its outputs, including fan-out and Otherwise wires, is one connection, unwired outputs cost nothing, and its rule IDs,
 names and thresholds count toward the 2 MB body.
@@ -858,7 +869,13 @@ already matches from an equal or lower arrival (`condition_rule_shadowed`), or f
 (`condition_threshold_first_arrival`), each at its rule row, every unconnected Condition output (`condition_output_unconnected`, at
 its rule row or, for Otherwise, at the Condition, naming the output), and every directed cycle through a Condition made only of Conditions
 and Continuations, whichever outputs its wires leave by (`condition_cycle`, at the Condition, naming the cycle): a Continuation may
-already pass messages straight through, so such a loop could circle without work. Each Finish ending needs a name
+already pass messages straight through, so such a loop could circle without work. A Join needs wires from at least two distinct blocks
+(`join_sources_required`: several exits of one block still fill one slot) and a wire from its output (`join_output_unconnected`), each at the
+Join. A directed cycle that contains a Join and consists only of Joins, Conditions and Continuations, self-loops included, is not ready
+(`join_cycle`, at the Join, naming the cycle); `condition_cycle` keeps its own meaning for cycles without a Join. A Continuation is refused
+(`continuation_worker_required`, at the Continuation) when any message that can reach it has no worker thread: a Join's output is unbound
+and an Agent's result is bound, while a Wait, Condition or Human step passes on what it received, and through a Subflow each child ending
+is followed separately by whether the message that reaches it came from an Agent or from a Join. Each Finish ending needs a name
 (`ending_name_required`), a name no other ending has (`ending_name_duplicate`; duplicate ending names are a readiness gap, unlike
 local exit names) and at least one incoming wire (`ending_unconnected`), each at its ending row. A ready Condition's thresholds therefore
 strictly descend and are at least 2, and each of its outputs is wired; one with only a wired Otherwise is ready. Readiness resolves each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether

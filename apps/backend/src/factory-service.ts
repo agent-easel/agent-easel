@@ -287,6 +287,7 @@ export const makeFactoryService = (
       retrySubflowStop: (runId, invocationId) => runner.retrySubflowStop(runId, invocationId),
       listConditionArrivals: (runId, blockId, limit, cursor) =>
         runner.listConditionArrivals(runId, blockId, limit, cursor),
+      getRunJoin: (runId, blockId) => runner.getRunJoin(runId, blockId),
       listAttention: () => runner.listAttention(),
       requestReport: (id, input) => runner.requestReport(id, input),
       archiveRun: (id) => runner.archiveRun(id),

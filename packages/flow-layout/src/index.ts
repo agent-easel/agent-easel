@@ -30,13 +30,10 @@ export type FlowLayoutDimensions<B extends LayoutBlock = LayoutBlock> = {
   readonly finish: { readonly firstEndingY: number };
   readonly blockWidth: number;
   readonly blockHeight: (block: B) => number;
+  readonly blockInputY: (block: B, index: number) => number;
+  readonly blockExitY: (block: B, exitId: string, index: number) => number;
   readonly blockFrame?: ((block: B) => BlockFrame | undefined) | undefined;
-  readonly ports: {
-    readonly inputY: number;
-    readonly firstExitY: number;
-    readonly exitRow: number;
-    readonly inputSpacing: number;
-  };
+  readonly ports: { readonly exitRow: number };
   readonly labels: boolean;
   readonly labelSize: (text: string) => { readonly width: number; readonly height: number };
 };
@@ -111,39 +108,23 @@ function blockPorts<B extends LayoutBlock>(
   index: IncomingIndex,
   dims: FlowLayoutDimensions<B>,
 ) {
-  const { ports } = dims;
-  const frame = dims.blockFrame?.(block);
-  const width = frame?.width ?? dims.blockWidth;
-  const inputY = frame?.inputY ?? ports.inputY;
-  const incoming = index.wires(block.id);
-  const inputPorts =
-    incoming.length > 0
-      ? incoming.map((_wire, index) => ({
-          id: elkInputPortId(block.id, index),
-          width: 0,
-          height: 0,
-          x: 0,
-          y: inputY + index * ports.inputSpacing,
-          layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
-        }))
-      : [
-          {
-            id: elkInputPortId(block.id, 0),
-            width: 0,
-            height: 0,
-            x: 0,
-            y: inputY,
-            layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
-          },
-        ];
+  const width = dims.blockFrame?.(block)?.width ?? dims.blockWidth;
+  const inputs = Math.max(1, index.ports(block.id).length);
   return [
-    ...inputPorts,
+    ...Array.from({ length: inputs }, (_port, index) => ({
+      id: elkInputPortId(block.id, index),
+      width: 0,
+      height: 0,
+      x: 0,
+      y: dims.blockInputY(block, index),
+      layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
+    })),
     ...block.exits.map((exit, index) => ({
       id: exitPortId(block.id, exit.id),
       width: 0,
       height: 0,
       x: width,
-      y: frame?.exitY(exit.id) ?? ports.firstExitY + index * ports.exitRow,
+      y: dims.blockExitY(block, exit.id, index),
       layoutOptions: { "org.eclipse.elk.port.side": "EAST" },
     })),
   ];
