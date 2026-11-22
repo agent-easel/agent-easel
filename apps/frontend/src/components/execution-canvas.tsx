@@ -751,16 +751,28 @@ export function ExecutionCanvas({
               },
               input: (path) => {
                 const scoped = subflows.scopes.get(path)?.run;
+                const invocation = subflows.placements.get(path)?.invocation;
                 const input = scoped?.input;
+                const promptText =
+                  input === undefined ? "No invocation yet" : input || "Empty text";
                 return {
                   port,
                   label: "Incoming message",
-                  press: (rows) => rows,
+                  press: (rows) => (
+                    <button
+                      type="button"
+                      className={pressClass}
+                      aria-label={`Incoming message, prompt: ${promptText}`}
+                      onClick={() => (invocation ? inspectInvocation(invocation) : onSelect(null))}
+                    >
+                      {rows}
+                    </button>
+                  ),
                   prompt: {
                     kind: "line",
                     content: (
                       <p className="truncate px-3 text-xs text-foreground" title={input}>
-                        {input === undefined ? "No invocation yet" : input || "Empty text"}
+                        {promptText}
                         {scoped?.images.length ? ` · ${scoped.images.length} images` : null}
                       </p>
                     ),

@@ -196,17 +196,25 @@ test("Auto-arrange moves the expanded Run view while preserving captured positio
   expect((await readHistoryRun(app.baseUrl, id)).definitions).toEqual(captured.definitions);
 });
 
+async function openFittedSubflowReturned(
+  app: Parameters<typeof prepareScenario>[0] & { open: (path: string) => Promise<void> },
+  browser: { setViewport: (size: { width: number; height: number }) => Promise<void> },
+  screen: Screen,
+) {
+  await browser.setViewport({ width: 1920, height: 1080 });
+  const { id } = await prepareScenario(app, "subflow-returned");
+  await app.open(`/runs/${id}`);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  return screen.getByRole("region", "Execution canvas");
+}
+
 test("hovering a Block inside an expanded Subflow emphasizes its outgoing wires", async ({
   app,
   browser,
   screen,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1920, height: 1080 });
-  const { id } = await prepareScenario(app, "subflow-returned");
-  await app.open(`/runs/${id}`);
-  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
-  const canvas = screen.getByRole("region", "Execution canvas");
+  const canvas = await openFittedSubflowReturned(app, browser, screen);
   const innerBlock = canvas.getByRole("article", "Block Code review", { exact: true });
 
   // Act
@@ -224,4 +232,35 @@ test("hovering a Block inside an expanded Subflow emphasizes its outgoing wires"
     ),
   ).toHaveCount(2);
   await app.screenshot("subflow-inner-block-hover-wires");
+});
+
+test("tabbing to the inner Flow input inside an expanded Subflow emphasizes its outgoing wires in its scope", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  const canvas = await openFittedSubflowReturned(app, browser, screen);
+  const releaseNotes = canvas
+    .getByRole("article", "Block Release notes", { exact: true })
+    .getByRole("button");
+  await releaseNotes.focus();
+
+  // Act
+  await releaseNotes.press("Tab");
+
+  // Assert
+  await expect(
+    browser.locator('[aria-label="Execution canvas"] [data-canvas-scope] [data-flow-input] button'),
+  ).toBeFocused();
+  await expect(
+    browser.locator(
+      '[aria-label="Execution canvas"] [data-canvas-scope] path[marker-end="url(#execution-arrow-emphasis)"]',
+    ),
+  ).toHaveCount(2);
+  await expect(
+    browser.locator(
+      '[aria-label="Execution canvas"] path[marker-end="url(#execution-arrow-emphasis)"]',
+    ),
+  ).toHaveCount(2);
 });
