@@ -85,7 +85,7 @@ export function threadOwnerName(run: RunDetail, bindingId: string | null) {
 
 /** Figma Run/ExecBlock frames: active states use a 75 % state line, settled ones a quieter one. */
 const frameColor: Record<RunStateKind | "not-started", string> = {
-  "not-started": "border-border bg-muted",
+  "not-started": "border-border-strong bg-card",
   working: "border-status-working/75 bg-card",
   waiting: "border-status-waiting/75 bg-card",
   "needs-input": "border-attention/75 bg-card",
@@ -656,7 +656,7 @@ function executionFinish(
   return {
     state,
     className: cn(
-      "border-border",
+      "border-border-strong",
       selected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
     ),
     press: (rows) => (
@@ -852,7 +852,7 @@ export function ExecutionCanvas({
                     : { kind: "pending" as const };
                 return {
                   state,
-                  className: "border-border",
+                  className: "border-border-strong",
                   endingPort: (ending) =>
                     state.kind === "reached" && state.endingId === ending.id ? reachedPort : port,
                   press: (rows) =>
