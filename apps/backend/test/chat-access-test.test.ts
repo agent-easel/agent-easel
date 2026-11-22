@@ -29,6 +29,7 @@ async function operating(c: Parameters<typeof chatControlWorld>[0]) {
   const access = await world.factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID, SECOND_USER],
+    bots: [],
     channels: [
       ...[ALLOWED_CHANNEL, OTHER_CHANNEL, DELETED_CHANNEL, FORUM_CHANNEL].map((channelId) => ({
         channelId,
@@ -234,6 +235,7 @@ it("an Access save drops the access test results of the channels and users it re
   const saved = await factory.updateDiscordAccess({
     revision: sent.value.access.revision,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [] }],
   });
 
@@ -261,6 +263,7 @@ it("an Access save while the access test is posting applies to the later posts a
   const saved = await factory.updateDiscordAccess({
     revision: before.value.access.revision,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [DELETED_CHANNEL, FORUM_CHANNEL].map((channelId) => ({
       channelId,
       projectIds: [project.id],
@@ -304,6 +307,7 @@ it("an Access save during the access test's channel lookup applies to the post t
   const access = await factory.updateDiscordAccess({
     revision: settings.value.access.revision,
     users: [PARTICIPANT_ID, SECOND_USER],
+    bots: [],
     channels,
   });
   assert(access.ok, JSON.stringify(access));
@@ -315,6 +319,7 @@ it("an Access save during the access test's channel lookup applies to the post t
   const saved = await factory.updateDiscordAccess({
     revision: access.value.access.revision,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels,
   });
   discord.releaseMessages();
@@ -344,6 +349,7 @@ it("an Access save between the access test's split messages applies to the later
   const access = await factory.updateDiscordAccess({
     revision: settings.value.access.revision,
     users,
+    bots: [],
     channels,
   });
   assert(access.ok, JSON.stringify(access));
@@ -357,6 +363,7 @@ it("an Access save between the access test's split messages applies to the later
   const saved = await factory.updateDiscordAccess({
     revision: access.value.access.revision,
     users: kept,
+    bots: [],
     channels,
   });
   discord.releaseMessages();

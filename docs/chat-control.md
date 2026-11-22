@@ -187,8 +187,13 @@ lists:
   channel's grant. A parent is a text, announcement or forum channel; a forum post is a thread of
   its forum.
 
-IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, channel or
-Project grant is refused rather than merged. Names are not used to match anything. A channel without
+The page lists **Bots** in a separate group directly below Access, saved by the same Save with the
+Access revision. It holds one comma-separated **Bot IDs** field, entered like the users, and the
+bot accounts' names with a neutral **Bot** tag. A listed bot grants nothing yet: bots are still
+ignored as [invocations](#invocations) until Factory admits them.
+
+IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, bot, channel
+or Project grant is refused rather than merged, as is an ID listed as both a user and a bot. Names are not used to match anything. A channel without
 Projects grants nothing. A granted Project Factory no longer knows grants nothing, is not listed and
 is dropped from the channel on the next save. Server membership, roles, administrator status and Factory client approval grant no chat
 authority, and Access grants no Factory UI access or client approval. Factory does not administer
@@ -196,11 +201,18 @@ Discord permissions: everyone who can read an allowed channel or its threads see
 there, including people Access does not list. When a save grants a channel its first Project, the
 page says once that everyone who can read that channel sees the bot's replies.
 
-When a check passes or an operating session becomes ready, Factory looks up each allowed user ID and
-channel ID through Discord and records the names it reports. The page shows them under the IDs. An
+When a check passes or an operating session becomes ready, Factory looks up each allowed user ID, bot
+ID and channel ID through Discord and records the names it reports, and for user and bot IDs whether
+Discord's user data flags the account as a bot. The page shows the names under the IDs. An
 ID Discord does not know shows an **Unknown user** or **Unknown channel** tag and one warning; saving
 stays allowed. Names are display only: matching always uses IDs, and IDs added after the latest
 lookup show no name until the next passing check or ready session.
+
+The recorded bot flag keeps the lists meaningful. A bot among the Users shows an error tag
+("*name* is a bot"), a human among the Bot IDs shows "*name* is not a bot", and an attention card
+"1 ID is in the wrong list" says where to move it. Save stays disabled while one is listed, and the
+server refuses such a save with the same wording and leaves the saved Access unchanged. An ID not
+looked up yet, or that Discord does not know, is not classified and saves.
 
 ### Access test
 

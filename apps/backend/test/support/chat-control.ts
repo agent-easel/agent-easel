@@ -116,6 +116,7 @@ export async function chatControlWorld(c: TestContext, telemetry?: ServerOptions
   const access = await factory.updateDiscordAccess({
     revision: 0,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [project.value.id] }],
   });
   assert(access.ok, JSON.stringify(access));

@@ -53,11 +53,14 @@ export function SettingsPage({
 export function SettingsGroup({
   label,
   badge,
+  description,
   children,
 }: {
   label: string;
   /** A status badge shown after the label. */
   badge?: ReactNode;
+  /** One permanent muted line between the label and the group. */
+  description?: ReactNode;
   children: ReactNode;
 }) {
   const id = useId();
@@ -69,6 +72,7 @@ export function SettingsGroup({
         </h3>
         {badge}
       </div>
+      {description && <p className="pl-0.5 text-sm text-muted-foreground/70">{description}</p>}
       <Surface tone="group">{children}</Surface>
     </section>
   );

@@ -416,6 +416,13 @@ conversation. It is Off by default, works only while the Factory backend runs, a
 Discord and the model provider outbound only. See [Chat control](docs/chat-control.md).
 _Avoid_: Chat bot as a separate service; treating chat messages or model output as authorization.
 
+**Bot ID**:
+A Discord bot account listed under **Bots** in Chat control's Access, kept apart from the allowed user
+IDs. Factory classifies each listed ID from Discord's own user data (the bot flag) and refuses a bot
+among the users and a human among the Bot IDs. Listing a bot grants no chat authority yet. See
+[Chat control](docs/chat-control.md#access).
+_Avoid_: Treating a bot as an allowed user; deciding bot or human by name.
+
 **Originating thread**:
 The Discord thread a Run was requested in through a confirmed Chat control Start, recorded when Factory
 accepts the Run. It is where Factory reports on that Run, not ownership: any allowed participant may act

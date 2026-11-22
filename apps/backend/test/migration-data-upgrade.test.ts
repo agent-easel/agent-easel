@@ -117,9 +117,11 @@ it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, 
       botName: null,
       access: {
         users: [],
+        bots: [],
         channels: [],
         unresolvedProjectIds: [],
         userNames: {},
+        accountKinds: {},
         channelNames: {},
         test: null,
         revision: 0,
@@ -182,6 +184,7 @@ it("upgraded Runs have no originating thread: with Chat control On and their Pro
   const access = await factory.updateDiscordAccess({
     revision: 0,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [fixture.project.id] }],
   });
   assert(access.ok, JSON.stringify(access));

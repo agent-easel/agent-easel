@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: join_lifecycle
+-- Newest applied migration: chat_access_bots
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -72,6 +72,11 @@ CREATE TABLE agents (
   created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id), owner_changed_at TEXT);
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
+
+CREATE TABLE chat_access_bots (
+  user_id TEXT PRIMARY KEY,
+  position INTEGER NOT NULL
+);
 
 CREATE TABLE chat_access_channel_projects (
   channel_id TEXT NOT NULL REFERENCES chat_access_channels(channel_id),
@@ -240,7 +245,7 @@ CREATE TABLE chat_discord_names (
   kind TEXT NOT NULL CHECK (kind IN ('user', 'channel')),
   discord_id TEXT NOT NULL,
   -- Null when Discord does not know the ID.
-  name TEXT,
+  name TEXT, is_bot INTEGER CHECK (is_bot IN (0, 1)),
   PRIMARY KEY (kind, discord_id)
 );
 

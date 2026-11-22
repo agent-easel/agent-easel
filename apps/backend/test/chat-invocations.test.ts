@@ -151,6 +151,7 @@ it("an allowed channel that grants no Project admits nobody", async (c) => {
   const saved = await factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [
       { channelId: ALLOWED_CHANNEL, projectIds: [project.id] },
       { channelId: OTHER_CHANNEL, projectIds: [] },
@@ -222,6 +223,7 @@ it("removing a participant from Access stops their next invocation as soon as th
   const revoked = await factory.updateDiscordAccess({
     revision: 1,
     users: [OUTSIDER],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [project.id] }],
   });
   assert(revoked.ok);
@@ -350,6 +352,7 @@ it("a reset in a forum post of an allowed forum channel is accepted", async (c) 
   const saved = await factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [{ channelId: FORUM_CHANNEL, projectIds: [project.id] }],
   });
   assert(saved.ok);

@@ -87,6 +87,7 @@ it("revoking the requester's Access ends the waiting Discord confirmation on an 
   const revoked = await world.factory.updateDiscordAccess({
     revision: settings.value.access.revision,
     users: [],
+    bots: [],
     channels: settings.value.access.channels,
   });
 

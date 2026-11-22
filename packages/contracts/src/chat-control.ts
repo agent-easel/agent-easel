@@ -172,15 +172,22 @@ export interface DiscordAccessChannel {
 export interface DiscordAccessConfiguration {
   /** Decimal Discord user IDs kept as text. Roles and server membership grant nothing. */
   readonly users: readonly string[];
+  /**
+   * Decimal Discord bot account IDs kept as text. Listing a bot grants no authority yet; a save
+   * refuses an ID Discord reports as a human and a bot ID in `users`.
+   */
+  readonly bots: readonly string[];
   readonly channels: readonly DiscordAccessChannel[];
   /** Granted Project IDs no Factory Project has; they grant nothing and the next save drops them. */
   readonly unresolvedProjectIds: readonly string[];
   /**
-   * Names Discord reported for allowed user IDs and channel IDs, looked up when a check passes or
-   * an operating session becomes ready. An ID that is absent was not looked up yet; `null` means
-   * Discord does not know it.
+   * Names Discord reported for allowed user and bot IDs and for channel IDs, looked up when a
+   * check passes or an operating session becomes ready. An ID that is absent was not looked up
+   * yet; `null` means Discord does not know it.
    */
   readonly userNames: Readonly<Record<string, string | null>>;
+  /** Whether Discord's user data flags a looked-up user or bot ID as a bot; absent when unknown. */
+  readonly accountKinds: Readonly<Record<string, "bot" | "human">>;
   readonly channelNames: Readonly<Record<string, string | null>>;
   /** The latest access test of the saved Access; null before one was sent. */
   readonly test: DiscordAccessTest | null;
@@ -303,6 +310,7 @@ export interface UpdateDiscordAccessInput {
   /** The revision the edits started from; a different current revision is a conflict. */
   readonly revision: number;
   readonly users: readonly string[];
+  readonly bots: readonly string[];
   readonly channels: readonly DiscordAccessChannel[];
 }
 

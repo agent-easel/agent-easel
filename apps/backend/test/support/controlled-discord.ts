@@ -255,6 +255,8 @@ export async function startControlledDiscord() {
   const heldResumes: [GatewaySession, WebSocket][] = [];
   /** Users who left every server; Discord answers Unknown Member for them. */
   const departed = new Set<string>();
+  /** User lookups that Discord's user data flags as bot accounts, by username. */
+  const botAccounts = new Map<string, string>();
   const hiddenChannels = new Map<string, Set<string>>();
   /** Parent channels whose permissions deny the bot Send Messages. */
   const postingDenied = new Set<string>();
@@ -626,7 +628,14 @@ export async function startControlledDiscord() {
       ({ match }) =>
         departed.has(match[1]!)
           ? { status: 404, body: { message: "Unknown User", code: 10013 } }
-          : { status: 200, body: user(match[1]!, "participant", false) },
+          : {
+              status: 200,
+              body: user(
+                match[1]!,
+                botAccounts.get(match[1]!) ?? "participant",
+                botAccounts.has(match[1]!),
+              ),
+            },
     ],
     [
       "GET",
@@ -1026,6 +1035,10 @@ export async function startControlledDiscord() {
       typingAvailable = available;
     },
     /** Makes thread-member lookups fail as an outage does. */
+    /** User lookups of this ID answer a bot account with this username. */
+    registerBotAccount(userId: string, username: string) {
+      botAccounts.set(userId, username);
+    },
     /** The user leaves every server; lookups of them answer Unknown Member. */
     removeGuildMember(userId: string) {
       departed.add(userId);

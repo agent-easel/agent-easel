@@ -214,7 +214,10 @@ function useOneSave(
     botCheck,
     dirty,
     saving: bot.saving || access.saving,
-    canSave: dirty && (!botCheck.dirty || botCheck.ready) && (!access.dirty || !access.problem),
+    canSave:
+      dirty &&
+      (!botCheck.dirty || botCheck.ready) &&
+      (!access.dirty || (!access.problem && access.wrongList.length === 0)),
     save,
     stopped,
     granted,
@@ -362,6 +365,7 @@ export function ChatDiscordSettings() {
             settings={access.settings}
             draft={access.draft}
             problem={access.problem}
+            wrongList={access.wrongList}
             disabled={page.saving}
             test={settings.access.test}
             sendTest={accessTestAction(page, settings)}

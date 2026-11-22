@@ -41,6 +41,7 @@ async function operating(
   const access = await factory.updateDiscordAccess({
     revision: 0,
     users: [PARTICIPANT_ID, COLLABORATOR_ID],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds }],
   });
   assert(access.ok, JSON.stringify(access));

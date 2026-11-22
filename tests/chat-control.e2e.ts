@@ -515,6 +515,61 @@ test("one Save writes the bot and then Access, and names the channel that got it
   await app.screenshot("chat-discord-access-saved");
 });
 
+test("the host lists a bot in Bots, sees its Bot badge, and a bot in Users or a human in Bot IDs is refused", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const HERMES = "200000000000000050";
+  const ATLAS = "200000000000000060";
+  await completeChatControl(app.baseUrl);
+  await discord(app.baseUrl).botAccount({ userId: HERMES, username: "Hermes" });
+  await discord(app.baseUrl).botAccount({ userId: ATLAS, username: "Atlas" });
+  await app.open("/settings/chat-control/discord");
+  const access = screen.getByRole("region", "Access");
+  const bots = screen.getByRole("region", "Bots");
+  await expect(bots.getByText(/^Bots may talk to Factory and start Runs/)).toBeVisible();
+  await access.getByLabel("Users").fill(`200000000000000001, ${ATLAS}`);
+  await bots.getByLabel("Bot IDs").fill(HERMES);
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", "Check connection").tap();
+
+  // Assert
+  await expect(bots.getByText(/^Hermes/)).toBeVisible({ timeout: 15_000 });
+  await expect(bots.getByText("Bot", { exact: true })).toBeVisible();
+  await expect(access.getByText("Atlas is a bot")).toBeVisible();
+  await expect(screen.getByText("1 ID is in the wrong list")).toBeVisible();
+  await expect(screen.getByText("Atlas is a bot. Move its ID to Bots, then save.")).toBeVisible();
+  const current = await discordSettings(app.baseUrl);
+  assert(current.ok);
+  const refused = await hostCall(app.baseUrl, "PUT", "/api/chat-control/discord/access", {
+    revision: current.value.access.revision,
+    users: ["200000000000000001", ATLAS],
+    bots: [HERMES],
+    channels: [],
+  });
+  assert(!refused.ok);
+  assert.strictEqual(refused.error.issues[0]?.code, "discord_access_bot_in_users");
+  await app.screenshot("chat-discord-bots-refused");
+
+  // Act
+  await access.getByLabel("Users").fill("200000000000000001");
+  await bots.getByLabel("Bot IDs").fill(`${HERMES}, ${ATLAS}`);
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByText("1 ID is in the wrong list")).toHaveCount(0);
+  await expect(bots.getByText("Bot", { exact: true })).toHaveCount(2);
+  const settings = await discordSettings(app.baseUrl);
+  expect(settings).toMatchObject({
+    ok: true,
+    value: { access: { users: ["200000000000000001"], bots: [HERMES, ATLAS] } },
+  });
+  await app.screenshot("chat-discord-bots-saved");
+});
+
 test("the host turns Chat control On with the switch and sees the connection badge", async ({
   app,
   screen,

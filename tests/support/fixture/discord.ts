@@ -67,9 +67,14 @@ export function discordFixture(
           token: connection.tokenConfigured ? { kind: "remove" } : { kind: "keep" },
         }),
       );
-    if (access.users.length > 0 || access.channels.length > 0)
+    if (access.users.length > 0 || access.bots.length > 0 || access.channels.length > 0)
       requireSuccess(
-        await factory.updateDiscordAccess({ revision: access.revision, users: [], channels: [] }),
+        await factory.updateDiscordAccess({
+          revision: access.revision,
+          users: [],
+          bots: [],
+          channels: [],
+        }),
       );
   }
 
@@ -118,6 +123,10 @@ export function discordFixture(
       /** The channel's permissions stop, or again let, the bot post there. */
       posting({ channelId, denied }: { channelId: string; denied: boolean }) {
         discord.setPostingDenied(channelId, denied);
+      },
+      /** Discord's user data flags `userId` as a bot account named `username`. */
+      botAccount({ userId, username }: { userId: string; username: string }) {
+        discord.registerBotAccount(userId, username);
       },
       /** `userId` replies "here" to the latest access test message in `channelId`. */
       replyToAccessTest({ userId, channelId }: { userId: string; channelId: string }) {

@@ -37,20 +37,30 @@ export const readAccess = (sql: SqlClient.SqlClient) =>
       projects.push(grant.project_id);
       if (grant.known !== 1) unresolved.add(grant.project_id);
     }
+    const bots = yield* sql<{
+      user_id: string;
+    }>`SELECT user_id FROM chat_access_bots ORDER BY position`;
     const names = yield* sql<{
       kind: "user" | "channel";
       discord_id: string;
       name: string | null;
-    }>`SELECT kind,discord_id,name FROM chat_discord_names`;
+      is_bot: number | null;
+    }>`SELECT kind,discord_id,name,is_bot FROM chat_discord_names`;
     const named = (kind: "user" | "channel") =>
       Object.fromEntries(
         names.filter((row) => row.kind === kind).map((row) => [row.discord_id, row.name]),
       );
     return {
       users: users.map((user) => user.user_id),
+      bots: bots.map((bot) => bot.user_id),
       channels: [...channels].map(([channelId, projectIds]) => ({ channelId, projectIds })),
       unresolvedProjectIds: [...unresolved],
       userNames: named("user"),
+      accountKinds: Object.fromEntries(
+        names
+          .filter((row) => row.kind === "user" && row.is_bot !== null)
+          .map((row) => [row.discord_id, row.is_bot === 1 ? "bot" : "human"] as const),
+      ),
       channelNames: named("channel"),
       test: yield* readAccessTest(sql),
       revision: row!.revision,
@@ -74,6 +84,29 @@ export const grantedProjects = (
         AND EXISTS (SELECT 1 FROM chat_access_users WHERE user_id=${userId})
       ORDER BY g.position`,
     (rows) => rows.map((row) => row.project_id),
+  );
+
+/** The IDs of one list that Discord's latest lookup showed belong to the other kind of account. */
+const wrongListIssues = (
+  ids: readonly string[],
+  path: "users" | "bots",
+  wrongKind: "bot" | "human",
+  access: DiscordAccessConfiguration,
+) =>
+  ids.flatMap((id, index) =>
+    access.accountKinds[id] === wrongKind
+      ? [
+          {
+            code:
+              wrongKind === "bot" ? "discord_access_bot_in_users" : "discord_access_human_in_bots",
+            path: `${path}[${index}]`,
+            message:
+              wrongKind === "bot"
+                ? `${access.userNames[id] ?? id} is a bot. Move its ID to Bots, then save.`
+                : `${access.userNames[id] ?? id} is not a bot. Move its ID to Users, then save.`,
+          },
+        ]
+      : [],
   );
 
 const STALE_EDIT = "Access changed since these edits began. Review the saved Access and try again.";
@@ -112,6 +145,13 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
         ),
       );
       if (issues.length > 0) return failure("validation", "Choose Projects Factory knows.", issues);
+      // Discord's own user data decides: a known bot never gets a user's place, nor a human a bot's.
+      const wrongList = [
+        ...wrongListIssues(input.users, "users", "bot", before),
+        ...wrongListIssues(input.bots, "bots", "human", before),
+      ];
+      if (wrongList.length > 0)
+        return failure("validation", "Move each ID to its own list.", wrongList);
       // Narrowing or removing a channel's Project scope clears its whole shared conversations,
       // mixed-Project prose included; an expansion keeps them, and a regrant restores nothing.
       yield* clearConversations(sql, {
@@ -130,6 +170,9 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
       yield* sql`DELETE FROM chat_access_users`;
       for (const [position, userId] of input.users.entries())
         yield* sql`INSERT INTO chat_access_users (user_id,position) VALUES (${userId},${position})`;
+      yield* sql`DELETE FROM chat_access_bots`;
+      for (const [position, botId] of input.bots.entries())
+        yield* sql`INSERT INTO chat_access_bots (user_id,position) VALUES (${botId},${position})`;
       for (const [position, channel] of input.channels.entries()) {
         yield* sql`INSERT INTO chat_access_channels (channel_id,position) VALUES (${channel.channelId},${position})`;
         for (const [index, projectId] of channel.projectIds.entries())
@@ -144,7 +187,9 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
 /** The allowed user and channel IDs, for a name lookup. */
 export const accessIds = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
-    const users = yield* sql<{ id: string }>`SELECT user_id AS id FROM chat_access_users`;
+    const users = yield* sql<{
+      id: string;
+    }>`SELECT user_id AS id FROM chat_access_users UNION SELECT user_id FROM chat_access_bots`;
     const channels = yield* sql<{ id: string }>`SELECT channel_id AS id FROM chat_access_channels`;
     return {
       users: users.map((row) => row.id),
@@ -161,7 +206,9 @@ export const recordNames = (sql: SqlClient.SqlClient, names: DiscordNames) =>
         ["user", names.users],
         ["channel", names.channels],
       ] as const)
-        for (const [id, name] of entries)
-          yield* sql`INSERT INTO chat_discord_names (kind,discord_id,name) VALUES (${kind},${id},${name})`;
+        for (const [id, name] of entries) {
+          const isBot = kind === "user" && name !== null ? Number(names.bots.has(id)) : null;
+          yield* sql`INSERT INTO chat_discord_names (kind,discord_id,name,is_bot) VALUES (${kind},${id},${name},${isBot})`;
+        }
     }),
   );
