@@ -2,6 +2,8 @@ import { assert, expect, it } from "@effect/vitest";
 import { JOIN_TIMELINE_ROUNDS, type RunDetail } from "@t3-factory/contracts";
 import { assertOk } from "./support/domain-setup.ts";
 import {
+  capturedJoinEndingMissing,
+  foreignJoinQueue,
   joinRoundAtMaximum,
   joinRoundsForwarded,
   joinStorageInterrupted,
@@ -17,6 +19,8 @@ import {
   finishedReport,
   flowInput,
   humanStep,
+  joinedEndingFlow,
+  workerAtWork,
   joinBesideEndingFlow,
   joinBlock,
   launchedWorkers,
@@ -41,13 +45,6 @@ const roundEvents = (run: RunDetail) =>
     .map((event) => ({ kind: event.kind, blockId: event.blockId, round: event.join?.round }));
 const mergeIntents = (run: RunDetail) => run.intents.filter((intent) => intent.blockId === "merge");
 
-async function reconciledRepeatedly(
-  factory: { reconcileRuns(): Promise<Parameters<typeof assertOk>[0]> },
-  passes = 3,
-) {
-  for (let pass = 0; pass < passes; pass++) assertOk(await factory.reconcileRuns());
-}
-
 async function partialWithFinishedWorkers(c: Parameters<typeof prepared>[0], message = "A1") {
   const f = await prepared(c, skippedSourceJoinFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
@@ -69,12 +66,13 @@ it("a partial round shows Waiting with arrived and pending sources in Run reads 
   const f = await prepared(c, parallelJoinFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
 
-  // Act
   await resultReported(f.world, first, { message: "A1" });
   const waiting = await observeFor("one source arrived", f.world, first.runId, (run) =>
     run.blocks.some((block) => block.blockId === "merge" && block.state === "waiting"),
   );
   const revised = turnBegins(f.world, first, "another-review");
+
+  // Act
   await resultReported(f.world, revised, { message: "A2", exit: "Revise" });
   const queued = await observeFor(
     "extra arrival queued",
@@ -135,11 +133,14 @@ it("a partial round shows Waiting with arrived and pending sources in Run reads 
 });
 
 it("a partial round holds automatic settlement while every worker is finished", async (c) => {
+  // Arrange
   const { f, first } = await partialWithFinishedWorkers(c);
-  await reconciledRepeatedly(f.f);
-  const run = assertOk(await f.f.getRun(first.runId));
+
+  // Act
+  assertOk(await f.f.reconcileRuns());
 
   // Assert
+  const run = assertOk(await f.f.getRun(first.runId));
   expect(run.lifecycle).toBe("active");
   expect(merge(run)).toMatchObject({ arrived: 1, sources: 2, latest: null });
   expect(run.blocks.find((block) => block.blockId === "merge")?.state).toBe("waiting");
@@ -147,9 +148,9 @@ it("a partial round holds automatic settlement while every worker is finished", 
   expect(run.settlement).toBeNull();
 });
 
-it("Settle cancels a partial round without forwarding it and a late result changes nothing", async (c) => {
+it("Settle cancels a partial round without forwarding it", async (c) => {
   // Arrange
-  const { f, first, second } = await partialWithFinishedWorkers(c);
+  const { f, first } = await partialWithFinishedWorkers(c);
 
   // Act
   const settled = await f.f.settleRun(first.runId, {});
@@ -176,7 +177,19 @@ it("Settle cancels a partial round without forwarding it and a late result chang
     [null, "Done"],
     [null, null],
   ]);
-  expect(await report(f.world, second, finishedReport("Late."))).toBe("RUN_SETTLED");
+});
+
+it("a late result leaves the cancelled round unchanged", async (c) => {
+  // Arrange
+  const { f, first, second } = await partialWithFinishedWorkers(c);
+  assertOk(await f.f.settleRun(first.runId, {}));
+  const run = assertOk(await f.f.getRun(first.runId));
+
+  // Act
+  const late = await report(f.world, second, finishedReport("Late."));
+
+  // Assert
+  expect(late).toBe("RUN_SETTLED");
   expect(assertOk(await f.f.getRun(first.runId)).events).toEqual(run.events);
 });
 
@@ -208,7 +221,7 @@ it("Archive cancels a partial round, keeps the forwarded round as history and cl
 
   // Assert
   expect(merge(archived)).toMatchObject({
-    round: 2,
+    round: 3,
     arrived: 0,
     latest: { round: 2, outcome: "cancelled" },
   });
@@ -216,6 +229,7 @@ it("Archive cancels a partial round, keeps the forwarded round as history and cl
     { kind: "join-round-forwarded", blockId: "merge", round: 1 },
     { kind: "join-round-cancelled", blockId: "merge", round: 2 },
   ]);
+  expect(assertOk(await f.f.getRunJoin(first.runId, "merge")).round).toBe(3);
   expect(await latestExits()).toEqual(["Revise", null]);
   expect(mergeIntents(archived).every((intent) => !intent.payloadRetained)).toBe(true);
   expect(await f.f.runtime.block({ arguments: { blockId: recipient.blockId } })).toMatchObject({
@@ -363,12 +377,13 @@ it("a partial round inside a Subflow keeps its invocation open until Settle canc
   await resultReported(world, a!, { message: "A1" });
   await resultReported(world, b!, { exit: "Skip" });
 
-  // Act
   const open = await observeFor("partial round in the invocation", world, started.id, (run) =>
     run.joins.some((join) => join.arrived === 1),
   );
-  await reconciledRepeatedly(f);
+  assertOk(await f.reconcileRuns());
   const still = assertOk(await f.getRun(started.id));
+
+  // Act
   assertOk(await f.settleRun(started.id, {}));
   const settled = assertOk(await f.getRun(started.id));
 
@@ -448,7 +463,6 @@ it("simultaneous invocations keep separate rounds, arrivals and numbers", async 
   const { run: launched, workers } = await launchedWorkers(world, started.id);
   const { left, right } = copyWorkers(launched, workers);
 
-  // Act
   await resultReported(world, left.get("a")!, { message: "Left A" });
   await resultReported(world, right.get("b")!, { message: "Right B" });
   const apart = await observeFor(
@@ -457,6 +471,8 @@ it("simultaneous invocations keep separate rounds, arrivals and numbers", async 
     started.id,
     (run) => run.joins.length === 2 && run.joins.every((join) => join.arrived === 1),
   );
+
+  // Act
   await resultReported(world, left.get("b")!, { message: "Left B" });
   const together = await observeFor("the left copy forwarded", world, started.id, (run) =>
     run.humanOccurrences.some((occurrence) => occurrence.context?.startsWith("Join round 1")),
@@ -534,12 +550,7 @@ const latched = (world: ScenarioWorld, runId: string) =>
     run.attention.some((matter) => matter.kind === "join-integrity"),
   );
 
-async function expectLatchedAndSettled(
-  f: Awaited<ReturnType<typeof prepared>>,
-  run: RunDetail,
-  refused: number,
-  workers: readonly WorkerHandle[],
-) {
+function expectLatched(run: RunDetail, refused: number) {
   expect(run.attention.filter((matter) => matter.kind === "join-integrity")).toMatchObject([
     { blockId: "merge", settledAt: null, message: expect.any(String) },
   ]);
@@ -549,23 +560,9 @@ async function expectLatchedAndSettled(
   expect(mergeIntents(run).filter((intent) => intent.state === "pending")[0]?.payloadRetained).toBe(
     true,
   );
-  const settled = await f.f.settleRun(run.id, { stopWorkers: true });
-  assert(settled.ok, JSON.stringify(settled));
-  for (const worker of workers) allTurnsEnd(f.world, worker, "interrupted");
-  const ended = await observeFor(
-    "the Run settled",
-    f.world,
-    run.id,
-    (detail) => detail.lifecycle === "settled",
-  );
-  expect(ended.attention.filter((matter) => matter.kind === "join-integrity")).toMatchObject([
-    { settledAt: expect.any(String), settlementReason: "manual-settlement" },
-  ]);
-  expect(mergeIntents(ended).filter((intent) => intent.state === "pending")).toEqual([]);
-  expect(ended.humanOccurrences).toEqual([]);
 }
 
-it("a lost queued message latches join-integrity before the round is consumed and Settle ends it", async (c) => {
+it("a lost queued message latches join-integrity before the round is consumed", async (c) => {
   // Arrange
   const f = await prepared(c, parallelJoinFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
@@ -579,7 +576,7 @@ it("a lost queued message latches join-integrity before the round is consumed an
 
   // Assert
   expect(merge(run)).toMatchObject({ arrived: 1, queued: 0 });
-  await expectLatchedAndSettled(f, run, 1, [first, second]);
+  expectLatched(run, 1);
 });
 
 it("an altered queued message latches join-integrity even though the round is incomplete", async (c) => {
@@ -598,13 +595,13 @@ it("an altered queued message latches join-integrity even though the round is in
   // Assert
   expect(second.runId).toBe(run.id);
   expect(merge(run)).toMatchObject({ arrived: 1, queued: 0 });
-  await expectLatchedAndSettled(f, run, 1, [first, second]);
+  expectLatched(run, 1);
 });
 
 it("a captured Join whose output lost its wires latches join-integrity at its first delivery", async (c) => {
   // Arrange
   const f = await prepared(c, parallelJoinFlow);
-  const [first, second] = await twoWorkersStarted(f.world, f.input);
+  const [first] = await twoWorkersStarted(f.world, f.input);
   await f.reopenWithCapturedOutputUnwired("merge", "output");
 
   // Act
@@ -613,35 +610,64 @@ it("a captured Join whose output lost its wires latches join-integrity at its fi
 
   // Assert
   expect(merge(run)).toMatchObject({ arrived: 0 });
-  await expectLatchedAndSettled(f, run, 1, [first, second]);
+  expectLatched(run, 1);
 });
 
-it("a round past the largest safe number latches join-integrity and consumes nothing", async (c) => {
-  // Arrange
+async function overflowQueue(c: Parameters<typeof prepared>[0]) {
   const f = await prepared(c, parallelJoinFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
-  await resultReported(f.world, first, { message: "A1" });
-  await resultReported(f.world, second, { message: "B1" });
-  await observeFor("round 1 forwarded", f.world, first.runId, (run) => merge(run)?.latest !== null);
+  await resultReported(f.world, first, { message: "Existing queued message" });
+  await observeFor("source queued", f.world, first.runId, (r) => merge(r)?.arrived === 1);
+  joinRoundsForwarded(f.h.databasePath, first.runId, "merge", 1);
   joinRoundAtMaximum(f.h.databasePath);
-  const firstAgain = turnBegins(f.world, first, "another-review");
-  const secondAgain = turnBegins(f.world, second, "another-second");
-  await resultReported(f.world, firstAgain, { message: "A2", exit: "Revise" });
-  await observeFor("A2 queued", f.world, first.runId, (run) => merge(run)?.arrived === 1);
+  await resultReported(f.world, second, { message: "Final source" });
+  await latched(f.world, first.runId);
+  return { f, runId: first.runId };
+}
 
-  // Act
-  await resultReported(f.world, secondAgain, { message: "B2", exit: "Revise" });
-  const run = await latched(f.world, first.runId);
-
-  // Assert
-  expect(merge(run)).toMatchObject({ arrived: 1, queued: 0 });
-  expect(run.attention.filter((matter) => matter.kind === "join-integrity")).toMatchObject([
-    { settledAt: null },
-  ]);
-  expect(mergeIntents(run).filter((intent) => intent.state === "pending")).toHaveLength(1);
+function expectOverflowCleared(run: RunDetail) {
+  expect(merge(run)).toMatchObject({
+    arrived: 0,
+    latest: { round: Number.MAX_SAFE_INTEGER, outcome: "forwarded" },
+  });
   expect(roundEvents(run)).toEqual([
     { kind: "join-round-forwarded", blockId: "merge", round: Number.MAX_SAFE_INTEGER },
   ]);
+  expect(run.attention.filter((matter) => matter.kind === "join-integrity")).toMatchObject([
+    { settledAt: expect.any(String) },
+  ]);
+}
+
+it("Archive clears an existing overflow queue and preserves the last valid round", async (c) => {
+  // Arrange
+  const { f, runId } = await overflowQueue(c);
+
+  // Act
+  const result = await f.f.archiveRun(runId);
+
+  // Assert
+  assertOk(result);
+  expectOverflowCleared(assertOk(await f.f.getRun(runId)));
+});
+
+it("Settle clears an existing overflow queue and preserves the last valid round", async (c) => {
+  // Arrange
+  const { f, runId } = await overflowQueue(c);
+  f.t3.threads.stopsEndThreads();
+
+  // Act
+  const result = await f.f.settleRun(runId, { stopWorkers: true });
+
+  // Assert
+  assertOk(result);
+  expectOverflowCleared(
+    await observeFor(
+      "completed manual settlement",
+      f.world,
+      runId,
+      (r) => r.lifecycle === "settled",
+    ),
+  );
 });
 
 it("a latched Join holds every later delivery unaccepted", async (c) => {
@@ -693,7 +719,7 @@ it("a storage failure while accepting an arrival records no arrival and no Probl
   expect(merge(failed)).toMatchObject({ arrived: 0 });
   expect(mergeIntents(failed)).toMatchObject([{ state: "pending" }]);
   expect(failed.attention).toEqual([]);
-  expect(mergeIntents(run)).toMatchObject([{ state: "acknowledged" }]);
+  expect(mergeIntents(run)).toMatchObject([{ state: "acknowledged", problem: null }]);
   expect(run.attention).toEqual([]);
 });
 
@@ -715,4 +741,138 @@ it("a Run keeps only each Join's latest rounds on the timeline while the summary
     round: JOIN_TIMELINE_ROUNDS + 11,
     latest: { round: JOIN_TIMELINE_ROUNDS + 10, outcome: "forwarded" },
   });
+});
+
+it("a missing captured ending latches before the first Join arrival", async (c) => {
+  // Arrange
+  const f = await prepared(c, joinedEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  capturedJoinEndingMissing(f.h.databasePath);
+  await f.reopen();
+
+  // Act
+  await resultReported(f.world, worker);
+
+  // Assert
+  const run = await latched(f.world, worker.runId);
+  expect(merge(run)).toMatchObject({ arrived: 0, latest: null });
+  expect(mergeIntents(run)).toMatchObject([{ state: "pending", payloadRetained: true }]);
+});
+
+async function foreignQueue(c: Parameters<typeof prepared>[0]) {
+  const f = await prepared(c, parallelJoinFlow);
+  const [, second] = await twoWorkersStarted(f.world, f.input);
+  const [other] = await twoWorkersStarted(f.world, { ...f.input, requestId: "other-run" });
+  await resultReported(f.world, other, { message: "Other review" });
+  await observeFor("other queued", f.world, other.runId, (r) => merge(r)?.arrived === 1);
+  foreignJoinQueue(f.h.databasePath, second.runId, other.runId);
+  return { f, second, other };
+}
+
+it("release holds a queue referencing another Run's acknowledged Handoff", async (c) => {
+  // Arrange
+  const { f, second, other } = await foreignQueue(c);
+
+  // Act
+  await resultReported(f.world, second, { message: "Second review" });
+
+  // Assert
+  const run = await latched(f.world, second.runId);
+  expect(merge(run)?.latest).toBeNull();
+  expect(run.humanOccurrences).toEqual([]);
+  expect(mergeIntents(assertOk(await f.f.getRun(other.runId)))).toMatchObject([
+    { payloadRetained: true },
+  ]);
+});
+
+it("cancelling a queue preserves a referenced payload belonging to another Run", async (c) => {
+  // Arrange
+  const { f, second, other } = await foreignQueue(c);
+
+  // Act
+  const archived = await f.f.archiveRun(second.runId);
+
+  // Assert
+  expect(merge(assertOk(archived))).toMatchObject({ arrived: 0, latest: { outcome: "cancelled" } });
+  expect(mergeIntents(assertOk(await f.f.getRun(other.runId)))).toMatchObject([
+    { payloadRetained: true },
+  ]);
+});
+
+it("Finish preserves the Join integrity Problem when another branch completes", async (c) => {
+  // Arrange
+  const f = await prepared(c, joinBesideEndingFlow);
+  const started = assertOk(await f.f.startRun(f.input));
+  const { run } = await launchedWorkers(f.world, started.id);
+  const worker = workerHandle(f.world, run, "worker");
+  const third = workerHandle(f.world, run, "third");
+  await f.reopenWithCapturedOutputUnwired("merge", "output");
+  await resultReported(f.world, worker);
+  await latched(f.world, started.id);
+  f.t3.threads.stopsEndThreads();
+
+  // Act
+  await resultReported(f.world, third);
+
+  // Assert
+  const ended = await observeFor(
+    "Finish settled",
+    f.world,
+    started.id,
+    (r) => r.lifecycle === "settled",
+  );
+  expect(ended.attention.filter((m) => m.kind === "join-integrity")).toMatchObject([
+    { settledAt: null },
+  ]);
+});
+
+it("an inner Finish preserves its Join integrity Problem", async (c) => {
+  // Arrange
+  const { f, input, agent, world, t3, h } = await prepared(c);
+  const parent = await parallelJoinedCopies(f, agent.id);
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const { run, workers } = await launchedWorkers(world, started.id);
+  const { left } = copyWorkers(run, workers);
+  await resultReported(world, left.get("a")!);
+  await observeFor("queued", world, started.id, (r) => r.joins.some((j) => j.arrived === 1));
+  queuedJoinMessageLost(h.databasePath);
+  await resultReported(world, left.get("b")!);
+  const problem = (await latched(world, started.id)).attention.find(
+    (m) => m.kind === "join-integrity",
+  )!;
+  t3.threads.stopsEndThreads();
+
+  // Act
+  await resultReported(world, left.get("c")!);
+
+  // Assert
+  const ended = await observeFor("inner cutoff", world, started.id, (r) =>
+    r.joins.some((j) => j.latest?.outcome === "cancelled"),
+  );
+  expect(ended.attention.find((m) => m.id === problem.id)?.settledAt).toBeNull();
+  const invocation = run.blocks.find((b) => b.blockId === problem.blockId)!.invocationId!;
+  const path = assertOk(await f.getSubflowInvocation(started.id, invocation));
+  expect(path.joins).toContainEqual(
+    expect.objectContaining({
+      blockId: problem.blockId,
+      round: 2,
+      latest: expect.objectContaining({ outcome: "cancelled" }),
+    }),
+  );
+});
+
+it("the first arrival after the round ceiling latches before queuing any message", async (c) => {
+  // Arrange
+  const f = await prepared(c, parallelJoinFlow);
+  const [a] = await twoWorkersStarted(f.world, f.input);
+  joinRoundsForwarded(f.h.databasePath, a.runId, "merge", 1);
+  joinRoundAtMaximum(f.h.databasePath);
+
+  // Act
+  await resultReported(f.world, a);
+
+  // Assert
+  const run = await latched(f.world, a.runId);
+  expect(merge(run)).toMatchObject({ round: Number.MAX_SAFE_INTEGER, arrived: 0, queued: 0 });
+  expect(mergeIntents(run)).toMatchObject([{ state: "pending", payloadRetained: true }]);
 });

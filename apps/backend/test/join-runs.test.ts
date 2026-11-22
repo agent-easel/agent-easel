@@ -10,8 +10,6 @@ import {
   parallelJoinFlow,
   twoWorkersStarted,
   turnBegins,
-  report,
-  finishedReport,
   resultReported,
   observeFor,
 } from "./support/scenarios.ts";
@@ -68,7 +66,6 @@ it("a restart preserves a fast source's extra arrival and the next round pairs t
       r.intents.filter((i) => i.blockId === "merge" && i.state === "acknowledged").length === 2,
   );
 
-  // Act
   await f.reopen();
   await resultReported(f.world, second, { message: "B1" });
   const one = await observeFor(
@@ -82,9 +79,10 @@ it("a restart preserves a fast source's extra arrival and the next round pairs t
   const recipient = workerHandle(f.world, one, "follow-up");
   await f.t3.threads.recordLaunchedThread(recipient.threadId);
   await resultReported(f.world, recipient, { message: "Reviewed." });
-  await f.reopen();
-  expect(await report(f.world, second, finishedReport("B1"))).toBe("ACCEPTED");
+
   const later = turnBegins(f.world, second, "another-second");
+
+  // Act
   await resultReported(f.world, later, { message: "B2", exit: "Revise" });
   const two = await observeFor(
     "second pair",

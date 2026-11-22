@@ -259,6 +259,7 @@ export interface SubflowPlacementSummary {
 }
 
 export interface SubflowInvocationPath {
+  readonly joins: readonly JoinSummary[];
   readonly ancestors: readonly SubflowInvocation[];
   readonly invocation: SubflowInvocation;
   readonly placements: readonly SubflowPlacementSummary[];
@@ -626,7 +627,10 @@ export interface RunDetail extends RunSummary {
     readonly blockId: string | null;
     /** Only on `condition-selected`: the arrival's number and the output it selected. */
     readonly condition?: ConditionSelection;
-    readonly join?: { readonly round: number };
+    readonly join?: {
+      readonly round: number;
+      readonly scope?: { readonly flowId: string; readonly templateBlockId: string };
+    };
   }[];
 }
 

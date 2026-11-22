@@ -961,10 +961,20 @@ export async function scenariosFixture(host: Host) {
       async arriveAtCondition({ id, through }: { id: string; through: number }) {
         await conditionArrivalsThrough(context, id, through);
       },
-      async reportFrom({ id, blockId, message }: { id: string; blockId: string; message: string }) {
+      async reportFrom({
+        id,
+        blockId,
+        message,
+        exit,
+      }: {
+        id: string;
+        blockId: string;
+        message: string;
+        exit?: string;
+      }) {
         const run = requireSuccess(await factory.getRun(id));
         await resultReported(context, workerHandle(context, run, blockId), {
-          exit: exitOf(run, blockId),
+          exit: exit ?? exitOf(run, blockId),
           message,
         });
       },

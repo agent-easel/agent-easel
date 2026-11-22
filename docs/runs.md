@@ -859,7 +859,9 @@ waiting arrival (exit id, exit name, arrival time) or null while it is pending, 
 20 of them, and its arrival in the `latest` round (the one that round forwarded, or the oldest one its cancellation
 cancelled; null when it had none), plus the same `round` and `latest`. It carries no message text: the combined message reaches recipients as their
 feedback or context, and Archive clears it. An unknown Run or a block that is not a Join of the Run is `not_found`. Inside
-a Subflow, use the invocation's own Join Block ID; each invocation keeps its own queues and round numbers.
+a Subflow, use the invocation's own Join Block ID; each invocation keeps its own queues and round numbers. Selecting a past invocation loads its Join summaries so its canvas and inspector can show the sources and outcome from that invocation.
+
+At the safe integer limit, the first further delivery latches an integrity Problem. The summary and detail keep `round` at the limit. A cutoff clears any overflow queue already present and preserves the last valid numbered outcome.
 
 The timeline records **round *N* forwarded** and **round *N* cancelled** rows with the Join icon (`join-round-forwarded` and
 `join-round-cancelled`, each with the round's `join.round`). A Run read carries only each Join's latest 50 of these events,

@@ -52,6 +52,8 @@ type RunEventRow = {
   arrival_number: number | null;
   output_id: string | null;
   join_round: number | null;
+  join_flow_id: string | null;
+  join_template: string | null;
   kind: string;
   observed_at: string;
   block_id: string | null;
@@ -205,7 +207,16 @@ function runEvent(event: RunEventRow): RunDetail["events"][number] {
     ...(event.arrival_number === null || event.output_id === null
       ? {}
       : { condition: { arrivalNumber: event.arrival_number, outputId: event.output_id } }),
-    ...(event.join_round === null ? {} : { join: { round: event.join_round } }),
+    ...(event.join_round === null
+      ? {}
+      : {
+          join: {
+            round: event.join_round,
+            ...(event.join_flow_id && event.join_template
+              ? { scope: { flowId: event.join_flow_id, templateBlockId: event.join_template } }
+              : {}),
+          },
+        }),
   };
 }
 
@@ -287,12 +298,15 @@ export function openRunQueries(database: RunnerDatabase) {
         // A Condition's selections grow with every arrival, so a Run read keeps only its latest
         // ones; the bounded evidence page reaches the rest.
         const events =
-          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id,COALESCE(jr.number,jc.round_number) AS join_round
+          yield* sql<RunEventRow>`WITH ranked_joins AS (SELECT sequence, ROW_NUMBER() OVER (PARTITION BY block_id ORDER BY sequence DESC) AS rank FROM run_events WHERE run_id=${id} AND kind IN ('join-round-forwarded','join-round-cancelled'))
+          SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id,COALESCE(jr.number,jc.round_number) AS join_round, v.flow_id AS join_flow_id, b.template_block_id AS join_template
           FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id
           LEFT JOIN join_rounds jr ON e.kind='join-round-forwarded' AND jr.id=e.cause_id
           LEFT JOIN join_cancellations jc ON e.kind='join-round-cancelled' AND jc.id=e.cause_id
+          LEFT JOIN run_blocks b ON e.kind IN ('join-round-forwarded','join-round-cancelled') AND b.run_id=e.run_id AND b.block_id=e.block_id
+          LEFT JOIN subflow_invocations v ON v.id=b.invocation_id
           WHERE e.run_id=${id} AND (e.kind<>'condition-selected' OR c.arrival_number>(SELECT k.arrivals FROM condition_counters k WHERE k.run_id=c.run_id AND k.block_id=c.block_id)-${CONDITION_TIMELINE_ARRIVALS})
-          AND (e.kind NOT IN ('join-round-forwarded','join-round-cancelled') OR (SELECT COUNT(*) FROM run_events n WHERE n.run_id=e.run_id AND n.block_id=e.block_id AND n.kind IN ('join-round-forwarded','join-round-cancelled') AND n.sequence>e.sequence)<${JOIN_TIMELINE_ROUNDS})
+          AND (e.kind NOT IN ('join-round-forwarded','join-round-cancelled') OR e.sequence IN (SELECT sequence FROM ranked_joins WHERE rank<=${JOIN_TIMELINE_ROUNDS}))
           ORDER BY e.sequence`;
         const reports =
           yield* sql<ResultRecord>`SELECT * FROM runtime_reports WHERE run_id=${id} ORDER BY rowid`;

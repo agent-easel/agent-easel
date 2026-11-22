@@ -165,7 +165,7 @@ export async function heavyWriters(factory: Factory, prompt: string): Promise<Ag
   return writers;
 }
 
-export async function savedFlow(factory: Factory, input: CreateFlowInput) {
+export async function savedFlow(factory: Pick<Factory, "createFlow">, input: CreateFlowInput) {
   return assertOk(await factory.createFlow(input));
 }
 

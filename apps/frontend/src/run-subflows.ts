@@ -72,12 +72,16 @@ function indexRunSubflows(
   const placements = new Map<string, Placement>();
   const byBlock = new Map<string, { path: string; scope: Scope }>();
   const summaries = new Map(run.subflows?.map((item) => [item.blockId, item]));
+  const joins = new Map(run.joins.map((join) => [join.blockId, join]));
   const liveBlocks = new Map(run.blocks.map((block) => [block.blockId, block]));
   for (const invocation of selected.values()) {
     const evidence = loaded?.get(invocation.id);
+    for (const join of evidence?.joins ?? [])
+      if (!joins.has(join.blockId)) joins.set(join.blockId, join);
     for (const placement of evidence?.placements ?? [])
       if (!summaries.has(placement.blockId)) summaries.set(placement.blockId, placement);
   }
+  const visibleRun = { ...run, joins: [...joins.values()] };
   function visit(path: string, scope: Scope) {
     scopes.set(path, scope);
     for (const [templateId, block] of scope.blocks)
@@ -107,7 +111,11 @@ function indexRunSubflows(
           blocks: invocation.blocks.map((inner) => liveBlocks.get(inner.blockId) ?? inner),
         };
         const blocks = new Map(visible.blocks.map((inner) => [inner.templateBlockId!, inner]));
-        visit(runtime.path, { run: scopedRun(run, visible, blocks), blocks, invocation });
+        visit(runtime.path, {
+          run: scopedRun(visibleRun, visible, blocks),
+          blocks,
+          invocation,
+        });
       }
     }
   }
@@ -118,7 +126,7 @@ function indexRunSubflows(
         run.blocks.filter((block) => !block.invocationId).map((block) => [block.blockId, block]),
       ),
     });
-  return { scopes, placements, byBlock };
+  return { scopes, placements, byBlock, joins: visibleRun.joins };
 }
 
 export function invocationBlockPath(evidence: SubflowInvocationPath, blockId: string) {

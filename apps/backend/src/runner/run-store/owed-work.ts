@@ -82,7 +82,7 @@ export function cancelOwedWork(
       id: string;
       block_id: string;
       execution_id: string;
-    }>`SELECT id,block_id,execution_id FROM run_attention WHERE run_id=${id} AND settled_at IS NULL`;
+    }>`SELECT id,block_id,execution_id FROM run_attention WHERE run_id=${id} AND settled_at IS NULL AND (${cutoff}<>'finish' OR kind<>'join-integrity')`;
     yield* settleAttention(
       sql,
       attention.map((matter) => ({

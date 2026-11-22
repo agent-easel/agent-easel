@@ -66,6 +66,7 @@ export function openRunReads(database: RunnerDatabase) {
           sql<{ count: number }>`SELECT COUNT(*) AS count FROM (
             SELECT block_id FROM run_activations WHERE run_id=${runId}
             UNION SELECT block_id FROM human_occurrences WHERE run_id=${runId}
+            UNION SELECT block_id FROM join_arrivals WHERE run_id=${runId}
             UNION SELECT block_id FROM wait_arrivals WHERE run_id=${runId}
             UNION SELECT block_id FROM continuation_visits WHERE run_id=${runId}
             UNION SELECT block_id FROM condition_counters WHERE run_id=${runId} AND arrivals>0

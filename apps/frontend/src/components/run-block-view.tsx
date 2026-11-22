@@ -581,7 +581,9 @@ export function RunBlockView({
 /** The Block's canonical state, as its canvas card shows it. */
 function BlockStateBadge({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
   const kind = blockStateKind(run, recorded);
-  const cancelled = kind === "stopped" && isCancelledJoin(joinSummaryOf(run, recorded.blockId));
+  const join = joinSummaryOf(run, recorded.blockId);
+  if (join && kind === "problem") return <StatusBadge kind="problem">Error</StatusBadge>;
+  const cancelled = kind === "stopped" && isCancelledJoin(join);
   if (cancelled) return <StatusBadge kind="stopped">Cancelled</StatusBadge>;
   return kind ? <StatusBadge kind={kind} /> : <ExecutionStateBadge state={recorded.state} />;
 }

@@ -40,7 +40,7 @@ export function cancelInvocationWork(
       WHERE run_id=${runId} AND block_id IN (${blocks}) AND state IN ('queued','sent')`;
     const matters = yield* sql<{ id: string; blockId: string; executionId: string }>`
       SELECT id,block_id AS blockId,execution_id AS executionId FROM run_attention
-      WHERE run_id=${runId} AND block_id IN (${blocks}) AND settled_at IS NULL`;
+      WHERE run_id=${runId} AND block_id IN (${blocks}) AND settled_at IS NULL AND kind<>'join-integrity'`;
     yield* settleAttention(
       sql,
       matters.map((matter) => ({ ...matter, runId })),

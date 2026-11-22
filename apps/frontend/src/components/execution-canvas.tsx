@@ -592,7 +592,8 @@ function executionBlock(
 ): CanvasBlockContent {
   const state = blockStateKind(run, recorded);
   const join = block.kind === "join" ? joinSummaryOf(run, block.id) : undefined;
-  const cancelled = block.kind === "join" && isCancelledJoin(join);
+  const cancelled = state === "stopped" && isCancelledJoin(join);
+  const badgeLabel = cancelled ? "Cancelled" : join && state === "problem" ? "Error" : undefined;
   const workingMessage = recorded?.state === "working" ? recorded.workingMessage : null;
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
   const chosen = chosenExitIds(run, block, recorded);
@@ -610,7 +611,7 @@ function executionBlock(
         <button
           type="button"
           className={pressClass}
-          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${cancelled ? "Cancelled" : state ? RUN_STATE_LABELS[state] : "Not started"}${workingMessage ? ` · ${workingMessage}` : ""}`}
+          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${badgeLabel ?? (state ? RUN_STATE_LABELS[state] : "Not started")}${workingMessage ? ` · ${workingMessage}` : ""}`}
           aria-pressed={selected}
           onClick={onSelect}
         >
@@ -618,13 +619,7 @@ function executionBlock(
         </button>
       ),
     },
-    header: (
-      <ExecutionBlockHeader
-        kind={block.kind}
-        state={state}
-        label={cancelled && state === "stopped" ? "Cancelled" : undefined}
-      />
-    ),
+    header: <ExecutionBlockHeader kind={block.kind} state={state} label={badgeLabel} />,
     title: (
       <ExecutionBlockTitle run={run} block={block} recorded={recorded} observation={observation} />
     ),
@@ -750,7 +745,7 @@ export function ExecutionCanvas({
     () => exitRecipients(run.definitions.flow.graph),
     [run.definitions.flow.graph],
   );
-  const joinReads = useJoinDetails(run.id, run.joins);
+  const joinReads = useJoinDetails(run.id, subflows.joins);
   const blockFooters = useMemo(
     () => (block: CanvasBlock) =>
       executionFooterCount(run, block, recordedById.get(block.id), observationUnavailable),

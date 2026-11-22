@@ -48,7 +48,7 @@ export function blockStateKind(
   const attention = blockAttention(run, recorded);
   if ((kind === "working" || kind === "waiting") && attention.needsInput) return "needs-input";
   if (
-    kind === "waiting" &&
+    (kind === "waiting" || kind === null) &&
     attention.problem &&
     run.joins.some((join) => join.blockId === recorded?.blockId)
   )

@@ -94,46 +94,51 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
     (arrival) => arrival.blockId,
   );
   const joins = new Map(detail.joins.map((summary) => [summary.blockId, summary]));
-  return orderedBlocks(detail.definitions.flow.graph).map(({ id, name, kind }) => {
-    const block = recorded.get(id);
-    const pending = attention.get(id) ?? [];
-    const problem = pending.find((matter) => attentionPresentation(matter.kind) === "problem");
-    const needsInput = pending.filter(
-      (matter) => attentionPresentation(matter.kind) === "needs-input",
-    );
-    const reviewInT3 = block !== undefined && awaitsReviewInT3(block);
-    const wait = waits.get(id);
-    const join = joins.get(id);
-    return {
-      name,
-      kind,
-      state: block?.state ?? "not-started",
-      observation: block?.freshness ?? "unknown",
-      problem: problem?.kind ?? null,
-      needsInput:
-        detail.settlement !== null
-          ? null
-          : reviewInT3 || needsInput.some((matter) => matter.kind === "native-request")
-            ? "T3"
-            : needsInput.length > 0
-              ? "Human"
-              : null,
-      wait: wait
-        ? {
-            deadlineAt: wait.reduce(
-              (earliest, arrival) =>
-                arrival.deadlineAt < earliest ? arrival.deadlineAt : earliest,
-              wait[0]!.deadlineAt,
-            ),
-            count: wait.length,
-          }
-        : null,
-      join:
-        join && block?.state === "waiting" && join.arrived > 0
-          ? { arrived: join.arrived, sources: join.sources }
+  const childJoins = detail.blocks
+    .filter((block) => block.invocationId && joins.has(block.blockId))
+    .map((block) => ({ id: block.blockId, name: block.name, kind: "join" as const }));
+  return [...orderedBlocks(detail.definitions.flow.graph), ...childJoins].map(
+    ({ id, name, kind }) => {
+      const block = recorded.get(id);
+      const pending = attention.get(id) ?? [];
+      const problem = pending.find((matter) => attentionPresentation(matter.kind) === "problem");
+      const needsInput = pending.filter(
+        (matter) => attentionPresentation(matter.kind) === "needs-input",
+      );
+      const reviewInT3 = block !== undefined && awaitsReviewInT3(block);
+      const wait = waits.get(id);
+      const join = joins.get(id);
+      return {
+        name,
+        kind,
+        state: block?.state ?? "not-started",
+        observation: block?.freshness ?? "unknown",
+        problem: problem?.kind ?? null,
+        needsInput:
+          detail.settlement !== null
+            ? null
+            : reviewInT3 || needsInput.some((matter) => matter.kind === "native-request")
+              ? "T3"
+              : needsInput.length > 0
+                ? "Human"
+                : null,
+        wait: wait
+          ? {
+              deadlineAt: wait.reduce(
+                (earliest, arrival) =>
+                  arrival.deadlineAt < earliest ? arrival.deadlineAt : earliest,
+                wait[0]!.deadlineAt,
+              ),
+              count: wait.length,
+            }
           : null,
-    };
-  });
+        join:
+          join && block?.state === "waiting" && join.arrived > 0
+            ? { arrived: join.arrived, sources: join.sources }
+            : null,
+      };
+    },
+  );
 }
 
 /** A Run's report from its identity and current detail, as Read Run describes the same facts. */

@@ -62,3 +62,24 @@ export function joinRoundsForwarded(
   database.exec("COMMIT");
   database.close();
 }
+
+export function foreignJoinQueue(databasePath: string, runId: string, otherRunId: string) {
+  const database = openStorage(databasePath);
+  database
+    .prepare("UPDATE join_arrivals SET run_id=? WHERE run_id=? AND round_id IS NULL")
+    .run(runId, otherRunId);
+  database.close();
+}
+
+export function capturedJoinEndingMissing(databasePath: string) {
+  const database = openStorage(databasePath);
+  database.exec("PRAGMA foreign_keys=OFF");
+  database.exec("BEGIN");
+  database.exec("DROP TRIGGER immutable_flow_revision_ending_delete");
+  database.exec("DELETE FROM flow_revision_endings");
+  database.exec(
+    "CREATE TRIGGER immutable_flow_revision_ending_delete BEFORE DELETE ON flow_revision_endings BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+  );
+  database.exec("COMMIT");
+  database.close();
+}

@@ -70,9 +70,11 @@ function joinTopology(definitions: RunDefinitions, blockId: string) {
   if (connections.some((wire) => wire.sourceBlockId === blockId && wire.exitId !== JOIN_OUTPUT))
     return unverified("A wire leaves the captured Join by an exit it lacks.");
   const recipients = handoffRecipients(connections, blockId, JOIN_OUTPUT);
+  const endings = handoffEndings(connections, blockId, JOIN_OUTPUT);
   if (
+    endings.some((id) => !flow.graph.finish?.endings.some((ending) => ending.id === id)) ||
     recipients.some((id) => !blocks.some((block) => block.id === id)) ||
-    recipients.length + handoffEndings(connections, blockId, JOIN_OUTPUT).length === 0
+    recipients.length + endings.length === 0
   )
     return unverified("The captured Join's output reaches no recipient or Finish ending.");
   return verified({ slots, flows });
@@ -197,7 +199,7 @@ const checkDelivery = Effect.fnUntraced(function* (
   if (!arriving.ok) return arriving;
   const queue =
     yield* sql<QueuedArrival>`SELECT a.ordinal,a.source_block_id,a.exit_id,i.id AS intent_id,i.kind,i.state,i.block_id AS intent_block_id,i.source_block_id AS intent_source_block_id,i.exit_id AS intent_exit_id,i.payload_json IS NOT NULL AS has_payload
-    FROM join_arrivals a LEFT JOIN operation_intents i ON i.id=a.incoming_intent_id
+    FROM join_arrivals a LEFT JOIN operation_intents i ON i.id=a.incoming_intent_id AND i.run_id=a.run_id
     WHERE a.run_id=${run.id} AND a.block_id=${blockId} AND a.round_id IS NULL AND a.cancelled_at IS NULL ORDER BY a.ordinal`;
   const queued = queuedHeads(queue, blockId, wired);
   if (!queued.ok) return queued;
@@ -208,9 +210,9 @@ const checkDelivery = Effect.fnUntraced(function* (
     heads.set(arriving.value.source, arriving.value);
     messages.value.set(arriving.value.intent, arriving.value.message);
   }
-  if (slots.some((slot) => !heads.has(slot.sourceBlockId))) return verified(null);
   const number = yield* nextRoundNumber(sql, run.id, blockId);
   if (!number.ok) return number;
+  if (slots.some((slot) => !heads.has(slot.sourceBlockId))) return verified(null);
   const message = roundMessage(run.definitions, slots, flows, messages.value, heads, number.value);
   if (!message.ok) return message;
   return verified({
@@ -230,8 +232,8 @@ const forwardRound = Effect.fnUntraced(function* (
   const id = yield* newId;
   yield* sql`INSERT INTO join_rounds(id,run_id,block_id,number,forwarded_at,message) VALUES(${id},${run.id},${blockId},${round.number},${time},${round.message})`;
   const spent = sql.in(round.spent);
-  yield* sql`UPDATE join_arrivals SET round_id=${id} WHERE incoming_intent_id IN ${spent}`;
-  yield* sql`UPDATE operation_intents SET payload_json=NULL WHERE id IN ${spent}`;
+  yield* sql`UPDATE join_arrivals SET round_id=${id} WHERE run_id=${run.id} AND block_id=${blockId} AND incoming_intent_id IN ${spent}`;
+  yield* sql`UPDATE operation_intents SET payload_json=NULL WHERE run_id=${run.id} AND block_id=${blockId} AND id IN ${spent}`;
   yield* appendTimelineEvent(sql, {
     kind: "join-round-forwarded",
     runId: run.id,
@@ -263,12 +265,13 @@ export function cancelJoinArrivals(
       block_id: string;
     }>`SELECT DISTINCT block_id FROM join_arrivals WHERE run_id=${runId} AND round_id IS NULL AND cancelled_at IS NULL ${inScope}`;
     for (const { block_id: blockId } of joins) {
-      yield* sql`UPDATE operation_intents SET payload_json=NULL WHERE id IN (SELECT incoming_intent_id FROM join_arrivals WHERE run_id=${runId} AND block_id=${blockId} AND round_id IS NULL AND cancelled_at IS NULL)`;
+      yield* sql`UPDATE operation_intents SET payload_json=NULL WHERE run_id=${runId} AND block_id=${blockId} AND kind='handoff' AND id IN (SELECT incoming_intent_id FROM join_arrivals WHERE run_id=${runId} AND block_id=${blockId} AND round_id IS NULL AND cancelled_at IS NULL)`;
       yield* sql`UPDATE join_arrivals SET cancelled_at=${time} WHERE run_id=${runId} AND block_id=${blockId} AND round_id IS NULL AND cancelled_at IS NULL`;
       const id = yield* newId;
       const recorded =
         yield* sql`INSERT INTO join_cancellations(id,run_id,block_id,round_number,cancelled_at)
         SELECT ${id},${runId},${blockId},COALESCE(MAX(number),0)+1,${time} FROM join_rounds WHERE run_id=${runId} AND block_id=${blockId}
+        HAVING COALESCE(MAX(number),0)<${Number.MAX_SAFE_INTEGER}
         ON CONFLICT(run_id,block_id,round_number) DO NOTHING RETURNING id`;
       if (recorded.length)
         yield* appendTimelineEvent(sql, {
@@ -315,7 +318,7 @@ export function openRunJoins(database: RunnerDatabase) {
             return changed;
           }
           yield* sql`INSERT INTO join_arrivals(incoming_intent_id,run_id,block_id,source_block_id,exit_id,arrived_at) VALUES(${incoming.id},${run.id},${blockId},${incoming.source_block_id},${incoming.exit_id},${time})`;
-          yield* sql`UPDATE operation_intents SET state='acknowledged',reconciled_at=${time} WHERE id=${incoming.id}`;
+          yield* sql`UPDATE operation_intents SET state='acknowledged',problem=NULL,reconciled_at=${time} WHERE id=${incoming.id}`;
           if (checked.value) yield* forwardRound(sql, run, blockId, checked.value, time);
           yield* writeBlockState(
             sql,

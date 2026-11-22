@@ -15,16 +15,16 @@ const readMessage = (caught: unknown) =>
 export function useJoinDetails(runId: string, summaries: readonly JoinSummary[]): JoinReads {
   const [reads, setReads] = useState<JoinReads>(new Map());
   const requested = useRef(new Map<string, string>());
-  const signature = summaries
-    .filter((summary) => summary.arrived > 0 || summary.latest)
-    .map((summary) => `${summary.blockId}=${runId}:${joinDetailKey(summary)}`)
-    .join(",");
+  const signature = JSON.stringify(
+    summaries
+      .filter((summary) => summary.arrived > 0 || summary.latest)
+      .map((summary) => [summary.blockId, JSON.stringify([runId, joinDetailKey(summary)])]),
+  );
   useEffect(() => {
     let current = true;
     const requests = requested.current;
     const inFlight = new Set<string>();
-    for (const entry of signature ? signature.split(",") : []) {
-      const [blockId = "", key = ""] = entry.split("=");
+    for (const [blockId, key] of JSON.parse(signature) as [string, string][]) {
       if (requests.get(blockId) === key) continue;
       requests.set(blockId, key);
       inFlight.add(blockId);
@@ -36,15 +36,16 @@ export function useJoinDetails(runId: string, summaries: readonly JoinSummary[])
         },
         (caught: unknown) => {
           inFlight.delete(blockId);
+          if (!current) return;
           requests.delete(blockId);
-          if (current)
-            setReads((previous) =>
-              new Map(previous).set(blockId, {
-                key,
-                detail: previous.get(blockId)?.detail ?? null,
-                error: readMessage(caught),
-              }),
-            );
+
+          setReads((previous) =>
+            new Map(previous).set(blockId, {
+              key,
+              detail: previous.get(blockId)?.detail ?? null,
+              error: readMessage(caught),
+            }),
+          );
         },
       );
     }

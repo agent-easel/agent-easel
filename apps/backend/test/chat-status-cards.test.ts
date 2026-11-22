@@ -1,3 +1,4 @@
+import { savedFlow, placingGraph } from "./support/subflow.ts";
 import { assert, expect, it } from "@effect/vitest";
 import {
   besidesReports,
@@ -38,6 +39,7 @@ import {
   missingReport,
   observeFor,
   parallelJoinFlow,
+  joinedEndingFlow,
   parallelWaitFlow,
   racingEndingsFlow,
   resultReleasedToHumanReview,
@@ -1068,11 +1070,12 @@ it("a Join with a partial round shows one Waiting row with its arrived sources u
   const { run } = await launchedWorkers(world.world, runId);
   const [first, second] = ["worker", "second"].map((id) => workerHandle(world.world, run, id));
 
-  // Act
   await resultReported(world.world, first!, { message: "A1" });
   const waiting = (
     await messageShows(world.discord, card, /Merge — Waiting · 1\/2 sources/)
   ).content.split("\n");
+
+  // Act
   await resultReported(world.world, second!, { message: "B1" });
   const forwarded = await messageShows(world.discord, card, /✅ Merge — finished/);
 
@@ -1100,4 +1103,28 @@ it("a latched Join Problem takes precedence over its Waiting row", async (c) => 
   const shown = await messageShows(world.discord, card, /Join cannot forward its next round/);
   expect(shown.content.split("\n")).toContain("⚠️ **Merge** — Join cannot forward its next round");
   expect(shown.content).not.toContain("Waiting · ");
+});
+
+it("a child Join waiting for its second source appears on the Discord card", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, async (context) => {
+    const { agent, flow: child } = await joinedEndingFlow(context);
+    const graph = placingGraph(child.id);
+    const flow = await savedFlow(context.factory, {
+      name: "Review panel",
+      graph: {
+        ...graph,
+        connections: graph.connections.map((w) => ({ ...w, exitId: "shipped" })),
+      },
+    });
+    return { agent, flow };
+  });
+  const { worker, card } = await chatStartedRun(world);
+
+  // Act
+  await resultReported(world.world, worker);
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /Merge — Waiting · 1\/2 sources/);
+  expect(shown.content.split("\n")).toContain("⏳ Merge — Waiting · 1/2 sources");
 });

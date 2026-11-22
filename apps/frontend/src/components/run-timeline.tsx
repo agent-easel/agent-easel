@@ -1,3 +1,4 @@
+import { joinSlots } from "@t3-factory/domain-validation";
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
@@ -29,6 +30,7 @@ type RunEvent = RunDetail["events"][number];
 /** One timeline row in words: who acted, what happened, and the exit route a report took. */
 interface EventPhrase {
   readonly actorId: CanvasBlockSelection | null;
+  readonly actorName?: string | undefined;
   readonly text: string;
   readonly route?: { readonly exit: string; readonly recipients: string };
   /** Arrival rows link to the block's T3 thread (Figma "T3 thread"). */
@@ -138,14 +140,26 @@ function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
   };
 }
 
+function joinEventBlock(run: RunDetail, event: RunEvent) {
+  const scope = event.join?.scope;
+  const graph = scope
+    ? run.definitions.subflows?.find((flow) => flow.id === scope.flowId)?.graph
+    : run.definitions.flow.graph;
+  const id = scope?.templateBlockId ?? event.blockId;
+  if (!id || !graph) return undefined;
+  return { id, graph, name: graph.blocks.find((b) => b.id === id)?.name };
+}
+
 function joinRoundForwarded(run: RunDetail, event: RunEvent): EventPhrase {
   const round = event.join?.round;
-  const sources = run.joins.find((join) => join.blockId === event.blockId)?.sources;
-  const recipients = event.blockId
-    ? blockExitRecipients(run.definitions.flow.graph, event.blockId)("output").filter(Boolean)
+  const block = joinEventBlock(run, event);
+  const sources = block && joinSlots(block.graph, block.id).length;
+  const recipients = block
+    ? blockExitRecipients(block.graph, block.id)("output").filter(Boolean)
     : [];
   return {
     actorId: event.blockId,
+    actorName: block?.name,
     text: [
       `round ${round ?? "?"} forwarded`,
       sources ? ` · ${sources}/${sources} sources` : "",
@@ -154,9 +168,10 @@ function joinRoundForwarded(run: RunDetail, event: RunEvent): EventPhrase {
   };
 }
 
-function joinRoundCancelled(_run: RunDetail, event: RunEvent): EventPhrase {
+function joinRoundCancelled(run: RunDetail, event: RunEvent): EventPhrase {
   return {
     actorId: event.blockId,
+    actorName: joinEventBlock(run, event)?.name,
     text: `round ${event.join?.round ?? "?"} cancelled · not forwarded`,
   };
 }
@@ -388,13 +403,17 @@ function ActorIcon({
   run,
   actorId,
   title,
+  join,
 }: {
+  join?: boolean;
   run: RunDetail;
   actorId: CanvasBlockSelection | null;
   title: boolean;
 }) {
   if (title) return <TitleMark className="text-link" />;
-  const kind = run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
+  const kind = join
+    ? "join"
+    : run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
   const Icon = kind ? BLOCK_KINDS[kind].Icon : Flag;
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }
@@ -636,7 +655,7 @@ function TimelineEvent({
   event: RunEvent;
   selectedBlockId: CanvasBlockSelection | null;
 }) {
-  const { actorId, text, route, thread, threadLink, title = false } = phrase(run, event);
+  const { actorId, actorName, text, route, thread, threadLink, title = false } = phrase(run, event);
   const link =
     thread && (threadLink ?? run.blocks.find((block) => block.blockId === actorId)?.link);
   const report =
@@ -661,8 +680,10 @@ function TimelineEvent({
       >
         {clockTime(event.observedAt)}
       </time>{" "}
-      <ActorIcon run={run} actorId={actorId} title={title} />
-      <span className="shrink-0 font-medium whitespace-nowrap">{nameOf(run, actorId)}</span>{" "}
+      <ActorIcon run={run} actorId={actorId} title={title} join={!!event.join} />
+      <span className="shrink-0 font-medium whitespace-nowrap">
+        {actorName ?? nameOf(run, actorId)}
+      </span>{" "}
       <span className="min-w-0 flex-1 truncate text-muted-foreground">{text}</span>{" "}
       {report && (
         <div className="w-full py-2 pl-11">

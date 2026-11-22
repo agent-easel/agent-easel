@@ -82,13 +82,14 @@ export function readJoinSummaries(
           row.block_id === blockId &&
           slots.some((slot) => slot.sourceBlockId === row.source_block_id),
       );
+      const latest = outcome(latestForwarded, latestCancelled);
       summaries.push({
         blockId,
-        round: (latestForwarded?.round ?? 0) + 1,
+        round: Math.min((latest?.round ?? 0) + 1, Number.MAX_SAFE_INTEGER),
         sources: slots.length,
         arrived: queues.length,
         queued: queues.reduce((total, row) => total + row.waiting - 1, 0),
-        latest: outcome(latestForwarded, latestCancelled),
+        latest,
       });
     }
     return summaries;
@@ -149,7 +150,7 @@ export function openJoinEvidence(database: RunnerDatabase) {
           ok: true as const,
           value: {
             blockId,
-            round: (forwarded.find((row) => row.block_id === blockId)?.round ?? 0) + 1,
+            round: Math.min((latest?.round ?? 0) + 1, Number.MAX_SAFE_INTEGER),
             sources: slots.map((slot) => {
               const source = definitions.flow.graph.blocks.find(
                 (entry) => entry.id === slot.sourceBlockId,

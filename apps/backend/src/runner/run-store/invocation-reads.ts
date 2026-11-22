@@ -18,6 +18,9 @@ import { decodeCursor, encodeCursor } from "./read-cursor.ts";
 import type { DeliveryRecord } from "./records.ts";
 import { runBlock } from "./run-block-view.ts";
 
+import { readJoinSummaries } from "./join-evidence.ts";
+import { readRunDefinitions } from "./run-definitions.ts";
+
 type Cursor = readonly ["subflow", string, string | null, string, number, number];
 
 type Ending = EndingEvidenceRow & {
@@ -193,12 +196,29 @@ export function openInvocationReads(database: RunnerDatabase) {
         ) SELECT * FROM path ORDER BY distance DESC`;
         if (!rows.length) return failure("not_found", "This Run has no such invocation.");
         const views = yield* readInvocationViews(sql, rows);
+        const placements = yield* readSubflowSummaries(sql, runId, invocationId);
+        const visible = [...views, ...placements.flatMap((p) => p.defaultInvocation ?? [])];
+        const [saved] = yield* sql<{
+          id: string;
+          flow_revision_id: string;
+        }>`SELECT id,flow_revision_id FROM runs WHERE id=${runId}`;
+        const joins = yield* readJoinSummaries(
+          sql,
+          { id: runId, definitions: yield* readRunDefinitions(sql, saved!) },
+          visible.flatMap((view) =>
+            view.blocks.map((b) => ({
+              block_id: b.blockId,
+              template_block_id: b.templateBlockId ?? null,
+            })),
+          ),
+        );
         return {
           ok: true,
           value: {
+            joins,
             ancestors: views.slice(0, -1),
             invocation: views.at(-1)!,
-            placements: yield* readSubflowSummaries(sql, runId, invocationId),
+            placements,
           },
         };
       }),
