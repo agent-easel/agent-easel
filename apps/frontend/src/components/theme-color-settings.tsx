@@ -51,24 +51,31 @@ function keepPreviousBody(hasPrevious: boolean) {
     : "Factory keeps its own colors.";
 }
 
-function noticeForApply(result: ApplyCustomThemeResult, hasPrevious: boolean): ThemeNotice | null {
+export function noticesForApply(
+  result: ApplyCustomThemeResult,
+  hasPrevious: boolean,
+): readonly ThemeNotice[] {
   if (!result.ok) {
-    return {
-      tone: "error",
-      target: "textarea",
-      title: result.message,
-      body: keepPreviousBody(hasPrevious),
-      ...(result.details ? { details: result.details } : {}),
-    };
+    return [
+      {
+        tone: "error",
+        target: "textarea",
+        title: result.message,
+        body: keepPreviousBody(hasPrevious),
+        ...(result.details ? { details: result.details } : {}),
+      },
+    ];
   }
+  const notices: ThemeNotice[] = [];
   if (result.storageWarning) {
-    return {
+    notices.push({
       tone: "neutral",
       title: "Custom colors applied for this tab only",
       body: result.storageWarning,
-    };
+    });
   }
-  return result.unreadColors > 0 ? unreadWarning(result.unreadColors) : null;
+  if (result.unreadColors > 0) notices.push(unreadWarning(result.unreadColors));
+  return notices;
 }
 
 async function readThemeFile(
@@ -110,7 +117,7 @@ export function ThemeColorSettings() {
     readonly base: string | null;
     readonly value: string;
   } | null>(null);
-  const [notice, setNotice] = useState<ThemeNotice | null>(null);
+  const [notices, setNotices] = useState<readonly ThemeNotice[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const errorCardId = useId();
 
@@ -122,7 +129,7 @@ export function ThemeColorSettings() {
   const applyJson = (text: string) => {
     const result = applyCustomThemeJson(text);
     if (result.ok) setEdited(null);
-    setNotice(noticeForApply(result, presentation !== null));
+    setNotices(noticesForApply(result, presentation !== null));
   };
 
   const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +140,7 @@ export function ThemeColorSettings() {
     void readThemeFile(file, presentation !== null).then((outcome) => {
       if (!isCurrentThemeUpload(token)) return;
       if (!outcome.ok) {
-        setNotice(outcome.notice);
+        setNotices([outcome.notice]);
         return;
       }
       setDraft(outcome.text);
@@ -144,12 +151,12 @@ export function ThemeColorSettings() {
   const handleReset = () => {
     resetCustomTheme();
     setEdited(null);
-    setNotice(null);
+    setNotices([]);
   };
 
   const canApply = draft.trim().length > 0 && draft !== (rawJson ?? "");
   const invalidId = (target: "textarea" | "upload") =>
-    notice?.target === target ? errorCardId : undefined;
+    notices.some((item) => item.target === target) ? errorCardId : undefined;
 
   return (
     <>
@@ -193,28 +200,32 @@ export function ThemeColorSettings() {
           }
         />
       </SettingsGroup>
-      <ThemeNoticeCard notice={notice} errorCardId={errorCardId} />
+      <ThemeNoticeCards notices={notices} errorCardId={errorCardId} />
     </>
   );
 }
 
-function ThemeNoticeCard({
-  notice,
+function ThemeNoticeCards({
+  notices,
   errorCardId,
 }: {
-  notice: ThemeNotice | null;
+  notices: readonly ThemeNotice[];
   errorCardId: string;
 }) {
-  if (!notice) return null;
   return (
-    <ProblemCard
-      {...(notice.target ? { id: errorCardId } : {})}
-      tone={notice.tone}
-      title={notice.title}
-      details={notice.details}
-    >
-      {notice.body}
-    </ProblemCard>
+    <>
+      {notices.map((notice) => (
+        <ProblemCard
+          key={notice.title}
+          {...(notice.target ? { id: errorCardId } : {})}
+          tone={notice.tone}
+          title={notice.title}
+          details={notice.details}
+        >
+          {notice.body}
+        </ProblemCard>
+      ))}
+    </>
   );
 }
 

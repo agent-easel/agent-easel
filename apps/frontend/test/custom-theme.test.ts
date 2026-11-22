@@ -4,6 +4,7 @@ import {
   parseCustomThemeJson,
   parseStoredCustomTheme,
 } from "@t3-factory/domain-validation";
+import { noticesForApply } from "../src/components/theme-color-settings.tsx";
 
 function hexLuminance(hex: string): number {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -357,4 +358,35 @@ it("stored custom themes are re-derived from rawJson so tampered presentations c
   assert(restored !== null);
   expect(restored.presentation).toStrictEqual(parsed.presentation);
   expect(rejected).toBeNull();
+});
+
+it("applying a theme with an unreadable mapped color while storage is unavailable preserves both notices", () => {
+  // Arrange
+  const parsed = parseCustomThemeJson(
+    JSON.stringify({
+      name: "PartialNoStorage",
+      appearance: "dark",
+      canvas: "#14121f",
+      accent: "#9d6cff",
+      colors: { sidebar: "not-a-color" },
+    }),
+  );
+  assert(parsed.ok);
+
+  // Act
+  const notices = noticesForApply(
+    {
+      ok: true,
+      presentation: parsed.presentation,
+      unreadColors: parsed.unreadColors,
+      storageWarning:
+        "This browser blocks saved settings, so the custom colors apply until this tab closes.",
+    },
+    false,
+  );
+
+  // Assert
+  expect(notices).toHaveLength(2);
+  expect(notices[0]?.title).toBe("Custom colors applied for this tab only");
+  expect(notices[1]?.title).toBe("1 color Factory cannot read was ignored");
 });
