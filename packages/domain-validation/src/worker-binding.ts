@@ -41,7 +41,12 @@ function followGraph(
   endingBindings: (flowId: string, endingId: string) => ReadonlySet<Binding>,
 ): Arrivals {
   const blocks = new Map(graph.blocks.map((block) => [block.id, block]));
-  const outgoing = Map.groupBy(graph.connections, (edge) => edge.sourceBlockId);
+  const outgoing = new Map<string, FlowGraphInput["connections"][number][]>();
+  for (const edge of graph.connections) {
+    const edges = outgoing.get(edge.sourceBlockId);
+    if (edges) edges.push(edge);
+    else outgoing.set(edge.sourceBlockId, [edge]);
+  }
   const arrivals = new Map<string, Set<Binding>>();
   const endings = new Map<string, Set<Binding>>();
   const pending: [string, Binding][] = [];

@@ -258,17 +258,5 @@ export function openRunConditions(database: RunnerDatabase) {
     );
   }
 
-  /** The message Condition arrival `arrivalId` of Run `runId` still keeps for its recipients;
-   * null once cleared. */
-  const conditionArrivalMessage = (runId: string, arrivalId: string) =>
-    database.transaction((sql) =>
-      Effect.map(
-        sql<{
-          message: string | null;
-        }>`SELECT message FROM condition_arrivals WHERE id=${arrivalId} AND run_id=${runId}`,
-        ([row]) => row?.message ?? null,
-      ),
-    );
-
-  return { handoffToConditionArrival, conditionArrivalMessage };
+  return { handoffToConditionArrival };
 }

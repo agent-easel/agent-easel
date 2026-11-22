@@ -115,10 +115,9 @@ function readBlockView(store: RunStore, detail: RunDetail, block: BlockRow) {
     const manifest = yield* store.blockImages(block.run_id);
     const definitions = yield* store.definitionsAtBlock(detail, block.block_id);
     const cause = visitCause(detail, block.block_id);
-    const routedId = conditionArrivalId(cause);
     const returned = /^subflow:([^/]+)/.exec(cause)?.[1];
-    const routed = routedId
-      ? yield* store.conditionArrivalMessage(block.run_id, routedId)
+    const routed = routedArrival(cause)
+      ? yield* store.routedMessage(block.run_id, cause)
       : returned
         ? yield* store.subflowReturnMessage(block.run_id, returned)
         : null;
@@ -200,10 +199,8 @@ function visitCause(detail: RunDetail, blockId: string) {
   );
 }
 
-/** The Condition arrival a visit's cause names, if a Condition routed the visit. */
-const conditionArrivalId = (cause: string) => /^condition:([^/]+)/.exec(cause)?.[1];
+const routedArrival = (cause: string) => /^(join|condition):/.test(cause);
 
-/** `routed` is the message of the Condition arrival that started the current visit, if one did. */
 function blockView(
   detail: RunDetail,
   definitions: ExecutionDefinitions,
@@ -249,7 +246,7 @@ function blockView(
 }
 
 function arrivalFeedback(detail: RunDetail, cause: string, routed: string | null) {
-  return conditionArrivalId(cause) || cause.startsWith("subflow:")
+  return routedArrival(cause) || cause.startsWith("subflow:")
     ? routed
     : visitFeedback(detail, cause);
 }
@@ -269,6 +266,7 @@ function visitReason(cause: string) {
   if (cause.startsWith("start:")) return "first";
   if (cause.startsWith("human:")) return "Human answer";
   if (cause.startsWith("wait:")) return "Wait";
+  if (cause.startsWith("join:")) return "Join";
   if (cause.startsWith("condition:")) return "Condition";
   return "feedback";
 }

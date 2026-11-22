@@ -63,7 +63,7 @@ and restricted OAuth credentials live outside project repositories.
   guard. Finish blocks with endings remain active.
   Migration `125` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
   `kind = 'join'`. A Join stores no column of its own; its sources come from the revision's
-  connections. Existing rows stay unchanged and no Join is inferred.
+  connections. Existing rows stay unchanged and no Join is inferred. Migration `126` adds durable Join arrivals and rounds keyed by execution block, and links outgoing Handoffs to their round. It preserves all existing data.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for bundled Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the

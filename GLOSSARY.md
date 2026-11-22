@@ -58,7 +58,7 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation, a Condition or a Subflow. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation, a Condition, a Join or a Subflow. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Subflow**:
@@ -121,6 +121,12 @@ _Avoid_: Branch, router, switch or decision as the block name; condition for a g
 **Condition arrival**:
 One distinct delivery a Condition accepts within a Run, numbered from 1 per Run and Condition and shared by all its incoming wires and workers. A redelivery of the same delivery keeps its number; another delivery with identical text is the next arrival. It records its number, the selected output (the matched rule or Otherwise) and the delivery's worker provenance; the number never resets, and once recorded neither number nor selection changes. An arrival number is not a review or attempt count.
 _Avoid_: Attempt, iteration or review number.
+
+**Join**:
+A workerless Flow block that waits for a Handoff from every distinct block wired into it. All wired exits of one source feed the same FIFO queue. Its single output carries the combined messages.
+
+**Join round**:
+One numbered group containing the oldest queued Handoff from each source of a Join. Numbering starts at 1 for each execution of the Join within a Run or Subflow invocation.
 
 **Worker provenance**:
 The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait, Condition or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.
@@ -275,7 +281,7 @@ _Avoid_: Start block, entry, entry Agent
 
 **Finish block**:
 The optional Flow block, at most one per Flow, on which the author declares the Flow's endings. The author adds it from the block library, where it is placed right of the other blocks by default, and can remove it together with its endings and their wires. It has the fixed label Finish, has no worker and no exits, and the Flow input never connects to it. A Flow without a Finish block or without endings keeps its unconnected exits as its only branch ends.
-_Avoid_: End block, Join block, terminal block
+_Avoid_: End block, terminal block. Use Join for the separate block that synchronizes sources.
 
 **Ending**:
 One declared way a Flow can end, in the Finish block's ordered list: a stable id, a name, an optional description and an output setting (None, Optional or Required) with a description of the expected output. Wires from any exit or output, Condition Otherwise included, enter a specific ending by its id, so renaming keeps them; several wires may enter one ending. A blank, duplicate or unwired ending is a readiness gap. An ending is not a Block exit, and an unconnected exit is not an ending.

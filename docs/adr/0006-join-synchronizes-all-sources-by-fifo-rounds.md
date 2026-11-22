@@ -1,0 +1,7 @@
+# Join synchronizes all sources by FIFO rounds
+
+Parallel reviewers can choose different exits and finish at different times. Join therefore allocates one slot per immediate source block, shared by all of that source's wired exits. It waits for every slot, takes the oldest distinct arrival from each and forwards their messages together through one workerless output. An extra arrival stays queued. This pairs reviews by arrival order. A branch that skips a round can cause revision drift, so a recipient that needs matching revisions must verify them.
+
+Each execution block owns its queues and monotonic round number. Concurrent Subflow invocations can run the same definition without mixing arrivals. Recording each incoming Handoff by identity and atomically consuming the queue heads, committing the round and creating the outgoing Handoffs makes recovery independent of when the process stopped.
+
+[The first reached ending ends the Run](0004-first-reached-ending-ends-the-run.md) takes precedence over a partial round. A cutoff cancels pending arrivals in its scope. A downstream decision belongs to the recipient of the combined text.

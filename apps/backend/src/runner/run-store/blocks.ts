@@ -40,7 +40,7 @@ function stateValue(sql: SqlClient.SqlClient, state: StateWrite) {
   if (typeof state === "string") return sql`${state}`;
   if ("keep" in state)
     return sql`CASE WHEN state IN ${sql.in(state.keep)} THEN state ELSE ${state.otherwise} END`;
-  return sql`CASE WHEN EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=run_blocks.run_id AND h.block_id=run_blocks.block_id AND h.state='pending') OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=run_blocks.run_id AND w.block_id=run_blocks.block_id AND w.state='pending') OR EXISTS(SELECT 1 FROM condition_arrivals c WHERE c.run_id=run_blocks.run_id AND c.block_id=run_blocks.block_id AND c.state='pending') THEN ${state.whileArrivalPending} ELSE ${state.otherwise} END`;
+  return sql`CASE WHEN EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=run_blocks.run_id AND h.block_id=run_blocks.block_id AND h.state='pending') OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=run_blocks.run_id AND w.block_id=run_blocks.block_id AND w.state='pending') OR EXISTS(SELECT 1 FROM condition_arrivals c WHERE c.run_id=run_blocks.run_id AND c.block_id=run_blocks.block_id AND c.state='pending') OR EXISTS(SELECT 1 FROM join_arrivals j WHERE j.run_id=run_blocks.run_id AND j.block_id=run_blocks.block_id AND j.round_id IS NULL AND j.cancelled_at IS NULL) THEN ${state.whileArrivalPending} ELSE ${state.otherwise} END`;
 }
 
 /** The only writer of Block state: sets `state` and `columns` on the Blocks `target` reaches. */

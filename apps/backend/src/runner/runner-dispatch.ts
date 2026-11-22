@@ -117,6 +117,10 @@ export function openRunnerDispatch(
         if (arrival) yield* scheduleWait(arrival);
         return;
       }
+      if (kind === "join") {
+        yield* store.handoffToJoinArrival(current, handoff, arrivalGeneration(release));
+        return;
+      }
       if (kind === "condition") {
         yield* store.handoffToConditionArrival(current, handoff, arrivalGeneration(release));
         return;

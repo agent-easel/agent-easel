@@ -1092,6 +1092,54 @@ export const conditionFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
   }));
 
+export const parallelJoinFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Parallel join", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId, [blockExit("revise", "Revise", "Revise")]),
+      agentBlock(
+        "second",
+        "Second entry",
+        agentId,
+        undefined,
+        [],
+        [blockExit("revise", "Revise", "Revise")],
+      ),
+      joinBlock("merge", "Merge"),
+      reviewStep,
+      agentBlock("follow-up", "Follow-up", agentId, undefined, [], [], "Compare the revisions."),
+      gate(),
+    ],
+    connections: [
+      connection("worker", "done", "merge"),
+      connection("worker", "revise", "merge"),
+      connection("second", "done", "merge"),
+      connection("second", "revise", "merge"),
+      connection("merge", "output", "review"),
+      connection("merge", "output", "follow-up"),
+      connection("merge", "output", "gate"),
+      connection("gate", OTHERWISE, "review"),
+    ],
+  }));
+
+export const joinedEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Reviewed ending", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [
+      entryWorker(agentId),
+      humanStep("review", "Entry worker"),
+      joinBlock("merge", "Merge"),
+    ],
+    connections: [
+      connection("worker", "done", "review"),
+      connection("worker", "done", "merge"),
+      connection("review", "approve", "merge"),
+      connection("review", "request-changes", "merge"),
+      shippedWire("merge", "output"),
+    ],
+    finish: { endings: [SHIPPED_ENDING("required")] },
+  }));
+
 const terminalConditionGraph = (agentId: string) => ({
   flowInput: flowInput("worker"),
   blocks: [

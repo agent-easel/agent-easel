@@ -37,6 +37,17 @@ export function openRunReads(database: RunnerDatabase) {
           ([row]) => row,
         ),
       ),
+    routedMessage: (runId: string, cause: string) =>
+      transaction((sql) =>
+        Effect.map(
+          sql<{
+            message: string | null;
+          }>`SELECT COALESCE(j.message,c.message) AS message FROM operation_intents i
+        LEFT JOIN join_rounds j ON j.id=i.join_round_id LEFT JOIN condition_arrivals c ON c.id=i.condition_arrival_id
+        WHERE i.run_id=${runId} AND i.cause=${cause}`,
+          ([row]) => row?.message ?? null,
+        ),
+      ),
     subflowReturnMessage: (runId: string, invocationId: string) =>
       transaction((sql) =>
         Effect.map(

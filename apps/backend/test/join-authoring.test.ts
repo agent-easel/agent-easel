@@ -1,6 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
 import { joinSlots } from "@t3-factory/domain-validation";
-import { prepared } from "./support/prepared-runner.ts";
 import { conditionDraft, readFlowAfterRestart } from "./support/domain-setup.ts";
 import {
   agentBlock,
@@ -14,14 +13,7 @@ import {
   OTHERWISE,
   waitBlock,
 } from "./support/scenarios.ts";
-import {
-  composition,
-  ending,
-  placingGraph,
-  savedFlow,
-  subflowBlock,
-  toEnding,
-} from "./support/subflow.ts";
+import { composition, ending, savedFlow, subflowBlock, toEnding } from "./support/subflow.ts";
 
 const merge = joinBlock("merge", "Merge reviews", { x: 600, y: 0 });
 
@@ -386,74 +378,4 @@ it("through a Subflow each child ending is followed separately: only the ending 
   expect(issueRows(parent.readiness.issues)).toStrictEqual([
     ["continuation_worker_required", "graph.blocks.3"],
   ]);
-});
-
-it("Start refuses a ready Flow that contains a Join and creates no Run", async (c) => {
-  // Arrange
-  const { f, flow, agent, input, project } = await prepared(c);
-  const saved = await f.updateFlow(flow.id, {
-    name: flow.name,
-    expectedRevision: flow.revision,
-    expectedProjectId: flow.projectId,
-    workspace: flow.workspace,
-    graph: {
-      flowInput: flowInput("worker"),
-      blocks: [
-        agentBlock("worker", "Entry worker", agent.id),
-        humanStep("review", "Review"),
-        joinBlock("merge", "Merge"),
-      ],
-      connections: [
-        connection("worker", "done", "review"),
-        connection("worker", "done", "merge"),
-        connection("review", "approve", "merge"),
-        connection("merge", JOIN_OUTPUT, "worker"),
-      ],
-    },
-  });
-  assert(saved.ok && saved.value.readiness.ready);
-
-  // Act
-  const started = await f.startRun(input);
-
-  // Assert
-  assert(!started.ok);
-  expect(started.error.issues.map((issue) => issue.code)).toStrictEqual([
-    "join_runtime_unavailable",
-  ]);
-  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-});
-
-it("Start refuses a Flow whose placed Subflow contains a Join and creates no Run", async (c) => {
-  // Arrange
-  const { f, agent, input, project } = await prepared(c);
-  const child = await savedFlow(f, {
-    name: "Review panel with Join",
-    graph: {
-      flowInput: flowInput("security", "style"),
-      blocks: [
-        agentBlock("security", "Security reviewer", agent.id, { x: 200, y: 0 }),
-        agentBlock("style", "Style reviewer", agent.id, { x: 200, y: 200 }),
-        joinBlock("panel", "Panel", { x: 400, y: 100 }),
-      ],
-      connections: [
-        connection("security", "done", "panel"),
-        connection("style", "done", "panel"),
-        toEnding("panel", JOIN_OUTPUT, "done"),
-      ],
-      finish: { position: { x: 700, y: 0 }, endings: [ending("done", "Done")] },
-    },
-  });
-  const parent = await savedFlow(f, { name: "Parent", graph: placingGraph(child.id) });
-  assert(parent.readiness.ready);
-
-  // Act
-  const started = await f.startRun({ ...input, flowId: parent.id });
-
-  // Assert
-  assert(!started.ok);
-  expect(started.error.issues.map((issue) => issue.code)).toStrictEqual([
-    "join_runtime_unavailable",
-  ]);
-  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });

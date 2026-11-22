@@ -30,7 +30,7 @@ const sharedDriverKinds = [
   "antigravity",
 ] as const;
 export const telemetryDriverKinds = [...sharedDriverKinds, "mistral-vibe"] as const;
-const runBlockTypes = Schema.Literals(["agent", "condition", "wait", "subflow", "finish"]);
+const runBlockTypes = Schema.Literals(["agent", "condition", "join", "wait", "subflow", "finish"]);
 
 export function telemetryDuration(milliseconds: number): typeof duration.Type {
   if (milliseconds < 1_000) return "<1s";

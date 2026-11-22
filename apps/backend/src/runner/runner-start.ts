@@ -270,8 +270,8 @@ export function openRunnerStart(
   ) {
     if (telemetry.enabled) {
       const { blocks } = flow.graph;
-      const blockTypes = (["agent", "condition", "wait", "subflow"] as const).filter((kind) =>
-        blocks.some((block) => block.kind === kind),
+      const blockTypes = (["agent", "condition", "join", "wait", "subflow"] as const).filter(
+        (kind) => blocks.some((block) => block.kind === kind),
       );
       yield* telemetry.record("run.started", {
         source,
@@ -509,21 +509,8 @@ export function openRunnerStart(
             (block) => block.kind === "agent" && block.revisitContext === "fresh",
           ),
         ) && !snapshot.support.freshContextSend;
-      const joinUnavailable = [flow, ...subflows.value].some((entry) =>
-        entry.graph.blocks.some((block) => block.kind === "join"),
-      );
       const issues: ValidationIssue[] = [
         ...attachments,
-        ...(joinUnavailable
-          ? [
-              {
-                code: "join_runtime_unavailable",
-                path: "flow",
-                message:
-                  "This Factory cannot run a Flow that contains a Join yet. Remove the Join, or start another Flow.",
-              },
-            ]
-          : []),
         ...(!workspace.ok ? workspace.issues : []),
         ...(!agents.ok ? agents.error.issues : []),
         ...(!support.supported

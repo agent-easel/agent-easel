@@ -375,7 +375,7 @@ followed by the captured Agent prompt. A revisit queues a turn on the same worke
 the previous activation's current result is released and, at send time, the worker thread is
 finished. When `revisitContext` is `"keep"` (the default), only the launch invokes the installed skill, and the revisit carries the incoming message preceded by the Block's
 [Revisit instruction](#revisit-instructions) when one is set, without resending the Agent prompt. When `revisitContext` is `"fresh"`, the revisit sends `freshContext: true` so T3 starts a fresh provider session on that worker thread without earlier context, and resends `$factory-block`, the `Factory Block id` header, the captured Agent prompt, any Revisit instruction and the incoming message. Continuation prompts and Request report always keep the current session. Two Blocks using the same
-Agent still have separate workers. Parallel arrivals never join or batch their feedback.
+Agent still have separate workers. Each direct arrival starts its own visit. Wire branches into a Join to deliver their feedback together.
 Threads share the Run's workspace, the project-root checkout or the Run's worktree; Factory guarantees neither edit-conflict handling
 nor agreement on one repository revision.
 
@@ -477,7 +477,7 @@ A Handoff to a Wait becomes one durable arrival when its source is released: a F
 or forwarding that created it. The arrival keeps the message and the Handoff's [worker provenance](#worker-provenance), and its absolute
 deadline is the release time plus the captured Wait's duration; editing the saved Flow never changes it. The Handoff is
 acknowledged in place under the owner, open gate, live authorization context and release generation, so a repeated delivery
-attempt finds it no longer pending and records nothing. Parallel and repeated arrivals are independent; nothing joins.
+attempt finds it no longer pending and records nothing. Each Wait arrival has its own deadline and delivery.
 
 Forwarding is one guarded Run-store transition, shared by the timer and **Continue now**, the arrival-addressed public
 operation that forwards one arrival early. Under this owner and the open gate it claims a still-pending arrival, records who forwarded it and creates every
@@ -498,6 +498,14 @@ the deadline or repeating missed time. Timing is best effort and system clock ch
 disables its arrival's wake-up; a stale one, one scheduled again at restart, or one for an arrival cancelled by Archive or manual
 settlement finds nothing due. Shutdown stops the
 wake-ups; the deadlines stay in the store.
+
+### Join rounds
+
+Each distinct source block wired into a Join has one queue. Its wired exits share that queue, including both answers of a Human step. Once every queue has a Handoff, the Join takes one from the front of each and sends the combined message to every recipient of its single output. Extra arrivals wait for the next round. Each Subflow invocation has its own queues and round numbers.
+
+The first line reads `Join round N`. Each section names its captured source and exit in Flow block order. Repeated source names receive ordinals. A backtick fence longer than any run of backticks in the message preserves the source text, and an empty arrival reads `(no message)`. The combined Handoff carries no worker provenance. An Agent reads it in `inputs.feedback` with reason `Join`, a Human step receives it as context, and an ending receives it as output according to its output setting.
+
+Queues pair arrivals in order. If one source can bypass a review round, the paired reviews can describe different revisions. For revision-sensitive work, include the revision in each review and have the recipient check that they agree.
 
 ### Condition arrivals
 
