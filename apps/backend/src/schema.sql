@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: chat_access_bots
+-- Newest applied migration: chat_archive_notices
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -183,7 +183,7 @@ CREATE TABLE chat_conversations (
 
 CREATE TABLE chat_deliveries (
   id TEXT PRIMARY KEY,
-  purpose TEXT NOT NULL CHECK (purpose IN ('receipt', 'status-card', 'attention', 'lifecycle', 'catch-up', 'completion')),
+  purpose TEXT NOT NULL CHECK (purpose IN ('receipt', 'status-card', 'attention', 'lifecycle', 'catch-up', 'completion', 'archive')),
   action_id TEXT REFERENCES chat_actions(id),
   run_id TEXT,
   guild_id TEXT NOT NULL,
@@ -358,7 +358,7 @@ CREATE TABLE chat_run_reporting (
   reference TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',
   final INTEGER NOT NULL DEFAULT 0 CHECK (final IN (0, 1))
-, baseline INTEGER NOT NULL DEFAULT 0 CHECK (baseline IN (0, 1)), completion_sequence INTEGER);
+, baseline INTEGER NOT NULL DEFAULT 0 CHECK (baseline IN (0, 1)), completion_sequence INTEGER, archive_noticed INTEGER NOT NULL DEFAULT 0 CHECK (archive_noticed IN (0, 1)));
 
 CREATE TABLE chat_sdk_cache (
   cache_key TEXT PRIMARY KEY,
