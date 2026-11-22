@@ -252,13 +252,16 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
     },
   );
 
-export const publishedRun =
+export const publishedDelivery =
   (sql: SqlClient.SqlClient, applicationId: string) => (threadId: string, messageId: string) =>
     Effect.map(
-      sql<{ run_id: string }>`SELECT run_id FROM chat_deliveries
-        WHERE purpose IN ${sql.in(["status-card", ...REQUESTER_NOTICE_PURPOSES])}
-        AND thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
-      ([row]) => row?.run_id,
+      sql<{
+        runId: string | null;
+      }>`SELECT CASE WHEN purpose IN ${sql.in(["status-card", ...REQUESTER_NOTICE_PURPOSES])}
+        THEN run_id END AS runId
+        FROM chat_deliveries
+        WHERE thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
+      ([row]) => row,
     );
 
 /**

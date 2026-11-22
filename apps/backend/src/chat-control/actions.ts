@@ -10,7 +10,8 @@ import { failure } from "../result.ts";
 import { newId } from "../ids.ts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
-import { ACTION_REQUESTERS } from "./requesters.ts";
+import type { BotGuardDecision, BotGuards } from "./bot-guards.ts";
+import { ACTION_REQUESTERS, type RequesterKind } from "./requesters.ts";
 import type { ConversationKey } from "./conversations.ts";
 import {
   createDeduplicated,
@@ -113,6 +114,7 @@ export interface ChatOperation {
 interface ProposalContext {
   readonly conversation: ConversationKey;
   readonly requesterId: string;
+  readonly requesterKind: RequesterKind;
   readonly generation: number;
   readonly messageId: string;
   readonly toolCallId: string;
@@ -268,6 +270,7 @@ export function makeChatActions(
    * form shows whether a Discord confirmation is waiting. */
   answerReviewChanged: (runId: string) => void,
   telemetry: Telemetry,
+  botGuards: BotGuards,
 ) {
   const byName = new Map(operations.map((operation) => [operation.name, operation]));
   const resolutions = reviewResolutions(sql);
@@ -311,18 +314,30 @@ export function makeChatActions(
       .withTransaction(
         Effect.gen(function* (): Effect.fn.Return<
           | { readonly kind: "new"; readonly id: string }
-          | { readonly kind: "pending"; readonly id: string; readonly expiresAt: string },
+          | { readonly kind: "pending"; readonly id: string; readonly expiresAt: string }
+          | { readonly kind: "bot-pending" }
+          | { readonly kind: "bot-rate"; readonly decision: Exclude<BotGuardDecision, "allow"> },
           unknown
         > {
           const identity = identityOf(context, proposed);
           const at = yield* now;
+          const { conversation } = context;
+          if (context.requesterKind === "bot") {
+            const [pendingStart] = yield* sql<{ id: string }>`SELECT id FROM chat_proposals
+              WHERE application_id=${conversation.applicationId} AND thread_id=${conversation.threadId}
+                AND requester_id=${context.requesterId} AND operation='start'
+                AND (state IN ('preparing','accepting') OR (state='presented' AND expires_at>${at}))
+              LIMIT 1`;
+            if (pendingStart) return { kind: "bot-pending" };
+            const decision = botGuards.rate(context.requesterId, Date.parse(at), "proposal");
+            if (decision !== "allow") return { kind: "bot-rate", decision };
+          }
           const [pending] = yield* sql<{
             id: string;
             expires_at: string;
           }>`SELECT id,expires_at FROM chat_proposals WHERE identity=${identity}
             AND state IN ('presented','accepting') AND expires_at>${at} ORDER BY expires_at DESC LIMIT 1`;
           if (pending) return { kind: "pending", id: pending.id, expiresAt: pending.expires_at };
-          const { conversation } = context;
           const operation = byName.get(proposed.operation)!;
           const target = operation.target(proposed.parameters);
           const live = yield* sql<{
@@ -476,8 +491,10 @@ export function makeChatActions(
             });
         }),
       );
-      if (outcome.kind === "accepted" && outcome.originRunId !== undefined)
+      if (outcome.kind === "accepted" && outcome.originRunId !== undefined) {
+        botGuards.resetThread(row.thread_id);
         originRecorded(outcome.originRunId);
+      }
       if (outcome.kind === "accepted" || outcome.kind === "rejected") {
         yield* deliveries.wake;
         yield* resolutions.changed;
@@ -630,13 +647,25 @@ export function makeChatActions(
       const [row] = yield* sql<{
         id: string;
         requester_id: string;
-      }>`SELECT id,requester_id FROM chat_proposals
+        operation: ChatOperationName;
+        state: ProposalState;
+        expires_at: string | null;
+        confirmation_code: string | null;
+        confirmation_message_id: string | null;
+      }>`SELECT id,requester_id,operation,state,expires_at,confirmation_code,confirmation_message_id
+        FROM chat_proposals
         WHERE application_id=${applicationId} AND thread_id=${threadId}
           AND (confirmation_message_id=${repliedTo ?? null} OR confirmation_code=${code ?? null})
         ORDER BY confirmation_message_id=${repliedTo ?? null} DESC,created_at DESC LIMIT 1`;
-      return row || code !== undefined
-        ? { proposalId: row?.id, requesterId: row?.requester_id }
-        : undefined;
+      if (!row && code === undefined) return undefined;
+      const botCanConfirm =
+        row?.operation === "start" &&
+        row.state === "presented" &&
+        row.confirmation_message_id === repliedTo &&
+        row.confirmation_code !== null &&
+        text === phraseOf(row.confirmation_code) &&
+        row.expires_at! > (yield* now);
+      return { proposalId: row?.id, requesterId: row?.requester_id, botCanConfirm };
     });
 
   const confirm = (reply: ConfirmationReply) =>

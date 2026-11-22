@@ -24,6 +24,7 @@ import type {
 import type { DiscordSender } from "./deliveries.ts";
 import type { ConversationalModel, ConversationalModelAccess } from "./model.ts";
 import { chatLanguageModel, failureMessage } from "./model-provider.ts";
+import { BOT_RATE_REFUSAL, type BotGuardDecision, type BotGuards } from "./bot-guards.ts";
 import { pendingAdmissions, type Interruption, type OwedNotice } from "./pending-admissions.ts";
 
 const MINUTE_MS = 60_000;
@@ -117,6 +118,7 @@ export interface InterpreterSession {
   readonly sender: DiscordSender;
   /** The shared review and consent path mutation proposals take. */
   readonly actions: Pick<ChatActions, "open" | "present" | "statuses">;
+  readonly botGuards: BotGuards;
 }
 
 export const BUSY_REPLY =
@@ -503,6 +505,11 @@ export const makeInterpreter = (session: InterpreterSession) =>
         stop ? stopped(stop) : settled,
       );
 
+    const botRateEnding = (state: Progress, decision: Exclude<BotGuardDecision, "allow">) =>
+      decision === "drop"
+        ? Effect.succeed(settled)
+        : refuse(state.slot, BOT_RATE_REFUSAL, deadline(state), state.configuration.revision);
+
     /** Work may continue until the total bound and, once dispatched, the recovery bound. */
     const deadline = (state: Progress) => {
       const total = state.slot.invocation.admittedAt + INTERPRETATION_LIMITS.totalMs;
@@ -598,19 +605,26 @@ export const makeInterpreter = (session: InterpreterSession) =>
         state.requests += 1;
         const { outcome, perCallBound } = yield* budgeted(
           state,
-          Effect.result(
-            Effect.tryPromise((signal) =>
-              generateText({
-                model: chatLanguageModel(configuration.connection),
-                instructions: request.system,
-                messages: request.messages,
-                tools: definitions,
-                maxRetries: 0,
-                maxOutputTokens: MAX_OUTPUT_TOKENS,
-                abortSignal: signal,
-              }),
-            ),
-          ),
+          Effect.gen(function* () {
+            const { requesterId, requesterKind } = slot.invocation;
+            if (requesterKind === "bot") {
+              const decision = session.botGuards.rate(requesterId, yield* now, "model");
+              if (decision !== "allow") return decision;
+            }
+            return yield* Effect.result(
+              Effect.tryPromise((signal) =>
+                generateText({
+                  model: chatLanguageModel(configuration.connection),
+                  instructions: request.system,
+                  messages: request.messages,
+                  tools: definitions,
+                  maxRetries: 0,
+                  maxOutputTokens: MAX_OUTPUT_TOKENS,
+                  abortSignal: signal,
+                }),
+              ),
+            );
+          }),
           INTERPRETATION_LIMITS.requestMs,
         );
         const failed = (message: string) =>
@@ -621,6 +635,7 @@ export const makeInterpreter = (session: InterpreterSession) =>
                 `The provider did not answer within ${INTERPRETATION_LIMITS.requestMs / 1000} seconds.`,
               )
             : interrupted("timed-out");
+        if (typeof outcome.value === "string") return yield* botRateEnding(state, outcome.value);
         if (outcome.value._tag === "Failure")
           return yield* failed(
             failureMessage(outcome.value.failure.cause, INTERPRETATION_LIMITS.requestMs),
@@ -630,6 +645,21 @@ export const makeInterpreter = (session: InterpreterSession) =>
           return yield* failed("The provider answered without any reply text.");
         yield* model.succeeded;
         return answer;
+      });
+
+    const dispatchTool = (state: Progress, call: ProposedCall) =>
+      Effect.gen(function* () {
+        const handler = registry.get(call.toolName);
+        const scope = yield* scopeOf(state);
+        return yield* budgeted(
+          state,
+          !handler
+            ? Effect.succeed(unknownTool(call.toolName))
+            : isMutation(handler)
+              ? handler.propose(call.input, scope)
+              : handler.execute(call.input, scope),
+          INTERPRETATION_LIMITS.resourceMs,
+        );
       });
 
     /** Runs the tool calls the model asked for and adds their results to the work; or how it ends. */
@@ -642,17 +672,7 @@ export const makeInterpreter = (session: InterpreterSession) =>
           if (call.invalid === true) continue;
           const stop = yield* checkpoint(state.slot, deadline(state), state.configuration.revision);
           if (stop) return stopped(stop);
-          const handler = registry.get(call.toolName);
-          const scope = yield* scopeOf(state);
-          const { outcome } = yield* budgeted(
-            state,
-            !handler
-              ? Effect.succeed(unknownTool(call.toolName))
-              : isMutation(handler)
-                ? handler.propose(call.input, scope)
-                : handler.execute(call.input, scope),
-            INTERPRETATION_LIMITS.resourceMs,
-          );
+          const { outcome } = yield* dispatchTool(state, call);
           if (Option.isNone(outcome)) return interrupted("timed-out");
           const value = outcome.value;
           // A valid mutation never runs here: its review ends the tool loop.
@@ -728,10 +748,19 @@ export const makeInterpreter = (session: InterpreterSession) =>
         const opened = yield* proposals.open(proposed, {
           conversation: invocation.conversation,
           requesterId: invocation.requesterId,
+          requesterKind: invocation.requesterKind,
           generation: invocation.generation,
           messageId: invocation.messageId,
           toolCallId: call.toolCallId,
         });
+        if (opened.kind === "bot-rate") return yield* botRateEnding(state, opened.decision);
+        if (opened.kind === "bot-pending")
+          return yield* refuse(
+            slot,
+            "This bot already has a pending Start in this thread. Confirm that review or wait for it to expire before asking for another.",
+            deadline(state),
+            configuration.revision,
+          );
         state.facts.push({
           tool: call.toolName,
           input: {},

@@ -31,9 +31,10 @@ import {
   type OperatingSession,
 } from "./discord-gateway.ts";
 import type { ChatActions } from "./actions.ts";
+import type { BotGuards } from "./bot-guards.ts";
 import type { ChatTool } from "./chat-tools.ts";
 import {
-  publishedRun,
+  publishedDelivery,
   type ChatDeliveries,
   type CreateMessageOptions,
   type DiscordSender,
@@ -274,6 +275,7 @@ export const makeDiscordOperation = (
     readonly tools: readonly ChatTool[];
     readonly actions: ChatActions;
     readonly deliveries: ChatDeliveries;
+    readonly botGuards: BotGuards;
   },
 ) =>
   Effect.gen(function* () {
@@ -359,6 +361,7 @@ export const makeDiscordOperation = (
           typing: (key) => adapter.typing(encodeThreadId(key)),
           sender,
           actions: conversation.actions,
+          botGuards: conversation.botGuards,
         });
         // The reply target a MESSAGE_CREATE carried, kept until admission takes it.
         const references = new Map<string, ReferencedMessage>();
@@ -384,12 +387,13 @@ export const makeDiscordOperation = (
             encodeThreadId,
             post,
             confirmations: conversation.actions,
+            botGuards: conversation.botGuards,
             referenced: (messageId) => {
               const reference = references.get(messageId);
               references.delete(messageId);
               return reference;
             },
-            publishedRun: publishedRun(sql, applicationId),
+            publishedDelivery: publishedDelivery(sql, applicationId),
           },
           engine,
         );
