@@ -1168,3 +1168,35 @@ it("reads an exact inner invocation with its ancestor placement through HTTP", a
     },
   });
 });
+
+it("a finished Block inside a Subflow settles its worker thread in T3 while the Run stays Active", async (c) => {
+  // Arrange
+  const { f, t3, world, input, agent } = await prepared(c);
+  const child = await savedFlow(f, {
+    name: "Two step",
+    graph: {
+      flowInput: flowInput("first"),
+      blocks: [
+        agentBlock("first", "First worker", agent.id),
+        agentBlock("second", "Second worker", agent.id, { x: 300, y: 0 }),
+      ],
+      connections: [connection("first", "done", "second"), toEnding("second", "done", "done")],
+      finish: { position: { x: 600, y: 0 }, endings: [ending("done", "Done")] },
+    },
+  });
+  const parent = await savedFlow(f, { name: "Wrapper", graph: placingGraph(child.id) });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const firstBlock = started.subflows![0]!.defaultInvocation!.blocks.find(
+    (block) => block.templateBlockId === "first",
+  )!;
+  const first = await blockWorkerLaunched(world, started.id, firstBlock.blockId);
+  await resultReported(world, first, { message: "First done" });
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(started.id));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: first.threadId }]);
+});

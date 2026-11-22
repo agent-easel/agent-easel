@@ -195,3 +195,33 @@ test("Auto-arrange moves the expanded Run view while preserving captured positio
   await expect(group).toBeVisible();
   expect((await readHistoryRun(app.baseUrl, id)).definitions).toEqual(captured.definitions);
 });
+
+test("hovering a Block inside an expanded Subflow emphasizes its outgoing wires", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1920, height: 1080 });
+  const { id } = await prepareScenario(app, "subflow-returned");
+  await app.open(`/runs/${id}`);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  const canvas = screen.getByRole("region", "Execution canvas");
+  const innerBlock = canvas.getByRole("article", "Block Code review", { exact: true });
+
+  // Act
+  await innerBlock.hover();
+
+  // Assert
+  await expect(
+    browser.locator(
+      '[aria-label="Execution canvas"] [data-canvas-scope] path[marker-end="url(#execution-arrow-emphasis)"]',
+    ),
+  ).toHaveCount(2);
+  await expect(
+    browser.locator(
+      '[aria-label="Execution canvas"] path[marker-end="url(#execution-arrow-emphasis)"]',
+    ),
+  ).toHaveCount(2);
+  await app.screenshot("subflow-inner-block-hover-wires");
+});
