@@ -9,7 +9,7 @@ import { expectFlowSaved } from "./support/studio.ts";
 
 /** Settles popover and menu transitions before a screenshot. */
 const settled =
-  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
+  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)";
 
 async function expectStudioViewport(screen: Screen, browser: Browser) {
   await expect

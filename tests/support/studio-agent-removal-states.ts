@@ -126,7 +126,7 @@ export async function beforeCopiedEditedAgent(fixtures: StudioFixtures, prefix: 
   await expect(screen.getByRole("button", "Copy as JSON", { exact: true })).toBeVisible();
   await screen.getByLabel("Prompt", { exact: true }).fill("Recover these unfinished edits.");
   await browser.evaluate(
-    "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.copiedAgentJson = text; } } })",
+    "void Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.copiedAgentJson = text; } } })",
   );
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }
@@ -161,7 +161,7 @@ export async function beforeAgentJsonFallback(fixtures: StudioFixtures, prefix: 
   await removeAgentElsewhere(app.baseUrl, agent.id);
   await expect(screen.getByRole("button", "Copy as JSON", { exact: true })).toBeVisible();
   await browser.evaluate(
-    "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Permission denied'); } } })",
+    "void Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Permission denied'); } } })",
   );
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }

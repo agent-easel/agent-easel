@@ -797,7 +797,7 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await expect(review).toContainText("Imported prompts run with your T3 permissions");
   await expect(review).toContainText("Read them in Studio before you start a Run.");
   await browser.evaluate(
-    "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
+    "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
   );
   await app.screenshot("flow-import-review");
   await browser.setViewport({ width: 560, height: 1000 });
