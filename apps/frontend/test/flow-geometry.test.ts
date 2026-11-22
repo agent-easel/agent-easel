@@ -7,7 +7,12 @@ import {
   buildElkGraph,
   createFlowLayoutDimensions,
 } from "@t3-factory/flow-layout";
-import { geometryGraph, sizeLimitConditionGraph, wiringGraph } from "./support/geometry.ts";
+import {
+  geometryGraph,
+  joinGraph,
+  sizeLimitConditionGraph,
+  wiringGraph,
+} from "./support/geometry.ts";
 
 it("authoring graph bounds enclose the Flow input at its drawn height and incoming growth", () => {
   // Arrange
@@ -19,6 +24,33 @@ it("authoring graph bounds enclose the Flow input at its drawn height and incomi
   // Assert
   expect(geometry.flowInputBox).toStrictEqual({ x: -100, y: 0, width: 200, height: 76 });
   expect(bounds).toStrictEqual({ minX: -100, minY: 0, width: 740, height: 425 });
+});
+
+it("a Join gives each source block one input port on its own row, below which its output sits, as the layout does", () => {
+  // Arrange
+  const graph = joinGraph();
+  const join = graph.blocks.find((block) => block.id === "join")!;
+  const geometry = createCanvasGeometry(graph, AUTHORING_DIMENSIONS);
+  const source = (sourceBlockId: string, exitId: string) =>
+    ({ kind: "exit", sourceBlockId, exitId }) as const;
+
+  // Act
+  const elkJoin = buildElkGraph(
+    graph,
+    createFlowLayoutDimensions(graph, AUTHORING_DIMENSIONS),
+  ).children?.find((node) => node.id === "block:join");
+
+  // Assert
+  expect(geometry.incomingPorts(join).map((port) => port.y)).toStrictEqual([192, 216]);
+  expect([
+    geometry.incomingPortIndex("join", source("code", "approve")),
+    geometry.incomingPortIndex("join", source("code", "request-changes")),
+    geometry.incomingPortIndex("join", source("security", "approve")),
+    geometry.incomingPortIndex("join", source("security", "request-changes")),
+  ]).toStrictEqual([0, 0, 1, 1]);
+  expect(geometry.exitPoint(join, "output")).toStrictEqual({ x: 640, y: 251 });
+  expect(elkJoin?.height).toBe(geometry.blockHeight(join));
+  expect(elkJoin?.ports?.map((port) => port.y)).toStrictEqual([92, 116, 151]);
 });
 
 it("execution graph bounds enclose the status footers a block draws", () => {

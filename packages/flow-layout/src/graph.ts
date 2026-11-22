@@ -2,6 +2,7 @@ import { type AgentDefinition, type FlowBlock, type FlowGraph } from "@t3-factor
 import {
   effectiveExits,
   inheritedExits,
+  joinSlots,
   type EffectiveExit,
   type ExitFlows,
 } from "@t3-factory/domain-validation";
@@ -91,27 +92,49 @@ function sourceKey(source: WireSource) {
 }
 
 export type IncomingIndex = {
-  readonly wires: (targetBlockId: string) => readonly WireSource[];
+  readonly ports: (targetBlockId: string) => readonly WireSource[];
   readonly portIndex: (targetBlockId: string, source: WireSource) => number;
 };
 
+type IncomingTarget = { ports: WireSource[]; index: Map<string, number> };
+
 export function incomingIndex(graph: FlowGraph): IncomingIndex {
-  const incoming = new Map<string, { wires: WireSource[]; ports: Map<string, number> }>();
+  const joins = new Set(graph.blocks.flatMap((block) => (block.kind === "join" ? [block.id] : [])));
+  const incoming = new Map<string, IncomingTarget>();
   const add = (targetBlockId: string, source: WireSource) => {
+    if (joins.has(targetBlockId)) return;
     let target = incoming.get(targetBlockId);
-    if (!target) incoming.set(targetBlockId, (target = { wires: [], ports: new Map() }));
+    if (!target) incoming.set(targetBlockId, (target = { ports: [], index: new Map() }));
     const key = sourceKey(source);
-    if (!target.ports.has(key)) target.ports.set(key, target.wires.length);
-    target.wires.push(source);
+    if (!target.index.has(key)) target.index.set(key, target.ports.length);
+    target.ports.push(source);
   };
   for (const targetBlockId of new Set(graph.flowInput.targetBlockIds))
     add(targetBlockId, { kind: "flow-input" });
   for (const { sourceBlockId, exitId, targetBlockId, targetEndingId } of graph.connections)
     if (targetEndingId === undefined) add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
+  for (const joinBlockId of joins) {
+    const slots = joinSlots(graph, joinBlockId);
+    incoming.set(joinBlockId, {
+      ports: slots.map((slot) => ({
+        kind: "exit",
+        sourceBlockId: slot.sourceBlockId,
+        exitId: slot.exitIds[0]!,
+      })),
+      index: new Map(slots.map((slot, index) => [slot.sourceBlockId, index])),
+    });
+  }
   return {
-    wires: (targetBlockId) => incoming.get(targetBlockId)?.wires ?? [],
-    portIndex: (targetBlockId, source) =>
-      incoming.get(targetBlockId)?.ports.get(sourceKey(source)) ?? 0,
+    ports: (targetBlockId) => incoming.get(targetBlockId)?.ports ?? [],
+    portIndex: (targetBlockId, source) => {
+      const target = incoming.get(targetBlockId);
+      if (!target) return 0;
+      const key =
+        joins.has(targetBlockId) && source.kind === "exit"
+          ? source.sourceBlockId
+          : sourceKey(source);
+      return target.index.get(key) ?? 0;
+    },
   };
 }
 

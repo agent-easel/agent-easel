@@ -56,7 +56,7 @@ export function createCanvasGeometry(
     y: block.position.y + blockInputY(block, index),
   });
   const incomingPorts = (block: CanvasBlock) =>
-    incoming.wires(block.id).map((source, index) => ({
+    incoming.ports(block.id).map((source, index) => ({
       source,
       ...inputPoint(block, index),
     }));

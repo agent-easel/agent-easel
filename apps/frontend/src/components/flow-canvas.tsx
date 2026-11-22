@@ -348,7 +348,7 @@ function AuthoringExit({
       ? "after the wait"
       : exit.source === "continuation"
         ? "response"
-        : exitDisplayName(exit);
+        : exitDisplayName(exit, "output");
   return (
     <>
       {exit.source === "condition" && (
@@ -532,7 +532,10 @@ function authoringBlock(args: AuthoringBlockArgs): CanvasBlockContent {
     ),
     exitPort: (exit) =>
       authoringExitPort(exit, name, args.connectingExitId, unconnected(exit.id), args.connectFrom),
-    incomingPort: incomingPort(fromFlowInput && flowInputTarget),
+    incomingPort: incomingPort(
+      fromFlowInput && flowInputTarget,
+      marks.blocks.get(block.id)?.some(({ issue }) => issue.code === "join_sources_required"),
+    ),
     footers: [],
     subflowBadge: tags,
     subflowFooter: subflowCollapsedFooter(
