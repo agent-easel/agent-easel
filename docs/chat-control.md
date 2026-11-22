@@ -618,7 +618,7 @@ place in the conversation's queue, and a reset or clearing removes the conversat
 ### Confirmation
 
 A review's **confirmation phrase** is `confirm` followed by a one-time code of four characters from
-an alphabet without easily confused characters (no 0/O, 1/I/L, 2/Z, 5/S, 8/B, U/V or G/6). Each new
+the unambiguous alphabet `ACDEFHJKMNPQRTWXY34679`. Each new
 review gets a fresh code, and live reviews in one thread never share one. Only the requester's
 Discord Reply bound to the review's last message by its recorded ID, in the review's thread, whose
 text is exactly the phrase, including case and spacing,
