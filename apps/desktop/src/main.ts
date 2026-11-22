@@ -102,6 +102,9 @@ let tray: Tray | null = null;
 let menuState: DesktopMenuState | null = null;
 /** Set only after the local user confirmed and the backend stopped in order. */
 let quitting = false;
+let started = false;
+let pendingOpen = false;
+let pendingActivate = false;
 let installingUpdate = false;
 /** An approved client's install request was accepted and starts on the next tick. */
 let serverInstallAccepted = false;
@@ -716,9 +719,16 @@ function registerUi() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", openWindow);
+  app.on("second-instance", () => {
+    if (started) openWindow();
+    else pendingOpen = true;
+  });
   // A Dock click: an open window only comes forward; otherwise the window opens where attention waits.
   app.on("activate", () => {
+    if (!started) {
+      pendingActivate = true;
+      return;
+    }
     const windowOpen = window !== null;
     openWindow();
     void attention.dock(windowOpen).then(openRoute);
@@ -841,9 +851,15 @@ async function start() {
   updates.start(updateChannel());
   applyMenuBarIcon();
   refreshTray();
+  started = true;
   const settings = store.get();
   // Launch at login starts in the background with the remembered role.
-  const background = settings.role !== null && app.getLoginItemSettings().wasOpenedAtLogin;
+  const background =
+    !pendingOpen &&
+    !pendingActivate &&
+    settings.role !== null &&
+    app.getLoginItemSettings().wasOpenedAtLogin;
   if (!background) openWindow();
+  if (pendingActivate) void attention.dock(false).then(openRoute);
   if (store.problem) void dialog.showMessageBox({ type: "warning", message: store.problem });
 }
