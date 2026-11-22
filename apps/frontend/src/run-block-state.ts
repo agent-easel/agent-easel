@@ -5,6 +5,7 @@ import {
   type RunBlock,
   type RunDetail,
 } from "@t3-factory/contracts";
+import { isCancelledJoin, joinSummaryOf } from "./join-display.ts";
 import type { RunStateKind } from "./components/status-badge.tsx";
 
 /**
@@ -55,6 +56,7 @@ export function blockStateKind(
     return "problem";
   if (kind !== null && kind !== "working" && kind !== "waiting" && attention.problem)
     return "problem";
+  if (recorded && isCancelledJoin(joinSummaryOf(run, recorded.blockId))) return "stopped";
   return kind;
 }
 

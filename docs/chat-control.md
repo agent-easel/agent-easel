@@ -687,7 +687,7 @@ awaiting review direct the reader to T3. When several arrivals are waiting on a 
 earliest deadline as a relative Discord timestamp and counts the pending arrivals. A Join with a
 partial round shows one text row, **Waiting · *n*/*m* sources**, with the sources that have arrived
 of those it waits for; it is not attention and posts no notice, while a Join integrity Problem
-replaces it with the Problem row. Observation
+replaces it with the Problem row. An inner Finish shows the Join as cancelled as soon as the cutoff commits, including while workers stop. An unresolved Join Problem keeps its row when a later invocation replaces that Join or its ancestor. Observation
 staleness and observations that have yet to be made appear on the relevant Block rows. Settled and
 Archived Runs retain their final Block states. Use Read Run for Finish endings, results, report
 bodies and prompts.

@@ -64,8 +64,9 @@ function blockStatus(block: Block) {
     return `🙋 **${label}** — needs input${block.needsInput === "T3" ? " (answer in T3)" : ""}`;
   if (block.wait)
     return `⏰ ${label} — waits until ${at(block.wait.deadlineAt)}${block.wait.count > 1 ? ` · ${block.wait.count} waiting` : ""}`;
-  if (block.join)
+  if (block.join && block.join.arrived > 0)
     return `⏳ ${label} — Waiting · ${block.join.arrived}/${block.join.sources} sources`;
+  if (block.join?.latest?.outcome === "cancelled") return `⏹️ ${label} — cancelled`;
   switch (block.state) {
     case "working":
       return `⚙️ **${label}** — working`;

@@ -53,6 +53,9 @@ import {
 import { queuedJoinMessageLost } from "./support/join-storage.ts";
 import {
   cardProblem,
+  childWorker,
+  nestedJoinCardFlow,
+  queuedJoinCardFlow,
   messageShows,
   chatStartedRun,
   unknownStatusCard,
@@ -1128,3 +1131,48 @@ it("a child Join waiting for its second source appears on the Discord card", asy
   const shown = await messageShows(world.discord, card, /Merge — Waiting · 1\/2 sources/);
   expect(shown.content.split("\n")).toContain("⏳ Merge — Waiting · 1/2 sources");
 });
+
+it("a child Join shows its committed cancellation while a sibling worker stops", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, nestedJoinCardFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { run } = await launchedWorkers(world.world, runId);
+  await resultReported(world.world, childWorker(world, run, "worker"));
+  await messageShows(world.discord, card, /Merge — Waiting/);
+
+  // Act
+  await resultReported(world.world, childWorker(world, run, "third"));
+
+  // Assert
+  const shown = await messageShows(world.discord, card, /Merge — cancelled/);
+  expect(shown.content.split("\n")).toContain("⏹️ Merge — cancelled");
+});
+
+it.for([
+  ["same placement", false],
+  ["ancestor", true],
+] as const)(
+  "a queued %s replacement keeps the earlier Join Problem on the card",
+  async ([_scope, ancestor], c) => {
+    // Arrange
+    const world = await startingWorld(c, queuedJoinCardFlow(ancestor));
+    const { runId, card } = await chatStartedRun(world);
+    const { run } = await launchedWorkers(world.world, runId);
+    await resultReported(world.world, workerHandle(world.world, run, "queue"));
+    await resultReported(world.world, childWorker(world, run, "worker"));
+    await messageShows(world.discord, card, /Merge — Waiting/);
+    queuedJoinMessageLost(world.harness.databasePath);
+    await resultReported(world.world, childWorker(world, run, "second"));
+    await messageShows(world.discord, card, /Join cannot forward/);
+    world.world.t3.threads.stopsEndThreads();
+
+    // Act
+    await resultReported(world.world, childWorker(world, run, "third"));
+
+    // Assert
+    const shown = await messageShows(world.discord, card, /○ Merge — not started/);
+    expect(shown.content.split("\n")).toContain(
+      "⚠️ **Merge** — Join cannot forward its next round",
+    );
+  },
+);

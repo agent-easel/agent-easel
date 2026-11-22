@@ -1,3 +1,14 @@
+import { placingGraph, savedFlow } from "./subflow.ts";
+import {
+  agentBlock,
+  connection,
+  flowInput,
+  humanStep,
+  joinBesideEndingFlow,
+  launchedWorkers,
+  workerHandle,
+  type ReadyFlowShape,
+} from "./scenarios.ts";
 import { assert } from "@effect/vitest";
 import type { DiscordSettings } from "@t3-factory/contracts";
 import type { Factory } from "../../src/index.ts";
@@ -12,7 +23,7 @@ import {
 } from "./chat-actions.ts";
 import { discordSettingsWhen } from "./chat-control.ts";
 import { unproven, type ControlledDiscord, type CreatedMessage } from "./controlled-discord.ts";
-import { launchedWorkers } from "./scenarios.ts";
+import type { RunDetail } from "@t3-factory/contracts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
 
@@ -70,4 +81,47 @@ export async function unknownStatusCard(world: World) {
   await clicked(world.discord, button, "610000000000000001", 1);
   const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
   return problem!;
+}
+
+export const nestedJoinCardFlow: ReadyFlowShape = async (context) => {
+  const { agent, flow: child } = await joinBesideEndingFlow(context);
+  const graph = placingGraph(child.id);
+  const flow = await savedFlow(context.factory, {
+    name: "Review panel",
+    graph: {
+      ...graph,
+      connections: graph.connections.map((wire) => ({ ...wire, exitId: "delivered" })),
+    },
+  });
+  return { agent, flow };
+};
+
+export const queuedJoinCardFlow =
+  (ancestor: boolean): ReadyFlowShape =>
+  async (context) => {
+    const { agent, flow: child } = await (ancestor ? nestedJoinCardFlow : joinBesideEndingFlow)(
+      context,
+    );
+    const graph = placingGraph(child.id);
+    const flow = await savedFlow(context.factory, {
+      name: "Queued reviews",
+      graph: {
+        flowInput: flowInput("inner-0", "queue"),
+        blocks: [
+          ...graph.blocks,
+          agentBlock("queue", "Queue another review", agent.id),
+          humanStep("review", "Decision"),
+        ],
+        connections: [
+          connection("queue", "done", "inner-0"),
+          connection("inner-0", ancestor ? "done" : "delivered", "review"),
+        ],
+      },
+    });
+    return { agent, flow };
+  };
+
+export function childWorker(world: World, run: RunDetail, templateId: string) {
+  const block = run.blocks.find((item) => item.templateBlockId === templateId)!;
+  return workerHandle(world.world, run, block.blockId);
 }

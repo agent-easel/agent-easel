@@ -867,7 +867,7 @@ The timeline records **round *N* forwarded** and **round *N* cancelled** rows wi
 `join-round-cancelled`, each with the round's `join.round`). A Run read carries only each Join's latest 50 of these events,
 chosen in the query, and an open Run keeps that window as the Join advances; the summary's counts stay complete. Finish,
 Settle and Archive cancel a partial round without forwarding it and record one **round *N* cancelled** row for each affected
-Join; an inner Finish cancels only its own invocation's Joins.
+Join whose next round number is representable; an inner Finish cancels only its own invocation's Joins.
 
 When Factory cannot trust a Join's captured topology or its waiting arrivals, or its next round number would pass
 9,007,199,254,740,991, it records one **Join integrity Problem** on the Join with the reason, as a Problem like any other, and accepts

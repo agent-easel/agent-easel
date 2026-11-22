@@ -186,8 +186,7 @@ export function openRunnerDispatch(
           yield* observe(runRow, block, contextId);
         return;
       }
-      const intent =
-        saved.kind === "handoff" ? yield* retriedNextPass(prepareHandoff(runRow, saved)) : saved;
+      const intent = saved.kind === "handoff" ? yield* prepareHandoff(runRow, saved) : saved;
       if (!intent) return;
       if (intent.kind === "launch") {
         yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
@@ -216,7 +215,7 @@ export function openRunnerDispatch(
             yield* store.noteUnresolved(intent, SEND_UNCERTAIN);
           }),
       );
-    });
+    }).pipe(retriedNextPass);
   }
   function reserveSend(runRow: RunRow, intent: Delivery, retryScope: string | null) {
     return Effect.gen(function* () {

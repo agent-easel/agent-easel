@@ -747,6 +747,16 @@ const parallelWork = (agentId: string) => agentBlock("parallel-block", "Parallel
 const followUp = (agentId: string) => agentBlock("follow-up", "Follow-up", agentId);
 const reviewStep = humanStep("review", "Review", { x: 400, y: 0 });
 
+export const independentRevisits: ReadyFlowShape = (world) =>
+  workerShape(world, "Independent revisits", (agentId) => ({
+    flowInput: flowInput("worker", "parallel-block"),
+    blocks: [entryWorker(agentId), parallelWork(agentId)],
+    connections: [
+      connection("worker", "done", "worker"),
+      connection("parallel-block", "done", "parallel-block"),
+    ],
+  }));
+
 const specStep = continuationStep("spec", "Spec", "Write the spec from what we agreed.");
 
 const instructedWorker = (agentId: string) =>

@@ -30,7 +30,7 @@ interface ReportBlock {
   readonly needsInput: "T3" | "Human" | null;
   readonly problem: RunAttention["kind"] | null;
   readonly wait: { readonly deadlineAt: string; readonly count: number } | null;
-  readonly join: { readonly arrived: number; readonly sources: number } | null;
+  readonly join: RunDetail["joins"][number] | null;
 }
 
 /**
@@ -97,7 +97,15 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
   const childJoins = detail.blocks
     .filter((block) => block.invocationId && joins.has(block.blockId))
     .map((block) => ({ id: block.blockId, name: block.name, kind: "join" as const }));
-  return [...orderedBlocks(detail.definitions.flow.graph), ...childJoins].map(
+  const historicalJoins = detail.attention.flatMap((matter) =>
+    matter.kind === "join-integrity" &&
+    matter.settledAt === null &&
+    matter.blockId !== null &&
+    !recorded.has(matter.blockId)
+      ? [{ id: matter.blockId, name: matter.blockName!, kind: "join" as const }]
+      : [],
+  );
+  return [...historicalJoins, ...orderedBlocks(detail.definitions.flow.graph), ...childJoins].map(
     ({ id, name, kind }) => {
       const block = recorded.get(id);
       const pending = attention.get(id) ?? [];
@@ -132,10 +140,7 @@ function reportBlocks(detail: RunDetail): ReportBlock[] {
               count: wait.length,
             }
           : null,
-        join:
-          join && block?.state === "waiting" && join.arrived > 0
-            ? { arrived: join.arrived, sources: join.sources }
-            : null,
+        join: join ?? null,
       };
     },
   );
