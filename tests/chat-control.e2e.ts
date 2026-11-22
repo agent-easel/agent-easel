@@ -557,6 +557,7 @@ test("the host can save a bot in Bots after correcting a wrong-list warning", as
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toHaveCount(0);
   await expect(screen.getByText("1 ID is in the wrong list")).toHaveCount(0);
   await expect(bots.getByText("Bot", { exact: true })).toHaveCount(2);
   const settings = await discordSettings(app.baseUrl);
