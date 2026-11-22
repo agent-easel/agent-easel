@@ -416,6 +416,15 @@ conversation. It is Off by default, works only while the Factory backend runs, a
 Discord and the model provider outbound only. See [Chat control](docs/chat-control.md).
 _Avoid_: Chat bot as a separate service; treating chat messages or model output as authorization.
 
+**Confirmation phrase**:
+The exact text, `confirm` followed by a one-time four-character code, that a Chat control review's
+last message shows its requester. A **typed confirmation** is the requester's Discord Reply to that
+message with exactly the phrase within five minutes; it is single use, decided by Factory before any
+model call and the only way to confirm a Start, Human answer or Archive. See
+[Chat control](docs/chat-control.md#confirmation).
+_Avoid_: Confirm button; treating a "yes", a message that is not a Reply to the review, or someone
+else's reply as consent.
+
 **Originating thread**:
 The Discord thread a Run was requested in through a confirmed Chat control Start, recorded when Factory
 accepts the Run. It is where Factory reports on that Run, not ownership: any allowed participant may act

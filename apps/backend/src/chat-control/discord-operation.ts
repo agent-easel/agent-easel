@@ -32,7 +32,6 @@ import {
 } from "./discord-gateway.ts";
 import type { ChatActions } from "./actions.ts";
 import type { ChatTool } from "./chat-tools.ts";
-import { buttonRow, type DisabledButton } from "./confirmation-buttons.ts";
 import {
   publishedRun,
   type ChatDeliveries,
@@ -100,17 +99,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
     return this.postMessage(threadId, { raw: text });
   }
 
-  /**
-   * Creates one Factory message, optionally with a confirmation button, in a single request and
-   * resolves with Discord's message ID. Discord enforces `nonce`: a create repeating an earlier
-   * one's nonce returns that message instead of creating another. Failures keep the adapter's
-   * error, whose status tells a definite refusal from an unproven outcome.
-   */
-  async create(
-    threadId: string,
-    text: string,
-    { nonce, button, requesterId }: CreateMessageOptions,
-  ) {
+  async create(threadId: string, text: string, { nonce, requesterId }: CreateMessageOptions) {
     const raw = requesterId === undefined ? text : text.replace(" ", ` <@${requesterId}> `);
     const { payload } = this.buildMessagePayload({ raw });
     const { channelId, threadId: discordThreadId } = this.decodeThreadId(threadId);
@@ -124,7 +113,6 @@ class FactoryDiscordAdapter extends DiscordAdapter {
           : { allowed_mentions: { parse: [], users: [requesterId] } }),
         nonce,
         enforce_nonce: true,
-        ...(button ? { components: buttonRow(button.customId, { label: button.label }) } : {}),
       },
     );
     return ((await response.json()) as { id: string }).id;
@@ -138,16 +126,6 @@ class FactoryDiscordAdapter extends DiscordAdapter {
       `/channels/${discordThreadId ?? channelId}/messages/${messageId}`,
       "PATCH",
       { content: payload.content, allowed_mentions: payload.allowed_mentions },
-    );
-  }
-
-  /** Replaces a review's button with a disabled one showing why, in a single request. */
-  async disable(threadId: string, messageId: string, customId: string, state: DisabledButton) {
-    const { channelId, threadId: discordThreadId } = this.decodeThreadId(threadId);
-    await this.discordFetch(
-      `/channels/${discordThreadId ?? channelId}/messages/${messageId}`,
-      "PATCH",
-      { components: buttonRow(customId, { disabled: state }), allowed_mentions: { parse: [] } },
     );
   }
 
@@ -371,8 +349,6 @@ export const makeDiscordOperation = (
             adapter.create(encodeThreadId(destination), text, options),
           edit: (destination, messageId, text) =>
             adapter.edit(encodeThreadId(destination), messageId, text),
-          disable: (destination, messageId, customId, state) =>
-            adapter.disable(encodeThreadId(destination), messageId, customId, state),
           reopen: (destination) => adapter.reopen(encodeThreadId(destination)),
           locked: (destination) => adapter.locked(encodeThreadId(destination)),
         };
@@ -412,7 +388,7 @@ export const makeDiscordOperation = (
             handOff: (threadId, message) => adapter.handOff(threadId, message),
             encodeThreadId,
             post,
-            confirm: conversation.actions.confirm,
+            confirmations: conversation.actions,
             referenced: (messageId) => {
               const reference = references.get(messageId);
               references.delete(messageId);
@@ -480,7 +456,7 @@ export const makeDiscordOperation = (
         yield* engine.started;
         // Owed receipts go out only from a verified, serving session.
         yield* Effect.forkScoped(conversation.deliveries.serve(sender));
-        yield* Effect.forkScoped(conversation.actions.serveButtons(sender));
+        yield* Effect.forkScoped(conversation.actions.serveResolutions(sender));
         return yield* Effect.callback<GatewayResult>((resume) => {
           client.once(Events.ShardDisconnect, ({ code }) =>
             resume(Effect.succeed(closeResult(code))),

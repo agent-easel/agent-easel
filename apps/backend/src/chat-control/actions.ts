@@ -1,5 +1,5 @@
 import type { Telemetry } from "../telemetry.ts";
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import type { JSONValue } from "ai";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -12,12 +12,6 @@ import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
 import type { ConversationKey } from "./conversations.ts";
 import {
-  BUTTON_PREFIX,
-  confirmationButtons,
-  type ConfirmationButton,
-  type DisabledButton,
-} from "./confirmation-buttons.ts";
-import {
   createDeduplicated,
   nonceOf,
   oweDelivery,
@@ -26,26 +20,40 @@ import {
   type DiscordSender,
 } from "./deliveries.ts";
 import { characters } from "./interpretation.ts";
+import { reviewResolutions } from "./review-resolutions.ts";
 import { at } from "./status-cards.ts";
 
 /** The mutation kinds Chat control can propose; each has one shared Factory operation. */
 export type ChatOperationName = ChatActionOperation;
 
-/** A requester's confirmation lasts this long from the first dispatch of its button. */
 const CONSENT_MS = 5 * 60_000;
 /** The longest complete review, all parts together, in Unicode characters. */
 const REVIEW_CHARACTER_LIMIT = 32_000;
 
-/** The text of a review's last message, which carries the button: who confirms, and until when. */
-const confirmationText = (expiresAt: string) =>
-  `🔒 Only the requester can confirm · expires ${at(expiresAt)}`;
+const CODE_ALPHABET = "ACDEFHJKMNPQRTWXY34679";
+const CODE_LENGTH = 4;
+const PHRASE_SHAPE = /^confirm [A-Za-z0-9]{4}$/i;
+
+const phraseOf = (code: string) => `confirm ${code}`;
+
+const newCode = () =>
+  Array.from({ length: CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join(
+    "",
+  );
+
+const confirmationText = (code: string, expiresAt: string) =>
+  `🔒 To confirm, reply to this message with \`${phraseOf(code)}\` · only the requester can confirm · expires ${at(expiresAt)}`;
 
 /** The latest expiry whose Discord timestamp has as many digits as any expiry Factory posts. */
 const LONGEST_EXPIRY = new Date(9_999_999_999_000).toISOString();
+const LONGEST_MENTION = `<@${"9".repeat(20)}> `;
 
-/** Whether a complete review, its button message included, exceeds what chat may present. */
 export const exceedsReviewLimit = (review: readonly string[]) =>
-  characters([...review, confirmationText(LONGEST_EXPIRY)].join("")) > REVIEW_CHARACTER_LIMIT;
+  characters(
+    [...review, LONGEST_MENTION, confirmationText("X".repeat(CODE_LENGTH), LONGEST_EXPIRY)].join(
+      "",
+    ),
+  ) > REVIEW_CHARACTER_LIMIT;
 
 /**
  * A mutation call Factory validated into an exact proposal: what would be performed, which
@@ -57,8 +65,6 @@ export interface Proposed {
   readonly parameters: JSONValue;
   readonly projectIds: readonly string[];
   readonly review: readonly string[];
-  /** The confirmation button's label. */
-  readonly confirmation: { readonly label: string };
   /** Compact targets the turn retains as the proposal fact. */
   readonly targets: JSONValue;
   /** A pending proposal of the same requester and thread this one corrects. */
@@ -97,7 +103,6 @@ export interface ChatOperation {
     outcome: Extract<ActionOutcome, { facts: JSONValue }>,
     parameters: JSONValue,
   ) => string | undefined;
-  /** One line for the requester's repeated click: what this decided outcome was. */
   readonly summary: (outcome: Extract<ActionOutcome, { facts: JSONValue }>) => string;
   /** The primary target whose newer proposal corrects an older one: a Project, occurrence or Run. */
   readonly target: (parameters: JSONValue) => string;
@@ -127,6 +132,8 @@ type ProposalRow = {
   state: ProposalState;
   ended_reason: "failed" | "superseded" | "revoked" | "application" | null;
   expires_at: string | null;
+  confirmation_code: string | null;
+  confirmation_message_id: string | null;
 };
 
 type ActionRow = {
@@ -143,27 +150,27 @@ export type ProposalStatus =
   | { readonly state: "expired" | "confirming" | "no-longer-valid" | "not-presented" }
   | { readonly state: "accepted" | "rejected"; readonly outcome: JSONValue };
 
-/** A button click as Discord delivered it, with Factory's check of the clicker's access. */
-export interface ConfirmationClick {
-  readonly customId: string;
-  readonly userId: string;
+export interface ConfirmationReply {
+  readonly proposalId: string | undefined;
+  readonly authorId: string;
   readonly threadId: string;
-  /** The verified application of the session that received the click. */
   readonly applicationId: string;
+  readonly text: string;
+  readonly repliedTo: { readonly messageId: string; readonly byFactory: boolean } | undefined;
   /** Whether that session still operates: Chat control On and the session not released. */
   readonly operating: () => boolean;
-  /** The clicker's current Discord access to the thread, checked only when needed. */
   readonly access: Effect.Effect<"permitted" | "denied" | "unavailable", unknown>;
   /** Whether the last affirmative check still has qualified evidence; no external I/O. */
   readonly accessCurrent: () => boolean;
 }
 
-export const isConfirmation = (customId: string) => customId.startsWith(BUTTON_PREFIX);
-
-/** The clicker's private feedback when a click does not change the button. */
 const REPLIES = {
   notYours:
     "🔒 Only the person who asked for this review can confirm it. Ask Factory for your own.",
+  notReply:
+    "↪️ Nothing was done. To confirm, reply to the review's last message with its exact confirmation phrase.",
+  wrongPhrase:
+    "🔤 That is not this review's confirmation phrase, so nothing was done. Reply with the exact phrase before the review expires.",
   invalid: "🚫 This confirmation is no longer valid. Ask Factory for a new review.",
   expired: "⌛ This review expired, so nothing was done. Ask Factory for a new review.",
   denied: "🚫 Chat control does not accept this confirmation from you here.",
@@ -176,15 +183,11 @@ const REPLIES = {
     "❓ Factory cannot tell yet whether this was accepted. It will not perform it again; the result follows here once Factory knows.",
 } as const;
 
-/**
- * How Factory answers a confirmation click: privately to the clicker, or, once the click decided
- * the review, by disabling its button in place (its result follows in the thread).
- */
-export type ClickAnswer =
-  | { readonly kind: "ephemeral"; readonly text: string }
-  | { readonly kind: "disable"; readonly customId: string; readonly state: DisabledButton };
+type ConfirmationAnswer =
+  | { readonly kind: "reply"; readonly text: string }
+  | { readonly kind: "decided" };
 
-const ephemeral = (text: string): ClickAnswer => ({ kind: "ephemeral", text });
+const replied = (text: string): ConfirmationAnswer => ({ kind: "reply", text });
 
 const PREPARATION_FAILED =
   "⚠️ Factory could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
@@ -208,34 +211,29 @@ const destinationOf = (row: ProposalRow): Destination => ({
   threadId: row.thread_id,
 });
 
-/**
- * The clicker's answer for each way performing a confirmed action can end. A decided review's
- * button is disabled for everyone; consent that is still live or still being reconciled keeps
- * its button, so the requester can click again.
- */
-const outcomeAnswer = (proposalId: string, kind: ActionOutcome["kind"]): ClickAnswer => {
-  if (kind === "unavailable") return ephemeral(REPLIES.notNow);
-  if (kind === "unknown") return ephemeral(REPLIES.unknown);
-  return {
-    kind: "disable",
-    customId: `${BUTTON_PREFIX}${proposalId}`,
-    state: kind === "accepted" ? "confirmed" : "invalid",
-  };
+const outcomeAnswer = (kind: ActionOutcome["kind"]): ConfirmationAnswer => {
+  if (kind === "unavailable") return replied(REPLIES.notNow);
+  if (kind === "unknown") return replied(REPLIES.unknown);
+  return { kind: "decided" };
 };
 
-/**
- * Why a click cannot take this proposal's consent, before any check that needs Discord:
- * `repeated` when the proposal was already confirmed, so the requester gets its result.
- */
-function clickRefusal(
+const repliesToReview = (row: ProposalRow, reply: ConfirmationReply) =>
+  reply.repliedTo !== undefined &&
+  (row.confirmation_message_id === null
+    ? reply.repliedTo.byFactory
+    : reply.repliedTo.messageId === row.confirmation_message_id);
+
+function replyRefusal(
   row: ProposalRow | undefined,
-  click: ConfirmationClick,
+  reply: ConfirmationReply,
 ): keyof typeof REPLIES | "repeated" | undefined {
-  if (!row || row.application_id !== click.applicationId || row.thread_id !== click.threadId)
+  if (!row || row.application_id !== reply.applicationId || row.thread_id !== reply.threadId)
     return "invalid";
-  if (row.requester_id !== click.userId) return "notYours";
+  if (row.requester_id !== reply.authorId) return "notYours";
+  if (!repliesToReview(row, reply)) return "notReply";
   if (row.state === "accepting" || row.state === "consumed") return "repeated";
-  return row.state === "presented" ? undefined : "invalid";
+  if (row.state !== "presented" || row.confirmation_code === null) return "invalid";
+  return reply.text === phraseOf(row.confirmation_code) ? undefined : "wrongPhrase";
 }
 
 type StatusRow = ProposalRow & {
@@ -264,16 +262,6 @@ function statusOf(row: StatusRow, at: number): ProposalStatus {
   }
 }
 
-/**
- * Chat control's shared review, consent, action and receipt path for every mutation kind.
- * A proposal records the exact operation and parameters with their requester and context. Its
- * review is published as complete ordered parts with the requester-bound button last; the button's
- * first dispatch fixes the five-minute expiry. Only the requester's click within that lifetime,
- * with Chat control On, the scope and application unchanged and current Discord access, consumes
- * it, and the shared operation runs under the action's stable identity, never inside a SQL
- * transaction. The decided outcome, the Run's originating thread and the owed receipt commit
- * together; an interrupted attempt reconciles the same identity and is never performed again.
- */
 export function makeChatActions(
   sql: SqlClient.SqlClient,
   operations: readonly ChatOperation[],
@@ -286,7 +274,7 @@ export function makeChatActions(
   telemetry: Telemetry,
 ) {
   const byName = new Map(operations.map((operation) => [operation.name, operation]));
-  const buttons = confirmationButtons(sql);
+  const resolutions = reviewResolutions(sql);
   /** Actions this process is performing right now. */
   const performing = new Set<string>();
 
@@ -351,14 +339,25 @@ export function makeChatActions(
           if (corrected.length > 0)
             yield* sql`UPDATE chat_proposals SET state='ended',ended_reason='superseded' WHERE id IN ${sql.in(corrected)}`;
           const id = yield* newId;
-          yield* sql`INSERT INTO chat_proposals (id,application_id,guild_id,parent_channel_id,thread_id,requester_id,operation,parameters_json,identity,project_ids_json,generation,message_id,tool_call_id,state,created_at)
+          const taken = new Set(
+            (yield* sql<{
+              confirmation_code: string;
+            }>`SELECT confirmation_code FROM chat_proposals WHERE application_id=${conversation.applicationId}
+              AND thread_id=${conversation.threadId} AND confirmation_code IS NOT NULL
+              AND state IN ('preparing','presented','accepting')`).map(
+              (row) => row.confirmation_code,
+            ),
+          );
+          let code = newCode();
+          while (taken.has(code)) code = newCode();
+          yield* sql`INSERT INTO chat_proposals (id,application_id,guild_id,parent_channel_id,thread_id,requester_id,operation,parameters_json,identity,project_ids_json,generation,message_id,tool_call_id,state,created_at,confirmation_code)
             VALUES (${id},${conversation.applicationId},${conversation.guildId},${conversation.parentChannelId},${conversation.threadId},${context.requesterId},
               ${proposed.operation},${JSON.stringify(proposed.parameters)},${identity},${JSON.stringify(proposed.projectIds)},
-              ${context.generation},${context.messageId},${context.toolCallId},'preparing',${at})`;
+              ${context.generation},${context.messageId},${context.toolCallId},'preparing',${at},${code})`;
           return { kind: "new", id };
         }),
       )
-      .pipe(Effect.tap(() => buttons.changed));
+      .pipe(Effect.tap(() => resolutions.changed));
 
   /** Hints the Runs whose occurrences committed Human answer proposals name. */
   const answerRunsChanged = (ids: readonly string[]) =>
@@ -388,15 +387,6 @@ export function makeChatActions(
       return proposed.projectIds.every((projectId) => granted.includes(projectId));
     });
 
-  /**
-   * Publishes a new proposal's complete review: every part in order, then the button. Before
-   * each part and before the button, the proposal must still be preparing, current Access must
-   * grant its targets and `permitted` (Chat control On, the requester's access and the
-   * conversation generation) must hold; otherwise publication stops without a button. Consent
-   * becomes usable only once every preceding part was delivered; the button's first dispatch
-   * fixes the expiry even if its own delivery stays uncertain. A part that fails, or a button
-   * Discord definitely refused, leaves no usable consent.
-   */
   const present = (
     id: string,
     proposed: Proposed,
@@ -405,11 +395,14 @@ export function makeChatActions(
     permitted: Effect.Effect<boolean, unknown>,
   ) =>
     Effect.gen(function* (): Effect.fn.Return<"presented" | "failed" | "withdrawn", unknown> {
-      const create = (text: string, nonce: string, button?: ConfirmationButton) =>
-        createDeduplicated(sender, destination, text, {
-          nonce: nonceOf("review", id, nonce),
-          ...(button === undefined ? {} : { button }),
-        });
+      const create = (text: string, nonce: string, requesterId?: string) =>
+        createDeduplicated(
+          sender,
+          destination,
+          text,
+          { nonce: nonceOf("review", id, nonce) },
+          Effect.succeed(requesterId === undefined ? {} : { requesterId }),
+        );
       const failed = Effect.gen(function* () {
         yield* fail(id);
         yield* create(PREPARATION_FAILED, "failed");
@@ -431,14 +424,16 @@ export function makeChatActions(
       );
       if (!usable) return yield* withdrawn;
       yield* answerRunsChanged([id]);
-      const button = yield* create(confirmationText(expiresAt), "button", {
-        customId: `${BUTTON_PREFIX}${id}`,
-        label: proposed.confirmation.label,
-      });
-      if ("failure" in button && button.failure !== "unknown") return yield* failed;
-      if ("messageId" in button) {
-        yield* sql`UPDATE chat_proposals SET button_message_id=${button.messageId} WHERE id=${id}`;
-        yield* buttons.changed;
+      const row = (yield* proposal(id))!;
+      const last = yield* create(
+        confirmationText(row.confirmation_code!, expiresAt),
+        "confirmation",
+        row.requester_id,
+      );
+      if ("failure" in last && last.failure !== "unknown") return yield* failed;
+      if ("messageId" in last) {
+        yield* sql`UPDATE chat_proposals SET confirmation_message_id=${last.messageId} WHERE id=${id}`;
+        yield* resolutions.changed;
       }
       return "presented";
     }).pipe(Effect.onInterrupt(() => fail(id)));
@@ -459,8 +454,7 @@ export function makeChatActions(
           if (outcome.kind === "unknown") return;
           yield* sql`UPDATE chat_actions SET state=${outcome.kind},decided_at=${decidedAt},outcome_json=${JSON.stringify(outcome.facts)}
               WHERE id=${actionId} AND state='accepting'`;
-          // The click that decided it, if any, disables the button in place.
-          yield* sql`UPDATE chat_proposals SET state='consumed',ended_reason=NULL,button_settled=1 WHERE id=${row.id}`;
+          yield* sql`UPDATE chat_proposals SET state='consumed',ended_reason=NULL,resolution_settled=0 WHERE id=${row.id}`;
           if (outcome.kind === "accepted" && outcome.originRunId !== undefined)
             yield* sql`INSERT INTO chat_run_origins (run_id,application_id,guild_id,parent_channel_id,thread_id,action_id,recorded_at)
                 VALUES (${outcome.originRunId},${row.application_id},${row.guild_id},${row.parent_channel_id},${row.thread_id},${actionId},${decidedAt})
@@ -478,11 +472,13 @@ export function makeChatActions(
       );
       if (outcome.kind === "accepted" && outcome.originRunId !== undefined)
         originRecorded(outcome.originRunId);
-      if (outcome.kind === "accepted" || outcome.kind === "rejected") yield* deliveries.wake;
+      if (outcome.kind === "accepted" || outcome.kind === "rejected") {
+        yield* deliveries.wake;
+        yield* resolutions.changed;
+      }
     });
 
-  /** Shared Start may wait on external preflight; taking a click is not Run acceptance. */
-  const acceptance = (row: ProposalRow, click: ConfirmationClick): StartAuthorization => {
+  const acceptance = (row: ProposalRow, reply: ConfirmationReply): StartAuthorization => {
     const local = Effect.gen(function* () {
       const current = (yield* proposal(row.id))!;
       if (current.state !== "accepting")
@@ -493,7 +489,7 @@ export function makeChatActions(
         enabled: number;
         application_id: string | null;
       }>`SELECT enabled,application_id FROM chat_control_state WHERE singleton=1`;
-      if (!state!.enabled || !click.operating())
+      if (!state!.enabled || !reply.operating())
         return failure("conflict", "Chat control is Off. Nothing was started.");
       if (state!.application_id !== current.application_id)
         return failure(
@@ -508,10 +504,10 @@ export function makeChatActions(
       check: Effect.gen(function* () {
         const allowed = yield* local;
         if (!allowed.ok) return allowed;
-        if (!click.operating())
+        if (!reply.operating())
           return failure("conflict", "Chat control is Off. Nothing was started.");
         // A denied or unresolved Discord check refuses this attempt, not the live consent.
-        const access = yield* click.access;
+        const access = yield* reply.access;
         if (access === "unavailable")
           return failure("conflict", "Discord access could not be confirmed. Nothing was started.");
         if (access === "denied")
@@ -522,7 +518,7 @@ export function makeChatActions(
         Effect.gen(function* () {
           const allowed = yield* local;
           if (!allowed.ok) return allowed;
-          return click.accessCurrent()
+          return reply.accessCurrent()
             ? allowed
             : failure("conflict", "Discord access changed before Factory accepted the Start.");
         }),
@@ -530,7 +526,7 @@ export function makeChatActions(
   };
 
   /** Performs a consumed proposal under its action identity, outside any transaction. */
-  const perform = (row: ProposalRow, actionId: string, click: ConfirmationClick) =>
+  const perform = (row: ProposalRow, actionId: string, reply: ConfirmationReply) =>
     Effect.gen(function* () {
       performing.add(actionId);
       const operation = byName.get(row.operation)!;
@@ -542,7 +538,7 @@ export function makeChatActions(
         });
       }
       const executed = yield* Effect.result(
-        operation.execute(actionId, parameters, acceptance(row, click)),
+        operation.execute(actionId, parameters, acceptance(row, reply)),
       );
       const outcome: ActionOutcome =
         executed._tag === "Success"
@@ -569,23 +565,21 @@ export function makeChatActions(
       return outcome;
     });
 
-  const repeatedClick = (row: ProposalRow, click: ConfirmationClick) =>
-    Effect.gen(function* (): Effect.fn.Return<ClickAnswer, unknown> {
+  const repeatedReply = (row: ProposalRow, reply: ConfirmationReply) =>
+    Effect.gen(function* (): Effect.fn.Return<ConfirmationAnswer, unknown> {
       const action = yield* actionOf(row.id);
-      if (!action) return ephemeral(REPLIES.invalid);
-      // Reconciliation needs no clicker; any result is shown only to its requester, here, with
-      // current access.
+      if (!action) return replied(REPLIES.invalid);
       const reconciled =
         action.state === "accepting" && !performing.has(action.id)
           ? yield* reconcileAction(row, action)
           : undefined;
-      if ((yield* click.access) !== "permitted") return ephemeral(REPLIES.denied);
+      if ((yield* reply.access) !== "permitted") return replied(REPLIES.denied);
       if (action.state === "accepting")
         return reconciled === undefined
-          ? ephemeral(REPLIES.confirming)
-          : outcomeAnswer(row.id, reconciled.kind);
+          ? replied(REPLIES.confirming)
+          : outcomeAnswer(reconciled.kind);
       const operation = byName.get(row.operation)!;
-      return ephemeral(
+      return replied(
         `You already confirmed this review. ${operation.summary({
           kind: action.state,
           facts: JSON.parse(action.outcome_json!) as JSONValue,
@@ -618,34 +612,41 @@ export function makeChatActions(
       }),
     );
 
-  /**
-   * A confirmation button click and how to answer it. Wrong requester, wrong context, denied or
-   * unavailable access never consume live consent and never change the button.
-   */
-  const confirm = (click: ConfirmationClick) =>
-    Effect.gen(function* (): Effect.fn.Return<ClickAnswer, unknown> {
-      const row = yield* proposal(click.customId.slice(BUTTON_PREFIX.length));
-      const refused = clickRefusal(row, click);
-      if (refused === "repeated") return yield* repeatedClick(row!, click);
-      if (refused) return ephemeral(REPLIES[refused]);
-      if (yield* expired(row!)) return ephemeral(REPLIES.expired);
-      const access = yield* click.access;
-      if (access !== "permitted") return ephemeral(REPLIES[access]);
-      // Chat control turned Off meanwhile: nothing is consumed and the consent stays live.
-      if (!click.operating()) return ephemeral(REPLIES.notNow);
-      const taken = yield* take(row!);
-      if (!("refused" in taken))
-        return outcomeAnswer(row!.id, (yield* perform(row!, taken.actionId, click)).kind);
-      return taken.refused === "confirming"
-        ? yield* repeatedClick(row!, click)
-        : ephemeral(REPLIES[taken.refused]);
+  const confirmationTarget = (
+    applicationId: string,
+    threadId: string,
+    repliedTo: string | undefined,
+    text: string,
+  ) =>
+    Effect.gen(function* () {
+      const code = PHRASE_SHAPE.test(text) ? text.slice(text.indexOf(" ") + 1) : undefined;
+      if (repliedTo === undefined && code === undefined) return undefined;
+      const [row] = yield* sql<{ id: string }>`SELECT id FROM chat_proposals
+        WHERE application_id=${applicationId} AND thread_id=${threadId}
+          AND (confirmation_message_id=${repliedTo ?? null} OR confirmation_code=${code ?? null})
+        ORDER BY confirmation_message_id=${repliedTo ?? null} DESC,created_at DESC LIMIT 1`;
+      return row || code !== undefined ? { proposalId: row?.id } : undefined;
     });
 
-  /**
-   * Startup recovery: a review interrupted before its button was dispatched never becomes
-   * usable, and every attempt left without an outcome reconciles its identity. An attempt proven
-   * not accepted returns its consent, which still expires at its original time.
-   */
+  const confirm = (reply: ConfirmationReply) =>
+    Effect.gen(function* (): Effect.fn.Return<ConfirmationAnswer, unknown> {
+      const row = reply.proposalId === undefined ? undefined : yield* proposal(reply.proposalId);
+      const refused = replyRefusal(row, reply);
+      if (refused === "repeated") return yield* repeatedReply(row!, reply);
+      if (refused) return replied(REPLIES[refused]);
+      if (yield* expired(row!)) return replied(REPLIES.expired);
+      const access = yield* reply.access;
+      if (access !== "permitted") return replied(REPLIES[access]);
+      // Chat control turned Off meanwhile: nothing is consumed and the consent stays live.
+      if (!reply.operating()) return replied(REPLIES.notNow);
+      const taken = yield* take(row!);
+      if (!("refused" in taken))
+        return outcomeAnswer((yield* perform(row!, taken.actionId, reply)).kind);
+      return taken.refused === "confirming"
+        ? yield* repeatedReply(row!, reply)
+        : replied(REPLIES[taken.refused]);
+    });
+
   const recover = Effect.gen(function* () {
     yield* sql`UPDATE chat_proposals SET state='ended',ended_reason='failed' WHERE state='preparing'`;
     const open = yield* sql<ActionRow>`SELECT * FROM chat_actions WHERE state='accepting'`;
@@ -680,14 +681,14 @@ export function makeChatActions(
     open,
     present,
     fail,
+    confirmationTarget,
     confirm,
     recover,
     statuses,
     reconciling,
-    /** The serving session's best-effort retirement of buttons that can no longer confirm. */
-    serveButtons: buttons.serve,
+    serveResolutions: resolutions.serve,
     /** Something outside this module may have made reviews unusable, e.g. an Access save. */
-    buttonsChanged: buttons.changed,
+    resolutionsChanged: resolutions.changed,
     /** Proposals that something outside this module ended, after it committed. */
     proposalsEnded: answerRunsChanged,
   };

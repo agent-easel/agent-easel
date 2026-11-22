@@ -6,11 +6,10 @@ import { ALLOWED_CHANNEL, discordBot, discordGuild } from "./chat-control.ts";
 import { invocation, operatingService, THREAD } from "./chat-conversation.ts";
 import { chatWorlds, runConversation } from "./chat-runs.ts";
 import {
-  buttonEvent,
+  messageEvent,
   PARTICIPANT_ID,
   type ControlledDiscord,
   type CreatedMessage,
-  type InteractionAnswer,
 } from "./controlled-discord.ts";
 import { preparedService } from "./prepared-runner.ts";
 import {
@@ -82,32 +81,35 @@ export const startCall = (
 
 export const START_PROMPT = "Improve search\nKeep it accessible.";
 
-type ButtonComponent = {
-  readonly custom_id: string;
-  readonly label: string;
-  readonly disabled?: boolean;
+export interface Confirmation {
+  readonly messageId: string;
+  readonly phrase: string;
+}
+
+const PHRASE = /`(confirm [A-Z0-9]{4})`/;
+const RESOLUTION = /^(?:✅ Confirmed|⌛ Expired|↩️ Replaced|🚫 No longer valid)$/;
+
+const confirmationIn = (message: CreatedMessage): Confirmation | undefined => {
+  const phrase = PHRASE.exec(message.content)?.[1];
+  return phrase === undefined ? undefined : { messageId: message.id, phrase };
 };
 
-/** The confirmation button a message's components show, if any. */
-const buttonIn = (components: unknown) =>
-  (components as readonly { readonly components: readonly ButtonComponent[] }[])[0]?.components[0];
+const isConfirmation = (message: CreatedMessage) =>
+  PHRASE.test(message.content) || RESOLUTION.test(message.content);
 
-/** The custom ID of the confirmation button on `message`, if it carries one. */
-const buttonOf = (message: CreatedMessage) => buttonIn(message.components)?.custom_id;
+export const reviewShows = (discord: ControlledDiscord, confirmation: Confirmation) =>
+  discord.created.find((message) => message.id === confirmation.messageId)!.content;
 
-/**
- * The button `customId` as Discord shows it now: its label, marked when disabled, or undefined
- * when no message shows it.
- */
-export const buttonShown = (discord: ControlledDiscord, customId: string) => {
-  const message = discord.created.find((entry) => buttonOf(entry) === customId);
-  const button = message && buttonIn(message.components);
-  return button && (button.disabled === true ? `${button.label} (disabled)` : button.label);
-};
+export async function resolved(discord: ControlledDiscord, confirmation: Confirmation) {
+  await discord.messagesWhen((messages) =>
+    messages.some(
+      (message) => message.id === confirmation.messageId && RESOLUTION.test(message.content),
+    ),
+  );
+  return reviewShows(discord, confirmation);
+}
 
-/** Messages Discord created so far that carry a confirmation button. */
-export const confirmations = (discord: ControlledDiscord) =>
-  discord.created.filter((message) => buttonOf(message) !== undefined);
+export const confirmations = (discord: ControlledDiscord) => discord.created.filter(isConfirmation);
 
 /** The model asks for one mutation tool call. */
 type MutationCall = { readonly toolCalls: readonly { name: string; input: unknown }[] };
@@ -130,61 +132,96 @@ export async function proposed(
   world.model.script(answer);
   world.discord.deliver(invocation(id, { content }));
   await createdBesidesReports(world.discord, messages);
-  const button = buttonOf(besidesReports(world.discord)[messages - 1]!);
-  assert(button !== undefined, "the last message carries the confirmation button");
-  return button;
+  const confirmation = confirmationIn(besidesReports(world.discord)[messages - 1]!);
+  assert(confirmation !== undefined, "the last message asks for the confirmation phrase");
+  return confirmation;
 }
 
-/** An interaction answer as text: an ephemeral reply, or the button an update left showing. */
-const answerText = (answer: InteractionAnswer) => {
-  if (answer.kind === "ephemeral") return answer.content;
-  const button = buttonIn(answer.components)!;
-  return button.disabled === true ? `${button.label} (disabled)` : button.label;
-};
+const CONFIRMATION_ANSWER =
+  /^(?:🔒 Only the person|↪️ Nothing was done|🔤 That is not|🚫 This confirmation|⌛ This review|🚫 Chat control does not accept this confirmation|⚠️ Factory could not (?:confirm your access|act on this)|⏳ Factory is already|❓ Factory cannot tell|You already confirmed)/;
 
-/** How Factory answered clicks, in order: ephemeral texts or the button an update shows. */
-export const clickAnswers = (discord: ControlledDiscord) =>
-  discord.interactionAnswers.map(answerText);
+const isConfirmationAnswer = (message: CreatedMessage) => CONFIRMATION_ANSWER.test(message.content);
 
-/**
- * Delivers a click on `customId` in `THREAD` and returns Factory's answer once it is the
- * `answers`th answer overall: the ephemeral text, or the button its message now shows.
- */
-export async function clicked(
+export const confirmationAnswers = (discord: ControlledDiscord) =>
+  discord.created.filter(isConfirmationAnswer).map((message) => message.content);
+
+export async function confirmationAnswered(discord: ControlledDiscord, count: number) {
+  await discord.createdWhere(isConfirmationAnswer, count);
+  return confirmationAnswers(discord).at(-1)!;
+}
+
+async function outcome(discord: ControlledDiscord, confirmation: Confirmation, answers: number) {
+  await discord.messagesWhen(
+    (messages) =>
+      messages.filter(isConfirmationAnswer).length >= answers ||
+      messages.some(
+        (message) => message.id === confirmation.messageId && RESOLUTION.test(message.content),
+      ),
+  );
+  const shown = reviewShows(discord, confirmation);
+  return RESOLUTION.test(shown) ? shown : confirmationAnswers(discord).at(-1)!;
+}
+
+export interface ReplyOptions {
+  readonly userId?: string;
+  readonly text?: string;
+  readonly asReply?: boolean;
+  readonly replyTo?: string;
+  readonly thread?: { readonly id: string };
+}
+
+export function reply(
   discord: ControlledDiscord,
-  customId: string,
+  confirmation: Confirmation,
   id: string,
-  answers: number,
-  options: {
-    readonly userId?: string;
-    readonly permissions?: bigint;
-    readonly thread?: Parameters<typeof buttonEvent>[0]["thread"];
-  } = {},
+  options: ReplyOptions = {},
 ) {
-  const message = discord.created.find((entry) => buttonOf(entry) === customId);
+  const channelId = options.thread?.id ?? THREAD;
+  const target = options.replyTo ?? confirmation.messageId;
+  const shown = discord.created.find((message) => message.id === target);
   discord.deliver(
-    buttonEvent({
+    messageEvent({
       bot: discordBot,
       guildId: discordGuild.id,
-      thread: { id: THREAD, parentId: ALLOWED_CHANNEL },
+      channelId,
       id,
-      customId,
-      ...(message ? { message } : {}),
-      ...options,
+      authorId: options.userId ?? PARTICIPANT_ID,
+      content: options.text ?? confirmation.phrase,
+      ...(options.asReply === false
+        ? { mention: true }
+        : {
+            mention: false,
+            replyTo: {
+              id: target,
+              channelId,
+              authorId: discordBot.applicationId,
+              authorIsBot: true,
+              content: shown?.content ?? "An earlier message.",
+            },
+          }),
     }),
   );
-  await discord.answered(answers);
-  return clickAnswers(discord).at(-1)!;
+}
+
+export async function confirmed(
+  discord: ControlledDiscord,
+  confirmation: Confirmation,
+  id: string,
+  answers = 1,
+  options: ReplyOptions = {},
+) {
+  reply(discord, confirmation, id, options);
+  return outcome(discord, confirmation, answers);
 }
 
 /** Holds a confirmed Start at its T3 contract snapshot until the test releases it. */
 export async function pendingStart(
   world: Pick<Awaited<ReturnType<typeof startingWorld>>, "discord" | "t3">,
-  customId: string,
-  options: Parameters<typeof clicked>[4] = {},
+  confirmation: Confirmation,
+  options: ReplyOptions = {},
 ) {
   const { inspecting, release } = world.t3.contract.holdInspection();
-  const answer = clicked(world.discord, customId, "610000000000000090", 1, options);
+  const answer = confirmed(world.discord, confirmation, "610000000000000090", 1, options);
   await inspecting;
   return { answer, release };
 }
@@ -207,9 +244,9 @@ export async function privateStartingWorld(c: TestContext) {
     }),
   );
   await world.discord.createdMessages(2);
-  const button = buttonOf(world.discord.created[1]!);
-  assert(button !== undefined);
-  return { ...world, button, clickOptions: { thread } };
+  const confirmation = confirmationIn(world.discord.created[1]!);
+  assert(confirmation !== undefined);
+  return { ...world, confirmation, replyOptions: { thread } };
 }
 
 /** The Runs Factory shows in navigation, as identity and title. */

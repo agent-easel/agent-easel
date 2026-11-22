@@ -1,5 +1,4 @@
 import {
-  buttonEvent,
   messageEvent,
   startControlledDiscord,
   type CreatedMessage,
@@ -8,9 +7,7 @@ import {
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 
-/** The confirmation button a message Discord created carries, if any. */
-const buttonOf = (message: CreatedMessage) =>
-  (message.components as { components: { custom_id: string }[] }[])[0]?.components[0];
+const phraseOf = (message: CreatedMessage) => /`(confirm [A-Z0-9]{4})`/.exec(message.content)?.[1];
 
 /** Chat control reaches this controlled Discord instead of discord.com; it knows one bot. */
 export async function startJourneyDiscord() {
@@ -108,12 +105,12 @@ export function discordFixture(
         );
         return { id };
       },
-      /** The messages Discord created so far: text and any confirmation button's custom ID. */
       messages: () =>
         discord.created.map((message) => ({
+          id: message.id,
           channelId: message.channelId,
           content: message.content,
-          customId: buttonOf(message)?.custom_id ?? null,
+          phrase: phraseOf(message) ?? null,
         })),
       /** The channel's permissions stop, or again let, the bot post there. */
       posting({ channelId, denied }: { channelId: string; denied: boolean }) {
@@ -161,17 +158,24 @@ export function discordFixture(
         if (state === "locked") discord.archiveThread(thread, { locked: true });
         else discord.unlockThread(thread);
       },
-      /** The participant clicks the confirmation button `customId` in `thread`. */
-      click({ thread, customId }: { thread: string; customId: string }) {
+      confirm({ thread, messageId }: { thread: string; messageId: string }) {
         invocations += 1;
+        const review = discord.created.find((message) => message.id === messageId)!;
         discord.deliver(
-          buttonEvent({
+          messageEvent({
             bot,
             guildId: guild.id,
-            thread: { id: thread, parentId: guild.channels[0]!.id },
+            channelId: thread,
             id: String(310000000000000000n + BigInt(invocations)),
-            customId,
-            message: discord.created.find((message) => buttonOf(message)?.custom_id === customId)!,
+            content: phraseOf(review)!,
+            mention: false,
+            replyTo: {
+              id: review.id,
+              channelId: thread,
+              authorId: bot.applicationId,
+              authorIsBot: true,
+              content: review.content,
+            },
           }),
         );
       },

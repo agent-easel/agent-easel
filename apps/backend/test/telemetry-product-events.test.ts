@@ -11,7 +11,7 @@ import {
   turnedOn,
 } from "./support/chat-control.ts";
 import { messageEvent, PARTICIPANT_ID } from "./support/controlled-discord.ts";
-import { answeringWorld, answerCall, clicked, proposed } from "./support/chat-actions.ts";
+import { answeringWorld, answerCall, confirmed, proposed } from "./support/chat-actions.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { liveClient, subscribe } from "./support/live.ts";
 import { mockIngest } from "./support/telemetry.ts";
@@ -326,10 +326,16 @@ it("reading a Run to answer a Human step counts the confirmed reply in its own c
   const ingest = await mockIngest(context);
   const world = await answeringWorld(context, undefined, { env: ingest.env });
   world.model.script({ toolCalls: [{ name: "read_run", input: { run: "#1" } }] });
-  const button = await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmation = await proposed(
+    world,
+    "600000000000000001",
+    2,
+    answerCall(world),
+    "approve #1",
+  );
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.factory.close();
 
   // Assert

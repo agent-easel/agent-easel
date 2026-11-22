@@ -14,7 +14,7 @@ import type { DiscordSettings } from "@t3-factory/contracts";
 import type { Factory } from "../../src/index.ts";
 import {
   besidesReports,
-  clicked,
+  confirmed,
   isStatusCard,
   proposedStart,
   START_PROMPT,
@@ -35,14 +35,14 @@ type World = Awaited<ReturnType<typeof startingWorld>>;
  */
 export async function chatStartedRun(world: World, ordinal = 1, prompt = START_PROMPT) {
   const before = besidesReports(world.discord).length;
-  const button = await proposedStart(
+  const confirmation = await proposedStart(
     world,
     `60000000000000000${ordinal}`,
     before + 2,
     startCall(world, prompt),
     `start this:\n${prompt}`,
   );
-  await clicked(world.discord, button, `61000000000000000${ordinal}`, ordinal);
+  await confirmed(world.discord, confirmation, `61000000000000000${ordinal}`, ordinal);
   await world.discord.createdWhere(isStatusCard, ordinal);
   const card = world.discord.created.filter(isStatusCard)[ordinal - 1]!;
   const navigation = await world.factory.listRunNavigation();
@@ -76,9 +76,9 @@ export const cardProblem = (
   );
 
 export async function unknownStatusCard(world: World) {
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.discord.faultMessages(...unproven("lost"));
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
   return problem!;
 }

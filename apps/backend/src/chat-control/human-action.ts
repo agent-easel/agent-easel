@@ -298,7 +298,7 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
   const tool: MutationTool = {
     name: "answer_human",
     description:
-      "Propose answering exactly one pending Human occurrence of a Run with Approve (no message) or Request changes (the requester's exact feedback). Nothing is answered now: Factory posts a complete review with the occurrence's full context and a confirmation button only the requester can use, and ends this reply. Read the Run first; when several occurrences are pending, or the Run or answer is unclear, ask. Never answer several occurrences for one request.",
+      "Propose answering exactly one pending Human occurrence of a Run with Approve (no message) or Request changes (the requester's exact feedback). Nothing is answered now: Factory posts a complete review with the occurrence's full context and a confirmation phrase only the requester can reply with, and ends this reply. Read the Run first; when several occurrences are pending, or the Run or answer is unclear, ask. Never answer several occurrences for one request.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -347,9 +347,7 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
           ...occurrence,
           context: occurrence.context,
         });
-        const exit = exitOf(parameters.exitId);
         const block = blockName(detail.value, occurrence.blockId);
-        const confirmation = { label: `Confirm ${exit.name}` };
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
@@ -360,7 +358,6 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
           parameters: parameters as unknown as JSONValue,
           projectIds: [identity.project.id],
           review,
-          confirmation,
           targets: {
             run: runReference(identity),
             runId: identity.id,
