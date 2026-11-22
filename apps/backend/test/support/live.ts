@@ -190,7 +190,6 @@ export const liveReads = (factory: Factory): Parameters<typeof makeLiveStreams>[
   listFlows: () => Effect.promise(() => factory.listFlows()),
   readStudio: () =>
     Effect.promise(async () => ({ ok: true as const, value: await publicStudio(factory) })),
-  getAppearance: () => Effect.die(new Error("Replaced-read live streams serve no appearance.")),
 });
 
 /** Commit after capturing a read, before the subscriber receives its value. */

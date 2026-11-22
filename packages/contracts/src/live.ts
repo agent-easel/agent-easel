@@ -9,7 +9,6 @@ import {
   type RunNavigationEntry,
 } from "./run.ts";
 import type { T3Connection } from "./connection.ts";
-import type { T3Appearance } from "./appearance.ts";
 import type { TriggerDefinition } from "./trigger.ts";
 
 /**
@@ -38,11 +37,6 @@ export type ConnectionLiveMessage =
   | { readonly _tag: "changed"; readonly connection: T3Connection }
   /** Only the observation time moved; every other field is unchanged. */
   | { readonly _tag: "checked"; readonly checkedAt: string | null };
-
-/** Theme-color status and presentation; never gates mutations or execution. */
-export type AppearanceLiveMessage =
-  | { readonly _tag: "snapshot"; readonly appearance: T3Appearance }
-  | { readonly _tag: "changed"; readonly appearance: T3Appearance };
 
 export type NavigationLiveMessage =
   | { readonly _tag: "snapshot"; readonly rows: readonly RunNavigationEntry[] }

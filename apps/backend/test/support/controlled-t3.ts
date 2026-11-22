@@ -1,5 +1,4 @@
 import type { T3Modules } from "../../src/t3/modules.ts";
-import { ControlledAppearance } from "./controlled-appearance.ts";
 import { ControlledT3Connection } from "./controlled-t3-connection.ts";
 import { ControlledT3Contract } from "./controlled-t3-contract.ts";
 import { ControlledT3Projects } from "./controlled-t3-projects.ts";
@@ -13,8 +12,6 @@ export class ControlledT3 implements T3Modules {
   readonly threads: ControlledT3Threads = this.makeThreads((projectId) =>
     this.projects.workspaceFor(projectId),
   );
-  /** `t3_theme_read` of the same environment. */
-  readonly appearance = new ControlledAppearance(this.connection);
 
   protected makeProjects() {
     return new ControlledT3Projects(this.connection, this.contract);

@@ -22,16 +22,16 @@ Typography, geometry, radii and motion are identical in both modes. Raw Run imag
 favicons and emoji keep their pixels. Forced-colors mode replaces Factory's colors with the
 system palette in either mode; meaning stays carried by labels and icons.
 
-### T3 theme colors
+### Custom theme colors
 
-With [theme colors](t3-integration.md#theme-colors), every color token can come
-from the T3 environment's default theme instead of the baseline, separately per mode.
-The effective appearance picks the palette. A mode without an accepted T3 palette keeps
-its baseline.
-Appearance shows **Following T3** when either mode uses T3 colors, **Checking** during the read,
-and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and motion.
+With [custom color themes](desktop-and-clients.md#appearance), every color token can come
+from a per-device JSON color config (compatible with T3's theme format) instead of the baseline,
+separately per mode. The effective appearance picks the palette. A mode without an accepted custom
+palette keeps its baseline. Appearance shows **Custom colors** when either mode uses custom colors,
+and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and
+motion; raw CSS fields are ignored.
 
-The backend maps T3 roles by meaning: canvas to the background, raised surfaces to cards and
+The client maps theme roles by meaning: canvas to the background, raised surfaces to cards and
 popovers, text and muted text to the foregrounds, sidebar roles to the sidebar, borders and
 inputs to lines, accent to primary actions and links, focus to the focus ring. Hover, pressed and
 selected fills are derived from the canvas or sidebar with that surface's own hue and chroma, so
@@ -42,13 +42,11 @@ Contrast policy: text, secondary text, action labels, links and status colors ne
 every surface they appear on, and focus rings and section labels 3:1. A color that misses is moved
 in lightness only, toward black or white, until it passes; if a required pair cannot pass, that
 whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
-shows **Technical details** when Factory cannot use the theme at all.
+shows **Technical details** when Factory cannot use the config at all.
 The primary action darkens on hover as in the baselines; an accent of middle lightness, on which
 only a dark label is readable, lightens on hover instead so the label stays readable. The same
-mapping and policy apply to built-in, seed-generated, overridden and variant palettes.
-Clients receive only Factory-formatted color values and apply them through the CSSOM as one rule
-per mode. Gates and unapproved screens use the baseline. The desktop window background and the
-first paint use the baseline until a client receives the presentation.
+mapping and policy apply to seed-generated, overridden and variant palettes.
+Custom colors are formatted by Factory and applied through the CSSOM as one rule per mode.
 
 ## Visual rules
 

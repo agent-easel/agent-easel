@@ -1,5 +1,9 @@
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import type { T3Modules } from "../src/index.ts";
+import { LiveT3Connection } from "../src/t3/live-connection.ts";
 import {
   authorizedLiveOAuth,
   connectedLiveT3,
@@ -89,6 +93,28 @@ it("after T3 changes a tool's output schema, the shared connection checks the ne
   // Assert
   expect(inspection).toMatchObject({ state: "incompatible" });
   expect(external.openedSessions).toBe(1);
+});
+
+it("opening LiveT3Connection removes obsolete t3-appearance credential files while keeping active T3 credentials", async (context) => {
+  // Arrange
+  const dir = mkdtempSync(join(tmpdir(), "factory-cred-cleanup-"));
+  context.onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  const obsolete = join(dir, `t3-appearance-${"a".repeat(64)}.json`);
+  const active = join(dir, `t3-${"b".repeat(64)}.json`);
+  writeFileSync(obsolete, JSON.stringify({ token: "retired" }));
+  writeFileSync(active, JSON.stringify({ endpoint: "http://127.0.0.1:3773/mcp" }));
+
+  // Act
+  const connection = new LiveT3Connection({
+    credentialsDirectory: dir,
+    callbackPort: 0,
+    openBrowser: () => Promise.resolve(),
+  });
+  context.onTestFinished(() => connection.close());
+
+  // Assert
+  expect(existsSync(obsolete)).toBe(false);
+  expect(existsSync(active)).toBe(true);
 });
 
 it("a send whose request may have reached T3 is not resent and reports T3 unavailable", async (context) => {

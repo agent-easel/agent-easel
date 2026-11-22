@@ -174,7 +174,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "appearance",
-    rowLabels: ["Mode", "Light", "Dark", "T3 theme", "Theme", "Theme colors"],
+    rowLabels: ["Mode", "Light", "Dark", "Color theme", "Theme config", "Custom colors"],
     label: "Appearance",
     icon: Palette,
     group: "device",

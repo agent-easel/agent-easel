@@ -1,15 +1,9 @@
-/**
- * The color math Factory's palette mapping needs: OKLCH and sRGB conversion with gamut mapping by
- * chroma reduction, WCAG contrast, and Factory's own output formats. Every color it returns is
- * quantized to 8-bit sRGB, so contrast is measured on exactly the value clients paint.
- */
-
 export interface Oklch {
   readonly l: number;
   readonly c: number;
   readonly h: number;
 }
-/** Gamma-encoded sRGB channels in 0..1. */
+
 export interface Rgb {
   readonly r: number;
   readonly g: number;
@@ -21,7 +15,6 @@ const toLinear = (channel: number) =>
 const toGamma = (channel: number) =>
   channel <= 0.0031308 ? channel * 12.92 : 1.055 * channel ** (1 / 2.4) - 0.055;
 
-/** Linear sRGB channels, outside 0..1 where the color is out of gamut. */
 export function linearFromOklch({ l, c, h }: Oklch): [number, number, number] {
   const radians = (h * Math.PI) / 180;
   const a = c * Math.cos(radians);
@@ -42,7 +35,6 @@ const inGamut = (channels: readonly number[]) =>
   channels.every((channel) => channel >= -1e-6 && channel <= 1 + 1e-6);
 const quantize = (channel: number) => Math.round(Math.min(1, Math.max(0, channel)) * 255) / 255;
 
-/** The displayable 8-bit sRGB color closest in chroma, keeping lightness and hue. */
 export function toRgb(color: Oklch): Rgb {
   const l = Math.min(1, Math.max(0, color.l));
   let linear = linearFromOklch({ ...color, l });
@@ -78,7 +70,6 @@ const NUMBER = String.raw`(-?\d+(?:\.\d+)?)`;
 const OKLCH = new RegExp(String.raw`^oklch\(${NUMBER} ${NUMBER} ${NUMBER}\)$`);
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
-/** Opaque `oklch(L C H)` or `#rgb`/`#rrggbb`, the forms T3 authors built-in colors in. */
 export function parseColor(text: string): Oklch | null {
   const oklch = OKLCH.exec(text);
   if (oklch) {
@@ -108,7 +99,6 @@ export function contrast(first: Rgb, second: Rgb) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/** Gamma-space blend from `from` toward `to`. */
 export function mix(from: Rgb, to: Rgb, amount: number): Rgb {
   const blend = (x: number, y: number) => quantize(x + (y - x) * amount);
   return { r: blend(from.r, to.r), g: blend(from.g, to.g), b: blend(from.b, to.b) };

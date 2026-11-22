@@ -73,12 +73,6 @@ CREATE TABLE agents (
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
 
-CREATE TABLE appearance_snapshot (
-  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  endpoint TEXT NOT NULL,
-  presentation TEXT NOT NULL
-);
-
 CREATE TABLE chat_access_channel_projects (
   channel_id TEXT NOT NULL REFERENCES chat_access_channels(channel_id),
   project_id TEXT NOT NULL,

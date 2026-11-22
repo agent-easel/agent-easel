@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 const directory = new URL("../src/migrations/", import.meta.url);
-const JOIN_LIFECYCLE = "127_join_lifecycle.sql";
+const JOIN_LIFECYCLE = "128_join_lifecycle.sql";
 
 function apply(database: DatabaseSync, file: string) {
   for (const statement of readFileSync(new URL(file, directory), "utf8")

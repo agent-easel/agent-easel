@@ -61,9 +61,9 @@ and restricted OAuth credentials live outside project repositories.
   Migration `124` marks legacy empty Finish blocks inactive, so they are absent from Flow and Run
   graphs. Each stored Finish row and its position are preserved under the restored immutability
   guard. Finish blocks with endings remain active.
-  Migration `125` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
+  Migration `126` rebuilt `flow_revision_blocks` under its restored immutability guards to admit
   `kind = 'join'`. A Join stores no column of its own; its sources come from the revision's
-  connections. Existing rows stay unchanged and no Join is inferred. Migration `126` adds durable Join arrivals and rounds keyed by execution block, and links outgoing Handoffs to their round. Migration `127` adds Join round cancellations and the `join-integrity` chat matter kind, and indexes Join timeline events. Both preserve all existing data.
+  connections. Existing rows stay unchanged and no Join is inferred. Migration `127` adds durable Join arrivals and rounds keyed by execution block, and links outgoing Handoffs to their round. Migration `128` adds Join round cancellations and the `join-integrity` chat matter kind, and indexes Join timeline events. Both preserve all existing data.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for bundled Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
@@ -198,16 +198,16 @@ Packaged Release and Beta builds use the public PostHog EU project token embedde
 
 ## Live delivery
 
-Run detail, sidebar navigation, shared T3 connection status, [theme colors](t3-integration.md#theme-colors),
+Run detail, sidebar navigation, shared T3 connection status,
 the Run composer's launch choices and Studio's saved definitions use typed Effect RPC streams over WebSocket at `/api/live`;
 commands and other reads remain HTTP operations. A window holds one connection-status subscription,
-one theme-color subscription (it never disables mutations or shows synchronizing), one view
+one view
 subscription carrying navigation and its open Runs, and, while the composer is shown, one
 launch-choices subscription carrying the Project catalog and Flows with their readiness.
 Servers also serve a Studio subscription carrying every current saved Agent, every
 current Flow with its readiness and every Trigger with its latest check and problem; Agent usage is derived from those
 Flows. A window holds it for its lifetime, because Agent reporting state and the command palette
-read it outside Studio; those reads never gate mutations or show synchronizing, like theme colors.
+read it outside Studio; those reads never gate mutations or show synchronizing.
 While Studio is open its hold gates the window's mutations like every other gating scope, so Studio
 writes, and other product writes, wait while it is unsynchronized; drafts stay editable. A refused or failed subscription stays
 synchronizing, with no HTTP fallback, and HTTP answers never mark the scope synchronized. Each read of a view covers navigation and those Runs in one

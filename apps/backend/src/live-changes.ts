@@ -8,8 +8,7 @@ export type LiveScope =
   /** The Run composer's Project catalog and Flows. */
   | { readonly kind: "launchChoices" }
   /** Studio's saved Agents, Flows and Triggers. */
-  | { readonly kind: "studio" }
-  | { readonly kind: "appearance" };
+  | { readonly kind: "studio" };
 
 interface Watcher {
   readonly scope: LiveScope;
@@ -68,10 +67,6 @@ export function makeLiveChanges() {
      */
     connectionChecked() {
       mark((scope) => scope.kind === "connection");
-    },
-    /** Theme-color status or presentation changed; nothing else depends on it. */
-    appearanceChanged() {
-      mark((scope) => scope.kind === "appearance");
     },
     /**
      * Calls `listener` with the ID of every Run whose committed state may have changed, whether or

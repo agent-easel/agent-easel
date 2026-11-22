@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CircleAlert, Hourglass, KeyRound, ShieldX, WifiOff } from "lucide-react";
-import type { AppearanceSource, ClientAccessState, FactoryClient } from "@t3-factory/contracts";
+import type { ClientAccessState, FactoryClient } from "@t3-factory/contracts";
 import {
   FACTORY_MINIMUM_SERVER_PROTOCOL,
   FACTORY_PROTOCOL,
@@ -13,8 +13,7 @@ import { Surface } from "@/components/ui/surface";
 import { fieldLabelClass } from "@/components/page";
 import { GateScreen } from "@/components/gate-screen";
 import { api, ApiError } from "./api.ts";
-import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
-import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
+import { ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
@@ -29,7 +28,6 @@ type Gate =
       readonly kind: "ready";
       readonly scope: "host" | "remote";
       readonly serverId: string | null;
-      readonly appearanceSource: AppearanceSource | null;
     };
 
 const localProtocol = {
@@ -55,7 +53,6 @@ async function evaluate(): Promise<Gate> {
       kind: "ready" as const,
       scope: scope.scope,
       serverId: scope.serverId ?? null,
-      appearanceSource: scope.appearanceSource ?? null,
     };
     return scope.scope === "host" ? ready : accessGate(scope.access, ready);
   } catch (cause) {
@@ -102,11 +99,6 @@ export function ClientGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (current.kind === "access-lost" || current.kind === "incompatible") void check();
   }, [current.kind, check]);
-  // A client without approved access keeps no theme colors of an earlier approval.
-  const unapproved = gate.kind === "request" || gate.kind === "pending";
-  useEffect(() => {
-    if (unapproved) forgetColors(profileStorage());
-  }, [unapproved]);
 
   if (gate.kind === "checking") return <ConnectingScreen />;
   if (gate.kind === "unreachable") return <UnreachableScreen />;
@@ -116,11 +108,7 @@ export function ClientGate({ children }: { children: ReactNode }) {
     return <RequestAccessScreen previous={gate.previous} onRequested={check} />;
   return (
     <ScopeContext.Provider value={gate.scope}>
-      <ServerIdContext.Provider value={gate.serverId}>
-        <AppearanceSourceContext.Provider value={gate.appearanceSource}>
-          {children}
-        </AppearanceSourceContext.Provider>
-      </ServerIdContext.Provider>
+      <ServerIdContext.Provider value={gate.serverId}>{children}</ServerIdContext.Provider>
     </ScopeContext.Provider>
   );
 }

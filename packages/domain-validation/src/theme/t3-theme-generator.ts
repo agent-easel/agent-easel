@@ -1,35 +1,5 @@
-/*!
- * T3's theme color canonicalization and its palette generator for canvas and accent seeds,
- * ported from T3 Code (https://github.com/pingdotgg/t3code) at revision
- * d2c25950b4d9183ea342d5d5fc14c326b9e0172a: `toCanonicalThemeColor`, `createVividThemeColors` and
- * the color math they use in apps/web/src/themePalette.ts, limited to the roles Factory maps.
- * Upstream parses colors with culori; this port reads a bounded subset of CSS color syntax
- * instead and adds no dependency.
- *
- * @license MIT
- * Copyright (c) 2026 T3 Tools Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
 import { linearFromOklch, toOklch, type Oklch } from "./color.ts";
 
-/** sRGB channels in 0..255; unrounded where upstream keeps a blend unrounded. */
 interface Rgb255 {
   readonly r: number;
   readonly g: number;
@@ -47,7 +17,6 @@ const OKLCH = new RegExp(
   "i",
 );
 
-/** A number, or a percentage of `whole`. */
 const scaled = (text: string, whole: number) =>
   text.endsWith("%") ? (Number.parseFloat(text) / 100) * whole : Number.parseFloat(text);
 const unit = (value: number) => Math.min(1, Math.max(0, value));
@@ -78,11 +47,6 @@ function parseOklch([, l, c, h, a]: RegExpExecArray) {
   };
 }
 
-/**
- * Reads the color syntaxes Factory supports in a published theme: `#rgb`, `#rgba`, `#rrggbb`,
- * `#rrggbbaa`, `rgb()`/`rgba()` with channels in 0..255, and `oklch()` with numbers or
- * percentages. Anything else, including CSS color syntax T3 itself accepts, reads as no color.
- */
 function parseThemeColor(text: string): { color: Oklch; alpha: number } | null {
   const input = text.trim();
   const hex = HEX.exec(input);
@@ -104,7 +68,6 @@ function formatThemeColor(color: Oklch, alpha = 1) {
   return alpha < 1 ? `oklch(${body} / ${formatNumber(alpha, 4)})` : `oklch(${body})`;
 }
 
-/** T3's canonical `oklch(L C H[ / a])` text of a color, or null when Factory reads no color. */
 export function canonicalThemeColor(text: string) {
   const parsed = parseThemeColor(text);
   return parsed && formatThemeColor(parsed.color, parsed.alpha);
@@ -139,7 +102,6 @@ function toRgb255(color: Oklch): Rgb255 {
 const oklchText = (color: Oklch) => formatThemeColor(toGamut(color));
 const rgbText = ({ r, g, b }: Rgb255) => formatThemeColor(fromRgb(r, g, b));
 
-/** Upstream's relative luminance, with the 0.03928 knee of WCAG 2.0. */
 function luminance({ r, g, b }: Rgb255) {
   const linear = (channel: number) => {
     const value = channel / 255;
@@ -153,7 +115,6 @@ function contrast(first: Rgb255, second: Rgb255) {
   return (lighter! + 0.05) / (darker! + 0.05);
 }
 
-/** The lightness nearest `base` in `direction` that reaches `minimum` contrast with `surface`. */
 function solveLightness(base: Oklch, surface: Rgb255, minimum: number, lighter: boolean): Oklch {
   const reaches = (color: Oklch) => contrast(toRgb255(color), surface) >= minimum;
   if (reaches(base)) return base;
@@ -172,7 +133,6 @@ const blend = (from: Rgb255, to: Rgb255, amount: number): Rgb255 => ({
   b: from.b + (to.b - from.b) * amount,
 });
 
-/** `foreground` softened toward `background` as far as `minimum` contrast allows. */
 function softenedText(background: Rgb255, foreground: Rgb255, minimum: number): Rgb255 {
   let readable = foreground;
   let [lower, upper] = [0, 1];
@@ -199,17 +159,12 @@ function readableForeground(background: Rgb255): Rgb255 {
   return contrast(background, WHITE) >= contrast(background, BLACK) ? WHITE : BLACK;
 }
 
-/**
- * The colors T3 generates from a published theme's `canvas` and `accent` seeds for the roles
- * Factory maps. Light or dark follows the canvas's own luminance, as upstream does; both seeds
- * are `#rgb` or `#rrggbb`, which the T3 boundary has already established.
- */
 export function generateSeedColors(canvasSeed: string, accentSeed: string) {
   const canvasRgb = toRgb255(parseThemeColor(canvasSeed)!.color);
   const accentRgb = toRgb255(parseThemeColor(accentSeed)!.color);
   const canvas = fromRgb(canvasRgb.r, canvasRgb.g, canvasRgb.b);
   const accent = fromRgb(accentRgb.r, accentRgb.g, accentRgb.b);
-  // At luminance 0.179, black and white text have equal contrast.
+
   const dark = luminance(canvasRgb) < 0.179;
   const hue = accent.c < 0.02 ? canvas.h : accent.h;
   const tint = Math.min(0.045, Math.max(0.008, accent.c * 0.22));

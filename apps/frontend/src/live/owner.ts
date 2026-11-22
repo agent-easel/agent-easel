@@ -26,9 +26,7 @@ export type LivePart =
   | { readonly kind: "run"; readonly runId: string }
   | { readonly kind: "launchChoices" }
   /** Studio's saved Agents and Flows: read for the window's lifetime, gating while Studio is open. */
-  | { readonly kind: "studio" }
-  /** Theme colors: optional presentation, held only for reading. */
-  | { readonly kind: "appearance" };
+  | { readonly kind: "studio" };
 
 type LiveMessage = { readonly _tag: string };
 type Snapshot<M extends LiveMessage> = Extract<M, { readonly _tag: "snapshot" }>;
@@ -115,18 +113,8 @@ type Entry = {
   established: boolean;
 };
 
-/**
- * The connection status subscription, the one view subscription for navigation and Runs, the
- * composer's launch choices, Studio's saved definitions and theme colors.
- */
-type Channel = "connection" | "view" | "launchChoices" | "studio" | "appearance";
-const channels: readonly Channel[] = [
-  "connection",
-  "view",
-  "launchChoices",
-  "studio",
-  "appearance",
-];
+type Channel = "connection" | "view" | "launchChoices" | "studio";
+const channels: readonly Channel[] = ["connection", "view", "launchChoices", "studio"];
 
 type Subscription = {
   /** Fences events: only the subscription holding the current token may write. */
@@ -162,7 +150,6 @@ export class LiveOwner {
     view: idleSubscription(),
     launchChoices: idleSubscription(),
     studio: idleSubscription(),
-    appearance: idleSubscription(),
   };
   private session: Session | null = null;
   private retry: (() => void) | undefined;
@@ -300,7 +287,6 @@ export class LiveOwner {
     if (channel === "connection") return { rpc: "WatchConnection" };
     if (channel === "launchChoices") return { rpc: "WatchLaunchChoices" };
     if (channel === "studio") return { rpc: "WatchStudio" };
-    if (channel === "appearance") return { rpc: "WatchAppearance" };
     const runIds = this.viewRuns()
       .served.flatMap(({ scope: { part } }) => (part.kind === "run" ? [part.runId] : []))
       .sort();

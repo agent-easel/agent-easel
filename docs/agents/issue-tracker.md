@@ -15,6 +15,7 @@ Write issue titles, bodies, comments, and resolutions in English. Conversations 
 - **Ready label**: `factory:ready` marks an issue as ready for a Factory Trigger to start. A Run a Trigger started names its ready label in the Run's start data. The claim removes it, so the issue does not start again; adding it again restarts the issue.
 - **Claim an issue**: `gh issue edit <number> --add-assignee @me --remove-label "<ready label>" --add-label "factory:in-progress"`, where `<ready label>` is the ready label named in the Run's start data, `factory:ready` when it names none, once the ownership checks under **Tool discovery and work state** show the issue is available. The `factory:in-progress` label marks the issue as taken in Factory. It is information, not a lock: those ownership checks still decide who may take an issue. That label is never removed; closing the issue is the completion signal.
 - **Close**: `gh issue close <number> --comment "..."`
+- **Close through the PR**: a PR closes the issues its work started from with one `Closes #<n>` line per issue: the spec and every ticket it delivers. GitHub recognizes only a closing keyword directly before each number, so prose such as "Implements #648 (#651, #652)" or "Closes #1, #2" leaves issues open. Use `Refs #<n>` only for deliberately partial work, with the reason. Before marking the PR ready, `gh pr view <number> --json closingIssuesReferences` lists every intended issue.
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 

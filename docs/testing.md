@@ -5,7 +5,7 @@ What deserves a test, how to structure it, and which suite it belongs in.
 Backend behavior tests exercise public Factory operations with temporary SQLite
 and controlled T3 modules. Tests configure the same concerns that live Factory
 composes over one connection: authorization, contract inspection, threads, Projects
-and environment, and appearance. They are application integration tests: persistence
+and environment. They are application integration tests: persistence
 is part of the workflow being checked. Pure exported domain rules can be tested
 without a database. External fixtures own simulated T3 state independently of Factory so
 restart checks can retain it. Close the owning backend before a recovery process opens
