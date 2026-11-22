@@ -418,9 +418,16 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **24**. The server and the Desktop and browser clients require protocol **24**.
+The current protocol is **25**. The server and the Desktop and browser clients require protocol **25**.
 
-Protocol 24 makes the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
+Protocol 25 adds [Join](studio.md) blocks to Flows and captured Run definitions, each Join's
+[round summary and round events](runs.md#joins) to Run detail, the per-source Join read, and the
+`join-integrity` attention kind. A protocol 24 client can neither draw nor save a Flow with a Join,
+and a protocol 25 client needs a server that sends Join summaries, so each side shows the update gate
+naming the peer to update. Existing approvals, credentials and stored data carry forward; the
+portable definition format v7 still imports versions 1–7.
+
+Protocol 24 made the [Finish block](studio.md#finish-block) optional in Flow and Run definitions.
 Protocol 23 clients assume every graph has one, and protocol 23 servers would add it back on save.
 Update both peers. Existing approvals and credentials carry forward.
 

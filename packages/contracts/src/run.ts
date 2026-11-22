@@ -886,6 +886,7 @@ export interface JoinSourceDetail {
   readonly arrived: JoinArrival | null;
   readonly queued: number;
   readonly extras: readonly JoinArrival[];
+  readonly latestArrival: JoinArrival | null;
 }
 
 export interface JoinDetail {

@@ -48,6 +48,7 @@ const journeyAreas = [
       "flow-authoring",
       "flow-readiness",
       "condition-block",
+      "join-block",
       "wait-block",
       "continuation",
       "canvas-viewport",

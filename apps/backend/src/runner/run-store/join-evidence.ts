@@ -95,10 +95,13 @@ export function readJoinSummaries(
   });
 }
 
-type QueueRow = {
+type LatestRow = {
   source_block_id: string;
   exit_id: string;
   arrived_at: string;
+};
+
+type QueueRow = LatestRow & {
   position: number;
   total: number;
 };
@@ -128,6 +131,20 @@ export function openJoinEvidence(database: RunnerDatabase) {
           FROM join_arrivals WHERE run_id=${runId} AND block_id=${blockId} AND round_id IS NULL AND cancelled_at IS NULL
         ) WHERE position<=${JOIN_QUEUED_LISTED + 1} ORDER BY source_block_id,position`;
         const { forwarded, cancelled } = yield* latestOutcomes(sql, runId);
+        const latest = outcome(
+          forwarded.find((row) => row.block_id === blockId),
+          cancelled.find((row) => row.block_id === blockId),
+        );
+        const latestRows = !latest
+          ? []
+          : latest.outcome === "forwarded"
+            ? yield* sql<LatestRow>`SELECT a.source_block_id,a.exit_id,a.arrived_at FROM join_arrivals a
+              JOIN join_rounds r ON r.id=a.round_id
+              WHERE r.run_id=${runId} AND r.block_id=${blockId} AND r.number=${latest.round}`
+            : yield* sql<LatestRow>`SELECT source_block_id,exit_id,arrived_at FROM join_arrivals
+              WHERE run_id=${runId} AND block_id=${blockId} AND cancelled_at=${latest.at} AND ordinal IN (
+                SELECT MIN(ordinal) FROM join_arrivals
+                WHERE run_id=${runId} AND block_id=${blockId} AND cancelled_at=${latest.at} GROUP BY source_block_id)`;
         return {
           ok: true as const,
           value: {
@@ -139,23 +156,23 @@ export function openJoinEvidence(database: RunnerDatabase) {
               )!;
               const exits = effectiveExits(source, definitions.agents, flows);
               const rows = queue.filter((row) => row.source_block_id === slot.sourceBlockId);
-              const arrivals = rows.map((row): JoinArrival => ({
+              const arrival = (row: LatestRow): JoinArrival => ({
                 exitId: row.exit_id,
                 exitName: exits.find((exit) => exit.id === row.exit_id)?.name || "Output",
                 arrivedAt: row.arrived_at,
-              }));
+              });
+              const arrivals = rows.map(arrival);
+              const inLatest = latestRows.find((row) => row.source_block_id === slot.sourceBlockId);
               return {
                 sourceBlockId: slot.sourceBlockId,
                 name: slot.label,
                 arrived: arrivals[0] ?? null,
                 queued: Math.max((rows[0]?.total ?? 1) - 1, 0),
                 extras: arrivals.slice(1),
+                latestArrival: inLatest ? arrival(inLatest) : null,
               };
             }),
-            latest: outcome(
-              forwarded.find((row) => row.block_id === blockId),
-              cancelled.find((row) => row.block_id === blockId),
-            ),
+            latest,
           },
         };
       }),

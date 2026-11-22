@@ -56,7 +56,7 @@ import {
   nestedWiresReach,
   type WirePresentation,
 } from "./flow-wires.tsx";
-import { JoinSourceList, joinSources, type JoinSource } from "./join-block.tsx";
+import { JoinSourceList, joinExitCount, joinSources, type JoinSource } from "./join-block.tsx";
 import { SubflowGroup } from "./subflow-group.tsx";
 import {
   computeSubflowPreviews,
@@ -131,6 +131,7 @@ export type CanvasBlockContent = {
   readonly footers: readonly ReactNode[];
   readonly subflowFooter?: ReactNode;
   readonly subflowBadge?: ReactNode;
+  readonly joinSource?: (source: JoinSource, slot: number) => string;
 };
 
 /**
@@ -368,6 +369,7 @@ function SurfaceBlock({
       {join && (
         <JoinSourceList
           sources={sources}
+          detail={content.joinSource ?? joinExitCount}
           rows={rows}
           renderPort={(index) => inputPort(index, rows.exitRow / 2)}
         />

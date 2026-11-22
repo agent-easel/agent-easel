@@ -47,6 +47,12 @@ export function blockStateKind(
   const kind = recorded ? stateKinds[recorded.state] : null;
   const attention = blockAttention(run, recorded);
   if ((kind === "working" || kind === "waiting") && attention.needsInput) return "needs-input";
+  if (
+    kind === "waiting" &&
+    attention.problem &&
+    run.joins.some((join) => join.blockId === recorded?.blockId)
+  )
+    return "problem";
   if (kind !== null && kind !== "working" && kind !== "waiting" && attention.problem)
     return "problem";
   return kind;
@@ -100,8 +106,15 @@ export function chosenExitIds(
           : [],
       );
     case "subflow":
-    case "join":
       return new Set();
+    case "join":
+      return new Set(
+        run.events.some(
+          (event) => event.blockId === block.id && event.kind === "join-round-forwarded",
+        )
+          ? ["output"]
+          : [],
+      );
     case "continuation":
       return new Set(
         run.continuationVisits.some(

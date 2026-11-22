@@ -24,16 +24,18 @@ export function joinSummary(sources: number) {
   return `Join · ${sources === 1 ? "1 source" : `${sources} sources`}`;
 }
 
-function exitCount(exits: number) {
-  return exits === 1 ? "1 exit" : `${exits} exits`;
+export function joinExitCount(source: JoinSource) {
+  return source.exits === 1 ? "1 exit" : `${source.exits} exits`;
 }
 
 export function JoinSourceList({
   sources,
+  detail,
   rows,
   renderPort,
 }: {
   sources: readonly JoinSource[];
+  detail: (source: JoinSource, slot: number) => string;
   rows: {
     readonly divider: number;
     readonly exitPaddingTop: number;
@@ -66,7 +68,7 @@ export function JoinSourceList({
             <span className="truncate text-xs font-medium text-foreground">{source.name}</span>
             <span className="flex-1" />
             <span className="shrink-0 text-2xs tracking-label text-muted-foreground">
-              {exitCount(source.exits)}
+              {detail(source, index)}
             </span>
             {renderPort?.(index)}
           </li>

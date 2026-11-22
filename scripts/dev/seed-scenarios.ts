@@ -17,7 +17,8 @@ export type DemoFlows = Record<
   | "conditionRounds"
   | "firstApproval"
   | "endings"
-  | "subflowReview",
+  | "subflowReview"
+  | "joinReview",
   string
 >;
 type Repository = NonNullable<ThreadFacts["repository"]>;
@@ -66,6 +67,16 @@ export type SeedScenario = {
       extraApproval: Report;
     }
   | { state: "ending reached"; result: Report }
+  | {
+      state: "Join round forwarded, next round partial";
+      implementation: Report;
+      firstRound: readonly [Report, Report];
+      correction: string;
+      corrected: Report;
+      secondReview: Report;
+      recheck: Report;
+      stillReviewing: string;
+    }
   | { state: "subflow closing" }
   | { state: "subflow returned" }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
@@ -410,6 +421,40 @@ export const seedScenarioList: readonly SeedScenario[] = [
       exit: "Done",
       message: "Noted the accessibility approval in the share dialog release notes.",
     },
+  },
+  {
+    key: "join-partial",
+    title: "Join · Second review round waits for accessibility",
+    flow: "joinReview",
+    state: "Join round forwarded, next round partial",
+    prompt:
+      "Add a keyboard shortcut to open the Atlas command bar. Both reviewers must report before I decide.",
+    implementation: {
+      exit: "Ready for review",
+      message: "Cmd+K now opens the command bar from every screen. Ready for review.",
+    },
+    firstRound: [
+      { exit: "Approved", message: "The shortcut handler is scoped correctly and has tests." },
+      {
+        exit: "Changes requested",
+        message:
+          "Focus does not return to the trigger after Escape.\n\n- Restore focus on close\n- Announce the open state",
+      },
+    ],
+    correction: "Restore focus on Escape, then send it back to both reviewers.",
+    corrected: {
+      exit: "Ready for review",
+      message: "Escape now restores focus to the element that opened the command bar.",
+    },
+    secondReview: {
+      exit: "Changes requested",
+      message: "The new focus code leaks a listener when the bar closes twice; remove it on close.",
+    },
+    recheck: {
+      exit: "Approved",
+      message: "The listener is removed on close now; approved on recheck.",
+    },
+    stillReviewing: "Checking focus order with VoiceOver on the corrected command bar.",
   },
   {
     key: "ending-reached",

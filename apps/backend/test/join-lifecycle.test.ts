@@ -109,8 +109,16 @@ it("a partial round shows Waiting with arrived and pending sources in Run reads 
         arrived: { exitId: "done", exitName: "Done", arrivedAt: expect.any(String) },
         queued: 1,
         extras: [{ exitId: "revise", exitName: "Revise", arrivedAt: expect.any(String) }],
+        latestArrival: null,
       },
-      { sourceBlockId: "second", name: "Second entry", arrived: null, queued: 0, extras: [] },
+      {
+        sourceBlockId: "second",
+        name: "Second entry",
+        arrived: null,
+        queued: 0,
+        extras: [],
+        latestArrival: null,
+      },
     ],
     latest: null,
   });
@@ -159,6 +167,15 @@ it("Settle cancels a partial round without forwarding it and a late result chang
   expect(run.blocks.find((block) => block.blockId === "merge")?.state).toBe("stopped");
   expect(mergeIntents(run)).toMatchObject([{ state: "acknowledged", payloadRetained: false }]);
   expect(run.humanOccurrences).toEqual([]);
+  expect(
+    assertOk(await f.f.getRunJoin(first.runId, "merge")).sources.map((source) => [
+      source.arrived,
+      source.latestArrival?.exitName ?? null,
+    ]),
+  ).toEqual([
+    [null, "Done"],
+    [null, null],
+  ]);
   expect(await report(f.world, second, finishedReport("Late."))).toBe("RUN_SETTLED");
   expect(assertOk(await f.f.getRun(first.runId)).events).toEqual(run.events);
 });
@@ -177,6 +194,11 @@ it("Archive cancels a partial round, keeps the forwarded round as history and cl
     reason: "Join",
     inputs: { feedback: expect.stringMatching(/^Join round 1/) },
   });
+  const latestExits = async () =>
+    assertOk(await f.f.getRunJoin(first.runId, "merge")).sources.map(
+      (source) => source.latestArrival?.exitName ?? null,
+    );
+  expect(await latestExits()).toEqual(["Done", "Done"]);
   const revised = turnBegins(f.world, first, "another-review");
   await resultReported(f.world, revised, { message: "A2", exit: "Revise" });
   await observeFor("round 2 partial", f.world, first.runId, (run) => merge(run)?.arrived === 1);
@@ -194,6 +216,7 @@ it("Archive cancels a partial round, keeps the forwarded round as history and cl
     { kind: "join-round-forwarded", blockId: "merge", round: 1 },
     { kind: "join-round-cancelled", blockId: "merge", round: 2 },
   ]);
+  expect(await latestExits()).toEqual(["Revise", null]);
   expect(mergeIntents(archived).every((intent) => !intent.payloadRetained)).toBe(true);
   expect(await f.f.runtime.block({ arguments: { blockId: recipient.blockId } })).toMatchObject({
     reason: "Join",

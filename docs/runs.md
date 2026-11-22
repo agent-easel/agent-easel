@@ -845,14 +845,19 @@ each source has one ([Runner](runner.md#join-rounds)). Run detail carries one co
 history: `round`, the round being collected (the latest forwarded or cancelled round plus one), `sources`, the captured
 sources, `arrived`, the sources with an arrival for this round, `queued`, the later arrivals kept for following rounds, and
 `latest`, the most recent outcome (round, `forwarded` or `cancelled`, and time). A Join no source has reached has `arrived` 0
-and shows Not started; with a partial round it shows **Waiting** and the arrived and pending sources. A waiting Join is visible work,
+and shows Not started; with a partial round it shows **Waiting · *n*/*m* sources** and the arrived and pending sources,
+then **round *N* forwarded** or **round *N* cancelled** (the Stopped badge labelled **Cancelled**) with the exits that
+round took. Selecting it shows its round, arrived sources, queued arrivals, a card per source for the round with the
+latest forwarded or cancelled round, its output target, and that it is workerless: Settle or Archive ends a round that
+never completes. Recipients and the Finish result show the combined message as Markdown. A waiting Join is visible work,
 never Needs input or a Problem: it raises no attention and no Snooze wake, and it holds
 [automatic settlement](#settled-runs) and keeps its Subflow invocation open.
 
 The per-source details are a separate bounded read of one Run and Join (`GET /api/runs/:runId/joins/:blockId`), available to
 every client that can read the Run. It lists the captured sources in Flow block order with each source's name, its oldest
 waiting arrival (exit id, exit name, arrival time) or null while it is pending, the count of its later arrivals and the oldest
-20 of them, plus the same `round` and `latest`. It carries no message text: the combined message reaches recipients as their
+20 of them, and its arrival in the `latest` round (the one that round forwarded, or the oldest one its cancellation
+cancelled; null when it had none), plus the same `round` and `latest`. It carries no message text: the combined message reaches recipients as their
 feedback or context, and Archive clears it. An unknown Run or a block that is not a Join of the Run is `not_found`. Inside
 a Subflow, use the invocation's own Join Block ID; each invocation keeps its own queues and round numbers.
 

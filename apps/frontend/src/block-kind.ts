@@ -226,7 +226,7 @@ export function blockReference(
           tone: "continued",
         },
         line: { text: `${kind} · waits for every source`, tone: "plain" },
-        header: kind,
+        header: `${kind} · waits for every source`,
       };
   }
 }

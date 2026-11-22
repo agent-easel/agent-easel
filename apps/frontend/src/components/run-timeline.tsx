@@ -7,7 +7,12 @@ import {
   type RunAttention,
   type RunDetail,
 } from "@t3-factory/contracts";
-import { capturedExits, FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
+import {
+  blockExitRecipients,
+  capturedExits,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
+} from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
 import { clockTime, dayAndTime, fullDateTime } from "../time-format.ts";
 import { capturedEnding, deliveryRecipientName } from "../run-evidence.ts";
@@ -130,6 +135,29 @@ function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
   return {
     actorId: event.blockId,
     text: `arrival ${countText(selection.arrivalNumber)} → ${conditionOutputName(run, event.blockId, selection.outputId)}`,
+  };
+}
+
+function joinRoundForwarded(run: RunDetail, event: RunEvent): EventPhrase {
+  const round = event.join?.round;
+  const sources = run.joins.find((join) => join.blockId === event.blockId)?.sources;
+  const recipients = event.blockId
+    ? blockExitRecipients(run.definitions.flow.graph, event.blockId)("output").filter(Boolean)
+    : [];
+  return {
+    actorId: event.blockId,
+    text: [
+      `round ${round ?? "?"} forwarded`,
+      sources ? ` · ${sources}/${sources} sources` : "",
+      recipients.length ? ` → ${recipients.join(", ")}` : "",
+    ].join(""),
+  };
+}
+
+function joinRoundCancelled(_run: RunDetail, event: RunEvent): EventPhrase {
+  return {
+    actorId: event.blockId,
+    text: `round ${event.join?.round ?? "?"} cancelled · not forwarded`,
   };
 }
 
@@ -323,6 +351,8 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
     text: "Report received after invocation closed",
   }),
   "condition-selected": conditionSelected,
+  "join-round-forwarded": joinRoundForwarded,
+  "join-round-cancelled": joinRoundCancelled,
   "operation-unresolved": operationUnresolved,
   "settlement-requested": said("settlement requested · automatic work held"),
   "worker-stop-requested": said("worker Stop requested · awaiting completion confirmation"),

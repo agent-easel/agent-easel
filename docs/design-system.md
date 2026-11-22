@@ -268,7 +268,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   with its right port. In the Flow editor a source row reads ***N* exits**, the number of that
   block's exits wired in, and before any source is wired one hint row holds the port. Readiness
   marks the card with the Error edge and tag, the source ports when it has too few sources, and
-  the output row and port when its output is unconnected. Run states are drawn on the same rows.
+  the output row and port when its output is unconnected. In a Run the card carries its StateBadge
+  and the same rows: before a visit a source row reads **—**; while a round collects, the arrived
+  exit (with **+*N*** for later arrivals queued behind it) or **pending**; after a round ends, the
+  exits that round took. Its reference line names the sources, the round, or **round *N* forwarded
+  *time*** / **round *N* cancelled**. A cancelled round shows the Stopped badge labelled
+  **Cancelled**, and a join-integrity Problem the Error badge with a footer holding the Problem
+  StatusBadge and **Join state is inconsistent**.
 - **Subflow group**: SubflowGroup (Figma Canvas/SubflowGroup), drawn by the canvas surface for a
   placed Subflow block in Studio: a bordered group container holding a read-only in-place preview
   of the referenced Flow (inner Flow input labeled **Incoming message** wired to its targets,
