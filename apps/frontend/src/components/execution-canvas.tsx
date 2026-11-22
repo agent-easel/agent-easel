@@ -656,7 +656,7 @@ function executionFinish(
   return {
     state,
     className: cn(
-      "border-border",
+      "border-border-strong",
       selected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
     ),
     press: (rows) => (
@@ -852,7 +852,7 @@ export function ExecutionCanvas({
                     : { kind: "pending" as const };
                 return {
                   state,
-                  className: "border-border",
+                  className: "border-border-strong",
                   endingPort: (ending) =>
                     state.kind === "reached" && state.endingId === ending.id ? reachedPort : port,
                   press: (rows) =>
