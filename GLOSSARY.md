@@ -419,7 +419,8 @@ _Avoid_: Chat bot as a separate service; treating chat messages or model output 
 **Bot ID**:
 A Discord bot account listed under **Bots** in Chat control's Access, kept apart from the allowed user
 IDs. Factory classifies each listed ID from Discord's own user data (the bot flag) and refuses a bot
-among the users and a human among the Bot IDs. Listing a bot grants no chat authority yet. See
+among the users and a human among the Bot IDs. A listed bot may converse with Factory and propose
+and confirm its own Starts; it never answers Human steps or archives. See
 [Chat control](docs/chat-control.md#access).
 _Avoid_: Treating a bot as an allowed user; deciding bot or human by name.
 

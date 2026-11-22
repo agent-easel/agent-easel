@@ -242,7 +242,8 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
       SELECT u.user_id FROM chat_run_origins o
       JOIN chat_actions a ON a.id=o.action_id
       JOIN chat_proposals p ON p.id=a.proposal_id
-      JOIN chat_access_users u ON u.user_id=p.requester_id
+      JOIN (SELECT user_id FROM chat_access_users UNION SELECT user_id FROM chat_access_bots) u
+        ON u.user_id=p.requester_id
       WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
     ) AS user_id FROM chat_deliveries d
       WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${REVOKED_CREATE}`,

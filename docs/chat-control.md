@@ -189,8 +189,9 @@ lists:
 
 The page lists **Bots** in a separate group directly below Access, saved by the same Save with the
 Access revision. It holds one comma-separated **Bot IDs** field, entered like the users, and the
-bot accounts' names with a neutral **Bot** tag. A listed bot grants nothing yet: bots are still
-ignored as [invocations](#invocations) until Factory admits them.
+bot accounts' names with a neutral **Bot** tag. A listed bot may converse with Factory and propose and
+confirm its own Starts in allowed channels, but never Human answers or Archives; see
+[bot requesters](#bot-requesters).
 
 IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, bot, channel
 or Project grant is refused rather than merged, as is an ID listed as both a user and a bot. Names are not used to match anything. A channel without
@@ -241,11 +242,12 @@ Project; a message already sent stays sent.
 
 ### Invocations
 
-Factory admits only a new message from a human, in a server channel, that mentions the bot or
-replies to one of its messages. Ordinary messages, edits, reactions, direct messages, bots and
-webhooks are ignored. The adapter's own mention handling is not used, because it creates a thread
-before any authorization. Before anything else happens, Factory requires that the author is an
-allowed user, that the channel or the thread's parent channel is allowed and grants at least one
+Factory admits only a new message from a human, or from a [listed bot](#bot-requesters), in a server
+channel, that mentions the bot or replies to one of its messages. Ordinary messages, edits,
+reactions, direct messages, webhooks, unlisted bots and Factory's own messages are ignored. The
+adapter's own Gateway handling is not used, because it creates a thread before any authorization and
+drops every bot author. Before anything else happens, Factory requires that the author is an
+allowed user (or, for a bot account, a listed bot), that the channel or the thread's parent channel is allowed and grants at least one
 Project Factory knows, and current evidence of the author's access. Only then does a parent-channel
 invocation get a new public thread started on the invoking message, carrying only that message; an
 invocation inside a thread uses that thread. A denied event creates no thread and sends Discord
@@ -268,6 +270,23 @@ the conversation has not been reset. Multipart conversational replies repeat thi
 part: an already dispatched send may finish, but revocation or reset stops later parts and prevents
 retaining the incomplete turn. The [conversation](#conversations) section describes how an
 admitted invocation is answered.
+
+#### Bot requesters
+
+Discord's own author flag decides which list applies: a bot account acts only through **Bot IDs** and
+a person only through Users, so a bot ID among the Users or a person's ID among the Bot IDs admits
+nothing. A listed bot's message is admitted only when its own text mentions Factory's bot, or when it
+is a Discord Reply to the last message of the bot's own review (its [confirmation](#confirmation)
+attempt). A reply's ping is not a mention: a bot's other replies, to Factory's messages or to someone
+else's review, are dropped before any model request, and nothing is posted for them. Bot messages
+never answer the [access test](#access-test).
+
+An admitted bot gets the same conversation, Run reads and Start proposals as a person, with the same
+review and typed confirmation. It cannot propose or confirm a Human answer or an Archive: Factory
+refuses such a proposal to the model before any review, and a confirmation of those actions needs
+its requester among the Users. The bot's thread is the Run's [originating thread](#originating-thread),
+and its status card and notices go there, mentioning the bot while it stays listed. People allowed in
+the channel keep talking to Factory in that thread as usual.
 
 ### /factory reset
 
@@ -697,8 +716,9 @@ with the phrase, and otherwise expires so the requester asks again.
 ### Originating thread
 
 A Run accepted from a chat Start records the Discord thread it was requested in as its originating
-thread. It is the destination of the Run's [status card](#status-cards), not ownership: any allowed
-participant may act on any Run in a permitted Project. Runs started in Factory, through Factory MCP
+thread, whether a person or a [listed bot](#bot-requesters) requested it. It is the destination of
+the Run's [status card](#status-cards), not ownership: any allowed participant may act on any Run in
+a permitted Project, within what a bot may do. Runs started in Factory, through Factory MCP
 or before this release have none, and reading or acting on a Run never adds one. Ordinary Run views
 and approved clients never see it. A receipt goes to the thread its action was requested in, and its
 delivery is independent of the Run's card.
@@ -786,8 +806,8 @@ place for each matter as `thread`, `t3` or `factory`.
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
 own short line with its Block, up to eight per notice; the settlement Problem is about the
 Run and names no Block, and a retried Settle keeps its one notice. When Factory posts an attention
-notice or catch-up, it mentions only the user who confirmed the Run's Start, if that user is still
-allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
+notice or catch-up, it mentions only the requester who confirmed the Run's Start, a person or a listed
+bot, if that requester is still allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
 notice still posts to a permitted thread when the requester has been removed. When any matter
 resolves, Factory updates its line or the compacted count in place and removes the heading's
 mention without notifying anyone.

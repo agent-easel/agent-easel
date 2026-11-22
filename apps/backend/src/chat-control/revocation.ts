@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
+import type { ChatActionOperation } from "@t3-factory/contracts";
 import { now } from "../time.ts";
+import { ACTION_REQUESTERS } from "./requesters.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 
 /** An Access save's channels and the Projects each grants. */
@@ -25,18 +27,26 @@ const ungranted = (channels: Channels, parentChannelId: string, projectIdsJson: 
  */
 export const applyAccessRevocation = (
   sql: SqlClient.SqlClient,
-  access: { readonly users: readonly string[]; readonly channels: Channels },
+  access: {
+    readonly users: readonly string[];
+    readonly bots: readonly string[];
+    readonly channels: Channels;
+  },
 ) =>
   Effect.gen(function* () {
     const live = yield* sql<{
       id: string;
       requester_id: string;
+      operation: ChatActionOperation;
       parent_channel_id: string;
       project_ids_json: string;
-    }>`SELECT id,requester_id,parent_channel_id,project_ids_json FROM chat_proposals WHERE state IN ('preparing','presented','accepting')`;
+    }>`SELECT id,requester_id,operation,parent_channel_id,project_ids_json FROM chat_proposals WHERE state IN ('preparing','presented','accepting')`;
+    const listed = (requesterId: string, operation: ChatActionOperation) =>
+      access.users.includes(requesterId) ||
+      (ACTION_REQUESTERS[operation] !== "human" && access.bots.includes(requesterId));
     const voided = live.filter(
       (row) =>
-        !access.users.includes(row.requester_id) ||
+        !listed(row.requester_id, row.operation) ||
         ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );
     if (voided.length > 0)
