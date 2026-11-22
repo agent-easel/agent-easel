@@ -1,20 +1,30 @@
 import { useLayoutEffect, useRef, useState, type FocusEvent, type PointerEvent } from "react";
 import { sameNode, type CanvasNode } from "./flow-graph.ts";
 
+export type PreviewSource = { readonly scope: string; readonly node: CanvasNode };
+
 /** The card whose outgoing connections are previewed, and the input that chose it. */
-type Preview = { readonly source: CanvasNode; readonly via: "pointer" | "keyboard" };
+type Preview = { readonly source: PreviewSource; readonly via: "pointer" | "keyboard" };
 
 /** The canvas node a target belongs to; content portalled out of the layer belongs to none. */
-function cardOf(layer: HTMLElement, target: EventTarget | null): CanvasNode | null {
+function cardOf(layer: HTMLElement, target: EventTarget | null): PreviewSource | null {
   if (!(target instanceof Element) || !layer.contains(target)) return null;
   const card = target.closest<HTMLElement>("[data-block-id], [data-flow-input]");
   if (!card) return null;
   const { blockId } = card.dataset;
-  return blockId === undefined ? { kind: "flow-input" } : { kind: "block", blockId };
+  const scope = card.closest<HTMLElement>("[data-canvas-scope]")?.dataset.canvasScope ?? "";
+  return {
+    scope,
+    node: blockId === undefined ? { kind: "flow-input" } : { kind: "block", blockId },
+  };
+}
+
+function sameSource(a: PreviewSource | null, b: PreviewSource | null) {
+  return a?.scope === b?.scope && sameNode(a?.node ?? null, b?.node ?? null);
 }
 
 function samePreview(a: Preview | null, b: Preview | null) {
-  return a?.via === b?.via && sameNode(a?.source ?? null, b?.source ?? null);
+  return a?.via === b?.via && sameSource(a?.source ?? null, b?.source ?? null);
 }
 
 /**
@@ -57,7 +67,7 @@ export function useConnectionPreview({
       preview.via === "keyboard"
         ? document.activeElement
         : pointer.current && document.elementFromPoint(pointer.current.x, pointer.current.y);
-    if (!sameNode(cardOf(layer.current, holder), preview.source)) update(() => null);
+    if (!sameSource(cardOf(layer.current, holder), preview.source)) update(() => null);
   });
 
   const releasePointer = (current: Preview | null) => (current?.via === "pointer" ? null : current);
@@ -83,7 +93,7 @@ export function useConnectionPreview({
     onBlur: (event: FocusEvent<HTMLElement>) => {
       const next = cardOf(event.currentTarget, event.relatedTarget);
       update((current) =>
-        current?.via === "keyboard" && !sameNode(next, current.source) ? null : current,
+        current?.via === "keyboard" && !sameSource(next, current.source) ? null : current,
       );
     },
   };

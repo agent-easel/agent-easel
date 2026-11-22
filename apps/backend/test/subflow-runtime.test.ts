@@ -25,7 +25,10 @@ import {
   ending,
   composition,
   heavyWriters,
+  loseStopReplyAfterInterrupt,
+  omitRecentRunsOnActiveRead,
   parallelFinish,
+  parallelReleasePanel,
   resave,
   placingGraph,
   reviewPanelGraph,
@@ -1167,4 +1170,94 @@ it("reads an exact inner invocation with its ancestor placement through HTTP", a
       placements: [],
     },
   });
+});
+
+it("a finished Block inside a Subflow settles its worker thread in T3 while the Run stays Active", async (c) => {
+  // Arrange
+  const { f, t3, world, input, agent } = await prepared(c);
+  const child = await savedFlow(f, {
+    name: "Two step",
+    graph: {
+      flowInput: flowInput("first"),
+      blocks: [
+        agentBlock("first", "First worker", agent.id),
+        agentBlock("second", "Second worker", agent.id, { x: 300, y: 0 }),
+      ],
+      connections: [connection("first", "done", "second"), toEnding("second", "done", "done")],
+      finish: { position: { x: 600, y: 0 }, endings: [ending("done", "Done")] },
+    },
+  });
+  const parent = await savedFlow(f, { name: "Wrapper", graph: placingGraph(child.id) });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const firstBlock = started.subflows![0]!.defaultInvocation!.blocks.find(
+    (block) => block.templateBlockId === "first",
+  )!;
+  const first = await blockWorkerLaunched(world, started.id, firstBlock.blockId);
+  await resultReported(world, first, { message: "First done" });
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(started.id));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: first.threadId }]);
+});
+
+it("a parallel Subflow worker stopped by invocation closure after reporting finished stays unsettled while the Run is Active", async (c) => {
+  // Arrange
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor("invocation stops style worker", world, runId, () =>
+    t3.threads.threadStops.some((stop) => stop.threadId === style.threadId),
+  );
+  allTurnsEnd(world, style, "interrupted");
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(runId));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
+});
+
+it("a lost Stop reply that interrupted a reporting Subflow worker keeps that turn unsettled while the Run is Active", async (c) => {
+  // Arrange
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  loseStopReplyAfterInterrupt(t3, () => allTurnsEnd(world, style, "interrupted"));
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor(
+    "invocation closed after lost Stop reply",
+    world,
+    runId,
+    (run) => run.subflows?.[0]?.defaultInvocation?.state === "returned",
+  );
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(runId));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
+});
+
+it("an invocation Stop recorded without an execution ID still keeps the stopped reporting worker unsettled while the Run is Active", async (c) => {
+  // Arrange
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  omitRecentRunsOnActiveRead(t3, style.threadId);
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor("invocation stops style worker without recentRuns", world, runId, () =>
+    t3.threads.threadStops.some((stop) => stop.threadId === style.threadId),
+  );
+  allTurnsEnd(world, style, "interrupted");
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(runId));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
 });

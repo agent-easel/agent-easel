@@ -39,7 +39,7 @@ import {
   type WireTarget,
 } from "../flow-graph.ts";
 import { useCanvasViewport } from "../use-canvas-viewport.ts";
-import { useConnectionPreview } from "../use-connection-preview.ts";
+import { useConnectionPreview, type PreviewSource } from "../use-connection-preview.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
 import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
@@ -970,7 +970,7 @@ function SurfaceLayer({
         presentation={wires}
         routes={routes}
         pendingWire={pending}
-        emphasized={preview.source}
+        emphasized={preview.source?.scope === "" ? preview.source.node : null}
         finish={finish !== undefined}
         area={area}
       />
@@ -1006,7 +1006,14 @@ function SurfaceLayer({
       {surface.nested &&
         area &&
         surface.subflowPreviews &&
-        drawNestedScopes(surface, surface.nested, graph, surface.subflowPreviews, area)}
+        drawNestedScopes(
+          surface,
+          surface.nested,
+          graph,
+          surface.subflowPreviews,
+          area,
+          preview.source,
+        )}
     </div>
   );
 }
@@ -1020,12 +1027,126 @@ function containsRect(outer: Rect, inner: Rect) {
   );
 }
 
+function NestedScopeLayer({
+  surface,
+  nested,
+  group,
+  path,
+  offsetX,
+  offsetY,
+  local,
+  emphasized,
+}: {
+  surface: CanvasSurfaceProps;
+  nested: NestedCanvas;
+  group: SubflowPreview;
+  path: string;
+  offsetX: number;
+  offsetY: number;
+  local: Rect;
+  emphasized: CanvasNode | null;
+}) {
+  const { innerGraph, innerGeometry, innerPreviews } = group;
+  const blocks = innerGraph.blocks.filter((item) => {
+    const box = innerGeometry.blockBox(item);
+    return reaches(local, box) && (!innerPreviews.has(item.id) || !containsRect(box, local));
+  });
+  const input = reaches(local, innerGeometry.flowInputBox);
+  const finish = reaches(local, innerGeometry.finishBox);
+  const wire = nestedWiresReach(innerGraph, innerGeometry, local);
+  const entry = group.incomingEntry;
+  const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
+  const entryBridge = reaches(local, {
+    x: -group.offsetX,
+    y: innerEntry.y,
+    width: entry.x,
+    height: 0,
+  });
+  const exitBridges = group.endingRoutes.filter(({ from, to }) =>
+    reaches(local, {
+      x: from.x - group.offsetX,
+      y: from.y - group.offsetY,
+      width: to.x - from.x,
+      height: 0,
+    }),
+  );
+  if (!input && !finish && !wire && !blocks.length && !entryBridge && !exitBridges.length)
+    return null;
+  return (
+    <div
+      data-canvas-scope={path}
+      className="pointer-events-none absolute [&>article]:pointer-events-auto"
+      style={{ left: offsetX, top: offsetY, width: 1, height: 1 }}
+    >
+      {(entryBridge || exitBridges.length > 0) && (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
+        >
+          {entryBridge && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
+          {exitBridges.map(({ endingId, from, to }) => (
+            <path
+              key={endingId}
+              d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
+            />
+          ))}
+        </svg>
+      )}
+      {wire && (
+        <FlowWires
+          graph={innerGraph}
+          geometry={innerGeometry}
+          presentation={surface.wires}
+          routes={null}
+          pendingWire={null}
+          emphasized={emphasized}
+          finish
+          area={local}
+          nested
+        />
+      )}
+      {input && (
+        <SurfaceFlowInput
+          graph={innerGraph}
+          geometry={innerGeometry}
+          dimensions={surface.dimensions}
+          content={nested.input(path)}
+        />
+      )}
+      {finish && (
+        <SurfaceFinish
+          graph={innerGraph}
+          geometry={innerGeometry}
+          dimensions={surface.dimensions}
+          content={nested.finish(path)}
+          pendingEnding={null}
+        />
+      )}
+      {blocks.map((item) => (
+        <SurfaceBlockItem
+          key={item.id}
+          block={item}
+          graph={innerGraph}
+          drawn={innerGeometry}
+          content={nested.block(path, item)}
+          pendingInput={null}
+          surface={surface}
+          scopePath={path}
+          previews={innerPreviews}
+          area={local}
+        />
+      ))}
+    </div>
+  );
+}
+
 function drawNestedScopes(
   surface: CanvasSurfaceProps,
   nested: NestedCanvas,
   root: CanvasGraph,
   previews: ReadonlyMap<string, SubflowPreview>,
   area: Rect,
+  emphasized: PreviewSource | null,
 ) {
   const layers: ReactNode[] = [];
   function visit(
@@ -1045,100 +1166,20 @@ function drawNestedScopes(
       const path = placementKey(scope, block.id);
       const offsetX = left + group.offsetX;
       const offsetY = top + group.offsetY;
-      const local = { ...area, x: area.x - offsetX, y: area.y - offsetY };
-      const { innerGraph, innerGeometry, innerPreviews } = group;
-      const blocks = innerGraph.blocks.filter((item) => {
-        const box = innerGeometry.blockBox(item);
-        if (!reaches(local, box)) return false;
-        return !innerPreviews.has(item.id) || !containsRect(box, local);
-      });
-      const input = reaches(local, innerGeometry.flowInputBox);
-      const finish = reaches(local, innerGeometry.finishBox);
-      const wire = nestedWiresReach(innerGraph, innerGeometry, local);
-      const entry = group.incomingEntry;
-      const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
-      const entryBridge = reaches(local, {
-        x: -group.offsetX,
-        y: innerEntry.y,
-        width: entry.x,
-        height: 0,
-      });
-      const exitBridges = group.endingRoutes.filter(({ from, to }) =>
-        reaches(local, {
-          x: from.x - group.offsetX,
-          y: from.y - group.offsetY,
-          width: to.x - from.x,
-          height: 0,
-        }),
+      layers.push(
+        <NestedScopeLayer
+          key={path}
+          surface={surface}
+          nested={nested}
+          group={group}
+          path={path}
+          offsetX={offsetX}
+          offsetY={offsetY}
+          local={{ ...area, x: area.x - offsetX, y: area.y - offsetY }}
+          emphasized={emphasized?.scope === path ? emphasized.node : null}
+        />,
       );
-      if (input || finish || wire || blocks.length || entryBridge || exitBridges.length)
-        layers.push(
-          <div
-            key={path}
-            className="pointer-events-none absolute [&>article]:pointer-events-auto"
-            style={{ left: offsetX, top: offsetY, width: 1, height: 1 }}
-          >
-            {(entryBridge || exitBridges.length > 0) && (
-              <svg
-                aria-hidden
-                className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
-              >
-                {entryBridge && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
-                {exitBridges.map(({ endingId, from, to }) => (
-                  <path
-                    key={endingId}
-                    d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
-                  />
-                ))}
-              </svg>
-            )}
-            {wire && (
-              <FlowWires
-                graph={innerGraph}
-                geometry={innerGeometry}
-                presentation={surface.wires}
-                routes={null}
-                pendingWire={null}
-                emphasized={null}
-                finish
-                area={local}
-                nested
-              />
-            )}
-            {input && (
-              <SurfaceFlowInput
-                graph={innerGraph}
-                geometry={innerGeometry}
-                dimensions={surface.dimensions}
-                content={nested.input(path)}
-              />
-            )}
-            {finish && (
-              <SurfaceFinish
-                graph={innerGraph}
-                geometry={innerGeometry}
-                dimensions={surface.dimensions}
-                content={nested.finish(path)}
-                pendingEnding={null}
-              />
-            )}
-            {blocks.map((item) => (
-              <SurfaceBlockItem
-                key={item.id}
-                block={item}
-                graph={innerGraph}
-                drawn={innerGeometry}
-                content={nested.block(path, item)}
-                pendingInput={null}
-                surface={surface}
-                scopePath={path}
-                previews={innerPreviews}
-                area={local}
-              />
-            ))}
-          </div>,
-        );
-      visit(innerGraph, innerPreviews, path, offsetX, offsetY);
+      visit(group.innerGraph, group.innerPreviews, path, offsetX, offsetY);
     }
   }
   visit(root, previews, "", 0, 0);
