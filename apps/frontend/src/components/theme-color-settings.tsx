@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { RotateCcw, Upload } from "lucide-react";
 import type { CustomThemePresentation } from "@t3-factory/contracts";
 import { MAX_THEME_JSON_BYTES } from "@t3-factory/domain-validation";
@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   applyCustomThemeJson,
+  beginThemeUpload,
+  cancelThemeUploads,
+  isCurrentThemeUpload,
   resetCustomTheme,
   useCustomTheme,
   type ApplyCustomThemeResult,
@@ -27,6 +30,7 @@ const EXAMPLE_THEME_JSON = JSON.stringify(
 
 interface ThemeNotice {
   readonly tone: "error" | "neutral";
+  readonly target?: "textarea" | "upload";
   readonly title: string;
   readonly body: string;
   readonly details?: string;
@@ -51,6 +55,7 @@ function noticeForApply(result: ApplyCustomThemeResult, hasPrevious: boolean): T
   if (!result.ok) {
     return {
       tone: "error",
+      target: "textarea",
       title: result.message,
       body: keepPreviousBody(hasPrevious),
       ...(result.details ? { details: result.details } : {}),
@@ -78,6 +83,7 @@ async function readThemeFile(
       ok: false,
       notice: {
         tone: "error",
+        target: "upload",
         title: "Theme config is larger than the 128 KB limit.",
         body: keepPreviousBody(hasPrevious),
       },
@@ -90,6 +96,7 @@ async function readThemeFile(
       ok: false,
       notice: {
         tone: "error",
+        target: "upload",
         title: "Couldn’t read the selected file",
         body: "Choose a readable JSON file or paste the config below.",
       },
@@ -105,14 +112,14 @@ export function ThemeColorSettings() {
   } | null>(null);
   const [notice, setNotice] = useState<ThemeNotice | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const uploadGeneration = useRef(0);
   const errorCardId = useId();
+
+  useEffect(() => () => cancelThemeUploads(), []);
 
   const draft = edited && edited.base === rawJson ? edited.value : (rawJson ?? "");
   const setDraft = (value: string) => setEdited({ base: rawJson, value });
 
   const applyJson = (text: string) => {
-    uploadGeneration.current += 1;
     const result = applyCustomThemeJson(text);
     if (result.ok) setEdited(null);
     setNotice(noticeForApply(result, presentation !== null));
@@ -122,9 +129,9 @@ export function ThemeColorSettings() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    const generation = ++uploadGeneration.current;
+    const token = beginThemeUpload();
     void readThemeFile(file, presentation !== null).then((outcome) => {
-      if (generation !== uploadGeneration.current) return;
+      if (!isCurrentThemeUpload(token)) return;
       if (!outcome.ok) {
         setNotice(outcome.notice);
         return;
@@ -135,14 +142,14 @@ export function ThemeColorSettings() {
   };
 
   const handleReset = () => {
-    uploadGeneration.current += 1;
     resetCustomTheme();
     setEdited(null);
     setNotice(null);
   };
 
   const canApply = draft.trim().length > 0 && draft !== (rawJson ?? "");
-  const invalidCardId = notice?.tone === "error" ? errorCardId : undefined;
+  const invalidId = (target: "textarea" | "upload") =>
+    notice?.target === target ? errorCardId : undefined;
 
   return (
     <>
@@ -155,6 +162,7 @@ export function ThemeColorSettings() {
             <ThemeConfigActions
               canApply={canApply}
               hasTheme={presentation !== null}
+              uploadInvalidId={invalidId("upload")}
               onApply={() => applyJson(draft)}
               onUpload={() => fileInput.current?.click()}
               onReset={handleReset}
@@ -166,7 +174,7 @@ export function ThemeColorSettings() {
             <>
               <Textarea
                 aria-label="Theme config JSON"
-                {...fieldAria(invalidCardId)}
+                {...fieldAria(invalidId("textarea"))}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder={EXAMPLE_THEME_JSON}
@@ -185,17 +193,28 @@ export function ThemeColorSettings() {
           }
         />
       </SettingsGroup>
-      {notice && (
-        <ProblemCard
-          id={invalidCardId}
-          tone={notice.tone}
-          title={notice.title}
-          details={notice.details}
-        >
-          {notice.body}
-        </ProblemCard>
-      )}
+      <ThemeNoticeCard notice={notice} errorCardId={errorCardId} />
     </>
+  );
+}
+
+function ThemeNoticeCard({
+  notice,
+  errorCardId,
+}: {
+  notice: ThemeNotice | null;
+  errorCardId: string;
+}) {
+  if (!notice) return null;
+  return (
+    <ProblemCard
+      id={notice.target ? errorCardId : undefined}
+      tone={notice.tone}
+      title={notice.title}
+      details={notice.details}
+    >
+      {notice.body}
+    </ProblemCard>
   );
 }
 
@@ -218,12 +237,14 @@ function ActiveThemeGroup({ presentation }: { presentation: CustomThemePresentat
 function ThemeConfigActions({
   canApply,
   hasTheme,
+  uploadInvalidId,
   onApply,
   onUpload,
   onReset,
 }: {
   canApply: boolean;
   hasTheme: boolean;
+  uploadInvalidId: string | undefined;
   onApply: () => void;
   onUpload: () => void;
   onReset: () => void;
@@ -238,7 +259,7 @@ function ThemeConfigActions({
       >
         Apply
       </Button>
-      <Button size="sm" variant="outline" onClick={onUpload}>
+      <Button size="sm" variant="outline" {...fieldAria(uploadInvalidId)} onClick={onUpload}>
         <Upload className="size-3.5" />
         Upload JSON
       </Button>

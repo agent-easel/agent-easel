@@ -25,7 +25,21 @@ export type ApplyCustomThemeResult =
 
 const EMPTY_STATE: CustomThemeState = { presentation: null, rawJson: null };
 let current: CustomThemeState = EMPTY_STATE;
+let generation = 0;
 const listeners = new Set<() => void>();
+
+export function beginThemeUpload(): number {
+  generation += 1;
+  return generation;
+}
+
+export function isCurrentThemeUpload(token: number): boolean {
+  return token === generation;
+}
+
+export function cancelThemeUploads() {
+  generation += 1;
+}
 
 function notify() {
   for (const listener of listeners) listener();
@@ -44,6 +58,7 @@ function readStoredTheme(): CustomThemeState {
 }
 
 function setThemeState(next: CustomThemeState) {
+  generation += 1;
   current = next;
   applyCustomColors(next.presentation);
   notify();
@@ -63,6 +78,7 @@ export function startCustomTheme() {
 }
 
 export function applyCustomThemeJson(rawJson: string): ApplyCustomThemeResult {
+  generation += 1;
   const parsed = parseCustomThemeJson(rawJson);
   if (!parsed.ok) return parsed;
   setThemeState({ presentation: parsed.presentation, rawJson });

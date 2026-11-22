@@ -218,6 +218,57 @@ it("foreground, secondary text, sidebar text and status colors are adjusted to m
   expect(contrastRatio(c["primary-foreground"], c["primary-hover"])).toBeGreaterThanOrEqual(4.5);
 });
 
+it("status colors are adjusted away from Factory defaults when a surface would otherwise fail 4.5:1", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "LighterSidebar",
+    appearance: "dark",
+    colors: {
+      canvas: "#121218",
+      surfaceRaised: "#1c1c26",
+      sidebar: "#52525b",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.dark.kind === "custom");
+  const c = result.presentation.modes.dark.colors;
+  expect(contrastRatio("#ef4444", "#52525b")).toBeLessThan(4.5);
+  expect(c.destructive).not.toBe("#ef4444");
+  expect(contrastRatio(c.destructive, c.sidebar)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(c.destructive, c.background)).toBeGreaterThanOrEqual(4.5);
+});
+
+it("when one mode has impossible contrast, that mode falls back to Factory baseline while the other stays custom", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "ImpossibleLight",
+    appearance: "dark",
+    canvas: "#14121f",
+    accent: "#9d6cff",
+    variants: {
+      light: {
+        canvas: "#ffffff",
+        surfaceRaised: "#ffffff",
+        sidebar: "#000000",
+      },
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  expect(result.presentation.modes.dark.kind).toBe("custom");
+  assert(result.presentation.modes.light.kind === "baseline");
+  expect(result.presentation.modes.light.explanation).toContain("that cannot be made readable");
+});
+
 it("a mid-lightness accent lightens on hover when darkening would make action labels unreadable", () => {
   // Arrange
   const json = JSON.stringify({

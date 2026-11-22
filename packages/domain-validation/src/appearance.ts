@@ -126,7 +126,10 @@ function parseDefinition(raw: Record<string, unknown>):
 export function parseCustomThemeJson(rawJson: string): CustomThemeParseResult {
   if (rawJson.trim().length === 0)
     return { ok: false, message: "Paste or upload a theme JSON config first." };
-  if (utf8Encoder.encode(rawJson).byteLength > MAX_THEME_JSON_BYTES)
+  if (
+    rawJson.length > MAX_THEME_JSON_BYTES ||
+    utf8Encoder.encode(rawJson).byteLength > MAX_THEME_JSON_BYTES
+  )
     return { ok: false, message: "Theme config is larger than the 128 KB limit." };
   let parsed: unknown;
   try {
