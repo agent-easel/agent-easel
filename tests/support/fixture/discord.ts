@@ -121,7 +121,6 @@ export function discordFixture(
       posting({ channelId, denied }: { channelId: string; denied: boolean }) {
         discord.setPostingDenied(channelId, denied);
       },
-      /** Discord's user data flags `userId` as a bot account named `username`. */
       botAccount({ userId, username }: { userId: string; username: string }) {
         discord.registerBotAccount(userId, username);
       },

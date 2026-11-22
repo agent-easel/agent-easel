@@ -59,7 +59,6 @@ export function SettingsGroup({
   label: string;
   /** A status badge shown after the label. */
   badge?: ReactNode;
-  /** One permanent muted line between the label and the group. */
   description?: ReactNode;
   children: ReactNode;
 }) {

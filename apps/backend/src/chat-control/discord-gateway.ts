@@ -46,7 +46,6 @@ type Readiness =
 
 /** Allowed Discord IDs to look up by name. */
 export interface DiscordIds {
-  /** Allowed user IDs and listed bot IDs; Discord's user data tells them apart. */
   readonly users: readonly string[];
   readonly channels: readonly string[];
 }
@@ -54,7 +53,6 @@ export interface DiscordIds {
 /** Names Discord reported per ID; `null` when Discord does not know the ID. */
 export interface DiscordNames {
   readonly users: ReadonlyMap<string, string | null>;
-  /** The looked-up user IDs whose Discord user data carries the bot flag. */
   readonly bots: ReadonlySet<string>;
   readonly channels: ReadonlyMap<string, string | null>;
 }

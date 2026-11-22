@@ -36,7 +36,6 @@ interface ChannelDraft {
 export interface AccessDraft {
   /** Comma-separated user IDs as typed; one ID per line is accepted too. */
   readonly users: string;
-  /** Comma-separated bot IDs, typed and pasted like the user IDs. */
   readonly bots: string;
   readonly channels: readonly ChannelDraft[];
 }
@@ -55,9 +54,8 @@ const draftOf = ({ access }: DiscordSettings): AccessDraft => ({
   })),
 });
 
-/** The user or bot IDs a draft field lists, split on commas and line breaks. */
-const userIds = (users: string) =>
-  users
+const userIds = (ids: string) =>
+  ids
     .split(/[\s,]+/)
     .map((id) => id.trim())
     .filter((id) => id.length > 0);
@@ -108,10 +106,6 @@ function draftProblem(input: UpdateDiscordAccessInput) {
   return validated.ok ? "" : validated.error.message;
 }
 
-/**
- * The draft's IDs that Discord's latest lookup showed are in the wrong list, as the message that
- * says where to move each: a bot among the Users, a human among the Bot IDs.
- */
 function wrongListMessages(draft: AccessDraft, access: DiscordSettings["access"]) {
   const who = (id: string) => access.userNames[id] ?? id;
   return [
@@ -200,6 +194,43 @@ function TestBadge({ reachedAt }: { reachedAt: string | null | undefined }) {
   );
 }
 
+function IdListInput({
+  id,
+  value,
+  placeholder,
+  disabled,
+  state,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  state: FieldState | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Input
+      id={id}
+      value={value}
+      placeholder={placeholder}
+      autoComplete="off"
+      spellCheck={false}
+      disabled={disabled}
+      className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(state?.tone))}
+      {...fieldAria(state?.cardId)}
+      onChange={(event) => onChange(event.target.value)}
+      onPaste={(event) => {
+        // One ID per line is accepted and shown as the comma-separated list.
+        const pasted = event.clipboardData.getData("text");
+        if (!pasted.includes("\n")) return;
+        event.preventDefault();
+        onChange(userIds(`${value}\n${pasted}`).join(", "));
+      }}
+    />
+  );
+}
+
 /**
  * Who may invoke Chat control and where: allowed users, then each allowed channel with the
  * Projects it grants. Names Discord reported show under the IDs once a check passed.
@@ -217,7 +248,6 @@ export function AccessCard({
   settings: DiscordSettings;
   draft: AccessDraft;
   problem: string;
-  /** Messages for the IDs Discord showed are in the wrong list. */
   wrongList: readonly string[];
   disabled: boolean;
   /** The latest access test, as the page's most recent read shows it. */
@@ -257,23 +287,13 @@ export function AccessCard({
           htmlFor="discord-access-users"
           secondary={userNamesLine(users, userNames, accountKinds, test)}
         >
-          <Input
+          <IdListInput
             id="discord-access-users"
             value={draft.users}
             placeholder="Discord user IDs"
-            autoComplete="off"
-            spellCheck={false}
             disabled={disabled}
-            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(usersState?.tone))}
-            {...fieldAria(usersState?.cardId)}
-            onChange={(event) => onChange({ ...draft, users: event.target.value })}
-            onPaste={(event) => {
-              // One ID per line is accepted and shown as the comma-separated list.
-              const pasted = event.clipboardData.getData("text");
-              if (!pasted.includes("\n")) return;
-              event.preventDefault();
-              onChange({ ...draft, users: userIds(`${draft.users}\n${pasted}`).join(", ") });
-            }}
+            state={usersState}
+            onChange={(users) => onChange({ ...draft, users })}
           />
         </FieldRow>
         {draft.channels.map((channel, index) => (
@@ -315,22 +335,13 @@ export function AccessCard({
           htmlFor="discord-access-bots"
           secondary={botNamesLine(bots, userNames, accountKinds)}
         >
-          <Input
+          <IdListInput
             id="discord-access-bots"
             value={draft.bots}
             placeholder="Discord bot IDs"
-            autoComplete="off"
-            spellCheck={false}
             disabled={disabled}
-            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(botsState?.tone))}
-            {...fieldAria(botsState?.cardId)}
-            onChange={(event) => onChange({ ...draft, bots: event.target.value })}
-            onPaste={(event) => {
-              const pasted = event.clipboardData.getData("text");
-              if (!pasted.includes("\n")) return;
-              event.preventDefault();
-              onChange({ ...draft, bots: userIds(`${draft.bots}\n${pasted}`).join(", ") });
-            }}
+            state={botsState}
+            onChange={(bots) => onChange({ ...draft, bots })}
           />
         </FieldRow>
       </SettingsGroup>
@@ -368,7 +379,6 @@ function userNamesLine(
   accountKinds: DiscordSettings["access"]["accountKinds"],
   test: DiscordAccessTest | null,
 ) {
-  // A bot among the users is refused: its name gives way to the error tag.
   const name = (id: string) =>
     userNames[id] === null ? (
       <StatusBadge kind="attention">Unknown user</StatusBadge>
@@ -394,7 +404,6 @@ function userNamesLine(
   ));
 }
 
-/** Listed bots by name, each followed by the neutral Bot tag; a human ID is refused in the list. */
 function botNamesLine(
   bots: readonly string[],
   userNames: DiscordSettings["access"]["userNames"],

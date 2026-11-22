@@ -250,7 +250,6 @@ export async function startControlledDiscord() {
   const heldResumes: [GatewaySession, WebSocket][] = [];
   /** Users who left every server; Discord answers Unknown Member for them. */
   const departed = new Set<string>();
-  /** User lookups that Discord's user data flags as bot accounts, by username. */
   const botAccounts = new Map<string, string>();
   const hiddenChannels = new Map<string, Set<string>>();
   /** Parent channels whose permissions deny the bot Send Messages. */
@@ -985,8 +984,6 @@ export async function startControlledDiscord() {
     setTypingAvailable(available: boolean) {
       typingAvailable = available;
     },
-    /** Makes thread-member lookups fail as an outage does. */
-    /** User lookups of this ID answer a bot account with this username. */
     registerBotAccount(userId: string, username: string) {
       botAccounts.set(userId, username);
     },
@@ -994,6 +991,7 @@ export async function startControlledDiscord() {
     removeGuildMember(userId: string) {
       departed.add(userId);
     },
+    /** Makes thread-member lookups fail as an outage does. */
     setThreadMembersAvailable(available: boolean) {
       threadMembersAvailable = available;
     },

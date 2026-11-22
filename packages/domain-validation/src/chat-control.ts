@@ -355,8 +355,8 @@ function parseChannels(value: unknown): Result<DiscordAccessChannel[]> {
 }
 
 /**
- * Structural validation of an Access save: trimmed decimal IDs, no repeated user, bot, channel or
- * per-channel Project, and no ID in both the user and bot lists. Whether the Projects exist is checked by the backend.
+ * Structural validation of an Access save: trimmed decimal IDs, no repeated user, channel or
+ * per-channel Project. Whether the Projects exist is checked by the backend.
  */
 export function validateUpdateDiscordAccess(input: unknown): Result<UpdateDiscordAccessInput> {
   const fields =

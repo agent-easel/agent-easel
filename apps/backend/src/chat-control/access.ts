@@ -86,7 +86,6 @@ export const grantedProjects = (
     (rows) => rows.map((row) => row.project_id),
   );
 
-/** The IDs of one list that Discord's latest lookup showed belong to the other kind of account. */
 const wrongListIssues = (
   ids: readonly string[],
   path: "users" | "bots",
@@ -145,7 +144,6 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
         ),
       );
       if (issues.length > 0) return failure("validation", "Choose Projects Factory knows.", issues);
-      // Discord's own user data decides: a known bot never gets a user's place, nor a human a bot's.
       const wrongList = [
         ...wrongListIssues(input.users, "users", "bot", before),
         ...wrongListIssues(input.bots, "bots", "human", before),
