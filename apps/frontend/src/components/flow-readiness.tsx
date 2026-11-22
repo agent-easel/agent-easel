@@ -8,6 +8,7 @@ import {
   type UpdateFlowInput,
   type ValidationIssue,
 } from "@t3-factory/contracts";
+import { JOIN_OUTPUT } from "@t3-factory/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
@@ -78,9 +79,14 @@ const ISSUE_TAGS: Readonly<Record<string, string>> = {
   condition_rule_shadowed: "Never matches",
   condition_threshold_first_arrival: "Arrival too low",
   condition_cycle: "Loop",
+  join_sources_required: "Needs 2 sources",
+  join_output_unconnected: "Not connected",
+  join_cycle: "Loop",
+  continuation_worker_required: "No worker thread",
   unreachable_block: "Not connected",
   flow_input_required: "Not connected",
   flow_input_wait: "Not an Agent",
+  flow_input_join: "Not an Agent",
   ending_name_required: "No name",
   ending_name_duplicate: "Duplicate name",
   ending_unconnected: "Not connected",
@@ -116,10 +122,15 @@ const noMarks: ReadinessMarks = {
   unconnectedEndings: new Set(),
 };
 
+const UNCONNECTED_OUTPUT_CODES = new Set([
+  "condition_output_unconnected",
+  "join_output_unconnected",
+]);
+
 export const outputKey = (blockId: string, outputId: string) => `${blockId}\u0000${outputId}`;
 
-/** The Condition output an unconnected-output issue names: a rule's, or Otherwise's at block level. */
 function unconnectedOutput(block: FlowGraph["blocks"][number], field: string) {
+  if (block.kind === "join") return JOIN_OUTPUT.id;
   if (block.kind !== "condition") return undefined;
   const rule = /^rules\.(\d+)/.exec(field)?.[1];
   return rule === undefined ? block.otherwise.id : block.rules[Number(rule)]?.id;
@@ -158,8 +169,9 @@ export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph
     if (!found) continue;
     const { block, field } = found;
     blocks.set(block.id, [...(blocks.get(block.id) ?? []), { issue, field }]);
-    const output =
-      issue.code === "condition_output_unconnected" ? unconnectedOutput(block, field) : undefined;
+    const output = UNCONNECTED_OUTPUT_CODES.has(issue.code)
+      ? unconnectedOutput(block, field)
+      : undefined;
     if (output) unconnectedOutputs.add(outputKey(block.id, output));
   }
   return { blocks, flowInput, unconnectedOutputs, ...finishMarks(readiness.issues, graph) };

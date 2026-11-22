@@ -361,7 +361,7 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 The editor's toolbar holds the owner badge (Global or the owning Project), the Flow name as an inline field, the save status
 (**Saved**, **Unsaved changes**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition**, **Join**, saved Agent definitions and placeable saved Flows) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the
 search filters steps, Agents and Flows by name and says **No matching steps or Agents** when nothing matches. Headings are **Steps**, **Flows** (placeable Flows under the placement rule, with any Flow that would form a cycle disabled with its reason and Flows without a reachable ending tagged **No reachable ending**), and each owner's name (**Global**,
 the Project) with a count. Names and descriptions wrap instead of being cut, and an Agent row shows its display summary, such as **Codex · GPT 6.1 Sol · High**.
@@ -438,6 +438,17 @@ exits **Approve** and **Request changes**, which carries a **Message required** 
 Flow-local name and **Wait for** a number and a unit (**minutes**, **hours** or **days**) in one row, such as 1.5 hours; an empty amount saves a draft without
 a duration. It has one input and one output (**after the wait**) whose **Output** row holds its target select. A Wait has no Agent, prompt, execution settings, reports or worker, and the Flow input cannot connect to
 it.
+
+**Join.** A Join waits until every block wired into it has sent something, then forwards their messages together through its
+one output; its library row reads **Join · Waits for every source**. On the canvas it reads **Join · *N* sources** and draws one
+row per source block, in the Flow's block order, each with its own input port: every exit of that block wired into the Join lands
+on its row, which reads ***N* exits**, so a reviewer's **Approve** and **Request changes** fill one slot. Dragging a wire from a
+block not yet wired in adds its row; before any is wired, one hint row (**Connect the blocks to wait for**) holds the port. Below
+the rows sits its one output row (**output**). Its panel holds **Name**, the read-only **Sources · *N* blocks** (each block with its
+connected exits, such as **Approve · Request changes**; a Wait's or Continuation's reads **Output**) and **Output** with its target
+select; sources change only by wiring. **Needs 2 sources** marks its source ports and **Not connected** its output row and port in
+the error colour, with the issue in the readiness list. The Flow input cannot connect to it. The rules are in
+[Validation](#validation).
 
 **Subflow.** A [Subflow](../GLOSSARY.md#subflow) places another saved Flow by its `flowId` (`kind: "subflow"`). Its exits are the referenced Flow's Finish endings by ending ID, so renaming an ending keeps every wire while removing an ending leaves a repairable broken wire (`subflow_exit_missing`); it has no Flow-local exits, hidden exits, Revisit instruction or workspace override (the top-level Run workspace applies). On the canvas, an expandable Subflow renders as a [`SubflowGroup`](design-system.md#which-component-for-which-pattern): a read-only in-place preview of the referenced Flow showing its inner Flow input (**Incoming message**) wired to its targets, its inner blocks and Finish, drawn-only ending routes to the outer right border, interactive outer left and right ports and a **Collapse** control in its header. Collapsing turns it into a compact block card with **Expand** and **Open Flow**; cyclic, over-budget, missing or unset Subflows auto-collapse with an error badge. Selecting a Subflow opens its settings panel with **Name**, the **Flow** picker (placeable Flows with cycle candidates disabled), **Open Flow**, read-only disclosures (**Workspace**, **Revision**, **Blocks inside**), **Exits** with target selects and ending expectations, **Broken wires** (one-click **Remove** repair) and **Issues inside** (linking directly to each affected nested Flow). The **Flow input** may connect to Subflows as well as Agent blocks, and Subflow exits may connect to any block or parent Finish ending. Removing a Flow is still allowed when another Flow places it: referencing parent Flows report `subflow_flow_missing` and keep their repairable wires.
 

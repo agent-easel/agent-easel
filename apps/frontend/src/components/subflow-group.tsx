@@ -4,6 +4,7 @@ import type { AgentDefinition, FlowBlock, FlowDraft } from "@t3-factory/contract
 import type { CanvasBlock, CanvasDimensions } from "@t3-factory/flow-layout";
 import { cn } from "@/lib/utils";
 import { TextLink } from "@/components/ui/text-link";
+import { JoinSourceList, joinSources } from "./join-block.tsx";
 import { blockReference, type ReferenceTone } from "../block-kind.ts";
 import { incomingApproachLane, wirePath, type createCanvasGeometry } from "../flow-geometry.ts";
 import {
@@ -170,6 +171,9 @@ function PreviewBlockCard({
       }}
     >
       <IdentityRows rows={rows} header={identity.header} title={identity.title} />
+      {block.kind === "join" && (
+        <JoinSourceList sources={joinSources(preview.innerGraph, block.id)} rows={rows} />
+      )}
       <span className="bg-border" style={{ height: rows.divider }} />
       <ul style={{ paddingTop: rows.exitPaddingTop, paddingBottom: rows.exitPaddingBottom }}>
         {block.exits.map((exit) => (
@@ -189,7 +193,7 @@ function PreviewBlockCard({
                 ? "after the wait"
                 : exit.source === "continuation"
                   ? "response"
-                  : exitDisplayName(exit)}
+                  : exitDisplayName(exit, "output")}
             </span>
           </li>
         ))}

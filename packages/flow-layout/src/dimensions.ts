@@ -109,22 +109,33 @@ export function createNodeGeometry<B extends LayoutBlock>(
     rows.exitPaddingBottom +
     block.exits.length * rows.exitRow;
   const incoming = incomingIndex(graph);
+  const joinRows = (block: B) =>
+    block.kind === "join" ? Math.max(1, incoming.ports(block.id).length) : 0;
+  const joinSection = (block: B) =>
+    block.kind === "join"
+      ? rows.exitPaddingTop + joinRows(block) * rows.exitRow + rows.exitPaddingBottom + rows.divider
+      : 0;
   const bodyHeight = (block: B) =>
-    blockHeightForIncomingFanIn(incoming.wires(block.id).length, ports, baseHeight(block));
+    block.kind === "join"
+      ? baseHeight(block) + joinSection(block)
+      : blockHeightForIncomingFanIn(incoming.ports(block.id).length, ports, baseHeight(block));
   const blockWidth = (block: B) => facts.blockFrame?.(block)?.width ?? rows.width;
   const blockHeight = (block: B) => {
     const custom = facts.blockFrame?.(block);
     if (custom) {
-      const fanIn = incoming.wires(block.id).length;
+      const fanIn = incoming.ports(block.id).length;
       const fanInHeight = custom.inputY + Math.max(0, fanIn - 1) * INCOMING_PORT_SPACING + 12;
       return Math.max(custom.height, fanInHeight);
     }
     return bodyHeight(block) + (facts.footerCount?.(block) ?? 0) * rows.footer;
   };
   const blockInputY = (block: B, index: number) =>
-    (facts.blockFrame?.(block)?.inputY ?? ports.inputY) + index * INCOMING_PORT_SPACING;
+    block.kind === "join"
+      ? ports.firstExitY + index * ports.exitRow
+      : (facts.blockFrame?.(block)?.inputY ?? ports.inputY) + index * INCOMING_PORT_SPACING;
   const blockExitY = (block: B, exitId: string, index: number) =>
-    facts.blockFrame?.(block)?.exitY(exitId) ?? ports.firstExitY + index * ports.exitRow;
+    facts.blockFrame?.(block)?.exitY(exitId) ??
+    ports.firstExitY + joinSection(block) + index * ports.exitRow;
   const flowInputBox = {
     ...graph.flowInput.position,
     width: input.width,
@@ -171,7 +182,9 @@ export function createNodeGeometry<B extends LayoutBlock>(
     blockExitY,
     reservedHeight,
     incomingGrowth: (block: B) =>
-      facts.blockFrame?.(block) ? 0 : bodyHeight(block) - baseHeight(block),
+      facts.blockFrame?.(block) || block.kind === "join"
+        ? 0
+        : bodyHeight(block) - baseHeight(block),
   };
 }
 
@@ -191,8 +204,10 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
     finish: { firstEndingY: geometry.finishEndingY },
     blockWidth: dimensions.block.width,
     blockHeight: geometry.reservedHeight,
+    blockInputY: geometry.blockInputY,
+    blockExitY: geometry.blockExitY,
     ...(facts.blockFrame && { blockFrame: facts.blockFrame }),
-    ports: { ...geometry.ports, inputSpacing: INCOMING_PORT_SPACING },
+    ports: { exitRow: geometry.ports.exitRow },
     labels,
     labelSize: (text) => ({ width: text.length * 7 + 24, height: 22 }),
   };

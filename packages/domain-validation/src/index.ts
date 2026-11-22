@@ -249,6 +249,7 @@ export {
   exitsWithEndings,
   inheritedExits,
   HUMAN_EXITS,
+  JOIN_OUTPUT,
   WAIT_OUTPUT,
   type EffectiveExit,
   type ExitFlows,

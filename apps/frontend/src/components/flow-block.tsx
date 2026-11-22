@@ -9,7 +9,7 @@ const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   agent: "text-link",
   human: "text-muted-foreground",
   wait: "text-muted-foreground",
-  join: "text-muted-foreground",
+  join: "text-brand-cyan",
   continuation: "text-brand-cyan",
   condition: "text-muted-foreground",
   subflow: "text-muted-foreground",

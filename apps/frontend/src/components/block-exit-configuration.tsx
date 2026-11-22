@@ -13,6 +13,7 @@ import {
   CONTINUATION_EXIT,
   exitsWithEndings,
   inheritedExits,
+  JOIN_OUTPUT,
   WAIT_OUTPUT,
   type ExitWithEndings,
 } from "@t3-factory/domain-validation";
@@ -42,6 +43,12 @@ type ExitBlock = Exclude<FlowBlock, { kind: "condition" | "subflow" }>;
 export function PanelHeading({ children }: { children: string }) {
   return <h3 className="text-label tracking-label text-muted-foreground">{children}</h3>;
 }
+
+const SINGLE_OUTPUTS = {
+  wait: WAIT_OUTPUT,
+  continuation: CONTINUATION_EXIT,
+  join: JOIN_OUTPUT,
+} as const;
 
 const cardClass = "grid divide-y overflow-hidden rounded-lg border";
 
@@ -185,7 +192,7 @@ export function BlockExitConfiguration({
     return (
       <section aria-label="Output" className="grid gap-2">
         <PanelHeading>Output</PanelHeading>
-        {target(block.kind === "continuation" ? CONTINUATION_EXIT.id : WAIT_OUTPUT.id, "output")}
+        {target(SINGLE_OUTPUTS[block.kind].id, "output")}
       </section>
     );
   if (block.kind === "human")
