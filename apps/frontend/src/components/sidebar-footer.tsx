@@ -123,13 +123,17 @@ function SettingsFooterLink({
   const statusLabel = indicator.label ? `Settings, ${indicator.label}` : "Settings";
   const settingsOptions = useSettingsOptions({ tab: indicator.tab });
   return (
-    <FooterIcon label={statusLabel} shortcut={shortcut} active={active}>
+    <FooterIcon
+      label={indicator.status ? "Settings" : statusLabel}
+      shortcut={shortcut}
+      active={active}
+    >
       <Link {...settingsOptions} aria-label={statusLabel}>
         <Settings aria-hidden className="size-4" strokeWidth={1.5} />
         {indicator.signal && (
           <ConnectionStateDot
             presentation={presentation}
-            label={indicator.label}
+            label={indicator.status ? undefined : indicator.label}
             className={dotClass[indicator.tone]}
             overlay
           />

@@ -9,6 +9,7 @@ import {
 } from "./support/agents.ts";
 import { readFlow, removeFlowElsewhere, saveFlowElsewhere } from "./support/flows.ts";
 import { delayLiveSnapshots, resetBrowserRequests } from "./support/live.ts";
+import { exportDefinitionFile } from "./support/owners.ts";
 import {
   expectBrokenAgentWire,
   expectFlowSaved,
@@ -219,6 +220,75 @@ test("a reconnect snapshot preserves the Flow draft and viewport", async ({
   await expect(name).toHaveValue("Offline Flow draft");
   await expectStudioViewport(viewport);
 });
+
+for (const { action, pending, endpoint } of [
+  { action: "Create Flow", pending: "Saving…", endpoint: "flows" },
+  { action: "Import", pending: "Importing…", endpoint: "imports" },
+] as const) {
+  test(`losing the connection during ${action} shows Offline only after the request ends`, async ({
+    fixture,
+    app,
+    screen,
+    browser,
+  }) => {
+    // Arrange
+    const dialog = await openOfflineActionDialog({ app, screen, browser }, action);
+    const request = await holdStudioWrite(browser, endpoint);
+    const submit = dialog.getByRole("button", action, { exact: true });
+    await expect(submit).toBeEnabled();
+    await submit.tap();
+    await expect.poll(request.arrived).toBe(true);
+    const busy = dialog.getByRole("button", pending, { exact: true });
+    await expect(busy).toBeDisabled();
+
+    // Act
+    await fixture.remoteAccess.offline();
+
+    // Assert
+    await expect(browser.locator('[role="status"][aria-label="Offline"]')).toBeAttached();
+    const reason = dialog.getByText("Offline", { exact: true });
+    await expect(reason).toHaveCount(0);
+    await expect(busy).toBeDisabled();
+    request.release();
+    await expect(reason).toBeVisible();
+    await expect(dialog.getByRole("button", action, { exact: true })).toBeDisabled();
+  });
+}
+
+async function holdStudioWrite(
+  browser: Parameters<typeof openApprovedStudio>[0]["browser"],
+  endpoint: "flows" | "imports",
+) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let arrived = false;
+  await browser.route(`**/api/${endpoint}`, async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    arrived = true;
+    await held;
+    await route.abort();
+  });
+  return { arrived: () => arrived, release };
+}
+
+async function openOfflineActionDialog(
+  { app, screen, browser }: Parameters<typeof openApprovedStudio>[0],
+  action: "Create Flow" | "Import",
+) {
+  await openApprovedStudio({ app, screen, browser }, "flows");
+  if (action === "Create Flow") {
+    await screen.getByRole("button", "New Flow", { exact: true }).tap();
+    const dialog = screen.getByRole("dialog", "New Flow", { exact: true });
+    await dialog.getByLabel("Flow name", { exact: true }).fill("Flow with a held create request");
+    return dialog;
+  }
+  const agent = await newStudioAgent(app);
+  const file = await exportDefinitionFile(app.baseUrl, "agent", agent.id);
+  await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
+  return screen.getByRole("dialog", /^Import “/);
+}
 
 test("an open Flow comparison follows the newest saved revision", async ({
   app,

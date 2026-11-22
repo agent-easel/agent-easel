@@ -187,21 +187,23 @@ function ImportReviewActions({
 }) {
   const allowed = useMutationsAllowed();
   const offline = useOfflineReason();
-  const beside = blocked || offline;
+  const beside = blocked || (committing ? "" : offline);
   return (
     <>
-      {beside && <p className="mr-auto text-sm text-destructive">{beside}</p>}
       <Button type="button" variant="outline" disabled={committing} onClick={onCancel}>
         Cancel
       </Button>
-      <Button
-        type="button"
-        variant={committing || (!blocked && allowed) ? "default" : "outline"}
-        disabled={committing || Boolean(blocked) || !allowed}
-        onClick={onConfirm}
-      >
-        {committing ? "Importing…" : "Import"}
-      </Button>
+      <div className="flex min-w-0 items-center gap-2">
+        {beside && <p className="text-sm text-destructive">{beside}</p>}
+        <Button
+          type="button"
+          variant={committing || (!blocked && allowed) ? "default" : "outline"}
+          disabled={committing || Boolean(blocked) || !allowed}
+          onClick={onConfirm}
+        >
+          {committing ? "Importing…" : "Import"}
+        </Button>
+      </div>
     </>
   );
 }

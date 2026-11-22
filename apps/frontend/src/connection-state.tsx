@@ -123,7 +123,7 @@ export function ConnectionStateDot({
 }: {
   presentation: SettingsConnectionPresentation;
   className?: string;
-  label: string;
+  label?: string | undefined;
   /** Pin to the top-right of a relative icon button (sidebar Settings). */
   overlay?: boolean;
 }) {
