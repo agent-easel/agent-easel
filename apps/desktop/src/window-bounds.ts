@@ -3,15 +3,38 @@ export interface WindowBounds {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  readonly maximized?: true;
+  readonly fullScreen?: true;
+}
+
+export interface WindowBoundsSnapshot {
+  isDestroyed(): boolean;
+  isMinimized(): boolean;
+  isFullScreen(): boolean;
+  isMaximized(): boolean;
+  getNormalBounds(): WindowBounds;
 }
 
 const isInteger = (value: unknown): value is number => Number.isInteger(value);
 
 export function parseWindowBounds(value: unknown): WindowBounds | null {
   if (typeof value !== "object" || value === null) return null;
-  const { x, y, width, height } = value as Record<string, unknown>;
+  const { x, y, width, height, maximized, fullScreen } = value as Record<string, unknown>;
   if (!isInteger(x) || !isInteger(y) || !isInteger(width) || !isInteger(height)) return null;
   if (width <= 0 || height <= 0) return null;
+  if (fullScreen === true) return { x, y, width, height, fullScreen: true };
+  if (maximized === true) return { x, y, width, height, maximized: true };
+  return { x, y, width, height };
+}
+
+export function captureWindowBounds(
+  target: WindowBoundsSnapshot,
+  previous: WindowBounds | null,
+): WindowBounds | null {
+  if (target.isDestroyed() || target.isMinimized()) return previous;
+  const { x, y, width, height } = target.getNormalBounds();
+  if (target.isFullScreen()) return { x, y, width, height, fullScreen: true };
+  if (target.isMaximized()) return { x, y, width, height, maximized: true };
   return { x, y, width, height };
 }
 

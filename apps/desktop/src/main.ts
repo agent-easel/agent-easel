@@ -55,7 +55,7 @@ import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
-import { restorableBounds, type WindowBounds } from "./window-bounds.ts";
+import { captureWindowBounds, restorableBounds, type WindowBounds } from "./window-bounds.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
 if (process.env.FACTORY_DESKTOP_USER_DATA)
@@ -90,6 +90,7 @@ let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
+let windowReady = false;
 let windowBounds: WindowBounds | null = null;
 /** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
 let routeReceiver: WebContents | null = null;
@@ -283,8 +284,12 @@ function openWindow() {
     windowBounds,
     screen.getAllDisplays().map((display) => display.workArea),
   );
+  windowReady = false;
   const created = new BrowserWindow({
-    ...(saved ?? { width: 1400, height: 900 }),
+    ...(saved
+      ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
+      : { width: 1400, height: 900 }),
+    ...(saved?.fullScreen ? { fullscreen: true } : {}),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -312,7 +317,11 @@ function openWindow() {
   created.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
-  created.once("ready-to-show", () => created.show());
+  created.once("ready-to-show", () => {
+    if (saved?.maximized && !saved.fullScreen && !created.isMaximized()) created.maximize();
+    created.show();
+    windowReady = true;
+  });
   // A reload replaces the page and its route listener; in-page navigation keeps both.
   created.webContents.on("did-navigate", () => {
     routeReceiver = null;
@@ -320,6 +329,10 @@ function openWindow() {
   const rememberBounds = () => void saveWindowBounds();
   created.on("resized", rememberBounds);
   created.on("moved", rememberBounds);
+  created.on("maximize", rememberBounds);
+  created.on("unmaximize", rememberBounds);
+  created.on("enter-full-screen", rememberBounds);
+  created.on("leave-full-screen", rememberBounds);
   created.on("close", () => {
     const url = created.webContents.getURL();
     if (url.startsWith(`${appOrigin}/`)) lastView = url;
@@ -330,6 +343,7 @@ function openWindow() {
   // Closing the window never stops the backend; the Dock and the optional tray reopen it.
   created.on("closed", () => {
     window = null;
+    windowReady = false;
     routeReceiver = null;
     attention.focus(false);
     applyMenuState(withoutOpenRun(menuState));
@@ -339,7 +353,7 @@ function openWindow() {
 }
 
 function saveWindowBounds(): Promise<unknown> {
-  if (window) windowBounds = window.getNormalBounds();
+  if (window && windowReady) windowBounds = captureWindowBounds(window, windowBounds);
   return store.update({ windowBounds }).catch(() => undefined);
 }
 

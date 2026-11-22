@@ -92,6 +92,30 @@ it("the window size and position the user left are restored when the installatio
   expect(reopened.get().windowBounds).toStrictEqual({ x: 120, y: 80, width: 1111, height: 777 });
 });
 
+it.for(["maximized", "fullScreen"] as const)(
+  "a %s window state survives reopening the installation",
+  async (state, context) => {
+    // Arrange
+    const directory = await profileDirectory(context);
+    const store = await SettingsStore.open(directory);
+    await store.update({
+      windowBounds: { x: 120, y: 80, width: 1111, height: 777, [state]: true },
+    });
+
+    // Act
+    const reopened = await SettingsStore.open(directory);
+
+    // Assert
+    expect(reopened.get().windowBounds).toStrictEqual({
+      x: 120,
+      y: 80,
+      width: 1111,
+      height: 777,
+      [state]: true,
+    });
+  },
+);
+
 it("a stored window position keeps only its size and position, never other window options", async (context) => {
   // Arrange
   const directory = await profileDirectory(context);
