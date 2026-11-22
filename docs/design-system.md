@@ -134,8 +134,8 @@ the viewport width minus 32 px.
 
 A primary action with a blank required name stays neutral and disabled, with no reason and without
 marking the field invalid. Any other cause that keeps it from running shows that one reason beside
-the action. The control stays neutral while disabled and uses the filled primary only when it can
-run. **Create Flow**, **Import** and the Studio editors' **Save** / **Create Agent** follow it.
+the action, including **Offline** while the client is offline and the action could otherwise run.
+The control stays neutral while disabled and uses the filled primary only when it can run. **Create Flow**, **Import** and the Studio editors' **Save** / **Create Agent** follow it.
 
 Save is the only filled primary action in Studio editors: filled only while there are unsaved
 changes it may send, neutral and disabled while saved or blocked, and **Saving…** while saving.

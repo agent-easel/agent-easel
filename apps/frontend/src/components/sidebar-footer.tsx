@@ -3,12 +3,16 @@ import { Settings, PencilRuler } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import {
   ConnectionStateDot,
-  connectionFooterText,
   connectionIsConfigured,
-  connectionStatusLabel,
   useConnectionState,
   type ConnectionPresentation,
 } from "../connection-state.tsx";
+import { useFactoryConnectionNotice } from "../client-gate.tsx";
+import {
+  sidebarFooterIndicator,
+  type SidebarFooterIndicator,
+  type SidebarFooterTone,
+} from "../sidebar-footer-indicator.ts";
 import { Link } from "@tanstack/react-router";
 import {
   useSettings,
@@ -24,37 +28,12 @@ import { reportingSummary, useReportingState } from "../reporting-state.tsx";
 import { useLiveStudio } from "../live/studio.ts";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 
-/** Connection failures take precedence; reporting warnings lead straight to their repair surface. */
-function settingsIndicator(
-  connection: ConnectionPresentation,
-  reporting: ReturnType<typeof reportingSummary>,
-  configured: boolean,
-) {
-  if (!configured)
-    return {
-      label: "",
-      text: "",
-      dotClass: "",
-      tab: "connection" as const,
-      signal: false,
-    };
-  if (connection !== "ready" || reporting.state === "installed")
-    return {
-      label: connectionStatusLabel(connection),
-      text: connectionFooterText(connection),
-      dotClass: "",
-      tab: "connection" as const,
-      signal: true,
-    };
-  const needsAttention = reporting.state === "attention";
-  return {
-    label: reporting.label,
-    text: reporting.message,
-    dotClass: needsAttention ? "bg-attention" : "bg-muted-foreground/60",
-    tab: needsAttention ? ("agent-reporting" as const) : ("connection" as const),
-    signal: true,
-  };
-}
+const dotClass: Record<SidebarFooterTone, string> = {
+  connection: "",
+  attention: "bg-attention",
+  checking: "bg-muted-foreground/60",
+  error: "bg-destructive",
+};
 
 export function SidebarFooter() {
   const { hint } = useShortcutPreferences();
@@ -62,12 +41,12 @@ export function SidebarFooter() {
   const studio = useStudio();
   const studioOptions = useStudioOptions({ tab: "flows" });
   const { presentation, connection } = useConnectionState();
-  const indicator = settingsIndicator(
+  const indicator = sidebarFooterIndicator({
+    factory: useFactoryConnectionNotice(),
     presentation,
-    reportingSummary(useReportingState()),
-    connectionIsConfigured(connection, presentation),
-  );
-  const statusText = indicator.text;
+    reporting: reportingSummary(useReportingState()),
+    configured: connectionIsConfigured(connection, presentation),
+  });
   // Trigger problems mark only the Studio entry, never Runs, notifications or the Dock badge.
   const failingTriggers =
     useLiveStudio().value?.triggers.filter((trigger) => trigger.error).length ?? 0;
@@ -107,15 +86,26 @@ export function SidebarFooter() {
           {triggersInError(failingTriggers)}
         </span>
       )}
-      {statusText && (
-        <span aria-hidden className="min-w-0 truncate pl-1 text-2xs text-muted-foreground">
-          {statusText}
-        </span>
-      )}
+      <FooterStatus indicator={indicator} />
       <div className="ml-auto shrink-0">
         <UpdateControl />
       </div>
     </nav>
+  );
+}
+
+function FooterStatus({ indicator }: { indicator: SidebarFooterIndicator }) {
+  return (
+    <span
+      role="status"
+      aria-label={indicator.status ? indicator.label : undefined}
+      className={cn(
+        "min-w-0 truncate pl-1 text-2xs",
+        indicator.tone === "error" ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
+      {indicator.status ? indicator.text : <span aria-hidden>{indicator.text}</span>}
+    </span>
   );
 }
 
@@ -126,21 +116,25 @@ function SettingsFooterLink({
   active,
 }: {
   presentation: ConnectionPresentation;
-  indicator: ReturnType<typeof settingsIndicator>;
+  indicator: SidebarFooterIndicator;
   shortcut: string | undefined;
   active: boolean;
 }) {
   const statusLabel = indicator.label ? `Settings, ${indicator.label}` : "Settings";
   const settingsOptions = useSettingsOptions({ tab: indicator.tab });
   return (
-    <FooterIcon label={statusLabel} shortcut={shortcut} active={active}>
+    <FooterIcon
+      label={indicator.status ? "Settings" : statusLabel}
+      shortcut={shortcut}
+      active={active}
+    >
       <Link {...settingsOptions} aria-label={statusLabel}>
         <Settings aria-hidden className="size-4" strokeWidth={1.5} />
         {indicator.signal && (
           <ConnectionStateDot
             presentation={presentation}
-            label={indicator.label}
-            className={indicator.dotClass}
+            label={indicator.status ? undefined : indicator.label}
+            className={dotClass[indicator.tone]}
             overlay
           />
         )}

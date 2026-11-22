@@ -1,4 +1,4 @@
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed, useOfflineReason } from "@/client-gate";
 import { useState, type FormEvent } from "react";
 import type { FlowDraft } from "@t3-factory/contracts";
 import { validateCreateFlow } from "@t3-factory/domain-validation";
@@ -35,7 +35,9 @@ export function CreateFlow({
   const [reason, setReason] = useState("");
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
-  const beside = flowCreateBeside(blank, blocked, reason);
+  const allowed = useMutationsAllowed();
+  const offline = useOfflineReason();
+  const beside = flowCreateBeside(blank, blocked, reason || (saving ? "" : offline));
   return (
     <NewFlowDialog
       name={name}
@@ -45,7 +47,7 @@ export function CreateFlow({
       saving={saving}
       failed={failed}
       beside={beside}
-      filled={!blank && !blocked}
+      filled={allowed && (saving || (!blank && !blocked))}
       onName={setName}
       onOwner={setOwner}
       onClose={onClose}
@@ -152,19 +154,21 @@ function NewFlowDialog({
         title="New Flow"
         actions={
           <>
-            {beside && <p className="mr-auto text-sm text-destructive">{beside}</p>}
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <MutationGate>
-              <Button
-                type="submit"
-                variant={filled || saving ? "default" : "outline"}
-                disabled={saving || !filled}
-              >
-                {saving ? "Saving…" : "Create Flow"}
-              </Button>
-            </MutationGate>
+            <div className="flex min-w-0 items-center gap-2">
+              {beside && <p className="text-sm text-destructive">{beside}</p>}
+              <MutationGate>
+                <Button
+                  type="submit"
+                  variant={filled ? "default" : "outline"}
+                  disabled={saving || !filled}
+                >
+                  {saving ? "Saving…" : "Create Flow"}
+                </Button>
+              </MutationGate>
+            </div>
           </>
         }
         onSubmit={onSubmit}

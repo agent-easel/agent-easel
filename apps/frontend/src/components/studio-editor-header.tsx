@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { MutationGate, useMutationsAllowed } from "@/client-gate";
+import { MutationGate, useMutationsAllowed, useOfflineReason } from "@/client-gate";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -170,16 +170,21 @@ export function StudioSaveButton({
   children?: string;
 }) {
   const mutationsAllowed = useMutationsAllowed();
+  const offline = useOfflineReason();
   const filled = mutationsAllowed && unsaved && (ready || saving);
+  const reason = unsaved && ready && !saving ? offline : "";
   return (
-    <MutationGate>
-      <Button
-        {...props}
-        variant={filled ? "default" : "outline"}
-        disabled={saving || !unsaved || !ready}
-      >
-        {saving ? "Saving…" : children}
-      </Button>
-    </MutationGate>
+    <>
+      {reason && <p className="text-sm whitespace-nowrap text-destructive">{reason}</p>}
+      <MutationGate>
+        <Button
+          {...props}
+          variant={filled ? "default" : "outline"}
+          disabled={saving || !unsaved || !ready}
+        >
+          {saving ? "Saving…" : children}
+        </Button>
+      </MutationGate>
+    </>
   );
 }

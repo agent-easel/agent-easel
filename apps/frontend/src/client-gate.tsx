@@ -1,14 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import {
-  CircleAlert,
-  CloudOff,
-  Hourglass,
-  KeyRound,
-  RefreshCw,
-  ShieldX,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleAlert, Hourglass, KeyRound, ShieldX, WifiOff } from "lucide-react";
 import type { AppearanceSource, ClientAccessState, FactoryClient } from "@t3-factory/contracts";
 import {
   FACTORY_MINIMUM_SERVER_PROTOCOL,
@@ -25,7 +16,6 @@ import { api, ApiError } from "./api.ts";
 import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
-import { clockTimeWithSeconds } from "./time-format.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
 
@@ -128,7 +118,7 @@ export function ClientGate({ children }: { children: ReactNode }) {
     <ScopeContext.Provider value={gate.scope}>
       <ServerIdContext.Provider value={gate.serverId}>
         <AppearanceSourceContext.Provider value={gate.appearanceSource}>
-          <OfflineBoundary>{children}</OfflineBoundary>
+          {children}
         </AppearanceSourceContext.Provider>
       </ServerIdContext.Provider>
     </ScopeContext.Provider>
@@ -285,20 +275,38 @@ function RequestAccessScreen({
   );
 }
 
-function OfflineBoundary({ children }: { children: ReactNode }) {
+export type FactoryConnectionNotice =
+  | { readonly kind: "offline"; readonly observedAt: number | null }
+  | { readonly kind: "synchronizing" };
+
+/** Usual catch-up takes a moment; announce it only when it is noticeable. */
+const synchronizingNoticeDelayMs = 500;
+
+export function useFactoryConnectionNotice(): FactoryConnectionNotice | null {
   const current = useTransport();
   const delivery = useLiveDelivery();
   const offline = current.kind === "offline" || delivery === "offline";
   const synchronizing = !offline && delivery === "synchronizing";
-  const observedAt =
-    current.kind === "online" || current.kind === "offline" ? current.observedAt : null;
-  return (
-    <>
-      {offline && <OfflineBanner observedAt={observedAt} />}
-      {synchronizing && <SynchronizingBanner />}
-      {children}
-    </>
-  );
+  const [noticeable, setNoticeable] = useState(false);
+  useEffect(() => {
+    if (!synchronizing) return;
+    const timer = setTimeout(() => setNoticeable(true), synchronizingNoticeDelayMs);
+    return () => {
+      clearTimeout(timer);
+      setNoticeable(false);
+    };
+  }, [synchronizing]);
+  if (offline)
+    return {
+      kind: "offline",
+      observedAt:
+        current.kind === "online" || current.kind === "offline" ? current.observedAt : null,
+    };
+  return synchronizing && noticeable ? { kind: "synchronizing" } : null;
+}
+
+export function useOfflineReason() {
+  return useFactoryConnectionNotice()?.kind === "offline" ? "Offline" : "";
 }
 
 /** Product writes wait for every held live scope; local browsing stays available. */
@@ -314,54 +322,5 @@ export function MutationGate({ children }: { children: ReactNode }) {
     <fieldset disabled={!mutationsAllowed} className="contents">
       {children}
     </fieldset>
-  );
-}
-
-function OfflineBanner({ observedAt }: { observedAt: number | null }) {
-  const time = observedAt === null ? "an earlier check" : clockTimeWithSeconds(observedAt);
-  return (
-    <ConnectivityBanner label="Offline" icon={CloudOff}>
-      <strong className="font-medium">Offline.</strong> Showing the state last observed at {time}.
-      Actions are disabled and nothing is queued; Factory reconnects automatically.
-    </ConnectivityBanner>
-  );
-}
-
-/** Usual catch-up takes a moment; announce it only when it is noticeable. */
-const synchronizingNoticeDelayMs = 500;
-
-function SynchronizingBanner() {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setShown(true), synchronizingNoticeDelayMs);
-    return () => clearTimeout(timer);
-  }, []);
-  if (!shown) return null;
-  return (
-    <ConnectivityBanner label="Synchronizing" icon={RefreshCw}>
-      <strong className="font-medium">Synchronizing.</strong> Showing the last observed state while
-      Factory catches up. Actions are disabled until it is current; nothing is queued.
-    </ConnectivityBanner>
-  );
-}
-
-function ConnectivityBanner({
-  label,
-  icon: Icon,
-  children,
-}: {
-  label: string;
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      role="status"
-      aria-label={label}
-      className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 border-b border-attention/40 bg-background px-4 py-2 text-sm text-foreground shadow-floating"
-    >
-      <Icon aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-attention" />
-      <span>{children}</span>
-    </div>
   );
 }

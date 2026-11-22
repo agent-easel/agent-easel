@@ -186,6 +186,7 @@ test("a lost server connection marks the last observed view offline and disables
   fixture,
   app,
   screen,
+  browser,
 }) => {
   // Arrange
   await approvedBrowser(app, screen);
@@ -195,10 +196,21 @@ test("a lost server connection marks the last observed view offline and disables
   await fixture.remoteAccess.offline();
 
   // Assert
-  await expect(screen.getByRole("status", "Offline")).toContainText("nothing is queued");
+  await expect(
+    screen.getByRole("navigation", "Sidebar footer").getByRole("status", "Offline"),
+  ).toHaveText(/^Offline · last observed \d{2}:\d{2}:\d{2}$/);
   await expect(screen.getByRole("button", "New Run (+)")).toBeDisabled();
   await expect(screen.getByRole("textbox", "Search Run titles")).toBeEnabled();
-  await expect(screen.getByRole("link", /^Settings,/)).toBeEnabled();
+  const settings = screen.getByRole("link", "Settings, Offline", { exact: true });
+  await expect(settings).toBeEnabled();
+  await settings.hover();
+  await expect(screen.getByRole("tooltip")).toContainText("Settings");
+  await expect(screen.getByRole("tooltip")).not.toContainText("Offline");
+  await screen.getByRole("textbox", "Search Run titles").hover();
+  await settings.focus();
+  await expect(screen.getByRole("tooltip")).toContainText("Settings");
+  await expect(screen.getByRole("tooltip")).not.toContainText("Offline");
+  await expect(browser.locator('[aria-label="Settings, Offline"] [title]')).toHaveCount(0);
   await expect(screen.getByRole("link", "Studio", { exact: true })).toBeEnabled();
   await app.screenshot("remote-offline");
   await fixture.remoteAccess.online();
