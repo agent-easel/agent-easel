@@ -25,7 +25,10 @@ import {
   ending,
   composition,
   heavyWriters,
+  loseStopReplyAfterInterrupt,
+  omitRecentRunsOnActiveRead,
   parallelFinish,
+  parallelReleasePanel,
   resave,
   placingGraph,
   reviewPanelGraph,
@@ -1203,39 +1206,58 @@ it("a finished Block inside a Subflow settles its worker thread in T3 while the 
 
 it("a parallel Subflow worker stopped by invocation closure after reporting finished stays unsettled while the Run is Active", async (c) => {
   // Arrange
-  const { f, t3, world, input, agent } = await prepared(c);
-  const child = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
-  const parent = await savedFlow(f, {
-    name: "Release",
-    graph: {
-      flowInput: flowInput("panel"),
-      blocks: [
-        subflowBlock("panel", "Review panel", child.id),
-        agentBlock("notes", "Release notes", agent.id, { x: 400, y: 0 }),
-      ],
-      connections: [connection("panel", "approved", "notes"), toEnding("notes", "done", "done")],
-      finish: { position: { x: 800, y: 0 }, endings: [ending("done", "Done")] },
-    },
-  });
-  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
-  const {
-    workers: [security, style],
-  } = await launchedWorkers(world, started.id);
-  const styleReply = await f.runtime.submit({
-    arguments: { blockId: style!.blockId, to: "finished", exit: "done", message: "Style done" },
-  });
-  expect(styleReply.code).toBe("ACCEPTED");
-  await resultReported(world, security!, { message: "Security approved" });
-  await observeFor("invocation stops style worker", world, started.id, () =>
-    t3.threads.threadStops.some((stop) => stop.threadId === style!.threadId),
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor("invocation stops style worker", world, runId, () =>
+    t3.threads.threadStops.some((stop) => stop.threadId === style.threadId),
   );
-  allTurnsEnd(world, style!, "interrupted");
+  allTurnsEnd(world, style, "interrupted");
 
   // Act
   assertOk(await f.reconcileRuns());
 
   // Assert
-  const run = assertOk(await f.getRun(started.id));
+  const run = assertOk(await f.getRun(runId));
   expect(run.lifecycle).toBe("active");
-  expect(t3.threads.settlements).toStrictEqual([{ threadId: security!.threadId }]);
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
+});
+
+it("a lost Stop reply that interrupted a reporting Subflow worker keeps that turn unsettled while the Run is Active", async (c) => {
+  // Arrange
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  loseStopReplyAfterInterrupt(t3, () => allTurnsEnd(world, style, "interrupted"));
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor(
+    "invocation closed after lost Stop reply",
+    world,
+    runId,
+    (run) => run.subflows?.[0]?.defaultInvocation?.state === "returned",
+  );
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(runId));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
+});
+
+it("an invocation Stop recorded without an execution ID still keeps the stopped reporting worker unsettled while the Run is Active", async (c) => {
+  // Arrange
+  const { f, t3, world, runId, security, style } = await parallelReleasePanel(c);
+  omitRecentRunsOnActiveRead(t3, style.threadId);
+  await resultReported(world, security, { message: "Security approved" });
+  await observeFor("invocation stops style worker without recentRuns", world, runId, () =>
+    t3.threads.threadStops.some((stop) => stop.threadId === style.threadId),
+  );
+  allTurnsEnd(world, style, "interrupted");
+
+  // Act
+  assertOk(await f.reconcileRuns());
+
+  // Assert
+  const run = assertOk(await f.getRun(runId));
+  expect(run.lifecycle).toBe("active");
+  expect(t3.threads.settlements).toStrictEqual([{ threadId: security.threadId }]);
 });
