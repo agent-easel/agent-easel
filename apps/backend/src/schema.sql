@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: optional_finish_block
+-- Newest applied migration: join_blocks
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -531,7 +531,7 @@ CREATE TABLE "flow_revision_blocks" (
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
   block_id TEXT NOT NULL,
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition', 'subflow')),
+  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition', 'subflow', 'join')),
   name TEXT NOT NULL,
   -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),

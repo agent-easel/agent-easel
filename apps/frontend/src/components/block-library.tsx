@@ -455,6 +455,7 @@ const LIBRARY_ICON_TILES: Record<LibraryKind, string> = {
   agent: "bg-brand-soft text-link",
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
+  join: "border bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
   condition: "border bg-muted text-muted-foreground",
   finish: "border bg-muted text-muted-foreground",

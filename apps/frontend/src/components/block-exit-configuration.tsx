@@ -181,11 +181,11 @@ export function BlockExitConfiguration({
       <EndingExpectations exit={exits.get(exitId)} />
     </>
   );
-  if (block.kind === "wait" || block.kind === "continuation")
+  if (block.kind === "wait" || block.kind === "continuation" || block.kind === "join")
     return (
       <section aria-label="Output" className="grid gap-2">
         <PanelHeading>Output</PanelHeading>
-        {target(block.kind === "wait" ? WAIT_OUTPUT.id : CONTINUATION_EXIT.id, "output")}
+        {target(block.kind === "continuation" ? CONTINUATION_EXIT.id : WAIT_OUTPUT.id, "output")}
       </section>
     );
   if (block.kind === "human")

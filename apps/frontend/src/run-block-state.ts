@@ -100,6 +100,7 @@ export function chosenExitIds(
           : [],
       );
     case "subflow":
+    case "join":
       return new Set();
     case "continuation":
       return new Set(

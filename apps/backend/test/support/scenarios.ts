@@ -30,6 +30,8 @@ type ContinuationShape = Extract<FlowBlock, { kind: "continuation" }>;
 export type ScenarioContinuation = { [Key in keyof ContinuationShape]: ContinuationShape[Key] };
 type ConditionShape = Extract<FlowBlock, { kind: "condition" }>;
 export type ScenarioCondition = { [Key in keyof ConditionShape]: ConditionShape[Key] };
+type JoinShape = Extract<FlowBlock, { kind: "join" }>;
+export type ScenarioJoin = { [Key in keyof JoinShape]: JoinShape[Key] };
 type Position = FlowBlock["position"];
 export const blockExit = (
   id: string,
@@ -391,6 +393,12 @@ export const conditionBlock = (
 });
 /** The fixed last output every Condition has. */
 export const OTHERWISE = "otherwise";
+export const joinBlock = (
+  id: string,
+  name: string,
+  position: Position = { x: 0, y: 0 },
+): ScenarioJoin => ({ id, name, kind: "join", position });
+export const JOIN_OUTPUT = "output";
 export const connection = (
   sourceBlockId: string,
   exitId: string,

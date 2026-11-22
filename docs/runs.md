@@ -24,6 +24,9 @@ levels of evidence. A configuration check alone proves neither execution nor rep
   Factory checks the Flow's and every placed Agent's owner again inside the acceptance transaction: an owner change
   while Start was validating refuses it with a conflict. No refusal creates a Task, Run or worker. Ownership adds no
   model or environment check; every other Start gate applies unchanged.
+- **Join.** A [Join](studio.md#graph-shape) can be authored and checked, but this Factory cannot run it yet. Start refuses
+  a Flow that contains a Join, or places a Flow that does, with `join_runtime_unavailable` at `flow`, and creates no Task,
+  Run or worker, so a ready Join Flow never starts and waits forever. Remove the Join to start the Flow.
 
 Before creating a Run, Start checks the Trigger’s issue or explicit GitHub issue references in the prompt. An HTTPS github.com issue URL identifies its repository directly. A bare `#123` uses the host-local Project’s GitHub repository. A confirmed closed issue or merged closing pull request displays a warning. The composer offers **Start anyway** and the Start tool accepts confirmation after review. An unattended Trigger lists the issue as not started. An unavailable GitHub read leaves manual Start available.
 

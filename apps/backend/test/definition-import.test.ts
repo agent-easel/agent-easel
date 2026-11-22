@@ -97,7 +97,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 7 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 8 })),
   );
 
   // Assert
@@ -107,7 +107,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 7, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 8, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -529,7 +529,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(6);
+  expect(document.formatVersion).toBe(7);
 
   // Act
   const committed = assertOk(
@@ -732,7 +732,7 @@ it("a full-size child Flow without Finish can be exported and reimported in a ve
 
   // Assert
   assert(copied.ok);
-  expect(document.formatVersion).toBe(6);
+  expect(document.formatVersion).toBe(7);
   const child = copied.value.flows?.find(({ key }) => key === "flow-2");
   assert(child);
   const restored = assertOk(await factory.getFlow(child.id));

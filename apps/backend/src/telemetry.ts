@@ -46,7 +46,16 @@ const flowProperties = Schema.Struct({
   scope,
   blockCount: bucket,
   blockTypes: Schema.Array(
-    Schema.Literals(["agent", "human", "wait", "continuation", "condition", "subflow", "finish"]),
+    Schema.Literals([
+      "agent",
+      "human",
+      "wait",
+      "continuation",
+      "condition",
+      "subflow",
+      "join",
+      "finish",
+    ]),
   ),
   usesSubflows: Schema.Boolean,
 });

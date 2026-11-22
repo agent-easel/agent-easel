@@ -972,3 +972,88 @@ it("an Agent duplicated into the other clone is a new Agent there at revision 1 
   });
   expect(copy.id).not.toBe(releaser.id);
 });
+
+function joinGraph(agentId: string, joinName: string) {
+  return {
+    flowInput: { targetBlockIds: ["coder"] },
+    blocks: [
+      {
+        id: "coder",
+        kind: "agent" as const,
+        name: "Coder",
+        agentId,
+        hiddenExitIds: [],
+        localExits: [],
+      },
+      { id: "review", kind: "human" as const, name: "Review" },
+      { id: "merge", kind: "join" as const, name: joinName },
+    ],
+    connections: [
+      { sourceBlockId: "coder", exitId: "done", targetBlockId: "review" },
+      { sourceBlockId: "coder", exitId: "done", targetBlockId: "merge" },
+      { sourceBlockId: "review", exitId: "approve", targetBlockId: "merge" },
+      { sourceBlockId: "review", exitId: "request-changes", targetBlockId: "merge" },
+      { sourceBlockId: "merge", exitId: "output", targetBlockId: "coder" },
+    ],
+  };
+}
+
+it("an MCP-created Flow with a Join saves ready with arranged positions and factory_get_flow reads the Join back", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+
+  // Act
+  const created = await client.callTool({
+    name: "factory_create_flow",
+    arguments: { name: "Parallel review", graph: joinGraph(agent.id, "Merge reviews") },
+  });
+
+  // Assert
+  expect(created.isError).toBe(false);
+  const flow = toolReply(created);
+  expect(flow.readiness).toStrictEqual({ ready: true, issues: [] });
+  expect(flow.graph.blocks[2]).toStrictEqual({
+    id: "merge",
+    kind: "join",
+    name: "Merge reviews",
+    position: { x: expect.any(Number), y: expect.any(Number) },
+  });
+  expect(
+    toolReply(await client.callTool({ name: "factory_get_flow", arguments: { flowId: flow.id } })),
+  ).toStrictEqual(flow);
+});
+
+it("factory_save_flow renames a Join and keeps its sources and output wires", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const created = assertOk(
+    await factory.createFlow({
+      name: "Parallel review",
+      graph: joinGraph(agent.id, "Merge reviews"),
+    }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_flow",
+    arguments: {
+      flowId: created.id,
+      name: created.name,
+      expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
+      graph: { ...created.graph, blocks: created.graph.blocks.map(renamedJoin("Combine reviews")) },
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const saved = toolReply(result);
+  expect(saved).toMatchObject({ revision: 2, readiness: { ready: true, issues: [] } });
+  expect(saved.graph.blocks[2]).toMatchObject({ kind: "join", name: "Combine reviews" });
+  expect(saved.graph.connections).toStrictEqual(created.graph.connections);
+});
+
+const renamedJoin = (name: string) => (block: { readonly kind: string }) =>
+  block.kind === "join" ? { ...block, name } : block;

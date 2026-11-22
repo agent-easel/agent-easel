@@ -9,8 +9,8 @@ import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
 /** The version every export writes. */
-export const PORTABLE_DOCUMENT_VERSION = 6;
-export type PortableFormatVersion = 1 | 2 | 3 | 4 | 5 | typeof PORTABLE_DOCUMENT_VERSION;
+export const PORTABLE_DOCUMENT_VERSION = 7;
+export type PortableFormatVersion = 1 | 2 | 3 | 4 | 5 | 6 | typeof PORTABLE_DOCUMENT_VERSION;
 
 /**
  * The exporter's model choice, which a receiving installation may match against its own catalog.
@@ -74,7 +74,7 @@ export interface PortableFlowEntry extends PortableFlow {
 }
 
 export interface PortableFlowDocument<
-  Version extends 5 | 6 = typeof PORTABLE_DOCUMENT_VERSION,
+  Version extends 5 | 6 | 7 = typeof PORTABLE_DOCUMENT_VERSION,
 > extends PortableEnvelope<Version> {
   readonly kind: "flow";
   readonly rootFlowKey: string;
@@ -82,7 +82,7 @@ export interface PortableFlowDocument<
   readonly agents: readonly PortableAgent[];
 }
 
-interface LegacyFlowDocument extends PortableEnvelope<Exclude<PortableFormatVersion, 5 | 6>> {
+interface LegacyFlowDocument extends PortableEnvelope<Exclude<PortableFormatVersion, 5 | 6 | 7>> {
   readonly kind: "flow";
   readonly flow: PortableFlow;
   readonly agents: readonly PortableAgent[];
@@ -97,7 +97,7 @@ export type PortableDocument = PortableAgentDocument | PortableFlowDocument;
  */
 export type ImportedDocument =
   | PortableAgentDocument<PortableFormatVersion>
-  | PortableFlowDocument<5 | 6>
+  | PortableFlowDocument<5 | 6 | 7>
   | LegacyFlowDocument;
 
 /** What an export answers: the file's document and what it could not keep. */
