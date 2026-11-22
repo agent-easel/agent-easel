@@ -557,11 +557,12 @@ review is at most 32,000 Unicode characters and goes out as fully visible ordere
 after every part was delivered does Factory post the last message, which mentions the requester and
 shows the review's [confirmation phrase](#confirmation), says that only the requester can confirm and
 when the review expires, as a Discord relative timestamp. A part that fails, or a last message
-Discord definitely refused, leaves nothing to confirm and Factory says so. Before each part and
-before the last message, Factory checks again that the proposal is still pending, Chat control is
-On, Access still allows the requester and the targeted Projects in that channel, the requester's
-Discord access is current and the conversation was not reset; otherwise it stops posting the review,
-posts no phrase and the proposal is not presented.
+Discord refused or whose creation Factory cannot prove, leaves nothing to confirm and Factory says
+so. The review becomes confirmable only once Factory has recorded the last message's ID. Before each
+part and before the last message, Factory checks again that the proposal is still pending, Chat
+control is On, Access still allows the requester and the targeted Projects in that channel, the
+requester's Discord access is current and the conversation was not reset; otherwise it stops posting
+the review, posts no phrase and the proposal is not presented.
 
 The consent is bound to the requester, the operating application, the thread, the exact operation
 and parameters and the model's call that proposed it. The last message's first dispatch fixes its
@@ -583,11 +584,11 @@ place in the conversation's queue, and a reset or clearing removes the conversat
 A review's **confirmation phrase** is `confirm` followed by a one-time code of four characters from
 an alphabet without easily confused characters (no 0/O, 1/I/L, 2/Z, 5/S, 8/B, U/V or G/6). Each new
 review gets a fresh code, and live reviews in one thread never share one. Only the requester's
-Discord Reply to the review's last message, in the review's thread, whose text is exactly the phrase
-(Factory's own mention and surrounding spaces aside; letter case counts) within the lifetime
-confirms. A plain "yes", any other text, a wrong code, a message that is not a Reply to that message,
-someone else's reply, a reply after expiry and a reused phrase confirm nothing. There is no button
-and no setting that skips the phrase.
+Discord Reply bound to the review's last message by its recorded ID, in the review's thread, whose
+text is exactly the phrase (Factory's own mention and surrounding spaces aside; letter case counts)
+within the lifetime confirms. A plain "yes", any other text, a wrong code, a message that is not a
+Reply to that message, someone else's reply, a reply after expiry and a reused phrase confirm
+nothing. There is no button and no setting that skips the phrase.
 
 Factory recognizes a confirmation attempt from its own records before anything reaches the language
 model: a Reply to a review's last message, or a message whose text is shaped like a phrase. Such a

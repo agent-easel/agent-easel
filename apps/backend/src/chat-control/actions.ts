@@ -156,7 +156,7 @@ export interface ConfirmationReply {
   readonly threadId: string;
   readonly applicationId: string;
   readonly text: string;
-  readonly repliedTo: { readonly messageId: string; readonly byFactory: boolean } | undefined;
+  readonly repliedTo: string | undefined;
   /** Whether that session still operates: Chat control On and the session not released. */
   readonly operating: () => boolean;
   readonly access: Effect.Effect<"permitted" | "denied" | "unavailable", unknown>;
@@ -217,12 +217,6 @@ const outcomeAnswer = (kind: ActionOutcome["kind"]): ConfirmationAnswer => {
   return { kind: "decided" };
 };
 
-const repliesToReview = (row: ProposalRow, reply: ConfirmationReply) =>
-  reply.repliedTo !== undefined &&
-  (row.confirmation_message_id === null
-    ? reply.repliedTo.byFactory
-    : reply.repliedTo.messageId === row.confirmation_message_id);
-
 function replyRefusal(
   row: ProposalRow | undefined,
   reply: ConfirmationReply,
@@ -230,7 +224,8 @@ function replyRefusal(
   if (!row || row.application_id !== reply.applicationId || row.thread_id !== reply.threadId)
     return "invalid";
   if (row.requester_id !== reply.authorId) return "notYours";
-  if (!repliesToReview(row, reply)) return "notReply";
+  if (row.confirmation_message_id === null) return row.state === "preparing" ? "notNow" : "invalid";
+  if (reply.repliedTo !== row.confirmation_message_id) return "notReply";
   if (row.state === "accepting" || row.state === "consumed") return "repeated";
   if (row.state !== "presented" || row.confirmation_code === null) return "invalid";
   return reply.text === phraseOf(row.confirmation_code) ? undefined : "wrongPhrase";
@@ -413,28 +408,26 @@ export function makeChatActions(
         if (!((yield* stillPreparing(id, proposed)) && (yield* permitted))) return yield* withdrawn;
         if (!("messageId" in (yield* create(part, `part ${index}`)))) return yield* failed;
       }
-      if (!(yield* permitted)) return yield* withdrawn;
+      if (!((yield* stillPreparing(id, proposed)) && (yield* permitted))) return yield* withdrawn;
       const expiresAt = new Date((yield* Clock.currentTimeMillis) + CONSENT_MS).toISOString();
-      const usable = yield* sql.withTransaction(
-        Effect.gen(function* () {
-          if (!(yield* stillPreparing(id, proposed))) return false;
-          yield* sql`UPDATE chat_proposals SET state='presented',expires_at=${expiresAt} WHERE id=${id}`;
-          return true;
-        }),
-      );
-      if (!usable) return yield* withdrawn;
-      yield* answerRunsChanged([id]);
       const row = (yield* proposal(id))!;
       const last = yield* create(
         confirmationText(row.confirmation_code!, expiresAt),
         "confirmation",
         row.requester_id,
       );
-      if ("failure" in last && last.failure !== "unknown") return yield* failed;
-      if ("messageId" in last) {
-        yield* sql`UPDATE chat_proposals SET confirmation_message_id=${last.messageId} WHERE id=${id}`;
-        yield* resolutions.changed;
-      }
+      if (!("messageId" in last)) return yield* failed;
+      const usable = yield* sql.withTransaction(
+        Effect.gen(function* () {
+          yield* sql`UPDATE chat_proposals SET confirmation_message_id=${last.messageId} WHERE id=${id}`;
+          if (!(yield* stillPreparing(id, proposed))) return false;
+          yield* sql`UPDATE chat_proposals SET state='presented',expires_at=${expiresAt} WHERE id=${id}`;
+          return true;
+        }),
+      );
+      yield* resolutions.changed;
+      if (!usable) return yield* withdrawn;
+      yield* answerRunsChanged([id]);
       return "presented";
     }).pipe(Effect.onInterrupt(() => fail(id)));
 

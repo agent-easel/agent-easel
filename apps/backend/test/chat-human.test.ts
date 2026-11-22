@@ -74,9 +74,11 @@ it("a presented Human answer review makes its occurrence wait for the Discord co
   await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
 
   // Assert
-  const { occurrence } = await occurrenceOf(world.factory, world.runId, world.occurrence.id);
-  assert(occurrence.chatConfirmationUntil);
-  expect(Date.parse(occurrence.chatConfirmationUntil)).toBeGreaterThan(before);
+  const until = async () =>
+    (await occurrenceOf(world.factory, world.runId, world.occurrence.id)).occurrence
+      .chatConfirmationUntil;
+  await expect.poll(until).toBeTruthy();
+  expect(Date.parse((await until())!)).toBeGreaterThan(before);
 });
 
 it("revoking the requester's Access ends the waiting Discord confirmation on an open Run page at once", async (c) => {

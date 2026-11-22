@@ -56,7 +56,12 @@ const ANSWERS = {
   expired: "⌛ This review expired, so nothing was done. Ask Factory for a new review.",
   denied: "🚫 Chat control does not accept this confirmation from you here.",
   rejected: "🚫 No longer valid",
+  notNow:
+    "⚠️ Factory could not act on this right now and did nothing. Try again before the review expires.",
 } as const;
+
+const PREPARATION_FAILED =
+  "⚠️ Factory could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
 
 const CONFIRMATION_TEXT = new RegExp(
   `^🔒 <@${PARTICIPANT_ID}> To confirm, reply to this message with \`confirm [ACDEFHJKMNPQRTWXY34679]{4}\` · only the requester can confirm · expires <t:\\d+:R>$`,
@@ -1007,6 +1012,46 @@ it("a review's last message whose create failed without proof is asked again und
   expect(answer).toBe(ANSWERS.accepted);
   expect(confirmations(world.discord)).toHaveLength(1);
   expect(await runsOf(world.factory)).toHaveLength(1);
+});
+
+it("while the review's last message is still being posted, no reply with its phrase confirms, whichever Factory message it replies to", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  world.discord.faultMessages("delivered", "paused-lost");
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const [review] = world.discord.created;
+
+  // Act
+  reply(world.discord, confirmation, "610000000000000001", { replyTo: review!.id });
+  reply(world.discord, confirmation, "610000000000000002");
+
+  // Assert
+  await world.discord.messagesWhen(
+    (messages) => confirmationAnswers(world.discord).length >= 2 || messages.some(isStatusCard),
+  );
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.notNow, ANSWERS.notNow]);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.threads.launchCalls).toBe(0);
+  world.discord.releaseMessages();
+});
+
+it("a review whose last message stays unproven fails, and no reply with its phrase confirms it", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  world.discord.faultMessages("delivered", ...unproven("lost"));
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  await world.discord.createdWhere((message) => message.content === PREPARATION_FAILED, 1);
+  const [review] = world.discord.created;
+
+  // Act
+  reply(world.discord, confirmation, "610000000000000001", { replyTo: review!.id });
+  reply(world.discord, confirmation, "610000000000000002");
+
+  // Assert
+  await confirmationAnswered(world.discord, 2);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.invalid, ANSWERS.invalid]);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.threads.launchCalls).toBe(0);
 });
 
 it("a receipt create still unproven after its re-attempts under the nonce is not repeated and is shown in Settings as unknown", async (c) => {

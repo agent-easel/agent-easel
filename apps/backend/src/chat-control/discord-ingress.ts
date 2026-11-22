@@ -476,16 +476,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     Effect.gen(function* () {
       const text = message.content.replace(ownMention, "").trim();
       const repliedTo =
-        message.type === MessageType.Reply && message.reference?.messageId
-          ? {
-              messageId: message.reference.messageId,
-              byFactory: message.mentions.repliedUser?.id === botUserId,
-            }
-          : undefined;
+        message.type === MessageType.Reply ? message.reference?.messageId : undefined;
       const target = yield* session.confirmations.confirmationTarget(
         applicationId,
         thread.id,
-        repliedTo?.messageId,
+        repliedTo,
         text,
       );
       if (!target) return undefined;
