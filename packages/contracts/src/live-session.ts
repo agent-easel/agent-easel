@@ -13,7 +13,6 @@ export type LiveWatch =
   | { readonly rpc: "WatchConnection" }
   | { readonly rpc: "WatchLaunchChoices" }
   | { readonly rpc: "WatchStudio" }
-  | { readonly rpc: "WatchAppearance" }
   | {
       readonly rpc: "WatchRunView";
       readonly navigation: boolean;
@@ -49,7 +48,6 @@ function watchStream(client: Client, watch: LiveWatch): LiveStream {
   if (watch.rpc === "WatchConnection") return client.WatchConnection();
   if (watch.rpc === "WatchLaunchChoices") return client.WatchLaunchChoices();
   if (watch.rpc === "WatchStudio") return client.WatchStudio();
-  if (watch.rpc === "WatchAppearance") return client.WatchAppearance();
   return client.WatchRunView({ navigation: watch.navigation, runIds: watch.runIds });
 }
 

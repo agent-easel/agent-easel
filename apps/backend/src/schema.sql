@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: optional_finish_block
+-- Newest applied migration: drop_appearance_snapshot
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -72,12 +72,6 @@ CREATE TABLE agents (
   created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id), owner_changed_at TEXT);
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
-
-CREATE TABLE appearance_snapshot (
-  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  endpoint TEXT NOT NULL,
-  presentation TEXT NOT NULL
-);
 
 CREATE TABLE chat_access_channel_projects (
   channel_id TEXT NOT NULL REFERENCES chat_access_channels(channel_id),

@@ -1,29 +1,26 @@
-import { useThemeColors } from "./inherited-colors.tsx";
+import { useCustomTheme } from "../custom-theme.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
 import { SettingsPage } from "./settings-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { ThemeColorSettings } from "./theme-color-settings.tsx";
 
 export function AppearanceSettings() {
-  const { status, presentation } = useThemeColors();
+  const { presentation } = useCustomTheme();
   const modes = presentation?.modes;
-  const following = modes?.light.kind === "inherited" || modes?.dark.kind === "inherited";
-  const checking = !status || status.state === "connecting";
+  const customized = modes?.light.kind === "custom" || modes?.dark.kind === "custom";
   return (
     <SettingsPage
       title="Appearance"
       badge={
-        checking ? (
-          <StatusBadge kind="checking">Checking</StatusBadge>
-        ) : following ? (
-          <StatusBadge kind="success">Following T3</StatusBadge>
+        customized ? (
+          <StatusBadge kind="success">Custom colors</StatusBadge>
         ) : (
           <StatusBadge kind="neutral">Factory colors</StatusBadge>
         )
       }
     >
       <AppearanceChoice />
-      <ThemeColorSettings status={status} presentation={presentation} />
+      <ThemeColorSettings />
     </SettingsPage>
   );
 }

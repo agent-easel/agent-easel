@@ -4,7 +4,6 @@ import * as Exit from "effect/Exit";
 import * as Stream from "effect/Stream";
 import {
   runEntityKeys,
-  type AppearanceLiveMessage,
   type ConnectionLiveMessage,
   type FlowDraft,
   type LaunchChoices,
@@ -22,7 +21,6 @@ import {
   type RunViewLiveMessage,
   type StudioDefinitions,
   type StudioLiveMessage,
-  type T3Appearance,
   type T3Connection,
 } from "@t3-factory/contracts";
 import type { LiveChanges, LiveScope } from "./live-changes.ts";
@@ -45,11 +43,6 @@ export interface LiveStreams {
   >;
   /** Studio's saved Agents with their settings status and Flows with their readiness. */
   readonly watchStudio: () => Stream.Stream<LiveEnvelope<StudioLiveMessage>, OperationError>;
-  /** Theme-color status and the inherited presentation, for approved clients only. */
-  readonly watchAppearance: () => Stream.Stream<
-    LiveEnvelope<AppearanceLiveMessage>,
-    OperationError
-  >;
 }
 
 type Read<A> = Effect.Effect<Result<A>, unknown>;
@@ -121,9 +114,6 @@ function connectionDiff(sent: T3Connection, current: T3Connection): ConnectionLi
     ? [{ _tag: "checked", checkedAt: current.checkedAt }]
     : [{ _tag: "changed", connection: current }];
 }
-
-const appearanceDiff = (sent: T3Appearance, current: T3Appearance): AppearanceLiveMessage[] =>
-  Equal.equals(sent, current) ? [] : [{ _tag: "changed", appearance: current }];
 
 /** Complete replacements and removals of one list by stable id; undefined when nothing changed. */
 function listChanges<A extends { readonly id: string }>(
@@ -363,7 +353,6 @@ export function makeLiveStreams(
     readonly listFlows: () => Read<readonly FlowDraft[]>;
     /** One read transaction of every list. */
     readonly readStudio: () => Read<StudioDefinitions>;
-    readonly getAppearance: () => Effect.Effect<T3Appearance>;
   },
   /** One read transaction, so a view's navigation and Runs describe the same committed state. */
   consistently: <A>(read: Effect.Effect<A, OperationError>) => Effect.Effect<A, OperationError>,
@@ -420,14 +409,6 @@ export function makeLiveStreams(
         settled(reads.readStudio()),
         (studio) => [{ _tag: "snapshot", studio }],
         studioDiff,
-      ),
-    watchAppearance: () =>
-      watch(
-        changes,
-        { kind: "appearance" },
-        reads.getAppearance(),
-        (appearance) => [{ _tag: "snapshot", appearance }],
-        appearanceDiff,
       ),
   };
 }

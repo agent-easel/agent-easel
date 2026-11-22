@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
-import { appearanceFixture } from "./fixture/appearance.ts";
 import { definitionsFixture } from "./fixture/definitions.ts";
 import { firstRunSetupFixture } from "./fixture/first-run-setup.ts";
 import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
@@ -41,7 +40,6 @@ const modules = {
   github: githubFixture(github, host),
   definitions: definitionsFixture(host),
   projects: projectsFixture(host),
-  appearance: appearanceFixture(host),
   reporting: reportingFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),
   scenarios,

@@ -1,6 +1,6 @@
 import { reportFeature } from "./api.ts";
 import { useSyncExternalStore } from "react";
-import { APPEARANCE_COLOR_TOKENS, type AppearancePresentation } from "@t3-factory/contracts";
+import { APPEARANCE_COLOR_TOKENS, type CustomThemePresentation } from "@t3-factory/contracts";
 import type { AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 
@@ -52,26 +52,19 @@ function applyPreference(preference: AppearancePreference) {
   for (const listener of listeners) listener();
 }
 
-const inheritedColorsId = "factory-inherited-colors";
+const customColorsId = "factory-custom-colors";
 
-/**
- * Overlays the inherited halves of `presentation` on the baseline, one rule per mode, so the
- * local mode keeps choosing between them and a baseline half simply has no rule. `null`
- * restores Factory's own colors. Values are set through the CSSOM, never parsed as CSS text.
- */
-export function applyInheritedColors(presentation: AppearancePresentation | null) {
+export function applyCustomColors(presentation: CustomThemePresentation | null) {
   recolor(() => {
-    document.getElementById(inheritedColorsId)?.remove();
+    document.getElementById(customColorsId)?.remove();
     if (!presentation) return;
     const style = document.createElement("style");
-    style.id = inheritedColorsId;
-    style.dataset.revision = presentation.revision;
+    style.id = customColorsId;
     document.head.append(style);
     const sheet = style.sheet!;
     for (const mode of ["light", "dark"] as const) {
       const half = presentation.modes[mode];
-      if (half.kind !== "inherited") continue;
-      // `html:root` outranks the baseline's `:root[data-appearance]` regardless of order.
+      if (half.kind !== "custom") continue;
       const index = sheet.insertRule(
         `html:root[data-appearance="${mode}"] {}`,
         sheet.cssRules.length,
@@ -85,7 +78,6 @@ export function applyInheritedColors(presentation: AppearancePresentation | null
 
 export function startAppearance() {
   const preference = currentPreference();
-  // The system scheme may have changed since the blocking script set the initial mode.
   applyEffectiveAppearance(preference);
   syncThemeColor();
   window.matchMedia(systemSchemeQuery).addEventListener("change", () => {

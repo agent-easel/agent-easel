@@ -101,9 +101,10 @@ it.for([
   [21, serverUpdate],
   [22, serverUpdate],
   [23, serverUpdate],
-  [24, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [24, serverUpdate],
+  [25, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which may save a Flow without a Finish block, refuses a protocol %i server only when it predates 24",
+  "the current client, which drops WatchAppearance, refuses a protocol %i server only when it predates 25",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: protocol } });

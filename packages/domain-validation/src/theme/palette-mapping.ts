@@ -12,12 +12,8 @@ import {
   type Oklch,
   type Rgb,
 } from "./color.ts";
-import type { T3Theme, T3ThemePalette } from "./t3-theme-palettes.ts";
+import type { ResolvedTheme, T3ThemePalette } from "./t3-theme-palettes.ts";
 
-/**
- * Factory's own status and cyan colors per mode, as in apps/frontend/src/styles.css. Inherited
- * palettes keep these hue families and only move their lightness until they are readable.
- */
 const FACTORY_STATUS: Readonly<Record<Appearance, Readonly<Record<StatusToken, string>>>> = {
   dark: {
     destructive: "#ef4444",
@@ -47,18 +43,11 @@ type StatusToken =
   | "status-stopped"
   | "brand-cyan";
 
-/** WCAG AA for text, and for focus indicators against what they surround. */
 const TEXT_CONTRAST = 4.5;
 const NON_TEXT_CONTRAST = 3;
 
-/**
- * Lightness steps of Factory's derived neutral fills, as its baselines step them: toward white
- * in Dark and toward black in Light. They keep the base surface's own hue and chroma, so hover
- * and selection never take T3's accent color.
- */
 const NEUTRAL_STEP = { muted: [0.04, -0.035], hover: [0.08, -0.06], selected: [0.06, -0.05] };
 
-/** The extremes a label can be moved to: black and white. */
 const INKS: readonly Rgb[] = [
   { r: 0, g: 0, b: 0 },
   { r: 1, g: 1, b: 1 },
@@ -66,13 +55,8 @@ const INKS: readonly Rgb[] = [
 
 const modeLabel = (mode: Appearance) => (mode === "dark" ? "Dark" : "Light");
 
-/** Rejection carries the readable reason a whole mode falls back to Factory's colors. */
 class Unreadable extends Error {}
 
-/**
- * The color closest to `color` in lightness that reaches `minimum` contrast with every surface,
- * moving toward whichever of black or white can reach it. Fails when neither can.
- */
 function readable(color: Oklch, surfaces: readonly Rgb[], minimum: number, what: string): Rgb {
   const worst = (candidate: Rgb) =>
     Math.min(...surfaces.map((surface) => contrast(candidate, surface)));
@@ -100,7 +84,6 @@ function parsePalette(palette: T3ThemePalette) {
   return parsed as Record<keyof T3ThemePalette, Oklch>;
 }
 
-/** A Dark palette must have a dark canvas and a Light one a light canvas. */
 function readsAs(mode: Appearance, canvas: Rgb) {
   return mode === "dark" ? luminance(canvas) <= 0.2 : luminance(canvas) >= 0.4;
 }
@@ -118,8 +101,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
   const sidebar = toRgb(t3.sidebar);
   const selected = step(t3.sidebar, NEUTRAL_STEP.selected);
   const primary = toRgb(t3.accent);
-  // The action fill darkens on hover as the baselines do. Where no label could stay readable
-  // on both fills, the accent takes a dark label, and the hover fill lightens instead.
+
   const actionHover = (step: number) => toRgb({ ...t3.accent, l: t3.accent.l + step });
   const primaryHover = INKS.some((ink) =>
     [primary, actionHover(-0.06)].every((fill) => contrast(ink, fill) >= TEXT_CONTRAST),
@@ -129,7 +111,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
   const surfaces = [background, card, muted];
 
   const foreground = readable(t3.text, [...surfaces, hover], TEXT_CONTRAST, "text");
-  // Secondary text also sits on hovered rows and on the sidebar and its selected rows.
+
   const mutedForeground = readable(
     t3.textMuted,
     [...surfaces, hover, sidebar, selected],
@@ -201,30 +183,25 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
   return colors;
 }
 
-function presentMode(theme: T3Theme, mode: Appearance): AppearanceModeResult {
+function presentMode(theme: ResolvedTheme, mode: Appearance): AppearanceModeResult {
   const palette = theme.modes[mode];
   const fallback = `Factory’s ${modeLabel(mode)} colors are used.`;
   if (!palette)
     return {
       kind: "baseline",
-      explanation: `T3 theme “${theme.name}” has no ${modeLabel(mode)} colors. ${fallback}`,
+      explanation: `Theme “${theme.name}” has no ${modeLabel(mode)} colors. ${fallback}`,
     };
   try {
-    return { kind: "inherited", colors: mapMode(palette, mode) };
+    return { kind: "custom", colors: mapMode(palette, mode) };
   } catch (error) {
     if (!(error instanceof Unreadable)) throw error;
     return {
       kind: "baseline",
-      explanation: `T3 theme “${theme.name}” has ${modeLabel(mode)} colors with ${error.message}. ${fallback}`,
+      explanation: `Theme “${theme.name}” has ${modeLabel(mode)} colors with ${error.message}. ${fallback}`,
     };
   }
 }
 
-/**
- * Maps both modes of a T3 theme onto Factory's color tokens by meaning. Each mode is validated
- * on its own: a mode whose required text, focus or action colors cannot be made readable falls
- * back to Factory's baseline for that mode, never to partially inherited colors.
- */
-export function presentThemeModes(theme: T3Theme): Record<Appearance, AppearanceModeResult> {
+export function presentThemeModes(theme: ResolvedTheme): Record<Appearance, AppearanceModeResult> {
   return { light: presentMode(theme, "light"), dark: presentMode(theme, "dark") };
 }

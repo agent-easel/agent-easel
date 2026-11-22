@@ -223,31 +223,18 @@ Every connection and startup gate has an **Application settings** entry, includi
 browsers, and the preference works while offline. Visual rules are in the
 [design system](design-system.md#light-and-dark).
 
-When the T3 connection shares [T3 theme colors](t3-integration.md#theme-colors), the server delivers one
-presentation with a Light and a Dark half to approved clients and the host panel through live
-delivery. Each client uses the palette for its effective mode and falls back to Factory's
-colors when that palette is missing or rejected. The **Appearance** header shows **Following T3** when
-at least one mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise.
-The **T3 theme** card shows the theme name and which modes use its colors. Connection and access
-gates and unapproved clients
-receive no theme colors and use Factory's colors.
-
-Each client caches the last presentation its server published: one snapshot with both halves, in the
-storage of the browser profile for that Factory address, or of the desktop installation's bundled
-page. It holds colors, the theme name and the source and resolver identifiers, never a credential. The snapshot is bound to the identity of the Factory server and to
-its current theme-color source (the connection's T3 environment and the resolver pin), both of which the server tells only the host panel and approved clients. A client reads it
-only after that answer, for the same server and exactly that source, and when it is still exactly a
-sanitized presentation; after another T3 source it shows Factory's colors until live delivery answers. The same holds for a client that
-stays open through a reconnect: when the access check after it declares another source, the colors
-it was showing end there and return only with a later delivery from the server, not with the one
-the client already held. A matching snapshot is shown
-until live delivery answers and while offline. Appearance changes switch palettes immediately.
-Whatever the server publishes next replaces the snapshot, and a
-presentation without colors (another T3 source, no inherited theme) removes it. A client whose Factory access is missing, pending, denied or revoked deletes it without
-reading it. The first paint, every gate screen and the desktop window background always use
-Factory's colors for the effective mode. A browser cannot open
-at all while its Factory server is unreachable; the desktop app opens its unreachable screen in
-Factory's colors.
+Each desktop installation and each browser profile may also apply one custom color theme JSON in
+**Settings → Appearance** (pasted or uploaded as a `.json` file). The config uses T3's color theme
+format v1 (`appearance`, `canvas`, `accent`, `colors`, `variants`; unknown fields such as `css` are
+ignored) and is resolved, mapped onto Factory's color tokens and validated under the
+[contrast policy](design-system.md#custom-theme-colors) directly on the device. Each mode
+(`light` / `dark`) applies its custom colors independently and falls back to Factory's colors when
+missing or unreadable. The **Appearance** header shows **Custom colors** when at least one mode
+uses custom colors and **Factory colors** otherwise. **Reset to Factory** removes the custom config
+and restores Factory's colors. The validated presentation and source JSON are stored locally in the
+browser profile or desktop installation (`localStorage`), sync across browser tabs of the same
+origin, and never travel to or through the Factory server. If a browser blocks storage, the custom
+colors apply until the tab closes and Settings explains why.
 
 - On **desktop**, Factory saves the preference with the installation's other settings.
   The effective mode drives native window chrome, dialogs and the window background.

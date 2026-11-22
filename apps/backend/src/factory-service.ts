@@ -11,7 +11,6 @@ import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";
 import { makeFirstRunSetup } from "./first-run-setup.ts";
-import { makeAppearance } from "./appearance/appearance.ts";
 import { makeProjects } from "./projects.ts";
 import { makeDefinitions } from "./definitions.ts";
 import * as RuntimeSetup from "./runtime-setup.ts";
@@ -119,12 +118,6 @@ export const makeFactoryService = (
       telemetry,
       t3.projects,
       t3StateDirectory,
-    );
-    const appearance = yield* makeAppearance(
-      t3.appearance,
-      connection.getConnection,
-      intervalMs,
-      changes,
     );
     const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
@@ -356,7 +349,6 @@ export const makeFactoryService = (
       requestClientAccess: (input) => clients.requestClientAccess(input),
       getClientAccess: (credential) => clients.getClientAccess(credential),
       getServerId: () => clients.getServerId(),
-      getAppearanceSource: () => appearance.getAppearanceSource(),
       authenticateClient: (credential) => clients.authenticateClient(credential),
       listClients: () => clients.listClients(),
       approveClient: (id) => clients.approveClient(id),
@@ -404,7 +396,6 @@ export const makeFactoryService = (
                 }),
               ),
             ),
-          getAppearance: appearance.getAppearance,
         },
         (read) =>
           sql

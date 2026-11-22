@@ -275,7 +275,12 @@ export {
   validateStartPrompt,
   type StartPrompt,
 } from "./run-prompt.ts";
-export { parseAppearancePresentation } from "./appearance.ts";
+export {
+  parseCustomThemeJson,
+  parseStoredCustomTheme,
+  type CustomThemeParseResult,
+  type StoredCustomTheme,
+} from "./appearance.ts";
 export { buildOptions, hintedSelection, optionAvailability, optionValue } from "./model-options.ts";
 export {
   CANVAS_COORD_MAX,

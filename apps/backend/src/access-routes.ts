@@ -66,18 +66,14 @@ export function accessRoutes(
     (operation: () => Promise<Result<unknown>>) =>
     (): Effect.Effect<HttpServerResponse.HttpServerResponse> =>
       Effect.map(Effect.promise(operation), (result) => resultResponse(result));
-  /** The scope answer for the host or an approved client, bound to this server and its theme source. */
   const boundScope = async (scope: ClientScope) => {
     const server = await factory.getServerId();
     if (!server.ok) return resultResponse(server);
-    const source = await factory.getAppearanceSource();
-    if (!source.ok) return resultResponse(source);
     return resultResponse({
       ok: true,
       value: {
         ...scope,
         serverId: server.value,
-        appearanceSource: source.value,
       } satisfies ClientScope,
     });
   };
