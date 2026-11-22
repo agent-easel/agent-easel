@@ -195,7 +195,9 @@ test("a lost server connection marks the last observed view offline and disables
   await fixture.remoteAccess.offline();
 
   // Assert
-  await expect(screen.getByRole("status", "Offline")).toContainText("nothing is queued");
+  await expect(
+    screen.getByRole("navigation", "Sidebar footer").getByRole("status", "Offline"),
+  ).toHaveText(/^Offline · last observed \d{2}:\d{2}:\d{2}$/);
   await expect(screen.getByRole("button", "New Run (+)")).toBeDisabled();
   await expect(screen.getByRole("textbox", "Search Run titles")).toBeEnabled();
   await expect(screen.getByRole("link", /^Settings,/)).toBeEnabled();

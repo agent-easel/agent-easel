@@ -98,7 +98,9 @@ test("a lost live connection keeps the last Run read-only, then resynchronizes w
   await fixture.remoteAccess.online();
 
   // Assert
-  await expect(screen.getByRole("status", "Synchronizing")).toBeVisible({ timeout: 15_000 });
+  await expect(
+    screen.getByRole("navigation", "Sidebar footer").getByRole("status", "Synchronizing"),
+  ).toBeVisible({ timeout: 15_000 });
   await expect(notLive).toContainText("Not live");
   await expect(
     screen.getByRole("heading", /Live recovery · Tidy the project picker/),

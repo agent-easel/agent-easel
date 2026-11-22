@@ -42,7 +42,8 @@ The connection badge is green only when Connected, amber for authorization or ve
 red when disconnected. The sidebar Settings dot also checks reporting configuration for providers used by saved Agents:
 while Connected, a missing, outdated, unsupported or unreadable installation makes it amber with a labelled warning and
 opens **Agent reporting**. Unused providers do not raise this warning. Reporting inspection is neutral while loading;
-connection problems take precedence. The footer names problems, so status never relies on color. The
+connection problems take precedence. Factory **Offline** and **Synchronizing** take precedence over both in the footer,
+including when T3 is not set up. The footer names problems, so status never relies on color. The
 T3 connection pane shows the status and **Check again** in the header. The
 Connection card lists the address, T3 version, authorization and when the last
 check ran. An unsaved address opens for editing automatically on the host. A

@@ -16,8 +16,7 @@ const factoryLight = "rgb(255, 255, 255)";
 /** The canvases of the published themes: Nightfall's dark seed, and Dusk's seed and Light variant. */
 const nightfallDark = "rgb(20, 18, 31)";
 const duskLight = "rgb(255, 248, 235)";
-/** The Settings dialog hides the banner behind it from the accessibility tree. */
-const offlineBannerShown = `document.querySelector('[role="status"][aria-label="Offline"]') !== null`;
+const offlineStatusBehindSettingsDialog = `document.querySelector('[role="status"][aria-label="Offline"]') !== null`;
 /** Longer than any journey: a reopened page gets no live theme colors while it is set. */
 const noLiveDeliveryMs = 600_000;
 
@@ -212,7 +211,7 @@ test("an offline client switches Light and Dark immediately within the T3 theme 
   const { app, screen, browser, fixture } = journey;
   await clientWithCachedOcean(journey);
   await fixture.remoteAccess.offline();
-  await expect.poll(() => browser.evaluate(offlineBannerShown)).toBe(true);
+  await expect.poll(() => browser.evaluate(offlineStatusBehindSettingsDialog)).toBe(true);
 
   // Act
   await screen.getByRole("radio", "Light").tap();

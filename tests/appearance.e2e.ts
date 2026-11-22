@@ -326,10 +326,9 @@ test("an offline client switches to System and follows the device without its se
   await screen.getByRole("link", "Appearance", { exact: true }).tap();
   await screen.getByRole("radio", "Dark").tap();
   await fixture.remoteAccess.offline();
-  // The Settings dialog hides the banner from the accessibility tree.
-  await expect
-    .poll(() => browser.evaluate(() => !!document.querySelector('[aria-label="Offline"]')))
-    .toBe(true);
+  const offlineStatusBehindSettingsDialog = () =>
+    browser.evaluate(() => !!document.querySelector('[role="status"][aria-label="Offline"]'));
+  await expect.poll(offlineStatusBehindSettingsDialog).toBe(true);
 
   // Act
   await screen.getByRole("radio", "System").tap();
