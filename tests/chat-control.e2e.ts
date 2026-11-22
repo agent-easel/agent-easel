@@ -830,7 +830,7 @@ test("an actual conversation failure shows on the Language model page and marks 
   await app.screenshot("chat-model-runtime-problem");
 });
 
-type FixtureMessage = { channelId: string; content: string; customId: string | null };
+type FixtureMessage = { id: string; channelId: string; content: string; phrase: string | null };
 
 /** The messages the controlled Discord created once `until` holds, read again after short pauses. */
 async function messagesWhen(
@@ -850,10 +850,6 @@ const CARD = /^\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
 const cards = (messages: FixtureMessage[]) =>
   messages.filter((message) => CARD.test(message.content));
 
-/**
- * A participant's Start of `prompt`, confirmed with its button after Discord was told to meet the
- * next message creates with `faults`. Returns the thread and the number of cards before it.
- */
 async function confirmedStart(baseUrl: string | undefined, prompt: string, faults: MessageFault[]) {
   const project = await firstProject(baseUrl);
   const flows = (await (await fetch(new URL("/api/flows", baseUrl))).json()) as Result<
@@ -868,14 +864,14 @@ async function confirmedStart(baseUrl: string | undefined, prompt: string, fault
   };
   const { id: thread } = await discord(baseUrl).invoke({ content: `start: ${prompt}` });
   const messages = await messagesWhen(baseUrl, (created) =>
-    created.some((message) => message.channelId === thread && message.customId !== null),
+    created.some((message) => message.channelId === thread && message.phrase !== null),
   );
-  const { customId } = messages.find(
-    (message) => message.channelId === thread && message.customId !== null,
+  const review = messages.find(
+    (message) => message.channelId === thread && message.phrase !== null,
   )!;
   const before = cards(messages).length;
   await discord(baseUrl).fault({ faults });
-  await discord(baseUrl).click({ thread, customId: customId! });
+  await discord(baseUrl).confirm({ thread, messageId: review.id });
   return { thread, before };
 }
 
@@ -898,11 +894,6 @@ async function cardRunId(baseUrl: string | undefined, thread: string) {
   return navigation.value.find((entry) => entry.number === number)!.id;
 }
 
-/**
- * A participant's Start, confirmed with its button, whose status card create Discord performed but
- * whose answers were lost, also for both re-attempts under its nonce: Factory owes a card it
- * cannot prove either way. Afterwards Discord's nonce uniqueness window passes.
- */
 async function unknownCard(baseUrl: string | undefined) {
   const { thread, before } = await confirmedStart(
     baseUrl,

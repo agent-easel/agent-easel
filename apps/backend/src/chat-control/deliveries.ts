@@ -13,7 +13,6 @@ import type {
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
-import type { ConfirmationButton, DisabledButton } from "./confirmation-buttons.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 import { catchUpNotices } from "./report-notices.ts";
 import { withApplicationNotice } from "./status-cards.ts";
@@ -27,17 +26,9 @@ export interface Destination {
 
 export interface CreateMessageOptions {
   readonly nonce: string;
-  readonly button?: ConfirmationButton;
   readonly requesterId?: string;
 }
 
-/**
- * How the operating session sends Factory messages: `create` resolves with Discord's message ID
- * and asks Discord to enforce the create's `nonce`, `edit` replaces a message's text, `disable`
- * replaces a review's button with a disabled one, `reopen` unarchives an archived thread unless
- * Discord shows it locked, which Factory never undoes, and `locked` reads whether moderators
- * locked the thread.
- */
 export interface DiscordSender {
   readonly applicationId: string;
   readonly create: (
@@ -46,12 +37,6 @@ export interface DiscordSender {
     options: CreateMessageOptions,
   ) => Promise<string>;
   readonly edit: (destination: Destination, messageId: string, text: string) => Promise<void>;
-  readonly disable: (
-    destination: Destination,
-    messageId: string,
-    customId: string,
-    state: DisabledButton,
-  ) => Promise<void>;
   readonly reopen: (destination: Destination) => Promise<"open" | "reopened" | "locked">;
   readonly locked: (destination: Destination) => Promise<boolean>;
 }

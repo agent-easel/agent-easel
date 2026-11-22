@@ -2,7 +2,7 @@ import { savedFlow, placingGraph } from "./support/subflow.ts";
 import { assert, expect, it } from "@effect/vitest";
 import {
   besidesReports,
-  clicked,
+  confirmed,
   isStatusCard,
   proposedStart,
   runsOf,
@@ -561,9 +561,9 @@ it("removing only the initiating user from Access keeps the Run's card maintaine
 it("a regrant creates the card an Active Run never got because its destination was revoked", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.discord.faultMessages("refused");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await cardProblem(world.factory, "failed");
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
@@ -771,11 +771,11 @@ it("the host's Retry after a lost replacement creates one new card with the curr
 it("a card create Discord may already have performed is not repeated and is shown as unknown", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.discord.faultMessages(...unproven("lost"));
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   const settings = await cardProblem(world.factory, "unknown");
@@ -794,10 +794,10 @@ it("a Status card accepted before revocation stays unknown when its response is 
   // Arrange
   const world = await startingWorld(c);
   const known = await chatStartedRun(world);
-  const button = await proposedStart(world, "600000000000000002", 4);
+  const confirmation = await proposedStart(world, "600000000000000002", 4);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   world.discord.faultMessages("paused-lost");
-  await clicked(world.discord, button, "610000000000000002", 2);
+  await confirmed(world.discord, confirmation, "610000000000000002", 2);
   await world.discord.createdWhere(isStatusCard, 2);
   const posts = world.discord.requested("POST", MESSAGES).length;
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
@@ -827,11 +827,11 @@ it("a Status card accepted before revocation stays unknown when its response is 
 it("an Active Run gets its card after revocation and regrant when Discord refused its first POST", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   const posts = world.discord.requested("POST", MESSAGES).length;
   world.discord.faultMessages("paused-refusal");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.request("POST", MESSAGES, posts + 1);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
@@ -948,9 +948,9 @@ it("after revocation and regrant, warned Retry of an unknown card posts the curr
 it("Retry still requires duplicate-risk acceptance after a lost create response followed by a definite refusal", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000091010", 2);
+  const confirmation = await proposedStart(world, "600000000000091010", 2);
   world.discord.faultMessages("lost", "refused");
-  await clicked(world.discord, button, "610000000000091010", 1);
+  await confirmed(world.discord, confirmation, "610000000000091010", 1);
   const settings = await discordSettingsWhen(
     world.factory,
     (current) => current.delivery.problems.length > 0,

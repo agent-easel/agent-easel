@@ -286,7 +286,7 @@ confirmed, it clears nothing and says so privately. There is no message-text fal
 While Chat control is Off, **Check connection** in the page header opens one bounded connection-only Gateway
 session with the saved token at the saved revision. It waits at most 30 seconds for the session to
 become ready, reads the application and bot name Discord authenticated, looks up the allowed IDs'
-names, and disconnects. It attaches no conversation handler: it answers no message, button or command,
+names, and disconnects. It attaches no conversation handler: it answers no message or command,
 posts nothing, registers no command and makes no model request; messages arriving meanwhile are not
 serviced. Only one Gateway session exists at a time, so a check while another runs is refused, and
 closing Factory ends a running check's session. While Chat control is On there is no separate check:
@@ -361,8 +361,8 @@ indicator lapses, rechecking first that the invocation is still permitted, and s
 publication begins or the interpretation ends, fails, times out or is fenced; nothing is triggered
 while the Gateway connection is down. Typing is best effort: a failed trigger is not retried, is no
 delivery problem and changes no Settings state, and it never delays or extends interpretation. Denied
-or ignored traffic, oversized requests, reports, receipts, reset acknowledgements and button clicks
-show no typing.
+or ignored traffic, oversized requests, reports, receipts, reset acknowledgements and confirmation
+attempts show no typing.
 
 ### Finding and reading Runs
 
@@ -554,45 +554,58 @@ another saved Flow has the same name) and the Project, then the exact prompt in 
 its Agents' current saved definitions, workspace included, are resolved at confirmation without
 another review, and the Run's automatic title is the prompt's first non-empty line. A
 review is at most 32,000 Unicode characters and goes out as fully visible ordered messages; only
-after every part was delivered does Factory post the last message with one **Confirm** button, which
-says that only the requester can confirm and when the review expires, as a Discord relative
-timestamp. A part that fails, or a
-button Discord definitely refused, leaves nothing to confirm and Factory says so. Before each part
-and before the button, Factory checks again that the proposal is still pending, Chat control is On,
-Access still allows the requester and the targeted Projects in that channel, the requester's Discord
-access is current and the conversation was not reset; otherwise it stops posting the review, posts
-no button and the proposal is not presented.
+after every part was delivered does Factory post the last message, which mentions the requester and
+shows the review's [confirmation phrase](#confirmation), says that only the requester can confirm and
+when the review expires, as a Discord relative timestamp. A part that fails, or a last message
+Discord definitely refused, leaves nothing to confirm and Factory says so. Before each part and
+before the last message, Factory checks again that the proposal is still pending, Chat control is
+On, Access still allows the requester and the targeted Projects in that channel, the requester's
+Discord access is current and the conversation was not reset; otherwise it stops posting the review,
+posts no phrase and the proposal is not presented.
 
 The consent is bound to the requester, the operating application, the thread, the exact operation
-and parameters and the model's call that proposed it. The button's first dispatch fixes its lifetime
-at five minutes; nothing renews it, including an uncertain delivery or a restart. Asking again for the
-identical action while its review waits points to the existing button instead of posting another. A
+and parameters and the model's call that proposed it. The last message's first dispatch fixes its
+lifetime at five minutes; nothing renews it, including an uncertain delivery or a restart. Asking again
+for the identical action while its review waits points to the existing review instead of posting
+another. A
 new proposal by the same requester in the same thread for the same operation and primary target (a
 Start's Project, a Human answer's occurrence, an Archive's Run) with different parameters is a
 correction: it ends every earlier pending review of that target as superseded before its own review is
 posted, whether or not the model named one. Proposals for other targets stay independent unless the
 model names the one it supersedes; expired and confirmed proposals are never changed. A reply such as "yes" is never
-consent: the model is told to point to the button, and later turns see each proposal's current state
+consent: the model is told to point to the review's phrase, and later turns see each proposal's current state
 (waiting, expired, accepted with the Run's identity, rejected or no longer valid) as a Factory fact,
 so a status question reads it instead of proposing the action again. A waiting confirmation occupies no
 place in the conversation's queue, and a reset or clearing removes the conversation, not the consent.
 
 ### Confirmation
 
-Only the requester's click within the lifetime, in the review's thread, confirms. Factory
-acknowledges each click as a deferred update of the button's message. A click that decides the
-review disables its button for everyone, as **✅ Confirmed** when Factory accepted the action or
-**🚫 No longer valid** when it definitively rejected it, and the result follows in the thread (an
-accepted Start's status card, otherwise the receipt); no private reply is sent. Every other click (someone else's, an expired, used or voided review, a denied
-or unconfirmed access check, a moment Factory cannot decide, an outcome still being established) gets
-a private ephemeral reply and leaves the button as it is, so a requester whose consent is still live
-or still being reconciled can click again. It checks again that Chat control is On, Access still
-allows the requester in that channel with the targeted Project, the application is still the
-one Factory operates as and the requester's Discord access is current, then takes the consent and performs the
-action with no model request and outside any database transaction. A click by someone else, a denied
-or unconfirmed Discord access check and a click that arrives while Factory is momentarily unable to
-decide all leave the consent usable until it expires; a click after expiry does nothing, even if the
-button was pressed earlier.
+A review's **confirmation phrase** is `confirm` followed by a one-time code of four characters from
+an alphabet without easily confused characters (no 0/O, 1/I/L, 2/Z, 5/S, 8/B, U/V or G/6). Each new
+review gets a fresh code, and live reviews in one thread never share one. Only the requester's
+Discord Reply to the review's last message, in the review's thread, whose text is exactly the phrase
+(Factory's own mention and surrounding spaces aside; letter case counts) within the lifetime
+confirms. A plain "yes", any other text, a wrong code, a message that is not a Reply to that message,
+someone else's reply, a reply after expiry and a reused phrase confirm nothing. There is no button
+and no setting that skips the phrase.
+
+Factory recognizes a confirmation attempt from its own records before anything reaches the language
+model: a Reply to a review's last message, or a message whose text is shaped like a phrase. Such a
+message is never interpreted. An attempt by a user Access does not allow there is ignored like any
+other message from them. An allowed user's attempt is taken once and decided; when it decides the
+review, nothing is posted for it: the review's last message shows **✅ Confirmed** when Factory
+accepted the action or **🚫 No longer valid** when it definitively rejected it, and the result
+follows in the thread (an accepted Start's status card, otherwise the receipt). Every other attempt
+(someone else's, not a Reply to the review, not the exact phrase, an expired, used or voided review, a
+denied or unconfirmed access check, a moment Factory cannot decide, an outcome still being
+established) gets a short public answer in the thread that mentions nobody, and a requester whose
+consent is still live or still being reconciled can reply again. Before taking the consent Factory
+checks again that Chat control is On, Access still allows the requester in that channel with the
+targeted Project, the application is still the one Factory operates as and the requester's Discord
+access is current, then performs the action with no model request and outside any database
+transaction. Someone else's attempt, a denied or unconfirmed Discord access check and an attempt that
+arrives while Factory is momentarily unable to decide all leave the consent usable until it expires;
+an attempt after expiry does nothing.
 
 The Start uses the shared Start operation with the action's own identity as its request ID, so the
 same validation, readiness checks and current-definition acceptance apply and a repeated attempt can
@@ -601,14 +614,14 @@ requester's guild membership and thread/parent-channel permissions from Discord,
 membership, and checks the live consent, expiry, On state, application and Project grants inside the Run
 acceptance transaction. Revocation permanently fences a pending acceptance even if access is later
 regranted; work already accepted remains attributable and recoverable. Discord denial or unresolved
-access after preflight refuses only that click and leaves otherwise-live consent at its original
+access after preflight refuses only that attempt and leaves otherwise-live consent at its original
 expiry; it cannot restore consent voided by a Factory Access or application change. A definitive local
 rejection, which proves nothing was started, uses the
-consent up. A duplicate or racing click, a lost answer and a restart reconcile that same request: an
+consent up. A duplicate or racing reply, a lost answer and a restart reconcile that same request: an
 attempt left without a recorded outcome is looked up by its request ID when Factory starts, and
-returns its consent (still bound to the original expiry) only when no Run was accepted. A repeated
-click by the requester after the decision gets the result privately, with current access required,
-and never a second public receipt.
+returns its consent (still bound to the original expiry) only when no Run was accepted. The
+requester's reply after the decision gets the result as a short answer, with current access
+required, and never a second receipt.
 
 A Human answer uses the shared Human answer operation, which records the action's identity with the
 answer in the same transaction. An occurrence that someone answered elsewhere, even with the same
@@ -620,22 +633,27 @@ accepts no answers; an attempt left without an outcome is looked up by the actio
 An Archive uses the shared Archive operation in the same way: the Run records the action's identity
 with the Archive, so a Run archived elsewhere rejects the confirmation and Factory requests no
 further worker interruption. Only an Archive this action performed requests interruption, and a
-repeated click, restart or reconciliation never archives or interrupts again.
+repeated reply, restart or reconciliation never archives or interrupts again.
 
 Consent survives restarts, Gateway outages, Off and On, Language model saves and the same
 application's token rotation, but only until it expires, and Off stops new confirmations. An Access
 save that removes the requester, the channel or the targeted Project voids matching consent for good;
 an application replacement voids the previous application's, including after switching back.
 
-Disabling buttons is best effort and never decides anything: every click is checked against the
-review's recorded state. Factory edits a review's button once, from a serving session, when the
-review becomes unusable: **⌛ Expired** at its original expiry, **↩️ Replaced** when a correction
-superseded it, **🚫 No longer valid** when an Access save voided it. It edits only buttons the serving
-application posted and only while the thread's channel still grants the review's Projects. A failed
-edit is ignored: it is not retried, is no delivery problem and shows nothing in Settings. Nothing is
-edited while Chat control is Off: a review that expired while no session served, or that an Access
-save voided while Chat control was Off, keeps its button as it is. The old bot's buttons are not
-edited after an application replacement.
+Showing a review's resolution is best effort and never decides anything: every attempt is checked
+against the review's recorded state. Factory edits a review's last message, replacing the phrase, once
+from a serving session when the review is decided or becomes unusable: **✅ Confirmed** or **🚫 No
+longer valid** once decided, **⌛ Expired** at its original expiry, **↩️ Replaced** when a correction
+superseded it, **🚫 No longer valid** when an Access save voided it. It edits only messages the
+serving application posted and only while the thread's channel still grants the review's Projects.
+A failed edit is ignored: it is not retried, is no delivery problem and shows nothing in Settings.
+Nothing is edited while Chat control is Off: a review that expired while no session served, or that
+an Access save voided while Chat control was Off, keeps its phrase as it is. The old bot's messages
+are not edited after an application replacement.
+
+Reviews posted with a **Confirm** button before the typed phrase replaced it expire when Factory is
+upgraded; their buttons stay as Discord shows them but confirm nothing, and their requesters ask for
+a fresh review.
 
 ### Receipts and delivery
 
@@ -670,10 +688,10 @@ and never repeated automatically; identical text or a missing copy is never take
 these current problems, with their destination and time, and confirmed actions whose outcome is
 still being reconciled. Retry of an unknown message first warns that Discord may show it twice;
 each Retry is one attempt, never repeats the action, and a new unknown outcome needs a new choice.
-Review parts and buttons follow the same nonce rule, so a button Discord already created is not posted
-twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the host: an
-uncertain review becomes usable only if its button is actually clicked, and otherwise expires so the
-requester asks again.
+Review parts and last messages follow the same nonce rule, so a last message Discord already created
+is not posted twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the
+host: an uncertain review becomes usable only if the requester actually replies to its last message
+with the phrase, and otherwise expires so the requester asks again.
 
 ### Originating thread
 
@@ -857,12 +875,14 @@ private answers to repeated, expired and superseded clicks, and deterministic re
 acknowledgement and clearing; status card edits and lifecycle notices; recovery after Off with an
 archived thread (unarchived without a wake-up message, card corrected, one catch-up labelled delivered
 late); and a locked thread left locked with its correction and a successful host Retry after unlocking.
-It predates the compact messages: the Start receipt and lifecycle notices it confirmed were removed
-since, and the compact review, card and notice texts are covered by automated tests only.
+It predates the compact messages and the typed confirmation phrase: the Start receipt and lifecycle
+notices it confirmed were removed since, the Confirm button it exercised was replaced by the phrase,
+and the compact review, card and notice texts and typed confirmation are covered by automated tests
+only.
 It found and fixed two incompatibilities: command registration replaced the application's other
 commands, and Discord accepts posts in a locked thread from a bot holding Manage Threads.
 
-Not qualified live: another participant's click, private-thread membership evidence, several servers,
+Not qualified live: another participant's confirmation attempt, private-thread membership evidence, several servers,
 same-thread reply-target payloads, uncertain-create nonce reconciliation, rate limits, the active-thread
 limit, deleted-card replacement, application replacement and token rotation, a real model failure, the
 Anthropic provider, real T3 workers, and the desktop application or a remote approved-client device.

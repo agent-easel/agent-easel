@@ -103,7 +103,6 @@ export interface CreatedMessage {
   readonly channelId: string;
   /** The current text: edits replace it. */
   content: string;
-  /** The current components: edits and interaction updates replace them. */
   components: unknown;
   /** The application whose bot authored it. */
   readonly applicationId: string;
@@ -111,13 +110,11 @@ export interface CreatedMessage {
 }
 type Fields = Record<string, unknown>;
 
-/**
- * How Factory answered one interaction: privately (an ephemeral reply or follow-up), or by
- * updating the message whose component was clicked, with the components it shows now.
- */
-export type InteractionAnswer =
-  | { readonly interactionId: string; readonly kind: "ephemeral"; readonly content: string }
-  | { readonly interactionId: string; readonly kind: "updated"; readonly components: unknown };
+type InteractionAnswer = {
+  readonly interactionId: string;
+  readonly kind: "ephemeral";
+  readonly content: string;
+};
 
 /** A REST request matched to a route, with its parsed body and the bot its token belongs to. */
 interface RouteRequest {
@@ -135,8 +132,6 @@ export interface GatewayEvent {
 }
 
 const MESSAGE_CONTENT_INTENT = 1 << 15;
-/** The interaction callback type acknowledging a component click by a later message update. */
-const DEFERRED_UPDATE_MESSAGE = 6;
 const EPHEMERAL = 1 << 6;
 
 /** A Discord user, as message authors and mentions carry it. */
@@ -279,13 +274,7 @@ export async function startControlledDiscord() {
   let channelLookupsPaused = false;
   /** Every text edit Discord applied, in order. */
   const edits: { readonly messageId: string; readonly content: string }[] = [];
-  /** Every edit of a message's components Discord applied, in order. */
-  const componentEdits: { readonly messageId: string; readonly components: unknown }[] = [];
-  /** Interactions by token: the clicked message and how Factory acknowledged them. */
-  const interactions = new Map<
-    string,
-    { readonly id: string; readonly messageId?: string; callbackType?: number }
-  >();
+  const interactions = new Map<string, { readonly id: string }>();
   const interactionAnswers: InteractionAnswer[] = [];
   const deletedThreads = new Set<string>();
   let activeThreadLimitReached = false;
@@ -308,11 +297,8 @@ export async function startControlledDiscord() {
   /** Delivers `event` to every ready, open Gateway session. */
   const deliver = (event: GatewayEvent) => {
     if (event.t === "INTERACTION_CREATE") {
-      const interaction = event.d as { id: string; token: string; message?: { id: string } };
-      interactions.set(interaction.token, {
-        id: interaction.id,
-        ...(interaction.message ? { messageId: interaction.message.id } : {}),
-      });
+      const interaction = event.d as { id: string; token: string };
+      interactions.set(interaction.token, { id: interaction.id });
     }
     for (const [session, socket] of sockets)
       if (session.ready && !session.closed) dispatch(socket, event);
@@ -567,10 +553,7 @@ export async function startControlledDiscord() {
           message.content = fields.content;
           edits.push({ messageId: message.id, content: message.content });
         }
-        if (fields.components !== undefined) {
-          message.components = fields.components;
-          componentEdits.push({ messageId: message.id, components: message.components });
-        }
+        if (fields.components !== undefined) message.components = fields.components;
         return {
           status: 200,
           body: sentMessage(match[1]!, botUser(bot), fields, { id: message.id }),
@@ -700,41 +683,15 @@ export async function startControlledDiscord() {
     RegExp,
     (request: Omit<RouteRequest, "bot" | "resumed">) => Answer,
   ])[] = [
-    [
-      "POST",
-      /^\/api\/v10\/interactions\/\d+\/([^/]+)\/callback$/,
-      ({ match, fields }) => {
-        const interaction = interactions.get(match[1]!);
-        if (interaction) interaction.callbackType = fields.type as number;
-        return { status: 204 };
-      },
-    ],
+    ["POST", /^\/api\/v10\/interactions\/\d+\/([^/]+)\/callback$/, () => ({ status: 204 })],
     [
       "PATCH",
       /^\/api\/v10\/webhooks\/(\d+)\/([^/]+)\/messages\/(?:@|%40)original$/,
-      ({ match, fields }) => {
-        const interaction = interactions.get(match[2]!);
-        // After a deferred message update, the original is the message whose component was used.
-        if (interaction?.callbackType === DEFERRED_UPDATE_MESSAGE) {
-          const message = created.find((entry) => entry.id === interaction.messageId);
-          if (!message) return unknownMessage;
-          if (fields.components !== undefined) message.components = fields.components;
-          if (typeof fields.content === "string") message.content = fields.content;
-          interactionAnswers.push({
-            interactionId: interaction.id,
-            kind: "updated",
-            components: message.components,
-          });
-          return {
-            status: 200,
-            body: sentMessage(message.channelId, user(match[1]!, "Factory bot", true), fields, {
-              id: message.id,
-              components: message.components,
-            }),
-          };
-        }
-        return privateAnswer(match[1]!, interaction, fields, { type: 20, flags: EPHEMERAL });
-      },
+      ({ match, fields }) =>
+        privateAnswer(match[1]!, interactions.get(match[2]!), fields, {
+          type: 20,
+          flags: EPHEMERAL,
+        }),
     ],
     [
       "POST",
@@ -975,17 +932,11 @@ export async function startControlledDiscord() {
     },
     /** Every message text edit Discord applied, in order. */
     edits,
-    /** Every edit of a message's components (its buttons) Discord applied, in order. */
-    componentEdits,
     /** How Factory answered interactions, in order. */
     interactionAnswers,
     /** Resolves once Factory answered `count` interactions in total. */
     answered(count: number) {
       return changed.wait(() => interactionAnswers.length >= count);
-    },
-    /** Resolves once Discord applied `count` component edits in total. */
-    componentsEdited(count: number) {
-      return changed.wait(() => componentEdits.length >= count);
     },
     /** Later message edits meet these faults in order, one each. */
     faultEdits(...faults: MessageFault[]) {
@@ -1283,87 +1234,6 @@ export function resetCommandEvent(options: {
         type: 1,
         options: [{ name: "reset", type: 1, options: [] }],
       },
-    },
-  };
-}
-
-/** The member payload interactions carry: the user and what Discord computed in the channel. */
-const interactionMember = (userId: string, permissions: bigint) => ({
-  user: user(userId, "participant", false),
-  roles: [],
-  joined_at: new Date(0).toISOString(),
-  deaf: false,
-  mute: false,
-  flags: 0,
-  permissions: String(permissions),
-});
-
-/** An INTERACTION_CREATE for a click on a message button with `customId` in a thread. */
-export function buttonEvent(options: {
-  readonly bot: ControlledDiscordBot;
-  readonly guildId: string;
-  readonly thread: { readonly id: string; readonly parentId: string; readonly private?: boolean };
-  readonly id: string;
-  readonly customId: string;
-  readonly userId?: string;
-  /** What Discord computed for the member in this channel, overwrites included. */
-  readonly permissions?: bigint;
-  /** The message carrying the button, as Discord shows it now. */
-  readonly message?: Pick<CreatedMessage, "id" | "content" | "components">;
-}): GatewayEvent {
-  const botUser = user(
-    options.bot.userId ?? options.bot.applicationId,
-    options.bot.username ?? "Factory bot",
-    true,
-  );
-  const channel = threadPayload({
-    id: options.thread.id,
-    guildId: options.guildId,
-    parentId: options.thread.parentId,
-    name: "thread",
-    private: options.thread.private ?? false,
-    members: new Set(),
-  });
-  return {
-    t: "INTERACTION_CREATE",
-    d: {
-      id: options.id,
-      application_id: options.bot.applicationId,
-      type: 3,
-      token: `interaction-token-${options.id}`,
-      version: 1,
-      guild_id: options.guildId,
-      channel_id: options.thread.id,
-      channel,
-      member: interactionMember(
-        options.userId ?? PARTICIPANT_ID,
-        options.permissions ?? MEMBER_PERMISSIONS,
-      ),
-      app_permissions: String(MEMBER_PERMISSIONS),
-      locale: "en-US",
-      guild_locale: "en-US",
-      entitlements: [],
-      authorizing_integration_owners: { "0": options.guildId },
-      context: 0,
-      message: {
-        id: options.message?.id ?? "800000000000000002",
-        type: 0,
-        channel_id: options.thread.id,
-        content: options.message?.content ?? "Confirm",
-        author: botUser,
-        timestamp: new Date(0).toISOString(),
-        edited_timestamp: null,
-        tts: false,
-        mention_everyone: false,
-        mentions: [],
-        mention_roles: [],
-        attachments: [],
-        embeds: [],
-        pinned: false,
-        components: options.message?.components ?? [],
-        flags: 0,
-      },
-      data: { custom_id: options.customId, component_type: 2 },
     },
   };
 }

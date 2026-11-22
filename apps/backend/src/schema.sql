@@ -309,8 +309,8 @@ CREATE TABLE chat_proposals (
   state TEXT NOT NULL CHECK (state IN ('preparing', 'presented', 'accepting', 'consumed', 'ended')),
   ended_reason TEXT CHECK (ended_reason IN ('failed', 'superseded', 'revoked', 'application')),
   created_at TEXT NOT NULL,
-  expires_at TEXT, button_message_id TEXT, button_settled INTEGER NOT NULL DEFAULT 0
-  CHECK (button_settled IN (0, 1)),
+  expires_at TEXT, confirmation_message_id TEXT, resolution_settled INTEGER NOT NULL DEFAULT 0
+  CHECK (resolution_settled IN (0, 1)), confirmation_code TEXT,
   CHECK ((state = 'ended') = (ended_reason IS NOT NULL)),
   CHECK (state = 'preparing' OR state = 'ended' OR expires_at IS NOT NULL)
 );

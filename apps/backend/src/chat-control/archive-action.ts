@@ -158,7 +158,7 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
   const tool: MutationTool = {
     name: "archive_run",
     description:
-      "Propose archiving one Run, which is also what a request to stop a Run means. Archive is final: it cancels owed automatic work and pending Human and Wait items and asks T3 once to interrupt the workers; it rolls nothing back. Nothing is archived now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Run first; when several could match, ask.",
+      "Propose archiving one Run, which is also what a request to stop a Run means. Archive is final: it cancels owed automatic work and pending Human and Wait items and asks T3 once to interrupt the workers; it rolls nothing back. Nothing is archived now: Factory posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Run first; when several could match, ask.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -175,7 +175,6 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
         const detail = yield* operations.getRun(identity.id);
         if (!detail.ok) return refused("unavailable", "Factory could not read this Run right now.");
         const review = archiveReview(identity, detail.value);
-        const confirmation = { label: "Confirm Archive" };
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
@@ -186,7 +185,6 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
           parameters: { runId: identity.id } satisfies ArchiveParameters as unknown as JSONValue,
           projectIds: [identity.project.id],
           review,
-          confirmation,
           targets: { run: runReference(identity), runId: identity.id, title: identity.title },
           supersedes: parsed.supersedes,
         } satisfies Proposed;

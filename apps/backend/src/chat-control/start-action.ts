@@ -259,7 +259,7 @@ export function startAction(operations: StartOperations) {
   const tool: MutationTool = {
     name: "start_run",
     description:
-      "Propose starting a Factory Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
+      "Propose starting a Factory Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -281,7 +281,6 @@ export function startAction(operations: StartOperations) {
           !flows.ok ||
             flows.value.some((other) => other.id !== flow.id && other.name === flow.name),
         );
-        const confirmation = { label: "Confirm Start" };
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
@@ -292,7 +291,6 @@ export function startAction(operations: StartOperations) {
           parameters: parameters as unknown as JSONValue,
           projectIds: [project.id],
           review,
-          confirmation,
           targets: {
             projectId: project.id,
             projectName: project.title,

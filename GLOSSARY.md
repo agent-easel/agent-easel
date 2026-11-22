@@ -423,6 +423,15 @@ among the users and a human among the Bot IDs. Listing a bot grants no chat auth
 [Chat control](docs/chat-control.md#access).
 _Avoid_: Treating a bot as an allowed user; deciding bot or human by name.
 
+**Confirmation phrase**:
+The exact text, `confirm` followed by a one-time four-character code, that a Chat control review's
+last message shows its requester. A **typed confirmation** is the requester's Discord Reply to that
+message with exactly the phrase within five minutes; it is single use, decided by Factory before any
+model call and the only way to confirm a Start, Human answer or Archive. See
+[Chat control](docs/chat-control.md#confirmation).
+_Avoid_: Confirm button; treating a "yes", a message that is not a Reply to the review, or someone
+else's reply as consent.
+
 **Originating thread**:
 The Discord thread a Run was requested in through a confirmed Chat control Start, recorded when Factory
 accepts the Run. It is where Factory reports on that Run, not ownership: any allowed participant may act

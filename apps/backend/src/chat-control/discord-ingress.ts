@@ -10,7 +10,6 @@ import {
   PermissionFlagsBits,
   RESTJSONErrorCodes,
   Routes,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type Interaction,
@@ -26,8 +25,7 @@ import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
 import { isAccessTestMessage, recordReached } from "./access-test.ts";
-import { isConfirmation, type ClickAnswer, type ConfirmationClick } from "./actions.ts";
-import { buttonRow } from "./confirmation-buttons.ts";
+import type { ChatActions } from "./actions.ts";
 import type { ConversationGenerations, ConversationKey } from "./conversations.ts";
 import {
   BUSY_REPLY,
@@ -71,8 +69,7 @@ interface IngressSession {
   readonly post: (key: ConversationKey, text: string) => Promise<unknown>;
   /** The reply target the current MESSAGE_CREATE payload carried, taken once. */
   readonly referenced: (messageId: string) => ReferencedMessage | undefined;
-  /** Decides a confirmation button click and how to answer it. */
-  readonly confirm: (click: ConfirmationClick) => Effect.Effect<ClickAnswer, unknown>;
+  readonly confirmations: Pick<ChatActions, "confirmationTarget" | "confirm">;
   /**
    * The Run a message this application published in `threadId` identifies, if Factory recorded
    * one for it. Only the identity is returned: the message's content is never imported.
@@ -399,27 +396,21 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       return invocation;
     });
 
-  /**
-   * Each evaluation establishes current Discord access. The immutable interaction permissions
-   * can refuse its click, but cannot authorize acceptance after waiting on external preflight.
-   */
   const requesterAccess = (
-    interaction:
-      | ChatInputCommandInteraction<"cached" | "raw">
-      | ButtonInteraction<"cached" | "raw">,
+    user: { readonly id: string; readonly guildId: string; readonly visible: boolean },
     thread: ThreadChannel,
   ) => {
     let qualified: EvidenceToken | undefined;
     const check = Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
       qualified = undefined;
-      const userId = interaction.user.id;
+      const userId = user.id;
       if (!thread.parentId || !(yield* permittedProjects(userId, thread.parentId))) return "denied";
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel)) return "denied";
-      const token = evidence.token(interaction.guildId);
+      if (!user.visible) return "denied";
+      const token = evidence.token(user.guildId);
       const access = yield* refreshedAccess(
         {
           applicationId,
-          guildId: interaction.guildId,
+          guildId: user.guildId,
           parentChannelId: thread.parentId,
           threadId: thread.id,
         },
@@ -439,11 +430,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
    * seconds and access checks may need Discord itself; its channel and thread, or nothing when
    * Discord refused the acknowledgement.
    */
-  const acknowledged = (
-    interaction:
-      | ChatInputCommandInteraction<"cached" | "raw">
-      | ButtonInteraction<"cached" | "raw">,
-  ) =>
+  const acknowledged = (interaction: ChatInputCommandInteraction<"cached" | "raw">) =>
     Effect.map(
       Effect.option(
         Effect.tryPromise(() => interaction.deferReply({ flags: MessageFlags.Ephemeral })),
@@ -463,7 +450,14 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       const { channel, thread } = place;
       let reply: keyof typeof RESET_REPLIES = channel ? "not-thread" : "unavailable";
       if (thread) {
-        const access = yield* requesterAccess(interaction, thread).check;
+        const access = yield* requesterAccess(
+          {
+            id: interaction.user.id,
+            guildId: interaction.guildId,
+            visible: interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel) === true,
+          },
+          thread,
+        ).check;
         reply = access === "permitted" ? "cleared" : access;
         if (access === "permitted" && session.operating())
           yield* generations.clear({
@@ -476,47 +470,63 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       yield* Effect.ignore(Effect.tryPromise(() => interaction.editReply(RESET_REPLIES[reply])));
     });
 
-  /**
-   * A confirmation button click: acknowledged at once as a deferred update of its message, then
-   * decided outside the gate, since performing an action may take longer than later events
-   * should wait. A click that decided the review disables the button for everyone; any other
-   * answer goes privately to the clicker and leaves the button as it is.
-   */
-  const confirmation = (interaction: ButtonInteraction<"cached" | "raw">) =>
+  const ownMention = new RegExp(`<@!?${botUserId}>`, "g");
+
+  const confirmationAttempt = (message: Message<true>, thread: ThreadChannel, parentId: string) =>
     Effect.gen(function* () {
-      if (!(yield* gate.withPermits(1)(firstDelivery(interaction.id)))) return;
-      const deferred = yield* Effect.option(Effect.tryPromise(() => interaction.deferUpdate()));
-      if (deferred._tag === "None") return;
-      const channel = interaction.channel;
-      const thread = channel?.isThread() ? channel : null;
-      const requester = thread ? requesterAccess(interaction, thread) : undefined;
-      const answer = yield* session.confirm({
-        customId: interaction.customId,
-        userId: interaction.user.id,
-        threadId: interaction.channelId,
+      const text = message.content.replace(ownMention, "").trim();
+      const repliedTo =
+        message.type === MessageType.Reply && message.reference?.messageId
+          ? {
+              messageId: message.reference.messageId,
+              byFactory: message.mentions.repliedUser?.id === botUserId,
+            }
+          : undefined;
+      const target = yield* session.confirmations.confirmationTarget(
+        applicationId,
+        thread.id,
+        repliedTo?.messageId,
+        text,
+      );
+      if (!target) return undefined;
+      session.referenced(message.id);
+      if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored" as const;
+      if (!(yield* firstDelivery(message.id))) return "ignored" as const;
+      return { proposalId: target.proposalId, text, repliedTo };
+    });
+
+  const confirmation = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    parentId: string,
+    attempt: Exclude<Effect.Success<ReturnType<typeof confirmationAttempt>>, "ignored" | undefined>,
+  ) =>
+    Effect.gen(function* () {
+      const requester = requesterAccess(
+        { id: message.author.id, guildId: message.guildId, visible: true },
+        thread,
+      );
+      const answer = yield* session.confirmations.confirm({
+        ...attempt,
+        authorId: message.author.id,
+        threadId: thread.id,
         applicationId,
         operating: session.operating,
-        access: requester?.check ?? Effect.succeed("unavailable"),
-        accessCurrent: () => requester?.current() ?? false,
+        access: requester.check,
+        accessCurrent: requester.current,
       });
-      if (answer.kind === "ephemeral")
-        return yield* Effect.ignore(
-          Effect.tryPromise(() =>
-            interaction.followUp({
-              content: answer.text,
-              flags: MessageFlags.Ephemeral,
-              allowedMentions: { parse: [] },
-            }),
-          ),
-        );
-      // Editing the message is an external send, which never happens while Chat control is Off.
-      if (session.operating())
+      if (answer.kind === "reply" && session.operating())
         yield* Effect.ignore(
           Effect.tryPromise(() =>
-            interaction.editReply({
-              components: buttonRow(answer.customId, { disabled: answer.state }),
-              allowedMentions: { parse: [] },
-            }),
+            session.post(
+              {
+                applicationId,
+                guildId: message.guildId,
+                parentChannelId: parentId,
+                threadId: thread.id,
+              },
+              answer.text,
+            ),
           ),
         );
     });
@@ -527,10 +537,6 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   const gate = Semaphore.makeUnsafe(1);
 
   return {
-    /**
-     * A Discord message; only explicit authorized invocations go further, and a reply to the
-     * access test only answers it.
-     */
     message: (message: Message) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -543,6 +549,13 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           if (answered === "reached" && session.operating())
             yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
           if (answered) return;
+          if (thread) {
+            const attempt = yield* gate.withPermits(1)(
+              confirmationAttempt(message, thread, parentId),
+            );
+            if (attempt === "ignored") return;
+            if (attempt) return yield* confirmation(message, thread, parentId, attempt);
+          }
           const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
           if (!invocation) return;
           yield* Effect.promise(() =>
@@ -550,16 +563,10 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           );
         }),
       ),
-    /**
-     * A Discord interaction; only `/factory reset` and confirmation buttons of this application
-     * are handled.
-     */
     interaction: (interaction: Interaction) =>
       Effect.gen(function* () {
         if (!session.operating() || !interaction.inGuild()) return;
         if (interaction.applicationId !== applicationId) return;
-        if (interaction.isButton() && isConfirmation(interaction.customId))
-          return yield* confirmation(interaction);
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName !== "factory") return;
         if (interaction.options.getSubcommand(false) !== "reset") return;

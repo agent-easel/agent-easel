@@ -39,10 +39,9 @@ export const applyAccessRevocation = (
         !access.users.includes(row.requester_id) ||
         ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );
-    // Buttons voided while Chat control is Off are never edited later: nothing is sent for Off.
     if (voided.length > 0)
       yield* sql`UPDATE chat_proposals SET state='ended',ended_reason='revoked',
-          button_settled=CASE WHEN (SELECT enabled FROM chat_control_state WHERE singleton=1)=1 THEN button_settled ELSE 1 END
+          resolution_settled=CASE WHEN (SELECT enabled FROM chat_control_state WHERE singleton=1)=1 THEN resolution_settled ELSE 1 END
         WHERE id IN ${sql.in(voided.map((row) => row.id))}`;
     const owed = yield* sql<{
       id: string;
@@ -95,12 +94,6 @@ export const applyAccessRevocation = (
     return voided.map((row) => row.id);
   });
 
-/**
- * Retires the live proposals of an application being replaced: its buttons can never confirm
- * again, even if that application operates again later. Owed receipts stay owed. Call inside the
- * transaction that records the replacing application; returns the retired proposals, whose Runs
- * the caller hints once it committed.
- */
 export const retireApplicationProposals = (sql: SqlClient.SqlClient, applicationId: string) =>
   Effect.map(
     sql<{ id: string }>`UPDATE chat_proposals SET state='ended',ended_reason='application'
