@@ -809,9 +809,9 @@ and a duplicate warning for an unproven create.
 
 ## Support limits
 
-The pinned AI SDK packages are `ai` 7.0.172, `@ai-sdk/openai-compatible` 3.0.92 and
-`@ai-sdk/anthropic` 4.0.104. The pinned Discord packages are `chat` 4.44.0 and
-`@chat-adapter/discord` 4.44.0, with `discord.js` 14.28.1 and `@discordjs/ws` 1.2.3, the versions the
+The pinned AI SDK packages are `ai` 7.0.178, `@ai-sdk/openai-compatible` 3.0.94 and
+`@ai-sdk/anthropic` 4.0.107. The pinned Discord packages are `chat` 4.45.0 and
+`@chat-adapter/discord` 4.45.0, with `discord.js` 14.28.1 and `@discordjs/ws` 1.2.3, the versions the
 adapter resolves. Factory supplies its own Gateway shard strategy because `@discordjs/ws` 1.2.3 can
 leave a session that is destroyed before it is ready reconnecting. Chat SDK runs with its `concurrent`
 strategy because its queue merges queued messages and its drop strategy loses admitted ones; Factory
@@ -827,7 +827,9 @@ uniqueness window pass. Factory does not search for copies an unknown create may
 
 ### Live qualification
 
-One live qualification ran these pins against the real Discord Gateway and REST API with one
+One live qualification ran the earlier pins (`ai` 7.0.172, `@ai-sdk/openai-compatible` 3.0.92,
+`@ai-sdk/anthropic` 4.0.104, `chat` 4.44.0, `@chat-adapter/discord` 4.44.0, `discord.js` 14.28.1 and
+`@discordjs/ws` 1.2.3) against the real Discord Gateway and REST API with one
 application, one server, one allowlisted channel and one human participant, and against an
 OpenAI-compatible local model gateway, with a disposable Factory home and a simulated T3 engine
 (no real workers). It confirmed: the synthetic model Test; the Off connection-only check (real

@@ -894,7 +894,7 @@ test("the host retries a status card Discord may already show only after a dupli
   ).toBeVisible();
   // The dialog fades in; the Run sidebar's progress indicators never settle.
   await browser.evaluate(
-    "Promise.all([...document.querySelectorAll('[role=alertdialog]')].flatMap((element) => element.getAnimations()).map((animation) => animation.finished))",
+    "Promise.all([...document.querySelectorAll('[role=alertdialog]')].flatMap((element) => element.getAnimations()).map((animation) => animation.finished)).then(() => null)",
   );
   await app.screenshot("chat-discord-delivery-retry-warning");
 

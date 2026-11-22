@@ -156,7 +156,7 @@ export async function beforeCopiedEditedFlow(fixtures: StudioFixtures, prefix: s
   await expect(screen.getByRole("button", "Copy as JSON", { exact: true })).toBeVisible();
   await screen.getByLabel("Flow name", { exact: true }).fill("");
   await browser.evaluate(
-    "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.copiedFlowJson = text; } } })",
+    "void Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.copiedFlowJson = text; } } })",
   );
   return {
     app: fixtures.app,
@@ -190,7 +190,7 @@ export async function beforeFlowJsonFallback(fixtures: StudioFixtures, prefix: s
   })();
   const { browser } = state;
   await browser.evaluate(
-    "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Permission denied'); } } })",
+    "void Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Permission denied'); } } })",
   );
   return { ...state };
 }

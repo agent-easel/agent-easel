@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
-  "minimumVersion": "3.38.1",
+  "minimumVersion": "3.45.0",
   "failOnParseError": true,
   "entry": [
     // Only files executed by path that fallow cannot discover from package.json scripts,
@@ -20,6 +20,8 @@
   ],
   // Vite serves apps/frontend/public at the site root, which fallow does not resolve.
   "ignoreUnresolvedImports": ["/appearance.js"],
+  // System binaries invoked via child_process rather than npm packages.
+  "ignoreBinaries": ["chflags", "clang++", "tailscale"],
   "rules": {
     // Treat every enabled advisory rule as an error, including direct `fallow` runs.
     "unused-dev-dependencies": "error",

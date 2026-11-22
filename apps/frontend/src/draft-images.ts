@@ -1,5 +1,5 @@
-import { sha256 } from "@noble/hashes/sha2";
-import { bytesToHex } from "@noble/hashes/utils";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import type { RunImage, RunImageMimeType } from "@t3-factory/contracts";
 import { imageSignatureMime, RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
 

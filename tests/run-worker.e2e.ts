@@ -848,7 +848,7 @@ test("Settle confirmation cancels without changes, then stops workers and settle
   await expect(dialog).toContainText("Factory asks T3 to stop the working Agent");
   await expect(dialog.getByRole("button", "Cancel", { exact: true })).toBeFocused();
   await browser.evaluate(
-    "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
+    "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
   );
   await app.screenshot("settle-confirmation");
   await dialog.getByRole("button", "Cancel", { exact: true }).tap();

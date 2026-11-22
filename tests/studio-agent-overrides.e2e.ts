@@ -14,7 +14,7 @@ import type { StudioFixtures } from "./support/studio.ts";
 const viewport = { width: 1440, height: 900 };
 /** Settles dialog and menu transitions before a screenshot. */
 const settled =
-  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
+  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)";
 
 /**
  * A new global Agent open in Studio with the Override for a Project dialog, opened from its model

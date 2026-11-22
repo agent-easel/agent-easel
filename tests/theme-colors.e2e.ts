@@ -193,10 +193,13 @@ test("a default theme in a format Factory does not support returns to Factory's 
   await app.screenshot("theme-colors-published-unsupported-format");
 });
 
-test("an approved client reopening before live delivery answers shows its cached T3 theme", async (journey) => {
+test("an approved client reopening before live delivery answers shows its cached T3 theme", async ({
+  app,
+  screen,
+  browser,
+}) => {
   // Arrange
-  const { app, browser } = journey;
-  const { appearance } = await clientWithCachedOcean(journey);
+  const { appearance } = await clientWithCachedOcean({ app, screen, browser });
   await delayLiveSnapshots(app, noLiveDeliveryMs);
 
   // Act
@@ -207,10 +210,14 @@ test("an approved client reopening before live delivery answers shows its cached
   await app.screenshot("theme-colors-cached-reopen-dark");
 });
 
-test("an offline client switches Light and Dark immediately within the T3 theme it holds", async (journey) => {
+test("an offline client switches Light and Dark immediately within the T3 theme it holds", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
   // Arrange
-  const { app, screen, browser, fixture } = journey;
-  await clientWithCachedOcean(journey);
+  await clientWithCachedOcean({ app, screen, browser });
   await fixture.remoteAccess.offline();
   await expect.poll(() => browser.evaluate(offlineBannerShown)).toBe(true);
 
@@ -223,10 +230,14 @@ test("an offline client switches Light and Dark immediately within the T3 theme 
   await screen.getByRole("radio", "Dark").tap();
 });
 
-test("a client whose Factory access was revoked keeps no cached theme", async (journey) => {
+test("a client whose Factory access was revoked keeps no cached theme", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
   // Arrange
-  const { app, screen, browser, fixture } = journey;
-  const { appearance } = await clientWithCachedOcean(journey);
+  const { appearance } = await clientWithCachedOcean({ app, screen, browser });
   await fixture.remoteAccess.revoke();
 
   // Act
@@ -239,10 +250,13 @@ test("a client whose Factory access was revoked keeps no cached theme", async (j
   await app.screenshot("theme-colors-access-revoked-baseline");
 });
 
-test("a T3 default that no longer colors Factory leaves a reopening client nothing to restore", async (journey) => {
+test("a T3 default that no longer colors Factory leaves a reopening client nothing to restore", async ({
+  app,
+  screen,
+  browser,
+}) => {
   // Arrange
-  const { app, browser, screen } = journey;
-  const { colors, appearance } = await clientWithCachedOcean(journey);
+  const { colors, appearance } = await clientWithCachedOcean({ app, screen, browser });
   await colors.setDefaultTheme("");
   const theme = screen.getByRole("region", "T3 theme");
   await expect(theme.getByText("None set in T3")).toBeVisible();

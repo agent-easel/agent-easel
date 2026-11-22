@@ -230,6 +230,25 @@ test("Flow Duplicate into Global keeps or copies global Agents, copies the Proje
   await app.screenshot("flow-duplicate-opened");
 });
 
+async function waitForImportedRoute(
+  browser: StudioFixtures["browser"],
+  review: ReturnType<Screen["getByRole"]>,
+  kind: "flows" | "agents",
+  before: ReadonlySet<string>,
+) {
+  await expect(review).toHaveCount(0);
+  const pattern = new RegExp(`^/studio/${kind}/([^/]+)$`);
+  await expect
+    .poll(async () => {
+      const id = pattern.exec(new URL(await browser.url()).pathname)?.[1];
+      return Boolean(id && !before.has(id));
+    })
+    .toBe(true);
+  const openedId = new URL(await browser.url()).pathname.split("/").at(-1)!;
+  assert.ok(!before.has(openedId));
+  return openedId;
+}
+
 test("Import creates the file's definitions in the chosen target Project", async ({
   app,
   screen,
@@ -255,9 +274,11 @@ test("Import creates the file's definitions in the chosen target Project", async
   await review.getByRole("button", "Import", { exact: true }).tap();
 
   // Assert
+  const openedFlowId = await waitForImportedRoute(browser, review, "flows", before);
   await expect(screen.getByLabel("Flow name")).toHaveValue("Northwind release");
   const imported = (await listFlows(app.baseUrl)).filter((flow) => !before.has(flow.id));
   assert.equal(imported.length, 1);
+  assert.equal(imported[0]!.id, openedFlowId);
   assert.equal(imported[0]!.projectId, northwind.projectId);
   await app.screenshot("import-target-opened");
 });
@@ -284,18 +305,18 @@ test("Import on the Agents list creates the file's Agent and opens it", async ({
   await app.screenshot("agents-import");
   await screen.getByRole("button", "Import", { exact: true }).tap();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
-  await screen
-    .getByRole("dialog", /^Import “/)
-    .getByRole("button", "Import", { exact: true })
-    .tap();
+  const review = screen.getByRole("dialog", /^Import “/);
+  await review.getByRole("button", "Import", { exact: true }).tap();
 
   // Assert
   assert.equal(await browser.evaluate("document.body.dataset.chooserOpened"), "true");
+  const openedId = await waitForImportedRoute(browser, review, "agents", before);
   await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(source.name);
   const imported = (await listAgentDefinitions(app.baseUrl)).filter(
     (agent) => !before.has(agent.id),
   );
   assert.equal(imported.length, 1);
+  assert.equal(imported[0]!.id, openedId);
   assert.equal(imported[0]!.name, source.name);
 });
 
