@@ -10,6 +10,7 @@ import { now } from "../time.ts";
 import { forgetRemovedFromTest, readAccessTest } from "./access-test.ts";
 import { clearConversations } from "./conversations.ts";
 import type { DiscordIds, DiscordNames } from "./discord-gateway.ts";
+import type { Requesters } from "./requesters.ts";
 import { applyAccessRevocation } from "./revocation.ts";
 
 type AccessRow = { revision: number; saved_at: string | null };
@@ -68,6 +69,14 @@ export const readAccess = (sql: SqlClient.SqlClient) =>
     } satisfies DiscordAccessConfiguration;
   });
 
+const listed = (sql: SqlClient.SqlClient, userId: string, requesters: Requesters) => {
+  const users = sql`EXISTS (SELECT 1 FROM chat_access_users WHERE user_id=${userId})`;
+  const bots = sql`EXISTS (SELECT 1 FROM chat_access_bots WHERE user_id=${userId})`;
+  if (requesters === "human") return users;
+  if (requesters === "bot") return bots;
+  return sql`(${users} OR ${bots})`;
+};
+
 /**
  * The Factory Projects a parent channel grants to an allowed user right now: empty unless the user
  * and the channel are both listed. A granted Project Factory no longer knows grants nothing.
@@ -76,12 +85,12 @@ export const grantedProjects = (
   sql: SqlClient.SqlClient,
   userId: string,
   parentChannelId: string,
+  requesters: Requesters,
 ) =>
   Effect.map(
     sql<{ project_id: string }>`SELECT g.project_id FROM chat_access_channel_projects g
       JOIN projects p ON p.id=g.project_id
-      WHERE g.channel_id=${parentChannelId}
-        AND EXISTS (SELECT 1 FROM chat_access_users WHERE user_id=${userId})
+      WHERE g.channel_id=${parentChannelId} AND ${listed(sql, userId, requesters)}
       ORDER BY g.position`,
     (rows) => rows.map((row) => row.project_id),
   );

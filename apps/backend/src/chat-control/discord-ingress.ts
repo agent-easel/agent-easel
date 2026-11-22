@@ -24,6 +24,7 @@ import { isSqlError } from "effect/sql/SqlError";
 import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
+import type { RequesterKind } from "./requesters.ts";
 import { isAccessTestMessage, recordReached } from "./access-test.ts";
 import type { ChatActions } from "./actions.ts";
 import type { ConversationGenerations, ConversationKey } from "./conversations.ts";
@@ -136,22 +137,25 @@ export const registerCommands = (client: Client<true>, applicationId: string) =>
 
 type Access = "permitted" | "denied" | "unavailable";
 
-/**
- * Where an explicit invocation was made: a new human message of an ordinary type that mentions
- * or replies to the bot in a text or announcement channel or a thread, a forum post included.
- * Anything else is ignored.
- */
 function explicitInvocation(message: Message<true>, botUserId: string) {
-  if (message.author.bot || message.webhookId !== null || message.system) return undefined;
+  if (message.webhookId !== null || message.system || message.author.id === botUserId)
+    return undefined;
   if (message.type !== MessageType.Default && message.type !== MessageType.Reply) return undefined;
   const invoked =
     message.mentions.users.has(botUserId) || message.mentions.repliedUser?.id === botUserId;
   if (!invoked) return undefined;
+  const kind: RequesterKind = message.author.bot ? "bot" : "human";
+  const requester = {
+    kind,
+    named: new RegExp(`<@!?${botUserId}>`).test(message.content),
+  };
   const channel = message.channel;
   if (channel.isThread())
-    return channel.parentId ? { thread: channel, parentId: channel.parentId } : undefined;
+    return channel.parentId
+      ? { thread: channel, parentId: channel.parentId, requester }
+      : undefined;
   return channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement
-    ? { thread: null, parentId: channel.id }
+    ? { thread: null, parentId: channel.id, requester }
     : undefined;
 }
 
@@ -190,8 +194,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       return rows.length > 0;
     });
 
-  const permittedProjects = (userId: string, parentChannelId: string) =>
-    Effect.map(grantedProjects(sql, userId, parentChannelId), (projects) => projects.length > 0);
+  const permittedProjects = (userId: string, kind: RequesterKind, parentChannelId: string) =>
+    Effect.map(
+      grantedProjects(sql, userId, parentChannelId, kind),
+      (projects) => projects.length > 0,
+    );
 
   /** Whether a private thread's member list includes the user, asked of Discord directly. */
   const privateThreadMember = (thread: ThreadChannel, userId: string) =>
@@ -252,6 +259,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   const permitted = (
     conversation: ConversationKey,
     requesterId: string,
+    requesterKind: RequesterKind,
     generation: number,
     initial: EvidenceToken,
     privateThread: boolean,
@@ -259,7 +267,8 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     let token = initial;
     return Effect.gen(function* () {
       if (!session.operating()) return false;
-      if (!(yield* permittedProjects(requesterId, conversation.parentChannelId))) return false;
+      if (!(yield* permittedProjects(requesterId, requesterKind, conversation.parentChannelId)))
+        return false;
       if (!(yield* generations.isCurrent(conversation, generation))) return false;
       if (evidence.isCurrent(token) && !privateThread) return true;
       const refreshed = evidence.token(conversation.guildId);
@@ -268,7 +277,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       token = refreshed;
       return (
         session.operating() &&
-        (yield* permittedProjects(requesterId, conversation.parentChannelId)) &&
+        (yield* permittedProjects(requesterId, requesterKind, conversation.parentChannelId)) &&
         (yield* generations.isCurrent(conversation, generation))
       );
     });
@@ -331,7 +340,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       if (testMessage === undefined) return undefined;
       if (!(yield* isAccessTestMessage(sql, parentId, testMessage))) return undefined;
       session.referenced(message.id);
-      if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored";
+      if (!(yield* permittedProjects(message.author.id, "human", parentId))) return "ignored";
       if (!(yield* firstDelivery(message.id))) return "ignored";
       yield* recordReached(sql, message.author.id);
       return "reached";
@@ -341,9 +350,14 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
    * Authorizes and records an invocation, creating its thread, and queues it in its conversation;
    * the conversation, or nothing when it was not admitted.
    */
-  const admitMessage = (message: Message<true>, thread: ThreadChannel | null, parentId: string) =>
+  const admitMessage = (
+    message: Message<true>,
+    thread: ThreadChannel | null,
+    parentId: string,
+    requesterKind: RequesterKind,
+  ) =>
     Effect.gen(function* () {
-      if (!(yield* permittedProjects(message.author.id, parentId))) return undefined;
+      if (!(yield* permittedProjects(message.author.id, requesterKind, parentId))) return undefined;
       if (!(yield* firstDelivery(message.id))) return undefined;
       const token = evidence.token(message.guildId);
       const threadId =
@@ -363,6 +377,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         conversation,
         generation,
         requesterId: message.author.id,
+        requesterKind,
         messageId: message.id,
         text: message.content,
         replyTarget: yield* replyTarget(message, threadId),
@@ -370,6 +385,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         permitted: permitted(
           conversation,
           message.author.id,
+          requesterKind,
           generation,
           token,
           thread?.type === ChannelType.PrivateThread,
@@ -397,14 +413,20 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     });
 
   const requesterAccess = (
-    user: { readonly id: string; readonly guildId: string; readonly visible: boolean },
+    user: {
+      readonly id: string;
+      readonly kind: RequesterKind;
+      readonly guildId: string;
+      readonly visible: boolean;
+    },
     thread: ThreadChannel,
   ) => {
     let qualified: EvidenceToken | undefined;
     const check = Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
       qualified = undefined;
       const userId = user.id;
-      if (!thread.parentId || !(yield* permittedProjects(userId, thread.parentId))) return "denied";
+      if (!thread.parentId || !(yield* permittedProjects(userId, user.kind, thread.parentId)))
+        return "denied";
       if (!user.visible) return "denied";
       const token = evidence.token(user.guildId);
       const access = yield* refreshedAccess(
@@ -417,7 +439,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         userId,
       );
       if (access !== "permitted") return access;
-      if (!(yield* permittedProjects(userId, thread.parentId))) return "denied";
+      if (!(yield* permittedProjects(userId, user.kind, thread.parentId))) return "denied";
       if (!evidence.isCurrent(token) || !session.operating()) return "unavailable";
       qualified = token;
       return "permitted";
@@ -453,6 +475,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         const access = yield* requesterAccess(
           {
             id: interaction.user.id,
+            kind: interaction.user.bot ? "bot" : "human",
             guildId: interaction.guildId,
             visible: interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel) === true,
           },
@@ -472,7 +495,12 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
 
   const ownMention = new RegExp(`<@!?${botUserId}>`, "g");
 
-  const confirmationAttempt = (message: Message<true>, thread: ThreadChannel, parentId: string) =>
+  const confirmationAttempt = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    parentId: string,
+    requester: { readonly kind: RequesterKind; readonly named: boolean },
+  ) =>
     Effect.gen(function* () {
       const text = message.content.replace(ownMention, "").trim();
       const repliedTo =
@@ -485,9 +513,12 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       );
       if (!target) return undefined;
       session.referenced(message.id);
-      if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored" as const;
+      const ownReply = repliedTo !== undefined && target.requesterId === message.author.id;
+      if (requester.kind === "bot" && !requester.named && !ownReply) return "ignored" as const;
+      if (!(yield* permittedProjects(message.author.id, requester.kind, parentId)))
+        return "ignored" as const;
       if (!(yield* firstDelivery(message.id))) return "ignored" as const;
-      return { proposalId: target.proposalId, text, repliedTo };
+      return { proposalId: target.proposalId, text, repliedTo, requesterKind: requester.kind };
     });
 
   const confirmation = (
@@ -497,12 +528,13 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     attempt: Exclude<Effect.Success<ReturnType<typeof confirmationAttempt>>, "ignored" | undefined>,
   ) =>
     Effect.gen(function* () {
+      const { requesterKind, ...reply } = attempt;
       const requester = requesterAccess(
-        { id: message.author.id, guildId: message.guildId, visible: true },
+        { id: message.author.id, kind: requesterKind, guildId: message.guildId, visible: true },
         thread,
       );
       const answer = yield* session.confirmations.confirm({
-        ...attempt,
+        ...reply,
         authorId: message.author.id,
         threadId: thread.id,
         applicationId,
@@ -538,20 +570,27 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           if (!session.operating() || !message.inGuild()) return;
           const place = explicitInvocation(message, botUserId);
           if (!place) return;
-          const { thread, parentId } = place;
-          const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
-          // The reaction is an external send, which never happens while Chat control is Off.
-          if (answered === "reached" && session.operating())
-            yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
-          if (answered) return;
+          const { thread, parentId, requester } = place;
+          if (requester.kind === "human") {
+            const answered = yield* gate.withPermits(1)(
+              answerAccessTest(message, thread, parentId),
+            );
+            // The reaction is an external send, which never happens while Chat control is Off.
+            if (answered === "reached" && session.operating())
+              yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
+            if (answered) return;
+          }
           if (thread) {
             const attempt = yield* gate.withPermits(1)(
-              confirmationAttempt(message, thread, parentId),
+              confirmationAttempt(message, thread, parentId, requester),
             );
             if (attempt === "ignored") return;
             if (attempt) return yield* confirmation(message, thread, parentId, attempt);
           }
-          const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
+          if (requester.kind === "bot" && !requester.named) return;
+          const invocation = yield* gate.withPermits(1)(
+            admitMessage(message, thread, parentId, requester.kind),
+          );
           if (!invocation) return;
           yield* Effect.promise(() =>
             session.handOff(session.encodeThreadId(invocation.conversation), message),

@@ -10,6 +10,7 @@ import { failure } from "../result.ts";
 import { newId } from "../ids.ts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
+import { ACTION_REQUESTERS } from "./requesters.ts";
 import type { ConversationKey } from "./conversations.ts";
 import {
   createDeduplicated,
@@ -287,8 +288,15 @@ export function makeChatActions(
     );
 
   const scopeGranted = (row: ProposalRow) =>
-    Effect.map(grantedProjects(sql, row.requester_id, row.parent_channel_id), (granted) =>
-      (JSON.parse(row.project_ids_json) as string[]).every((id) => granted.includes(id)),
+    Effect.map(
+      grantedProjects(
+        sql,
+        row.requester_id,
+        row.parent_channel_id,
+        ACTION_REQUESTERS[row.operation],
+      ),
+      (granted) =>
+        (JSON.parse(row.project_ids_json) as string[]).every((id) => granted.includes(id)),
     );
 
   /**
@@ -378,7 +386,12 @@ export function makeChatActions(
     Effect.gen(function* () {
       const row = yield* proposal(id);
       if (row?.state !== "preparing") return false;
-      const granted = yield* grantedProjects(sql, row.requester_id, row.parent_channel_id);
+      const granted = yield* grantedProjects(
+        sql,
+        row.requester_id,
+        row.parent_channel_id,
+        ACTION_REQUESTERS[row.operation],
+      );
       return proposed.projectIds.every((projectId) => granted.includes(projectId));
     });
 
@@ -614,11 +627,16 @@ export function makeChatActions(
     Effect.gen(function* () {
       const code = PHRASE_SHAPE.test(text) ? text.slice(text.indexOf(" ") + 1) : undefined;
       if (repliedTo === undefined && code === undefined) return undefined;
-      const [row] = yield* sql<{ id: string }>`SELECT id FROM chat_proposals
+      const [row] = yield* sql<{
+        id: string;
+        requester_id: string;
+      }>`SELECT id,requester_id FROM chat_proposals
         WHERE application_id=${applicationId} AND thread_id=${threadId}
           AND (confirmation_message_id=${repliedTo ?? null} OR confirmation_code=${code ?? null})
         ORDER BY confirmation_message_id=${repliedTo ?? null} DESC,created_at DESC LIMIT 1`;
-      return row || code !== undefined ? { proposalId: row?.id } : undefined;
+      return row || code !== undefined
+        ? { proposalId: row?.id, requesterId: row?.requester_id }
+        : undefined;
     });
 
   const confirm = (reply: ConfirmationReply) =>

@@ -60,16 +60,6 @@ interface SessionIngress {
 class FactoryDiscordAdapter extends DiscordAdapter {
   ingress: SessionIngress | undefined;
 
-  protected override async handleGatewayMessage(message: Message) {
-    await this.ingress?.message(message);
-  }
-
-  protected override async handleGatewayInteraction(interaction: Interaction) {
-    await this.ingress?.interaction(interaction);
-  }
-
-  protected override async handleGatewayReaction() {}
-
   protected override buildMessagePayload(
     ...args: Parameters<DiscordAdapter["buildMessagePayload"]>
   ) {
@@ -162,7 +152,12 @@ class FactoryDiscordAdapter extends DiscordAdapter {
   }
 
   listen(client: Client, isShuttingDown: () => boolean) {
-    this.setupLegacyGatewayHandlers(client, isShuttingDown);
+    client.on(Events.MessageCreate, (message: Message) => {
+      if (!isShuttingDown()) void this.ingress?.message(message);
+    });
+    client.on(Events.InteractionCreate, (interaction: Interaction) => {
+      if (!isShuttingDown()) void this.ingress?.interaction(interaction);
+    });
   }
 
   async startThread(channelId: string, messageId: string) {

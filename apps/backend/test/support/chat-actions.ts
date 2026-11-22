@@ -128,9 +128,10 @@ export async function proposed(
   messages: number,
   answer: MutationCall,
   content: string,
+  author: Pick<Parameters<typeof messageEvent>[0], "authorId" | "authorIsBot"> = {},
 ) {
   world.model.script(answer);
-  world.discord.deliver(invocation(id, { content }));
+  world.discord.deliver(invocation(id, { content, ...author }));
   await createdBesidesReports(world.discord, messages);
   const confirmation = confirmationIn(besidesReports(world.discord)[messages - 1]!);
   assert(confirmation !== undefined, "the last message asks for the confirmation phrase");
@@ -164,6 +165,7 @@ async function outcome(discord: ControlledDiscord, confirmation: Confirmation, a
 
 export interface ReplyOptions {
   readonly userId?: string;
+  readonly authorIsBot?: boolean;
   readonly text?: string;
   readonly asReply?: boolean;
   readonly replyTo?: string;
@@ -186,6 +188,7 @@ export function reply(
       channelId,
       id,
       authorId: options.userId ?? PARTICIPANT_ID,
+      authorIsBot: options.authorIsBot ?? false,
       content: options.text ?? confirmation.phrase,
       ...(options.asReply === false
         ? { mention: true }
