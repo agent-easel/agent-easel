@@ -11,6 +11,8 @@ import {
   twoWorkersStarted,
   turnBegins,
   resultReported,
+  report,
+  finishedReport,
   observeFor,
 } from "./support/scenarios.ts";
 
@@ -134,4 +136,35 @@ it("an empty approval fills its source slot and Finish records the Join as write
     output:
       "Join round 1\n\n## Entry worker (1) — Done\n\n```\nReady.\n```\n\n## Entry worker (2) — Approve\n\n```\n(no message)\n```",
   });
+});
+
+it("replaying an accepted result after restart leaves its forwarded Join round intact", async (c) => {
+  // Arrange
+  const f = await prepared(c, parallelJoinFlow);
+  const [first, second] = await twoWorkersStarted(f.world, f.input);
+  await resultReported(f.world, first, { message: "A1" });
+  await resultReported(f.world, second, { message: "B1" });
+  await observeFor(
+    "first pair reached both Human recipients",
+    f.world,
+    first.runId,
+    (r) => r.humanOccurrences.length === 2,
+  );
+  await f.reopen();
+
+  // Act
+  const replay = await report(f.world, second, finishedReport("B1"));
+
+  // Assert
+  expect(replay).toBe("ACCEPTED");
+  const read = await f.f.getRun(first.runId);
+  expect(read).toMatchObject({
+    ok: true,
+    value: {
+      joins: [{ round: 2, arrived: 0, queued: 0, latest: { outcome: "forwarded", round: 1 } }],
+    },
+  });
+  expect(read.ok && read.value.intents.filter((intent) => intent.blockId === "merge")).toHaveLength(
+    2,
+  );
 });
