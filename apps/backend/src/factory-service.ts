@@ -21,8 +21,12 @@ import type { GitAdapter } from "./adapters/git.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
-import type { RunListExtras } from "./runner/run-store/navigation.ts";
-import { runReadSource, type RunReadSource } from "./run-read-source.ts";
+import {
+  runListSource,
+  runReadSource,
+  type RunListSource,
+  type RunReadSource,
+} from "./run-read-source.ts";
 import { makeClientAccess } from "./client-access.ts";
 import { makeRunImages } from "./run-images.ts";
 import { makeRunTitles } from "./run-titles.ts";
@@ -56,7 +60,9 @@ export class FactoryService extends Context.Service<
     readonly runtime: RuntimeReports;
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
-    readonly listRunListExtras: (words: readonly string[]) => Effect.Effect<Result<RunListExtras>>;
+    readonly listRunReadSnapshot: (
+      words: readonly string[],
+    ) => Effect.Effect<Result<RunListSource>>;
     readonly readRunByReference: (
       reference: { id: string } | { number: number },
     ) => Effect.Effect<Result<RunReadSource | null>>;
@@ -368,6 +374,10 @@ export const makeFactoryService = (
       getHostLifecycle: () => clients.getHostLifecycle(),
     };
     const guarded = guardOperations(operations);
+    const inspectRun = <A>(read: Effect.Effect<Result<A>, unknown>) =>
+      guard(
+        sql.withTransaction(read).pipe(Effect.provideService(SqlClient.BeginTransaction, "BEGIN")),
+      );
     const factory: FactoryService["Service"] = {
       ...guarded,
       recordClientUpdate: ({ receiptId, fromVersion, toVersion }) =>
@@ -388,9 +398,10 @@ export const makeFactoryService = (
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
-      listRunListExtras: (words) => guard(runner.listRunListExtras(words)),
+      listRunReadSnapshot: (words) =>
+        inspectRun(runListSource(runner.listRunNavigation(), runner.listRunListExtras(words))),
       readRunByReference: (reference) =>
-        guard(runReadSource(sql, (id) => runner.getRun(id))(reference)),
+        inspectRun(runReadSource(sql, runner.getRun, runner.getSubflowInvocation)(reference)),
       setRuntimeBackendUrl: (url) => {
         runtimeBackendUrl = url;
       },

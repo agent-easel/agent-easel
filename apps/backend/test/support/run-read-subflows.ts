@@ -12,6 +12,7 @@ import {
   joinBlock,
   launchedWorkers,
   observeFor,
+  reportRejected,
   resultReported,
   type ScenarioWorld,
 } from "./scenarios.ts";
@@ -77,27 +78,52 @@ export async function queuedReviewPanel(c: TestContext) {
   };
 }
 
-export async function returnedReviewPanel(c: TestContext) {
+async function startedReviewPanel(c: TestContext) {
   const fixture = await prepared(c);
-  const { f, t3, input, agent, world } = fixture;
+  const { f, input, agent, world } = fixture;
   const child = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
   const parent = await savedFlow(f, {
     name: "Release",
     graph: { ...placingGraph(child.id), connections: [toEnding("inner-0", "approved", "done")] },
   });
   const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const { workers } = await launchedWorkers(world, started.id);
+  return { ...fixture, runId: started.id, workers };
+}
+
+export async function returnedReviewPanel(c: TestContext) {
+  const panel = await startedReviewPanel(c);
   const {
+    t3,
+    world,
+    runId,
     workers: [security],
-  } = await launchedWorkers(world, started.id);
+  } = panel;
   t3.threads.stopsEndThreads();
   await resultReported(world, security!, { message: "Reviewed" });
   await observeFor(
     "invocation returned",
     world,
-    started.id,
+    runId,
     (run) => run.subflows?.[0]?.defaultInvocation?.state === "returned",
   );
-  return { ...fixture, runId: started.id };
+  return panel;
+}
+
+export async function reviewPanelWithFailedStop(c: TestContext) {
+  const panel = await startedReviewPanel(c);
+  const {
+    t3,
+    world,
+    runId,
+    workers: [security],
+  } = panel;
+  t3.contract.support.stop = false;
+  await resultReported(world, security!);
+  await observeFor("invocation Stop problem", world, runId, (run) =>
+    run.attention.some((matter) => matter.kind === "subflow-stop-unresolved"),
+  );
+  return panel;
 }
 
 export async function elevenPlacementsWithNested(c: TestContext) {
@@ -130,6 +156,55 @@ export async function elevenPlacementsWithNested(c: TestContext) {
     workers: [work],
   } = await launchedWorkers(world, started.id);
   return { ...fixture, runId: started.id, work: work! };
+}
+
+export async function sameNamedBlocksWithProblems(c: TestContext) {
+  const fixture = await prepared(c);
+  const { f, input, agent, world } = fixture;
+  const finish = { position: { x: 600, y: 0 }, endings: [ending("done", "Done")] };
+  const leaf = await savedFlow(f, {
+    name: "Leaf",
+    graph: {
+      flowInput: flowInput("leaf-worker"),
+      blocks: [agentBlock("leaf-worker", "Reviewer", agent.id)],
+      connections: [toEnding("leaf-worker", "done", "done")],
+      finish,
+    },
+  });
+  const middle = await savedFlow(f, {
+    name: "Middle",
+    graph: {
+      flowInput: flowInput("nested"),
+      blocks: [subflowBlock("nested", "Nested review", leaf.id)],
+      connections: [toEnding("nested", "done", "done")],
+      finish,
+    },
+  });
+  const ids = ["root-a", "root-b", "place-a", "place-b"];
+  const root = await savedFlow(f, {
+    name: "Parallel review",
+    graph: {
+      flowInput: flowInput(...ids),
+      blocks: [
+        agentBlock("root-a", "Reviewer", agent.id),
+        agentBlock("root-b", "Reviewer", agent.id),
+        subflowBlock("place-a", "Review", middle.id),
+        subflowBlock("place-b", "Review", middle.id),
+      ],
+      connections: ids.map((id) => toEnding(id, "done", "done")),
+      finish,
+    },
+  });
+  const { id: runId } = assertOk(await f.startRun({ ...input, flowId: root.id }));
+  await observeFor(
+    "all four reviewers activated",
+    world,
+    runId,
+    (run) => run.activations.length === 4,
+  );
+  const { workers } = await launchedWorkers(world, runId);
+  for (const worker of workers) await reportRejected(world, worker);
+  return { ...fixture, runId, reportingIds: workers.map((worker) => worker.blockId) };
 }
 
 export async function joinProblemInEarlierInvocation(c: TestContext) {
