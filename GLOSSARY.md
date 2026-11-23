@@ -416,6 +416,23 @@ conversation. It is Off by default, works only while the Factory backend runs, a
 Discord and the model provider outbound only. See [Chat control](docs/chat-control.md).
 _Avoid_: Chat bot as a separate service; treating chat messages or model output as authorization.
 
+**Bot ID**:
+A Discord bot account listed under **Bots** in Chat control's Access, kept apart from the allowed user
+IDs. Factory classifies each listed ID from Discord's own user data (the bot flag) and refuses a bot
+among the users and a human among the Bot IDs. A listed bot may converse with Factory and propose
+and confirm its own Starts; it never answers Human steps or archives. See
+[Chat control](docs/chat-control.md#access).
+_Avoid_: Treating a bot as an allowed user; deciding bot or human by name.
+
+**Confirmation phrase**:
+The exact text, `confirm` followed by a one-time four-character code, that a Chat control review's
+last message shows its requester. A **typed confirmation** is the requester's Discord Reply to that
+message with exactly the phrase within five minutes; it is single use, decided by Factory before any
+model call and the only way to confirm a Start, Human answer or Archive. See
+[Chat control](docs/chat-control.md#confirmation).
+_Avoid_: Confirm button; treating a "yes", a message that is not a Reply to the review, or someone
+else's reply as consent.
+
 **Originating thread**:
 The Discord thread a Run was requested in through a confirmed Chat control Start, recorded when Factory
 accepts the Run. It is where Factory reports on that Run, not ownership: any allowed participant may act
@@ -429,7 +446,9 @@ The one maintained Discord message Factory posts in a chat-started Run's origina
 It shows the Run's identity, lifecycle and Flow, then the captured Flow's Blocks in graph order
 with their current or final state on each row. Large Flows summarize not-started Blocks first
 and then finished Blocks to fit one message. Factory edits the card as Blocks and the Run change.
-The card mentions nobody and omits results, report bodies and prompts. See
+On create, the card mentions the Run's requester, person or bot, while saved Access allows that
+requester; otherwise, and on every edit, the card mentions nobody. It omits results, report bodies
+and prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
@@ -437,9 +456,11 @@ _Avoid_: Progress feed or per-event notification; treating the card's text as co
 A new Discord message in a chat-started Run's originating thread. An attention notice reports new
 Needs input or Problem matters. A catch-up reports such matters that accrued while Factory could
 not post. A completion notice says a Run became Settled and invites a reply, once per Settled cycle.
-On create, a Run notice pings the Run's requester while saved Access allows that user. Resolving
-a matter edits its attention notice or catch-up in place and removes the mention. A reply to a
-notice from the operating application identifies the Run for a fresh scoped read. See
+An Archive notice says a Run was Archived, once per Run. Each ends with a machine line for
+consumers. On create, a Run notice pings the Run's requester, person or bot, while saved Access
+allows that requester. Resolving a matter edits its attention notice or catch-up in place and
+removes the mention. A reply to a notice from the operating application identifies the Run for a
+fresh scoped read. See
 [Chat control](docs/chat-control.md#attention-notices).
-_Avoid_: Notices for ordinary Block transitions or Archive, replaying matters that opened and resolved
+_Avoid_: Notices for ordinary Block transitions, replaying matters that opened and resolved
 while Factory could not post, answer buttons on a notice.

@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
+import type { ChatActionOperation } from "@t3-factory/contracts";
 import { now } from "../time.ts";
+import { ACTION_REQUESTERS } from "./requesters.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 
 /** An Access save's channels and the Projects each grants. */
@@ -25,24 +27,31 @@ const ungranted = (channels: Channels, parentChannelId: string, projectIdsJson: 
  */
 export const applyAccessRevocation = (
   sql: SqlClient.SqlClient,
-  access: { readonly users: readonly string[]; readonly channels: Channels },
+  access: {
+    readonly users: readonly string[];
+    readonly bots: readonly string[];
+    readonly channels: Channels;
+  },
 ) =>
   Effect.gen(function* () {
     const live = yield* sql<{
       id: string;
       requester_id: string;
+      operation: ChatActionOperation;
       parent_channel_id: string;
       project_ids_json: string;
-    }>`SELECT id,requester_id,parent_channel_id,project_ids_json FROM chat_proposals WHERE state IN ('preparing','presented','accepting')`;
+    }>`SELECT id,requester_id,operation,parent_channel_id,project_ids_json FROM chat_proposals WHERE state IN ('preparing','presented','accepting')`;
+    const listed = (requesterId: string, operation: ChatActionOperation) =>
+      access.users.includes(requesterId) ||
+      (ACTION_REQUESTERS[operation] !== "human" && access.bots.includes(requesterId));
     const voided = live.filter(
       (row) =>
-        !access.users.includes(row.requester_id) ||
+        !listed(row.requester_id, row.operation) ||
         ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );
-    // Buttons voided while Chat control is Off are never edited later: nothing is sent for Off.
     if (voided.length > 0)
       yield* sql`UPDATE chat_proposals SET state='ended',ended_reason='revoked',
-          button_settled=CASE WHEN (SELECT enabled FROM chat_control_state WHERE singleton=1)=1 THEN button_settled ELSE 1 END
+          resolution_settled=CASE WHEN (SELECT enabled FROM chat_control_state WHERE singleton=1)=1 THEN resolution_settled ELSE 1 END
         WHERE id IN ${sql.in(voided.map((row) => row.id))}`;
     const owed = yield* sql<{
       id: string;
@@ -58,11 +67,11 @@ export const applyAccessRevocation = (
       const at = yield* now;
       yield* sql`UPDATE chat_deliveries SET next_attempt_at=NULL,
           problem=${REVOKED_CREATE},problem_at=${at}
-        WHERE id IN ${ids} AND purpose<>'completion' AND state='sending'`;
+        WHERE id IN ${ids} AND purpose NOT IN ('completion','archive') AND state='sending'`;
       yield* sql`UPDATE chat_deliveries SET state='unknown',next_attempt_at=NULL
-        WHERE id IN ${ids} AND purpose<>'completion' AND state='owed' AND problem=${UNKNOWN_CREATE_PROBLEM}`;
+        WHERE id IN ${ids} AND purpose NOT IN ('completion','archive') AND state='owed' AND problem=${UNKNOWN_CREATE_PROBLEM}`;
       yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL
-        WHERE id IN ${ids} AND (purpose='completion' OR state NOT IN ('sending','unknown'))`;
+        WHERE id IN ${ids} AND (purpose IN ('completion','archive') OR state NOT IN ('sending','unknown'))`;
     }
     // A chat-started Run whose originating channel loses its Project accrues no notices; after a
     // regrant its notices start from its state then, without narrating the revoked interval.
@@ -91,16 +100,12 @@ export const applyAccessRevocation = (
     if (regranted.length > 0)
       yield* sql`UPDATE chat_run_reporting SET completion_sequence=(
           SELECT c.sequence FROM chat_settled_cycles c WHERE c.run_id=chat_run_reporting.run_id
-        ) WHERE run_id IN ${sql.in(regranted.map((row) => row.run_id))}`;
+        ),archive_noticed=EXISTS(
+          SELECT 1 FROM runs r WHERE r.id=chat_run_reporting.run_id AND r.archived_at IS NOT NULL
+        ) OR archive_noticed WHERE run_id IN ${sql.in(regranted.map((row) => row.run_id))}`;
     return voided.map((row) => row.id);
   });
 
-/**
- * Retires the live proposals of an application being replaced: its buttons can never confirm
- * again, even if that application operates again later. Owed receipts stay owed. Call inside the
- * transaction that records the replacing application; returns the retired proposals, whose Runs
- * the caller hints once it committed.
- */
 export const retireApplicationProposals = (sql: SqlClient.SqlClient, applicationId: string) =>
   Effect.map(
     sql<{ id: string }>`UPDATE chat_proposals SET state='ended',ended_reason='application'

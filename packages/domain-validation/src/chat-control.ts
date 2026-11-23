@@ -371,11 +371,31 @@ export function validateUpdateDiscordAccess(input: unknown): Result<UpdateDiscor
     "user ID",
   );
   if (!users.ok) return users;
+  const bots = parseDiscordIds(
+    fields.bots,
+    "bots",
+    DISCORD_ACCESS_USER_LIMIT,
+    "discord_access_bot",
+    "bot ID",
+  );
+  if (!bots.ok) return bots;
+  const shared = bots.value.findIndex((id) => users.value.includes(id));
+  if (shared >= 0)
+    return invalid(
+      "discord_access_duplicate",
+      `bots[${shared}]`,
+      `${bots.value[shared]} is listed as both a user and a bot. Keep it in one list.`,
+    );
   const channels = parseChannels(fields.channels);
   if (!channels.ok) return channels;
   return {
     ok: true,
-    value: { revision: revision.value, users: users.value, channels: channels.value },
+    value: {
+      revision: revision.value,
+      users: users.value,
+      bots: bots.value,
+      channels: channels.value,
+    },
   };
 }
 

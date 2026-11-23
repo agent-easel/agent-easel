@@ -52,6 +52,7 @@ export async function conversing(c: TestContext) {
   const access = await world.factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID, COLLABORATOR_ID],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [world.project.id] }],
   });
   assert(access.ok, JSON.stringify(access));
@@ -136,6 +137,7 @@ export async function savedAccess(
   const saved = await factory.updateDiscordAccess({
     revision: settings.value.access.revision,
     users,
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds }],
   });
   assert(saved.ok, JSON.stringify(saved));
@@ -180,6 +182,7 @@ export const operatingService = (
   factory: FactoryService["Service"],
   { model, discord }: { readonly model: ControlledModel; readonly discord: ControlledDiscord },
   projectId: string,
+  bots: readonly string[] = [],
 ) =>
   Effect.gen(function* () {
     yield* factory.updateChatModelSettings(chatModelSave({ baseUrl: model.baseUrl() }));
@@ -187,6 +190,7 @@ export const operatingService = (
     const access = yield* factory.updateDiscordAccess({
       revision: 0,
       users: [PARTICIPANT_ID, COLLABORATOR_ID],
+      bots,
       channels: [{ channelId: ALLOWED_CHANNEL, projectIds: [projectId] }],
     });
     assert(access.ok, JSON.stringify(access));

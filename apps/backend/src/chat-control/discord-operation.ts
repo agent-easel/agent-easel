@@ -31,10 +31,10 @@ import {
   type OperatingSession,
 } from "./discord-gateway.ts";
 import type { ChatActions } from "./actions.ts";
+import type { BotGuards } from "./bot-guards.ts";
 import type { ChatTool } from "./chat-tools.ts";
-import { buttonRow, type DisabledButton } from "./confirmation-buttons.ts";
 import {
-  publishedRun,
+  publishedDelivery,
   type ChatDeliveries,
   type CreateMessageOptions,
   type DiscordSender,
@@ -46,6 +46,11 @@ import { makeRequesterEvidence } from "./requester-evidence.ts";
 import { retireApplicationProposals } from "./revocation.ts";
 
 type Run = <A>(effect: Effect.Effect<A, unknown>) => Promise<A>;
+
+const mentioning = (text: string, requesterId: string) =>
+  /^\p{Extended_Pictographic}/u.test(text)
+    ? text.replace(" ", ` <@${requesterId}> `)
+    : `<@${requesterId}> ${text}`;
 
 /** The ingress handlers of one operating session. */
 interface SessionIngress {
@@ -60,16 +65,6 @@ interface SessionIngress {
  */
 class FactoryDiscordAdapter extends DiscordAdapter {
   ingress: SessionIngress | undefined;
-
-  protected override async handleGatewayMessage(message: Message) {
-    await this.ingress?.message(message);
-  }
-
-  protected override async handleGatewayInteraction(interaction: Interaction) {
-    await this.ingress?.interaction(interaction);
-  }
-
-  protected override async handleGatewayReaction() {}
 
   protected override buildMessagePayload(
     ...args: Parameters<DiscordAdapter["buildMessagePayload"]>
@@ -100,18 +95,8 @@ class FactoryDiscordAdapter extends DiscordAdapter {
     return this.postMessage(threadId, { raw: text });
   }
 
-  /**
-   * Creates one Factory message, optionally with a confirmation button, in a single request and
-   * resolves with Discord's message ID. Discord enforces `nonce`: a create repeating an earlier
-   * one's nonce returns that message instead of creating another. Failures keep the adapter's
-   * error, whose status tells a definite refusal from an unproven outcome.
-   */
-  async create(
-    threadId: string,
-    text: string,
-    { nonce, button, requesterId }: CreateMessageOptions,
-  ) {
-    const raw = requesterId === undefined ? text : text.replace(" ", ` <@${requesterId}> `);
+  async create(threadId: string, text: string, { nonce, requesterId }: CreateMessageOptions) {
+    const raw = requesterId === undefined ? text : mentioning(text, requesterId);
     const { payload } = this.buildMessagePayload({ raw });
     const { channelId, threadId: discordThreadId } = this.decodeThreadId(threadId);
     const response = await this.discordFetch(
@@ -124,7 +109,6 @@ class FactoryDiscordAdapter extends DiscordAdapter {
           : { allowed_mentions: { parse: [], users: [requesterId] } }),
         nonce,
         enforce_nonce: true,
-        ...(button ? { components: buttonRow(button.customId, { label: button.label }) } : {}),
       },
     );
     return ((await response.json()) as { id: string }).id;
@@ -138,16 +122,6 @@ class FactoryDiscordAdapter extends DiscordAdapter {
       `/channels/${discordThreadId ?? channelId}/messages/${messageId}`,
       "PATCH",
       { content: payload.content, allowed_mentions: payload.allowed_mentions },
-    );
-  }
-
-  /** Replaces a review's button with a disabled one showing why, in a single request. */
-  async disable(threadId: string, messageId: string, customId: string, state: DisabledButton) {
-    const { channelId, threadId: discordThreadId } = this.decodeThreadId(threadId);
-    await this.discordFetch(
-      `/channels/${discordThreadId ?? channelId}/messages/${messageId}`,
-      "PATCH",
-      { components: buttonRow(customId, { disabled: state }), allowed_mentions: { parse: [] } },
     );
   }
 
@@ -184,7 +158,12 @@ class FactoryDiscordAdapter extends DiscordAdapter {
   }
 
   listen(client: Client, isShuttingDown: () => boolean) {
-    this.setupLegacyGatewayHandlers(client, isShuttingDown);
+    client.on(Events.MessageCreate, (message: Message) => {
+      if (!isShuttingDown()) void this.ingress?.message(message);
+    });
+    client.on(Events.InteractionCreate, (interaction: Interaction) => {
+      if (!isShuttingDown()) void this.ingress?.interaction(interaction);
+    });
   }
 
   async startThread(channelId: string, messageId: string) {
@@ -301,6 +280,7 @@ export const makeDiscordOperation = (
     readonly tools: readonly ChatTool[];
     readonly actions: ChatActions;
     readonly deliveries: ChatDeliveries;
+    readonly botGuards: BotGuards;
   },
 ) =>
   Effect.gen(function* () {
@@ -371,8 +351,6 @@ export const makeDiscordOperation = (
             adapter.create(encodeThreadId(destination), text, options),
           edit: (destination, messageId, text) =>
             adapter.edit(encodeThreadId(destination), messageId, text),
-          disable: (destination, messageId, customId, state) =>
-            adapter.disable(encodeThreadId(destination), messageId, customId, state),
           reopen: (destination) => adapter.reopen(encodeThreadId(destination)),
           locked: (destination) => adapter.locked(encodeThreadId(destination)),
         };
@@ -388,6 +366,7 @@ export const makeDiscordOperation = (
           typing: (key) => adapter.typing(encodeThreadId(key)),
           sender,
           actions: conversation.actions,
+          botGuards: conversation.botGuards,
         });
         // The reply target a MESSAGE_CREATE carried, kept until admission takes it.
         const references = new Map<string, ReferencedMessage>();
@@ -412,13 +391,14 @@ export const makeDiscordOperation = (
             handOff: (threadId, message) => adapter.handOff(threadId, message),
             encodeThreadId,
             post,
-            confirm: conversation.actions.confirm,
+            confirmations: conversation.actions,
+            botGuards: conversation.botGuards,
             referenced: (messageId) => {
               const reference = references.get(messageId);
               references.delete(messageId);
               return reference;
             },
-            publishedRun: publishedRun(sql, applicationId),
+            publishedDelivery: publishedDelivery(sql, applicationId),
           },
           engine,
         );
@@ -480,7 +460,7 @@ export const makeDiscordOperation = (
         yield* engine.started;
         // Owed receipts go out only from a verified, serving session.
         yield* Effect.forkScoped(conversation.deliveries.serve(sender));
-        yield* Effect.forkScoped(conversation.actions.serveButtons(sender));
+        yield* Effect.forkScoped(conversation.actions.serveResolutions(sender));
         return yield* Effect.callback<GatewayResult>((resume) => {
           client.once(Events.ShardDisconnect, ({ code }) =>
             resume(Effect.succeed(closeResult(code))),

@@ -25,6 +25,7 @@ it("Access keeps Discord IDs beyond JavaScript's exact integer range exactly as 
   const saved = await factory.updateDiscordAccess({
     revision: 0,
     users: [" 18446744073709551615 "],
+    bots: [],
     channels: [{ channelId: "18446744073709551614", projectIds: [] }],
   });
 
@@ -66,6 +67,7 @@ it("a channel cannot be granted a Project Factory does not know", async (c) => {
   const saved = await factory.updateDiscordAccess({
     revision: 0,
     users: [],
+    bots: [],
     channels: [{ channelId: ALLOWED_CHANNEL, projectIds: ["no-such-project"] }],
   });
 
@@ -82,7 +84,12 @@ it("an Access save from an older revision is refused as a conflict", async (c) =
   const { factory } = await chatControlWorld(c);
 
   // Act
-  const saved = await factory.updateDiscordAccess({ revision: 0, users: [], channels: [] });
+  const saved = await factory.updateDiscordAccess({
+    revision: 0,
+    users: [],
+    bots: [],
+    channels: [],
+  });
 
   // Assert
   assert(!saved.ok);
@@ -149,6 +156,7 @@ it("a passing check records the bot's display name and the names Discord knows f
       await factory.updateDiscordAccess({
         revision: 1,
         users: [PARTICIPANT_ID, unknownUser],
+        bots: [],
         channels: [
           { channelId: ALLOWED_CHANNEL, projectIds: [project.id] },
           { channelId: unknownChannel, projectIds: [] },
@@ -169,10 +177,124 @@ it("a passing check records the bot's display name and the names Discord knows f
   });
 });
 
+it("a passing check classifies listed bot IDs from Discord's bot flag and keeps an unknown bot ID savable", async (c) => {
+  // Arrange
+  const { discord, factory } = await chatControlWorld(c);
+  const bot = "200000000000000050";
+  const unknownBot = "200000000000000098";
+  discord.registerBotAccount(bot, "Hermes");
+  discord.removeGuildMember(unknownBot);
+  const saved = await factory.updateDiscordAccess({
+    revision: 1,
+    users: [PARTICIPANT_ID],
+    bots: [bot, unknownBot],
+    channels: [],
+  });
+  assert(saved.ok);
+
+  // Act
+  const checked = await factory.checkDiscordConnection({ revision: 1 });
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.access).toMatchObject({
+    bots: [bot, unknownBot],
+    userNames: { [PARTICIPANT_ID]: "participant", [bot]: "Hermes", [unknownBot]: null },
+    accountKinds: { [PARTICIPANT_ID]: "human", [bot]: "bot" },
+  });
+  const resaved = await factory.updateDiscordAccess({
+    revision: 2,
+    users: [PARTICIPANT_ID],
+    bots: [bot, unknownBot],
+    channels: [],
+  });
+  expect(resaved.ok).toBe(true);
+});
+
+it("an ID listed as both a user and a bot, or a bot ID listed twice, is refused", async (c) => {
+  // Arrange
+  const factory = await (await factoryHarness(c)).open();
+
+  // Act
+  const both = await factory.updateDiscordAccess({
+    revision: 0,
+    users: [PARTICIPANT_ID],
+    bots: [PARTICIPANT_ID],
+    channels: [],
+  });
+  const twice = await factory.updateDiscordAccess({
+    revision: 0,
+    users: [],
+    bots: ["200000000000000050", " 200000000000000050"],
+    channels: [],
+  });
+
+  // Assert
+  assert(!both.ok && !twice.ok);
+  expect(both.error.issues[0]).toMatchObject({ code: "discord_access_duplicate", path: "bots[0]" });
+  expect(twice.error.issues[0]).toMatchObject({
+    code: "discord_access_duplicate",
+    path: "bots[1]",
+  });
+});
+
+it("a known bot in Users and a known human in Bot IDs are refused and the saved Access stays unchanged", async (c) => {
+  // Arrange
+  const { discord, factory } = await chatControlWorld(c);
+  const bot = "200000000000000050";
+  discord.registerBotAccount(bot, "Atlas");
+  assert(
+    (
+      await factory.updateDiscordAccess({
+        revision: 1,
+        users: [PARTICIPANT_ID],
+        bots: [bot],
+        channels: [],
+      })
+    ).ok,
+  );
+  assert((await factory.checkDiscordConnection({ revision: 1 })).ok);
+  const before = await factory.getDiscordSettings();
+
+  // Act
+  const botAsUser = await factory.updateDiscordAccess({
+    revision: 2,
+    users: [PARTICIPANT_ID, bot],
+    bots: [],
+    channels: [],
+  });
+  const humanAsBot = await factory.updateDiscordAccess({
+    revision: 2,
+    users: [],
+    bots: [bot, PARTICIPANT_ID],
+    channels: [],
+  });
+
+  // Assert
+  assert(!botAsUser.ok && !humanAsBot.ok);
+  expect(botAsUser.error.issues).toStrictEqual([
+    {
+      code: "discord_access_bot_in_users",
+      path: "users[1]",
+      message: "Atlas is a bot. Move its ID to Bots, then save.",
+    },
+  ]);
+  expect(humanAsBot.error.issues).toStrictEqual([
+    {
+      code: "discord_access_human_in_bots",
+      path: "bots[1]",
+      message: "participant is not a bot. Move its ID to Users, then save.",
+    },
+  ]);
+  expect(await factory.getDiscordSettings()).toStrictEqual(before);
+});
+
 it("Chat control turns On with a keyless model, no passed tests and empty Access", async (c) => {
   // Arrange
   const { discord, factory } = await chatControlWorld(c);
-  assert((await factory.updateDiscordAccess({ revision: 1, users: [], channels: [] })).ok);
+  assert(
+    (await factory.updateDiscordAccess({ revision: 1, users: [], bots: [], channels: [] })).ok,
+  );
 
   // Act
   const on = await factory.setChatControlEnabled({ enabled: true });
@@ -466,6 +588,7 @@ it("Access for a second channel saves while the connection keeps its own revisio
   const saved = await factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID],
+    bots: [],
     channels: [
       { channelId: ALLOWED_CHANNEL, projectIds: [project.id] },
       { channelId: OTHER_CHANNEL, projectIds: [project.id] },

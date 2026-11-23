@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Trash2 } from "lucide-react";
+import { Bot, ChevronsUpDown, Trash2 } from "lucide-react";
 import type {
   DiscordAccessTest,
   DiscordSettings,
@@ -36,6 +36,7 @@ interface ChannelDraft {
 export interface AccessDraft {
   /** Comma-separated user IDs as typed; one ID per line is accepted too. */
   readonly users: string;
+  readonly bots: string;
   readonly channels: readonly ChannelDraft[];
 }
 
@@ -45,6 +46,7 @@ const knownProjects = (projectIds: readonly string[], access: DiscordSettings["a
 
 const draftOf = ({ access }: DiscordSettings): AccessDraft => ({
   users: access.users.join(", "),
+  bots: access.bots.join(", "),
   channels: access.channels.map((channel) => ({
     key: randomId(),
     channelId: channel.channelId,
@@ -52,9 +54,8 @@ const draftOf = ({ access }: DiscordSettings): AccessDraft => ({
   })),
 });
 
-/** The user IDs a draft lists, split on commas and line breaks. */
-const userIds = (users: string) =>
-  users
+const userIds = (ids: string) =>
+  ids
     .split(/[\s,]+/)
     .map((id) => id.trim())
     .filter((id) => id.length > 0);
@@ -62,6 +63,7 @@ const userIds = (users: string) =>
 const saveInput = (draft: AccessDraft, settings: DiscordSettings): UpdateDiscordAccessInput => ({
   revision: settings.access.revision,
   users: userIds(draft.users),
+  bots: userIds(draft.bots),
   channels: draft.channels.map(({ channelId, projectIds }) => ({
     channelId: channelId.trim(),
     projectIds,
@@ -69,12 +71,13 @@ const saveInput = (draft: AccessDraft, settings: DiscordSettings): UpdateDiscord
 });
 
 const sameAccess = (
-  input: Pick<UpdateDiscordAccessInput, "users" | "channels">,
+  input: Pick<UpdateDiscordAccessInput, "users" | "bots" | "channels">,
   saved: DiscordSettings["access"],
 ) =>
-  JSON.stringify([input.users, input.channels]) ===
+  JSON.stringify([input.users, input.bots, input.channels]) ===
   JSON.stringify([
     saved.users,
+    saved.bots,
     saved.channels.map((channel) => ({
       channelId: channel.channelId,
       projectIds: knownProjects(channel.projectIds, saved),
@@ -103,6 +106,18 @@ function draftProblem(input: UpdateDiscordAccessInput) {
   return validated.ok ? "" : validated.error.message;
 }
 
+function wrongListMessages(draft: AccessDraft, access: DiscordSettings["access"]) {
+  const who = (id: string) => access.userNames[id] ?? id;
+  return [
+    ...userIds(draft.users)
+      .filter((id) => access.accountKinds[id] === "bot")
+      .map((id) => `${who(id)} is a bot. Move its ID to Bots, then save.`),
+    ...userIds(draft.bots)
+      .filter((id) => access.accountKinds[id] === "human")
+      .map((id) => `${who(id)} is not a bot. Move its ID to Users, then save.`),
+  ];
+}
+
 /** The Access section's saved state and draft; the page saves it after the bot. */
 export function useAccessSection() {
   const section = useChatControlSection({
@@ -116,7 +131,8 @@ export function useAccessSection() {
   const input = settings && draft ? saveInput(draft, settings) : null;
   const dirty = settings !== null && input !== null && !sameAccess(input, settings.access);
   const problem = dirty && input ? draftProblem(input) : "";
-  return { ...section, input, dirty, problem };
+  const wrongList = settings && draft ? wrongListMessages(draft, settings.access) : [];
+  return { ...section, input, dirty, problem, wrongList };
 }
 
 /**
@@ -130,6 +146,7 @@ function unknownIds(
 ) {
   return {
     users: userIds(draft.users).filter((id) => access.userNames[id] === null),
+    bots: userIds(draft.bots).filter((id) => access.userNames[id] === null),
     channels: draft.channels.filter(
       (channel) =>
         access.channelNames[channel.channelId.trim()] === null &&
@@ -140,6 +157,7 @@ function unknownIds(
 
 const PROBLEM = "discord-access-problem";
 const UNKNOWN = "discord-access-unknown";
+const WRONG_LIST = "discord-access-wrong-list";
 const GONE = "discord-access-gone";
 
 /** Sending the access test from the "Add channel" row; absent before the first Access save. */
@@ -176,6 +194,43 @@ function TestBadge({ reachedAt }: { reachedAt: string | null | undefined }) {
   );
 }
 
+function IdListInput({
+  id,
+  value,
+  placeholder,
+  disabled,
+  state,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  state: FieldState | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Input
+      id={id}
+      value={value}
+      placeholder={placeholder}
+      autoComplete="off"
+      spellCheck={false}
+      disabled={disabled}
+      className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(state?.tone))}
+      {...fieldAria(state?.cardId)}
+      onChange={(event) => onChange(event.target.value)}
+      onPaste={(event) => {
+        // One ID per line is accepted and shown as the comma-separated list.
+        const pasted = event.clipboardData.getData("text");
+        if (!pasted.includes("\n")) return;
+        event.preventDefault();
+        onChange(userIds(`${value}\n${pasted}`).join(", "));
+      }}
+    />
+  );
+}
+
 /**
  * Who may invoke Chat control and where: allowed users, then each allowed channel with the
  * Projects it grants. Names Discord reported show under the IDs once a check passed.
@@ -184,6 +239,7 @@ export function AccessCard({
   settings,
   draft,
   problem,
+  wrongList,
   disabled,
   test,
   sendTest,
@@ -192,6 +248,7 @@ export function AccessCard({
   settings: DiscordSettings;
   draft: AccessDraft;
   problem: string;
+  wrongList: readonly string[];
   disabled: boolean;
   /** The latest access test, as the page's most recent read shows it. */
   test: DiscordAccessTest | null;
@@ -199,12 +256,22 @@ export function AccessCard({
   onChange: (draft: AccessDraft) => void;
 }) {
   const projects = useProjects();
-  const { userNames, channelNames } = settings.access;
+  const { userNames, accountKinds, channelNames } = settings.access;
   const unknown = unknownIds(draft, settings.access, test);
   const users = userIds(draft.users);
-  const usersState: FieldState | undefined = unknown.users.length
-    ? { tone: "attention", cardId: UNKNOWN }
-    : undefined;
+  const bots = userIds(draft.bots);
+  const listState = (
+    ids: readonly string[],
+    wrongKind: "bot" | "human",
+    unknownInList: readonly string[],
+  ): FieldState | undefined =>
+    ids.some((id) => accountKinds[id] === wrongKind)
+      ? { tone: "error", cardId: WRONG_LIST }
+      : unknownInList.length
+        ? { tone: "attention", cardId: UNKNOWN }
+        : undefined;
+  const usersState = listState(users, "bot", unknown.users);
+  const botsState = listState(bots, "human", unknown.bots);
   const setChannel = (key: string, change: Partial<ChannelDraft>) =>
     onChange({
       ...draft,
@@ -218,25 +285,15 @@ export function AccessCard({
         <FieldRow
           label="Users"
           htmlFor="discord-access-users"
-          secondary={userNamesLine(users, userNames, test)}
+          secondary={userNamesLine(users, userNames, accountKinds, test)}
         >
-          <Input
+          <IdListInput
             id="discord-access-users"
             value={draft.users}
             placeholder="Discord user IDs"
-            autoComplete="off"
-            spellCheck={false}
             disabled={disabled}
-            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(usersState?.tone))}
-            {...fieldAria(usersState?.cardId)}
-            onChange={(event) => onChange({ ...draft, users: event.target.value })}
-            onPaste={(event) => {
-              // One ID per line is accepted and shown as the comma-separated list.
-              const pasted = event.clipboardData.getData("text");
-              if (!pasted.includes("\n")) return;
-              event.preventDefault();
-              onChange({ ...draft, users: userIds(`${draft.users}\n${pasted}`).join(", ") });
-            }}
+            state={usersState}
+            onChange={(users) => onChange({ ...draft, users })}
           />
         </FieldRow>
         {draft.channels.map((channel, index) => (
@@ -269,12 +326,40 @@ export function AccessCard({
           }
         />
       </SettingsGroup>
+      <SettingsGroup
+        label="Bots"
+        description="Bots may talk to Factory and start Runs in allowed channels. Every Start still needs the confirmation phrase. Bots can’t answer Human blocks or archive."
+      >
+        <FieldRow
+          label="Bot IDs"
+          htmlFor="discord-access-bots"
+          secondary={botNamesLine(bots, userNames, accountKinds)}
+        >
+          <IdListInput
+            id="discord-access-bots"
+            value={draft.bots}
+            placeholder="Discord bot IDs"
+            disabled={disabled}
+            state={botsState}
+            onChange={(bots) => onChange({ ...draft, bots })}
+          />
+        </FieldRow>
+      </SettingsGroup>
       {problem && (
         <ProblemCard id={PROBLEM} tone="error" title="Access isn’t valid">
           {problem}
         </ProblemCard>
       )}
-      {(unknown.users.length > 0 || unknown.channels.length > 0) && (
+      {wrongList.length > 0 && (
+        <ProblemCard
+          id={WRONG_LIST}
+          tone="attention"
+          title={`${count(wrongList.length, "ID")} ${wrongList.length === 1 ? "is" : "are"} in the wrong list`}
+        >
+          {wrongList.join(" ")}
+        </ProblemCard>
+      )}
+      {(unknown.users.length > 0 || unknown.bots.length > 0 || unknown.channels.length > 0) && (
         <ProblemCard id={UNKNOWN} tone="attention" title={unknownTitle(unknown)}>
           Fix the IDs, then save.
         </ProblemCard>
@@ -291,14 +376,18 @@ export function AccessCard({
 function userNamesLine(
   users: readonly string[],
   userNames: DiscordSettings["access"]["userNames"],
+  accountKinds: DiscordSettings["access"]["accountKinds"],
   test: DiscordAccessTest | null,
 ) {
   const name = (id: string) =>
     userNames[id] === null ? (
       <StatusBadge kind="attention">Unknown user</StatusBadge>
+    ) : accountKinds[id] === "bot" ? (
+      <StatusBadge kind="error">{userNames[id] ?? id} is a bot</StatusBadge>
     ) : (
       (userNames[id] ?? id)
     );
+  const plain = (id: string) => userNames[id] !== null && accountKinds[id] !== "bot";
   if (test && users.some((id) => id in test.users))
     return users.map((id) => (
       <span key={id} className="flex basis-full items-center gap-2">
@@ -310,9 +399,42 @@ function userNamesLine(
   return users.map((id, index) => (
     <span key={id}>
       {name(id)}
-      {userNames[id] !== null && index < users.length - 1 && ","}
+      {plain(id) && index < users.length - 1 && ","}
     </span>
   ));
+}
+
+function botNamesLine(
+  bots: readonly string[],
+  userNames: DiscordSettings["access"]["userNames"],
+  accountKinds: DiscordSettings["access"]["accountKinds"],
+) {
+  if (!bots.some((id) => id in userNames)) return null;
+  return bots.map((id) => {
+    const name = userNames[id];
+    if (name === null)
+      return (
+        <StatusBadge key={id} kind="attention">
+          Unknown user
+        </StatusBadge>
+      );
+    if (accountKinds[id] === "human")
+      return (
+        <StatusBadge key={id} kind="error">
+          {name ?? id} is not a bot
+        </StatusBadge>
+      );
+    return (
+      <span key={id} className="flex items-center gap-1.5">
+        {name ?? id}
+        {accountKinds[id] === "bot" && (
+          <StatusBadge kind="neutral" icon={Bot}>
+            Bot
+          </StatusBadge>
+        )}
+      </span>
+    );
+  });
 }
 
 /** The row under the channels: Add channel and, once Access was saved, the access test. */
@@ -399,6 +521,7 @@ const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 function unknownTitle(unknown: ReturnType<typeof unknownIds>) {
   const parts = [
     ...(unknown.users.length ? [count(unknown.users.length, "user")] : []),
+    ...(unknown.bots.length ? [count(unknown.bots.length, "bot")] : []),
     ...(unknown.channels.length ? [count(unknown.channels.length, "channel")] : []),
   ];
   return `Discord doesn’t know ${parts.join(" and ")}`;

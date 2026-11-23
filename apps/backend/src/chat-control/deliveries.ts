@@ -13,10 +13,9 @@ import type {
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
-import type { ConfirmationButton, DisabledButton } from "./confirmation-buttons.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 import { catchUpNotices } from "./report-notices.ts";
-import { withApplicationNotice } from "./status-cards.ts";
+import { fitCardText, MESSAGE_LIMIT, withApplicationNotice } from "./status-cards.ts";
 
 /** Where a Factory message goes: a thread and the parent channel whose Access grants it. */
 export interface Destination {
@@ -27,17 +26,9 @@ export interface Destination {
 
 export interface CreateMessageOptions {
   readonly nonce: string;
-  readonly button?: ConfirmationButton;
   readonly requesterId?: string;
 }
 
-/**
- * How the operating session sends Factory messages: `create` resolves with Discord's message ID
- * and asks Discord to enforce the create's `nonce`, `edit` replaces a message's text, `disable`
- * replaces a review's button with a disabled one, `reopen` unarchives an archived thread unless
- * Discord shows it locked, which Factory never undoes, and `locked` reads whether moderators
- * locked the thread.
- */
 export interface DiscordSender {
   readonly applicationId: string;
   readonly create: (
@@ -46,12 +37,6 @@ export interface DiscordSender {
     options: CreateMessageOptions,
   ) => Promise<string>;
   readonly edit: (destination: Destination, messageId: string, text: string) => Promise<void>;
-  readonly disable: (
-    destination: Destination,
-    messageId: string,
-    customId: string,
-    state: DisabledButton,
-  ) => Promise<void>;
   readonly reopen: (destination: Destination) => Promise<"open" | "reopened" | "locked">;
   readonly locked: (destination: Destination) => Promise<boolean>;
 }
@@ -180,6 +165,8 @@ const DEDUPLICATED_REQUESTS = 3;
  */
 const DEDUPLICATION_WINDOW_MS = 60_000;
 
+const mentionLength = (requesterId: string) => requesterId.length + "<@> ".length;
+
 /** A stable nonce for one create intent, within Discord's 25 characters. */
 export const nonceOf = (...intent: readonly string[]) =>
   createHash("sha256").update(intent.join("\n")).digest("hex").slice(0, 25);
@@ -213,6 +200,7 @@ export const createDeduplicated = (
     Pick<CreateMessageOptions, "requesterId"> | false,
     unknown
   > = Effect.succeed({}),
+  fit: (text: string, limit: number) => string = (unfitted) => unfitted,
 ) =>
   Effect.gen(function* (): Effect.fn.Return<Created, unknown> {
     const firstAt = yield* Clock.currentTimeMillis;
@@ -221,7 +209,15 @@ export const createDeduplicated = (
       const access = yield* createAccess;
       if (access === false) return { withdrawn: true, unproven };
       const sent = yield* Effect.result(
-        bounded(() => sender.create(destination, text, { ...options, ...access })),
+        bounded(() =>
+          sender.create(
+            destination,
+            access.requesterId === undefined
+              ? text
+              : fit(text, MESSAGE_LIMIT - mentionLength(access.requesterId)),
+            { ...options, ...access },
+          ),
+        ),
       );
       if (sent._tag === "Success") return { messageId: sent.success };
       const refusal = createRefusal(sendFailure(sent.failure.cause), unproven);
@@ -241,11 +237,15 @@ const destinationOf = (row: DeliveryRow): Destination => ({
   threadId: row.thread_id,
 });
 
-const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
+const REQUESTER_PURPOSES: readonly DeliveryRow["purpose"][] = [
+  "status-card",
   "attention",
   "catch-up",
   "completion",
+  "archive",
 ];
+
+const ONE_SHOT_PURPOSES: readonly DeliveryRow["purpose"][] = ["completion", "archive"];
 
 const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
   Effect.map(
@@ -253,8 +253,9 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
       SELECT u.user_id FROM chat_run_origins o
       JOIN chat_actions a ON a.id=o.action_id
       JOIN chat_proposals p ON p.id=a.proposal_id
-      JOIN chat_access_users u ON u.user_id=p.requester_id
-      WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
+      JOIN (SELECT user_id FROM chat_access_users UNION SELECT user_id FROM chat_access_bots) u
+        ON u.user_id=p.requester_id
+      WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_PURPOSES)}
     ) AS user_id FROM chat_deliveries d
       WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${REVOKED_CREATE}`,
     ([access]) => {
@@ -263,13 +264,16 @@ const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
     },
   );
 
-export const publishedRun =
+export const publishedDelivery =
   (sql: SqlClient.SqlClient, applicationId: string) => (threadId: string, messageId: string) =>
     Effect.map(
-      sql<{ run_id: string }>`SELECT run_id FROM chat_deliveries
-        WHERE purpose IN ${sql.in(["status-card", ...REQUESTER_NOTICE_PURPOSES])}
-        AND thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
-      ([row]) => row?.run_id,
+      sql<{
+        runId: string | null;
+      }>`SELECT CASE WHEN purpose IN ${sql.in(REQUESTER_PURPOSES)}
+        THEN run_id END AS runId
+        FROM chat_deliveries
+        WHERE thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
+      ([row]) => row,
     );
 
 /**
@@ -540,6 +544,7 @@ export const makeChatDeliveries = (
           row.text,
           { nonce: nonceOf("delivery", row.id) },
           deliveryCreateAccess(sql, row.id),
+          row.purpose === "status-card" ? fitCardText : undefined,
         ).pipe(
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );
@@ -646,7 +651,7 @@ export const makeChatDeliveries = (
             ],
           );
         if (!(yield* destinationPermitted(sql, row))) {
-          if (row.purpose !== "completion" && row.state === "unknown")
+          if (!ONE_SHOT_PURPOSES.includes(row.purpose) && row.state === "unknown")
             return failure("conflict", "Access no longer permits this destination.");
           yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id}`;
           return failure(
@@ -654,7 +659,7 @@ export const makeChatDeliveries = (
             "Access no longer permits this destination; the message was cancelled.",
           );
         }
-        const retainedProblem = row.purpose !== "completion" && row.state === "unknown";
+        const retainedProblem = !ONE_SHOT_PURPOSES.includes(row.purpose) && row.state === "unknown";
         const [scheduled] = yield* sql`UPDATE chat_deliveries SET state='owed',next_attempt_at=NULL,
               problem=${retainedProblem ? UNKNOWN_CREATE_PROBLEM : null},
               problem_at=${retainedProblem ? row.problem_at : null}

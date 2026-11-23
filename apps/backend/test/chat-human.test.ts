@@ -3,24 +3,28 @@ import { assert, expect, it } from "@effect/vitest";
 import {
   answerCall,
   answeringWorld,
-  clicked,
+  confirmationAnswered,
+  confirmed,
   confirmations,
   HUMAN_CONTEXT,
   occurrenceOf,
   statusCardsIn,
   proposed,
+  reply,
+  resolved,
 } from "./support/chat-actions.ts";
 import { servingAgain } from "./support/chat-control.ts";
+import { PARTICIPANT_ID } from "./support/controlled-discord.ts";
 import { invocation, toolResults } from "./support/chat-conversation.ts";
 import { addedProject, startedRun } from "./support/chat-runs.ts";
 import { appliedRun, subscribe, watchRun } from "./support/live.ts";
 
-const ACCEPTED = "✅ Confirmed (disabled)";
-const REJECTED = "🚫 No longer valid (disabled)";
+const ACCEPTED = "✅ Confirmed";
+const REJECTED = "🚫 No longer valid";
 const FEEDBACK = "Please handle the empty state too.";
 const REQUEST = `request changes on #1: ${FEEDBACK}`;
 
-it("a Human answer proposal reviews the Run, the exact occurrence with its complete context, the answer and the exact message with one requester button last, and answers nothing", async (c) => {
+it("a Human answer proposal reviews the Run, the exact occurrence with its complete context, the answer and the exact message with the requester's confirmation phrase last, and answers nothing", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
   const call = answerCall(world, {
@@ -30,10 +34,10 @@ it("a Human answer proposal reviews the Run, the exact occurrence with its compl
   });
 
   // Act
-  const button = await proposed(world, "600000000000000001", 2, call, REQUEST);
+  const confirmation = await proposed(world, "600000000000000001", 2, call, REQUEST);
 
   // Assert
-  const [review, confirmation] = world.discord.created;
+  const [review, last] = world.discord.created;
   expect(review!.content).toMatch(
     new RegExp(
       [
@@ -49,9 +53,13 @@ it("a Human answer proposal reviews the Run, the exact occurrence with its compl
       ].join("\n"),
     ),
   );
-  expect(confirmation!.content).toMatch(/^🔒 Only the requester can confirm · expires <t:\d+:R>$/);
+  expect(last!.content).toMatch(
+    new RegExp(
+      `^🔒 <@${PARTICIPANT_ID}> To confirm, reply to this message with \`confirm [A-Z0-9]{4}\` · only the requester can confirm · expires <t:\\d+:R>$`,
+    ),
+  );
   expect(confirmations(world.discord)).toHaveLength(1);
-  expect(button).toMatch(/^factory-confirm:/);
+  expect(confirmation.phrase).toMatch(/^confirm [ACDEFHJKMNPQRTWXY34679]{4}$/);
   expect(
     (await occurrenceOf(world.factory, world.runId, world.occurrence.id)).occurrence.state,
   ).toBe("pending");
@@ -66,9 +74,11 @@ it("a presented Human answer review makes its occurrence wait for the Discord co
   await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
 
   // Assert
-  const { occurrence } = await occurrenceOf(world.factory, world.runId, world.occurrence.id);
-  assert(occurrence.chatConfirmationUntil);
-  expect(Date.parse(occurrence.chatConfirmationUntil)).toBeGreaterThan(before);
+  const until = async () =>
+    (await occurrenceOf(world.factory, world.runId, world.occurrence.id)).occurrence
+      .chatConfirmationUntil;
+  await expect.poll(until).toBeTruthy();
+  expect(Date.parse((await until())!)).toBeGreaterThan(before);
 });
 
 it("revoking the requester's Access ends the waiting Discord confirmation on an open Run page at once", async (c) => {
@@ -87,6 +97,7 @@ it("revoking the requester's Access ends the waiting Discord confirmation on an 
   const revoked = await world.factory.updateDiscordAccess({
     revision: settings.value.access.revision,
     users: [],
+    bots: [],
     channels: settings.value.access.channels,
   });
 
@@ -103,10 +114,16 @@ it("revoking the requester's Access ends the waiting Discord confirmation on an 
 it("the requester's confirmation answers exactly the reviewed occurrence of a Run started in Factory and posts the receipt in the request thread without giving the Run an origin", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmation = await proposed(
+    world,
+    "600000000000000001",
+    2,
+    answerCall(world),
+    "approve #1",
+  );
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ACCEPTED);
@@ -127,14 +144,20 @@ it("the requester's confirmation answers exactly the reviewed occurrence of a Ru
 it("an identical answer given in Factory meanwhile is not this action's: the confirmation is rejected and the receipt says nothing was answered", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmation = await proposed(
+    world,
+    "600000000000000001",
+    2,
+    answerCall(world),
+    "approve #1",
+  );
   const elsewhere = await world.factory.answerHumanOccurrence(world.occurrence.id, {
     exitId: "approve",
   });
   assert(elsewhere.ok, JSON.stringify(elsewhere));
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(REJECTED);
@@ -147,19 +170,26 @@ it("an identical answer given in Factory meanwhile is not this action's: the con
   ).toHaveLength(1);
 });
 
-it("two clicks racing on one Human answer review answer once and hand the answer on once", async (c) => {
+it("two confirmation replies racing on one Human answer review answer once and hand the answer on once", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmation = await proposed(
+    world,
+    "600000000000000001",
+    2,
+    answerCall(world),
+    "approve #1",
+  );
 
   // Act
-  const answers = await Promise.all([
-    clicked(world.discord, button, "610000000000000001", 1),
-    clicked(world.discord, button, "610000000000000002", 2),
-  ]);
+  reply(world.discord, confirmation, "610000000000000001");
+  reply(world.discord, confirmation, "610000000000000002");
 
   // Assert
-  expect(answers).toContain(ACCEPTED);
+  expect(await resolved(world.discord, confirmation)).toBe(ACCEPTED);
+  expect(await confirmationAnswered(world.discord, 1)).toMatch(
+    /^(?:⏳|You already confirmed this review\.)/,
+  );
   const { occurrence, handoffs } = await occurrenceOf(
     world.factory,
     world.runId,
@@ -172,13 +202,19 @@ it("two clicks racing on one Human answer review answer once and hand the answer
 it("a Human answer review presented before a backend restart is confirmed once after it", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmation = await proposed(
+    world,
+    "600000000000000001",
+    2,
+    answerCall(world),
+    "approve #1",
+  );
   await world.factory.close();
   const reopened = await world.open();
   await servingAgain(world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ACCEPTED);

@@ -53,6 +53,7 @@ export interface DiscordIds {
 /** Names Discord reported per ID; `null` when Discord does not know the ID. */
 export interface DiscordNames {
   readonly users: ReadonlyMap<string, string | null>;
+  readonly bots: ReadonlySet<string>;
   readonly channels: ReadonlyMap<string, string | null>;
 }
 
@@ -138,10 +139,12 @@ export const lookupNames = (client: Client<true>, ids: DiscordIds) =>
           : [];
       }
     };
+    const bots = new Set<string>();
     const users = await Promise.all(
       ids.users.map((id) =>
         lookup(id, async (userId) => {
           const user = await client.users.fetch(userId);
+          if (user.bot) bots.add(userId);
           return user.globalName ?? user.username;
         }),
       ),
@@ -154,7 +157,7 @@ export const lookupNames = (client: Client<true>, ids: DiscordIds) =>
         }),
       ),
     );
-    return { users: new Map(users.flat()), channels: new Map(channels.flat()) };
+    return { users: new Map(users.flat()), bots, channels: new Map(channels.flat()) };
   });
 
 const failed = (gatewayResult: GatewayResult): Readiness => ({

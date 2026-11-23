@@ -27,6 +27,7 @@ import { makeRunTitles } from "./run-titles.ts";
 import { makeChatCredentials } from "./chat-control/credentials.ts";
 import { conversationalModel, makeChatModel } from "./chat-control/model.ts";
 import { makeChatActions } from "./chat-control/actions.ts";
+import { makeBotGuards } from "./chat-control/bot-guards.ts";
 import { discoveryTools } from "./chat-control/chat-tools.ts";
 import { makeChatDeliveries } from "./chat-control/deliveries.ts";
 import { makeReportCapture } from "./chat-control/run-reports.ts";
@@ -215,6 +216,7 @@ export const makeFactoryService = (
       chatDeliveries.wake,
     );
     yield* changes.onRunChanged(reportCapture.changed);
+    const botGuards = makeBotGuards();
     const chatActions = makeChatActions(
       sql,
       [chatStart.operation, chatHumanAnswer.operation, chatArchive.operation],
@@ -222,6 +224,7 @@ export const makeFactoryService = (
       reportCapture.changed,
       changes.runChanged,
       telemetry,
+      botGuards,
     );
     const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
       telemetry,
@@ -238,6 +241,7 @@ export const makeFactoryService = (
       ],
       actions: chatActions,
       deliveries: chatDeliveries,
+      botGuards,
     });
     const chatModel = yield* makeChatModel(chatCredentials, discordOperation.modelSaved);
     const chatDiscord = yield* makeChatDiscord(chatCredentials, discordGateway, discordOperation, {

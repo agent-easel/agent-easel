@@ -214,7 +214,10 @@ function useOneSave(
     botCheck,
     dirty,
     saving: bot.saving || access.saving,
-    canSave: dirty && (!botCheck.dirty || botCheck.ready) && (!access.dirty || !access.problem),
+    canSave:
+      dirty &&
+      (!botCheck.dirty || botCheck.ready) &&
+      (!access.dirty || (!access.problem && access.wrongList.length === 0)),
     save,
     stopped,
     granted,
@@ -362,6 +365,7 @@ export function ChatDiscordSettings() {
             settings={access.settings}
             draft={access.draft}
             problem={access.problem}
+            wrongList={access.wrongList}
             disabled={page.saving}
             test={settings.access.test}
             sendTest={accessTestAction(page, settings)}
@@ -763,7 +767,8 @@ function AccessProblems({ page, settings }: { page: DiscordPage; settings: Disco
   const { access } = page;
   const saved = access.settings?.access ?? settings.access;
   const nobody =
-    saved.users.length === 0 || !saved.channels.some((channel) => channel.projectIds.length > 0);
+    (saved.users.length === 0 && saved.bots.length === 0) ||
+    !saved.channels.some((channel) => channel.projectIds.length > 0);
   const channelNames = page.granted.map((id) => {
     const name = saved.channelNames[id];
     return name ? `#${name}` : id;

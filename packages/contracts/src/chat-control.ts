@@ -172,6 +172,7 @@ export interface DiscordAccessChannel {
 export interface DiscordAccessConfiguration {
   /** Decimal Discord user IDs kept as text. Roles and server membership grant nothing. */
   readonly users: readonly string[];
+  readonly bots: readonly string[];
   readonly channels: readonly DiscordAccessChannel[];
   /** Granted Project IDs no Factory Project has; they grant nothing and the next save drops them. */
   readonly unresolvedProjectIds: readonly string[];
@@ -181,6 +182,7 @@ export interface DiscordAccessConfiguration {
    * Discord does not know it.
    */
   readonly userNames: Readonly<Record<string, string | null>>;
+  readonly accountKinds: Readonly<Record<string, "bot" | "human">>;
   readonly channelNames: Readonly<Record<string, string | null>>;
   /** The latest access test of the saved Access; null before one was sent. */
   readonly test: DiscordAccessTest | null;
@@ -226,7 +228,7 @@ export interface ChatDeliveryProblem {
    * chat-started Run's maintained card in its originating thread; an attention notice announces
    * new Needs input or Problems there; a catch-up combines what accrued while Factory could not post.
    */
-  readonly purpose: "receipt" | "status-card" | "attention" | "catch-up" | "completion";
+  readonly purpose: "receipt" | "status-card" | "attention" | "catch-up" | "completion" | "archive";
   readonly state: "retrying" | "failed" | "unknown";
   /** The destination thread and its parent channel, as decimal Discord IDs. */
   readonly guildId: string;
@@ -303,6 +305,7 @@ export interface UpdateDiscordAccessInput {
   /** The revision the edits started from; a different current revision is a conflict. */
   readonly revision: number;
   readonly users: readonly string[];
+  readonly bots: readonly string[];
   readonly channels: readonly DiscordAccessChannel[];
 }
 

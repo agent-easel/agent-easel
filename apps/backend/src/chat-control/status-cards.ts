@@ -116,7 +116,7 @@ function collapseRows(rows: string[], icon: string, state: string) {
   };
 }
 
-function fitRemainingRows(head: string[], rows: string[], tail: string[]) {
+function fitRemainingRows(head: string[], rows: string[], tail: string[], limit: number) {
   const priorOmission = /^… and (\d+) more Blocks$/.exec(rows.at(-1) ?? "");
   const alreadyOmitted = priorOmission ? Number(priorOmission[1]) : 0;
   const shown = priorOmission ? rows.slice(0, -1) : rows;
@@ -125,7 +125,7 @@ function fitRemainingRows(head: string[], rows: string[], tail: string[]) {
     const omitted = shown.length - kept + alreadyOmitted;
     const overflow = omitted > 0 ? [`… and ${omitted} more Blocks`] : [];
     const reserve = overflow.length > 0 ? overflow[0]!.length + 1 : 0;
-    if (length + reserve <= MESSAGE_LIMIT)
+    if (length + reserve <= limit)
       return [...head, ...shown.slice(0, kept), ...overflow, ...tail].join("\n");
     length -= shown[kept - 1]!.length + 1;
   }
@@ -133,16 +133,21 @@ function fitRemainingRows(head: string[], rows: string[], tail: string[]) {
   return [...head, ...(omitted > 0 ? [`… and ${omitted} more Blocks`] : []), ...tail].join("\n");
 }
 
-function fitCard(head: string[], rows: string[]) {
+function fitCard(head: string[], rows: string[], limit = MESSAGE_LIMIT) {
   const full = [...head, ...rows].join("\n");
-  if (full.length <= MESSAGE_LIMIT) return full;
+  if (full.length <= limit) return full;
 
   const notStarted = collapseRows(rows, "○", "not started");
   const compact = [...head, ...notStarted.remaining, ...notStarted.summary].join("\n");
-  if (compact.length <= MESSAGE_LIMIT) return compact;
+  if (compact.length <= limit) return compact;
 
   const finished = collapseRows(notStarted.remaining, "✅", "finished");
-  return fitRemainingRows([...head, ...finished.summary], finished.remaining, notStarted.summary);
+  return fitRemainingRows(
+    [...head, ...finished.summary],
+    finished.remaining,
+    notStarted.summary,
+    limit,
+  );
 }
 
 function statusCardText(report: RunReport, replacedApplication: boolean) {
@@ -160,14 +165,25 @@ function statusCardText(report: RunReport, replacedApplication: boolean) {
   );
 }
 
+function parseCard(text: string) {
+  const lines = text.split("\n");
+  const head = lines.splice(0, lines[0]!.startsWith(`_${APPLICATION_NOTICE}_`) ? 3 : 1);
+  if (lines[0] === STOPPING || lines[0] === UNRESOLVED) head.push(lines.shift()!);
+  return { head, rows: lines };
+}
+
 /** A card that replaces another application's card carries the notice once, as its first line. */
 export function withApplicationNotice(text: string) {
   if (text.startsWith(`_${APPLICATION_NOTICE}_`)) return text;
-  const [heading, ...rows] = text.split("\n");
-  const head = [`_${APPLICATION_NOTICE}_`, "", heading!];
-  if (rows[0] === STOPPING || rows[0] === UNRESOLVED) head.push(rows.shift()!);
-  return fitCard(head, rows);
+  const { head, rows } = parseCard(text);
+  return fitCard([`_${APPLICATION_NOTICE}_`, "", ...head], rows);
 }
+
+export const fitCardText = (text: string, limit: number) => {
+  if (text.length <= limit) return text;
+  const { head, rows } = parseCard(text);
+  return fitCard(head, rows, limit);
+};
 
 type CardRow = {
   delivery_id: string;

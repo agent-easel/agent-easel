@@ -2,17 +2,22 @@ import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
+  confirmationAnswered,
   besidesReports,
-  buttonShown,
-  clicked,
   clockedStartingWorld,
+  confirmationAnswers,
+  confirmed,
   createdBesidesReports,
   confirmations,
-  clickAnswers,
   isStatusCard,
   proposedStart,
   pendingStart,
   privateStartingWorld,
+  reply,
+  resolved,
+  type Confirmation,
+  type ReplyOptions,
+  reviewShows,
   runsOf,
   START_PROMPT,
   startCall,
@@ -39,52 +44,98 @@ import { addedProject } from "./support/chat-runs.ts";
 import { assertOk } from "./support/domain-setup.ts";
 import { PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
 
-/** Clicks that decided the review answer with its disabled button; others privately. */
 const ANSWERS = {
-  accepted: "✅ Confirmed (disabled)",
+  accepted: "✅ Confirmed",
   notYours:
     "🔒 Only the person who asked for this review can confirm it. Ask Factory for your own.",
+  notReply:
+    "↪️ Nothing was done. To confirm, reply to the review's last message with its exact confirmation phrase.",
+  wrongPhrase:
+    "🔤 That is not this review's confirmation phrase, so nothing was done. Reply with the exact phrase before the review expires.",
   invalid: "🚫 This confirmation is no longer valid. Ask Factory for a new review.",
   expired: "⌛ This review expired, so nothing was done. Ask Factory for a new review.",
   denied: "🚫 Chat control does not accept this confirmation from you here.",
-  rejected: "🚫 No longer valid (disabled)",
+  rejected: "🚫 No longer valid",
+  notNow:
+    "⚠️ Factory could not act on this right now and did nothing. Try again before the review expires.",
 } as const;
+
+const PREPARATION_FAILED =
+  "⚠️ Factory could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
+
+const CONFIRMATION_TEXT = new RegExp(
+  `^🔒 <@${PARTICIPANT_ID}> To confirm, reply to this message with \`confirm [ACDEFHJKMNPQRTWXY34679]{4}\` · only the requester can confirm · expires <t:\\d+:R>$`,
+);
 
 const MESSAGE_CREATES = /^\/api\/v10\/channels\/\d+\/messages$/;
 
-it("a Start proposal posts Factory's complete compact review with one requester button last, and starts nothing", async (c) => {
+it("a Start proposal posts Factory's complete compact review with the requester's confirmation phrase last, and starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
 
   // Act
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Assert
-  const [review, confirmation] = world.discord.created;
+  const [review, last] = world.discord.created;
   expect(review!.content).toBe(
     [
       `📝 **Start ${world.flow.name} in ${world.project.title}?**`,
       `\`\`\`\n${START_PROMPT}\n\`\`\``,
     ].join("\n"),
   );
-  expect(confirmation!.content).toMatch(/^🔒 Only the requester can confirm · expires <t:\d+:R>$/);
+  expect(last!.content).toMatch(CONFIRMATION_TEXT);
+  expect(last!.content).toContain(`\`${confirmation.phrase}\``);
   expect(confirmations(world.discord)).toHaveLength(1);
-  expect(button).toMatch(/^factory-confirm:/);
   expect(await runsOf(world.factory)).toStrictEqual([]);
+});
+
+it("the review's last message mentions only its requester", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+
+  // Act
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+
+  // Assert
+  const create = world.discord
+    .requested("POST", MESSAGE_CREATES)
+    .map((request) => request.body as { content: string; allowed_mentions: unknown })
+    .find((body) => body.content.includes(confirmation.phrase));
+  expect(create!.allowed_mentions).toStrictEqual({ parse: [], users: [PARTICIPANT_ID] });
+});
+
+it("each review gets a fresh confirmation phrase", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const other = await addedProject(world, "other-clone");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  const first = await proposedStart(world, "600000000000000001", 2);
+
+  // Act
+  const second = await proposedStart(
+    world,
+    "600000000000000002",
+    4,
+    startCall(world, "Improve search filters", { projectId: other.id }),
+    "also start: Improve search filters",
+  );
+
+  // Assert
+  expect(second.phrase).not.toBe(first.phrase);
 });
 
 it("the requester's confirmation accepts exactly the reviewed Start, posts its status card as the only message and makes the thread the Run's originating thread", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
-  expect(buttonShown(world.discord, button)).toBe("✅ Confirmed (disabled)");
-  expect(world.discord.interactionAnswers.map((entry) => entry.kind)).toStrictEqual(["updated"]);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([]);
   await world.discord.createdWhere(isStatusCard, 1);
   const navigation = await world.factory.listRunNavigation();
   assert(navigation.ok);
@@ -98,73 +149,163 @@ it("the requester's confirmation accepts exactly the reviewed Start, posts its s
   expect(statusCardsIn(world.discord).map((card) => card.channelId)).toStrictEqual([THREAD]);
 });
 
-it("another participant's click is refused ephemerally and leaves the requester's consent usable", async (c) => {
+it("another participant's reply with the phrase is refused publicly, never reaches the language model and leaves the requester's consent usable", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  await clicked(world.discord, button, "610000000000000001", 1, { userId: COLLABORATOR_ID });
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const requests = world.model.requests.length;
+  await confirmed(world.discord, confirmation, "610000000000000001", 1, {
+    userId: COLLABORATOR_ID,
+  });
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000002", 2);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000002", 2);
 
   // Assert
-  expect(clickAnswers(world.discord)).toStrictEqual([ANSWERS.notYours, ANSWERS.accepted]);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.notYours]);
   expect(answer).toBe(ANSWERS.accepted);
+  expect(world.model.requests).toHaveLength(requests);
   expect(await runsOf(world.factory)).toStrictEqual([{ number: 1, title: "Improve search" }]);
 });
 
-it("another participant's click is answered privately and leaves the requester's button as it is", async (c) => {
+const REFUSED_ATTEMPTS: readonly {
+  readonly name: string;
+  readonly options: (confirmation: Confirmation) => ReplyOptions;
+  readonly answer: string;
+}[] = [
+  { name: "a plain yes as a Reply", options: () => ({ text: "yes" }), answer: ANSWERS.wrongPhrase },
+  {
+    name: "a wrong code",
+    options: () => ({ text: "confirm 7777" }),
+    answer: ANSWERS.wrongPhrase,
+  },
+  {
+    name: "the phrase in lower case",
+    options: (confirmation) => ({ text: confirmation.phrase.toLowerCase() }),
+    answer: ANSWERS.wrongPhrase,
+  },
+  {
+    name: "the phrase surrounded by spaces",
+    options: (confirmation) => ({ text: ` ${confirmation.phrase} ` }),
+    answer: ANSWERS.wrongPhrase,
+  },
+  {
+    name: "the exact phrase without a Reply",
+    options: () => ({ asReply: false }),
+    answer: ANSWERS.notReply,
+  },
+];
+
+for (const attempt of REFUSED_ATTEMPTS)
+  it(`${attempt.name} confirms nothing, never reaches the language model and leaves the consent usable`, async (c) => {
+    // Arrange
+    const world = await startingWorld(c);
+    const confirmation = await proposedStart(world, "600000000000000001", 2);
+    const requests = world.model.requests.length;
+
+    // Act
+    const answer = await confirmed(
+      world.discord,
+      confirmation,
+      "610000000000000001",
+      1,
+      attempt.options(confirmation),
+    );
+
+    // Assert
+    expect(answer).toBe(attempt.answer);
+    expect(world.model.requests).toHaveLength(requests);
+    expect(await runsOf(world.factory)).toStrictEqual([]);
+    expect(await confirmed(world.discord, confirmation, "610000000000000002", 2)).toBe(
+      ANSWERS.accepted,
+    );
+  });
+
+it("the phrase as a Reply to another of Factory's messages confirms nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const [review] = world.discord.created;
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1, {
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1, {
+    replyTo: review!.id,
+  });
+
+  // Assert
+  expect(answer).toBe(ANSWERS.notReply);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+});
+
+it("a reply to the review from a user Access does not allow is ignored without any answer or model request", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const requests = world.model.requests.length;
+  reply(world.discord, confirmation, "610000000000000001", { userId: "200000000000000099" });
+
+  // Act
+  const answer = await confirmed(world.discord, confirmation, "610000000000000002", 1);
+
+  // Assert
+  expect(answer).toBe(ANSWERS.accepted);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([]);
+  expect(world.model.requests).toHaveLength(requests);
+});
+
+it("another participant's reply leaves the requester's review waiting", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+
+  // Act
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1, {
     userId: COLLABORATOR_ID,
   });
 
   // Assert
   expect(answer).toBe(ANSWERS.notYours);
-  expect(buttonShown(world.discord, button)).toBe("Confirm Start");
-  expect(world.discord.componentEdits).toStrictEqual([]);
+  expect(reviewShows(world.discord, confirmation)).toMatch(CONFIRMATION_TEXT);
+  expect(world.discord.edits).toStrictEqual([]);
 });
 
-it("a repeated click after acceptance starts no second Run and tells the requester the accepted result without a public receipt", async (c) => {
+it("reusing a used phrase after acceptance starts no second Run and tells the requester the accepted result without a receipt", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  await clicked(world.discord, button, "610000000000000001", 1);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.createdWhere(isStatusCard, 1);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000002", 2);
+  reply(world.discord, confirmation, "610000000000000002");
 
   // Assert
-  expect(answer).toBe(
+  expect(await confirmationAnswered(world.discord, 1)).toBe(
     "You already confirmed this review. Factory accepted Run #1 “Improve search”.",
   );
   expect(await runsOf(world.factory)).toHaveLength(1);
-  expect(besidesReports(world.discord)).toHaveLength(2);
+  expect(besidesReports(world.discord)).toHaveLength(3);
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("two clicks racing on one review start exactly one Run", async (c) => {
+it("two confirmation replies racing on one review start exactly one Run", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Act
-  const [first, second] = await Promise.all([
-    clicked(world.discord, button, "610000000000000001", 1),
-    clicked(world.discord, button, "610000000000000002", 2),
-  ]);
+  reply(world.discord, confirmation, "610000000000000001");
+  reply(world.discord, confirmation, "610000000000000002");
 
   // Assert
-  expect([first, second]).toContain(ANSWERS.accepted);
+  expect(await resolved(world.discord, confirmation)).toBe(ANSWERS.accepted);
+  expect(await confirmationAnswered(world.discord, 1)).toMatch(
+    /^(?:⏳|You already confirmed this review\.)/,
+  );
   expect(await runsOf(world.factory)).toStrictEqual([{ number: 1, title: "Improve search" }]);
 });
 
-it("an identical proposal by the same requester reuses the waiting review and posts no second button", async (c) => {
+it("an identical proposal by the same requester reuses the waiting review and posts no second phrase", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await proposedStart(world, "600000000000000001", 2);
@@ -183,7 +324,7 @@ it("an identical proposal by the same requester reuses the waiting review and po
   expect(confirmations(world.discord)).toHaveLength(1);
 });
 
-it("a corrected Start for the same Project supersedes the earlier review without the model naming it, so its button starts nothing", async (c) => {
+it("a corrected Start for the same Project supersedes the earlier review without the model naming it, so its phrase starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const first = await proposedStart(world, "600000000000000001", 2);
@@ -196,14 +337,14 @@ it("a corrected Start for the same Project supersedes the earlier review without
   );
 
   // Act
-  const answer = await clicked(world.discord, first, "610000000000000001", 1);
+  reply(world.discord, first, "610000000000000001");
 
   // Assert
-  expect(answer).toBe(ANSWERS.invalid);
+  expect(await confirmationAnswered(world.discord, 1)).toBe(ANSWERS.invalid);
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
-it("a corrected Start shows the earlier review's button as replaced", async (c) => {
+it("a corrected Start shows the earlier review as replaced", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const first = await proposedStart(world, "600000000000000001", 2);
@@ -218,8 +359,7 @@ it("a corrected Start shows the earlier review's button as replaced", async (c) 
   );
 
   // Assert
-  await world.discord.componentsEdited(1);
-  expect(buttonShown(world.discord, first)).toBe("↩️ Replaced (disabled)");
+  expect(await resolved(world.discord, first)).toBe("↩️ Replaced");
   expect(confirmations(world.discord)).toHaveLength(2);
 });
 
@@ -238,19 +378,19 @@ it("a Start proposed for another Project leaves the earlier Start's review confi
   );
 
   // Act
-  const answer = await clicked(world.discord, first, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, first, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
   expect(await runsOf(world.factory)).toStrictEqual([{ number: 1, title: "Improve search" }]);
 });
 
-it("completing Start preflight after access revocation accepts no Run", async (c) => {
+it("completing Start preflight after the requester's Access revocation accepts no Run", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  const pending = await pendingStart(world, button);
-  await savedAccess(world.factory, [], []);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, confirmation);
+  await savedAccess(world.factory, [COLLABORATOR_ID], [world.project.id]);
 
   // Act
   pending.release();
@@ -264,8 +404,8 @@ it("completing Start preflight after access revocation accepts no Run", async (c
 it("completing Start preflight after a Gateway gap refreshes the requester's lost guild access", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  const pending = await pendingStart(world, button);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, confirmation);
   const lookups = world.discord.requested("GET", /guilds\/\d+\/members\//).length;
   world.discord.removeGuildMember(PARTICIPANT_ID);
   world.discord.interruptSessions();
@@ -284,8 +424,8 @@ it("completing Start preflight after a Gateway gap refreshes the requester's los
 it("completing Start preflight refreshes a public thread's current parent-channel permissions", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  const pending = await pendingStart(world, button);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, confirmation);
   world.discord.hideChannelFrom(ALLOWED_CHANNEL, PARTICIPANT_ID);
 
   // Act
@@ -300,20 +440,20 @@ it("completing Start preflight refreshes a public thread's current parent-channe
 it("a Discord denial after Start preflight leaves the same consent usable when membership returns", async (c) => {
   // Arrange
   const world = await privateStartingWorld(c);
-  const pending = await pendingStart(world, world.button, world.clickOptions);
-  world.discord.removeThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  const pending = await pendingStart(world, world.confirmation, world.replyOptions);
+  world.discord.removeThreadMember(world.replyOptions.thread.id, PARTICIPANT_ID);
   pending.release();
   const firstAnswer = await pending.answer;
-  world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  world.discord.addThreadMember(world.replyOptions.thread.id, PARTICIPANT_ID);
   delete world.t3.contract.beforeInspection;
 
   // Act
-  const answer = await clicked(
+  const answer = await confirmed(
     world.discord,
-    world.button,
+    world.confirmation,
     "610000000000000091",
     2,
-    world.clickOptions,
+    world.replyOptions,
   );
 
   // Assert
@@ -326,25 +466,21 @@ it("a Discord denial after Start preflight leaves the same consent usable when m
 it("restoring Discord membership cannot revive a consent revoked by Factory during Start preflight", async (c) => {
   // Arrange
   const world = await privateStartingWorld(c);
-  const pending = await pendingStart(world, world.button, world.clickOptions);
-  world.discord.removeThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
-  await savedAccess(world.factory, [], []);
+  const pending = await pendingStart(world, world.confirmation, world.replyOptions);
+  world.discord.removeThreadMember(world.replyOptions.thread.id, PARTICIPANT_ID);
+  await savedAccess(world.factory, [COLLABORATOR_ID], [world.project.id]);
   pending.release();
-  await pending.answer;
-  world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  const firstAnswer = await pending.answer;
+  world.discord.addThreadMember(world.replyOptions.thread.id, PARTICIPANT_ID);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id]);
   delete world.t3.contract.beforeInspection;
 
   // Act
-  const answer = await clicked(
-    world.discord,
-    world.button,
-    "610000000000000091",
-    2,
-    world.clickOptions,
-  );
+  reply(world.discord, world.confirmation, "610000000000000091", world.replyOptions);
+  const answer = await confirmationAnswered(world.discord, 1);
 
   // Assert
+  expect(firstAnswer).toBe(ANSWERS.rejected);
   expect(answer).not.toBe(ANSWERS.accepted);
   expect(await runsOf(world.factory)).toStrictEqual([]);
   expect(world.t3.threads.launchCalls).toBe(0);
@@ -353,8 +489,8 @@ it("restoring Discord membership cannot revive a consent revoked by Factory duri
 it("completing Start preflight after revocation and regrant starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  const pending = await pendingStart(world, button);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, confirmation);
   await savedAccess(world.factory, [], []);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id]);
 
@@ -404,7 +540,7 @@ it("confirming a Start whose Flow moved to another Project after the review star
   // Arrange
   const world = await startingWorld(c);
   const other = await addedProject(world, "other-clone");
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   assertOk(
     await world.factory.changeFlowOwner(world.flow.id, {
       expectedProjectId: null,
@@ -413,7 +549,7 @@ it("confirming a Start whose Flow moved to another Project after the review star
   );
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.rejected);
@@ -483,15 +619,18 @@ it("task text over 8,000 characters is refused without a review, never shortened
   expect(toolResults(world.model, 1)[0]!.error).toBe("prompt_too_long");
 });
 
-it.effect("a click after the review's five-minute lifetime starts nothing", (c) =>
+it.effect("a reply after the review's five-minute lifetime starts nothing", (c) =>
   Effect.gen(function* () {
     // Arrange
     const world = yield* clockedStartingWorld(c);
-    const button = yield* until(() => proposedStart(world, "600000000000000001", 2));
+    const confirmation = yield* until(() => proposedStart(world, "600000000000000001", 2));
     yield* TestClock.adjust(5 * 60_000);
 
     // Act
-    const answer = yield* until(() => clicked(world.discord, button, "610000000000000001", 1));
+    const answer = yield* until(async () => {
+      reply(world.discord, confirmation, "610000000000000001");
+      return confirmationAnswered(world.discord, 1);
+    });
 
     // Assert
     expect(answer).toBe(ANSWERS.expired);
@@ -505,8 +644,8 @@ it.effect("a Start first reaching acceptance after its review expires starts not
   Effect.gen(function* () {
     // Arrange
     const world = yield* clockedStartingWorld(c);
-    const button = yield* until(() => proposedStart(world, "600000000000000001", 2));
-    const pending = yield* until(() => pendingStart(world, button));
+    const confirmation = yield* until(() => proposedStart(world, "600000000000000001", 2));
+    const pending = yield* until(() => pendingStart(world, confirmation));
     yield* TestClock.adjust(5 * 60_000);
 
     // Act
@@ -522,32 +661,39 @@ it.effect("a Start first reaching acceptance after its review expires starts not
   }),
 );
 
-it.effect("a review's button shows as expired at its original expiry", (c) =>
+it.effect("a review shows as expired at its original expiry", (c) =>
   Effect.gen(function* () {
     // Arrange
     const world = yield* clockedStartingWorld(c);
-    const button = yield* until(() => proposedStart(world, "600000000000000001", 2));
+    const confirmation = yield* until(() => proposedStart(world, "600000000000000001", 2));
 
     // Act
     yield* TestClock.adjust(5 * 60_000);
 
     // Assert
-    yield* until(() => world.discord.componentsEdited(1));
-    expect(buttonShown(world.discord, button)).toBe("⌛ Expired (disabled)");
+    expect(yield* until(() => resolved(world.discord, confirmation))).toBe("⌛ Expired");
   }),
 );
 
-it("a Discord access denial rejects the click without consuming the consent", async (c) => {
+it("a Discord access denial rejects the reply without consuming the consent", async (c) => {
   // Arrange
-  const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  await clicked(world.discord, button, "610000000000000001", 1, { permissions: 0n });
+  const world = await privateStartingWorld(c);
+  const { confirmation, replyOptions } = world;
+  world.discord.removeThreadMember(replyOptions.thread.id, PARTICIPANT_ID);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1, replyOptions);
+  world.discord.addThreadMember(replyOptions.thread.id, PARTICIPANT_ID);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000002", 2);
+  const answer = await confirmed(
+    world.discord,
+    confirmation,
+    "610000000000000002",
+    2,
+    replyOptions,
+  );
 
   // Assert
-  expect(clickAnswers(world.discord)).toStrictEqual([ANSWERS.denied, ANSWERS.accepted]);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.denied]);
   expect(answer).toBe(ANSWERS.accepted);
   expect(await runsOf(world.factory)).toHaveLength(1);
 });
@@ -555,32 +701,31 @@ it("a Discord access denial rejects the click without consuming the consent", as
 it("revoking the requester voids their waiting review for good, even after the grant returns", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   await savedAccess(world.factory, [COLLABORATOR_ID], [world.project.id]);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id]);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  reply(world.discord, confirmation, "610000000000000001");
 
   // Assert
-  expect(answer).toBe(ANSWERS.invalid);
+  expect(await confirmationAnswered(world.discord, 1)).toBe(ANSWERS.invalid);
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
-it("revoking the requester shows their waiting review's button as no longer valid", async (c) => {
+it("revoking the requester shows their waiting review as no longer valid", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Act
   await savedAccess(world.factory, [COLLABORATOR_ID], [world.project.id]);
 
   // Assert
-  await world.discord.componentsEdited(1);
-  expect(buttonShown(world.discord, button)).toBe("🚫 No longer valid (disabled)");
+  expect(await resolved(world.discord, confirmation)).toBe("🚫 No longer valid");
 });
 
-it("a review voided while Chat control is Off keeps its button as it is after turning On again", async (c) => {
+it("a review voided while Chat control is Off keeps its phrase as it is after turning On again", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const voidedWhileOff = await proposedStart(world, "600000000000000001", 2);
@@ -601,14 +746,12 @@ it("a review voided while Chat control is Off keeps its button as it is after tu
   await savedAccess(world.factory, [], [world.project.id]);
 
   // Assert
-  await world.discord.componentsEdited(1);
-  expect(world.discord.componentEdits.map((edit) => edit.messageId)).toStrictEqual([
-    voidedWhileOn.id,
-  ]);
-  expect(buttonShown(world.discord, voidedWhileOff)).toBe("Confirm Start");
+  await world.discord.messagesWhen(() => world.discord.edits.length >= 1);
+  expect(world.discord.edits.map((edit) => edit.messageId)).toStrictEqual([voidedWhileOn.id]);
+  expect(reviewShows(world.discord, voidedWhileOff)).toMatch(CONFIRMATION_TEXT);
 });
 
-it("revoking the requester while their review is being posted stops it before its button appears", async (c) => {
+it("revoking the requester while their review is being posted stops it before its phrase appears", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   world.discord.faultMessages("paused");
@@ -636,7 +779,7 @@ it("revoking the requester while their review is being posted stops it before it
 it("replacing the Discord application retires its waiting reviews, even after switching back", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   const other = { token: "other-bot-token.discord.secret", applicationId: "123456789012345679" };
   world.discord.addBot(other);
   const replaced = await world.factory.updateDiscordConnection(
@@ -651,22 +794,22 @@ it("replacing the Discord application retires its waiting reviews, even after sw
   await servingAgain(world.discord, 3);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  reply(world.discord, confirmation, "610000000000000001");
 
   // Assert
-  expect(answer).toBe(ANSWERS.invalid);
+  expect(await confirmationAnswered(world.discord, 1)).toBe(ANSWERS.invalid);
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
 it("consent survives turning Chat control Off and On again within its lifetime", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
   await turnedOn(world.factory, world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
@@ -676,7 +819,7 @@ it("consent survives turning Chat control Off and On again within its lifetime",
 it("rotating the same application's bot token while On keeps the waiting review confirmable", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   const rotated = "rotated-bot-token.discord.secret";
   world.discord.addBot({ token: rotated, applicationId: discordBot.applicationId });
   const saved = await world.factory.updateDiscordConnection(
@@ -686,7 +829,7 @@ it("rotating the same application's bot token while On keeps the waiting review 
   await servingAgain(world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
@@ -696,13 +839,13 @@ it("rotating the same application's bot token while On keeps the waiting review 
 it("a review presented before a backend restart is confirmed once after it", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   await world.factory.close();
   const reopened = await world.open();
   await servingAgain(world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
@@ -712,12 +855,12 @@ it("a review presented before a backend restart is confirmed once after it", asy
 it("a confirmation works while the language model fails, with no model request", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.model.fail(500, { error: "down" });
   const requests = world.model.requests.length;
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
@@ -728,11 +871,11 @@ it("a confirmation works while the language model fails, with no model request",
 it("a definitive Start rejection uses up the consent and posts a not-accepted receipt", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   assert((await world.factory.removeFlow(world.flow.id)).ok);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.rejected);
@@ -746,7 +889,7 @@ it("a definitive Start rejection uses up the consent and posts a not-accepted re
 it("confirming a Start whose Agent lost its model after the review starts no Run and names the Agent that needs one", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   const block = world.flow.graph.blocks.find((entry) => entry.kind === "agent");
   assert(block?.kind === "agent" && block.agentId);
   const agent = await world.factory.getAgent(block.agentId);
@@ -763,7 +906,7 @@ it("confirming a Start whose Agent lost its model after the review starts no Run
   assert(cleared.ok, JSON.stringify(cleared));
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.rejected);
@@ -775,8 +918,8 @@ it("confirming a Start whose Agent lost its model after the review starts no Run
 it("a later turn reads the proposal's accepted outcome from Factory's facts instead of proposing again", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
-  await clicked(world.discord, button, "610000000000000001", 1);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.createdWhere(isStatusCard, 1);
   world.model.script({ text: "It started as Run #1." });
 
@@ -807,17 +950,19 @@ it("a UI-started Run gets no status card, while a chat-started Run in the same P
     input: "Started in Factory\nNot through chat.",
   });
   assert(uiStarted.ok, JSON.stringify(uiStarted));
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   await world.discord.createdWhere(isStatusCard, 1);
   expect(statusCardsIn(world.discord)).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringMatching(/^\*\*Run #2 · Improve search\*\* · 🟢 Active · 🔀 /),
+      content: expect.stringMatching(
+        new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #2 · Improve search\\*\\* · 🟢 Active · 🔀 `),
+      ),
     }),
   ]);
 });
@@ -825,14 +970,10 @@ it("a UI-started Run gets no status card, while a chat-started Run in the same P
 const owedReceipt = (world: Awaited<ReturnType<typeof startingWorld>>) =>
   discordSettingsWhen(world.factory, (settings) => settings.delivery.problems.length > 0);
 
-/**
- * A Start review whose Flow was removed afterwards, so its confirmation is rejected: the only
- * Start outcome that posts a receipt. Returns its button.
- */
 async function rejectedProposal(world: Awaited<ReturnType<typeof startingWorld>>) {
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   assert((await world.factory.removeFlow(world.flow.id)).ok);
-  return button;
+  return confirmation;
 }
 
 const REJECTED = "❌ **Start not accepted**";
@@ -840,14 +981,13 @@ const REJECTED = "❌ **Start not accepted**";
 it("a receipt create Discord performed without answering is asked again under its enforced nonce and shows once", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages("lost");
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
-  // The review, its button, the lost receipt create and its re-attempt under the same nonce.
   await world.discord.request("POST", MESSAGE_CREATES, 4);
   expect(
     besidesReports(world.discord)
@@ -866,14 +1006,14 @@ it("a receipt create Discord performed without answering is asked again under it
   expect(settings.value.delivery.problems).toStrictEqual([]);
 });
 
-it("a confirmation button whose create failed without proof is asked again under its nonce, shows once and confirms", async (c) => {
+it("a review's last message whose create failed without proof is asked again under its nonce, shows once and confirms", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   world.discord.faultMessages("delivered", "delivered", "delivered", "failed");
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ANSWERS.accepted);
@@ -881,14 +1021,54 @@ it("a confirmation button whose create failed without proof is asked again under
   expect(await runsOf(world.factory)).toHaveLength(1);
 });
 
+it("while the review's last message is still being posted, no reply with its phrase confirms, whichever Factory message it replies to", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  world.discord.faultMessages("delivered", "paused-lost");
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  const [review] = world.discord.created;
+
+  // Act
+  reply(world.discord, confirmation, "610000000000000001", { replyTo: review!.id });
+  reply(world.discord, confirmation, "610000000000000002");
+
+  // Assert
+  await world.discord.messagesWhen(
+    (messages) => confirmationAnswers(world.discord).length >= 2 || messages.some(isStatusCard),
+  );
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.notNow, ANSWERS.notNow]);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.threads.launchCalls).toBe(0);
+  world.discord.releaseMessages();
+});
+
+it("a review whose last message stays unproven fails, and no reply with its phrase confirms it", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  world.discord.faultMessages("delivered", ...unproven("lost"));
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
+  await world.discord.createdWhere((message) => message.content === PREPARATION_FAILED, 1);
+  const [review] = world.discord.created;
+
+  // Act
+  reply(world.discord, confirmation, "610000000000000001", { replyTo: review!.id });
+  reply(world.discord, confirmation, "610000000000000002");
+
+  // Assert
+  await confirmationAnswered(world.discord, 2);
+  expect(confirmationAnswers(world.discord)).toStrictEqual([ANSWERS.invalid, ANSWERS.invalid]);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.threads.launchCalls).toBe(0);
+});
+
 it("a receipt create still unproven after its re-attempts under the nonce is not repeated and is shown in Settings as unknown", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages(...unproven("lost"));
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   const settings = await owedReceipt(world);
@@ -910,9 +1090,9 @@ it("a receipt create still unproven after its re-attempts under the nonce is not
 it("the warned Retry sends an unknown receipt once more and starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages(...unproven("lost"));
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   const [problem] = (await owedReceipt(world)).delivery.problems;
   world.discord.nonceWindowPassed();
 
@@ -937,9 +1117,9 @@ it("the warned Retry sends an unknown receipt once more and starts nothing", asy
 it("Retry of an unknown receipt is refused until the owner accepts a possible duplicate", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages(...unproven("lost"));
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   const [problem] = (await owedReceipt(world)).delivery.problems;
 
   // Act
@@ -957,9 +1137,9 @@ it("Retry of an unknown receipt is refused until the owner accepts a possible du
 it("a receipt Discord refused is shown as failed, and Retry after correction delivers it without a duplicate warning", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages("refused");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   const [problem] = (await owedReceipt(world)).delivery.problems;
 
   // Act
@@ -978,11 +1158,11 @@ it("a receipt Discord refused is shown as failed, and Retry after correction del
 it("a rate-limited receipt is retried automatically", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages("rate-limited");
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   await createdBesidesReports(world.discord, 3);
@@ -992,9 +1172,9 @@ it("a rate-limited receipt is retried automatically", async (c) => {
 it("revoking the receipt's destination cancels the owed receipt", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages("refused");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await owedReceipt(world);
 
   // Act
@@ -1010,9 +1190,9 @@ it("revoking the receipt's destination cancels the owed receipt", async (c) => {
 it("a revoked receipt create interrupted by a backend stop stays unknown after restart", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await rejectedProposal(world);
+  const confirmation = await rejectedProposal(world);
   world.discord.faultMessages("held");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.request("POST", /^\/api\/v10\/channels\/\d+\/messages$/, 3);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], []);
   await world.factory.close();

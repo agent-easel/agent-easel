@@ -18,11 +18,13 @@ import {
 import { addedProject, calls, readRun } from "./support/chat-runs.ts";
 import { type CreatedMessage, PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
 import {
+  machineRecord,
   nativeRequestAnswered,
   nativeRequestShown,
   noticeCreated,
   pausedAttentionCreate,
   pausedSettlementProblem,
+  prose,
   revokedNoticeCreate,
 } from "./support/report-notices.ts";
 import {
@@ -86,6 +88,15 @@ function expectNoticePing(discord: World["discord"], notice: CreatedMessage) {
 
 const isCompletion = (message: CreatedMessage) => /^✅ .+ finished\.\n/.test(message.content);
 const completions = (discord: World["discord"]) => discord.created.filter(isCompletion);
+
+const isArchiveNotice = (message: CreatedMessage) =>
+  /^🗄️ .+ was archived\.\n/.test(message.content);
+const archiveNotices = (discord: World["discord"]) => discord.created.filter(isArchiveNotice);
+
+async function archiveNoticeCreated(discord: World["discord"]) {
+  await discord.createdWhere(isArchiveNotice, 1);
+  return archiveNotices(discord)[0]!;
+}
 
 async function completionCreated(discord: World["discord"], ordinal = 1) {
   await discord.createdWhere(isCompletion, ordinal);
@@ -181,14 +192,24 @@ it("automatic settlement posts one plain completion notice to the requester in t
   // Assert
   const notice = await completionCreated(world.discord);
   expect(notice.channelId).toBe(THREAD);
-  expect(notice.content).toBe(
-    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nReply here to inspect the result or choose what to do next.`,
+  expect(prose(notice.content)).toBe(
+    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nSettled automatically.\nReply here to inspect the result or choose what to do next.`,
   );
+  expect(machineRecord(notice.content)).toStrictEqual({
+    v: 1,
+    event: "completion",
+    id: expect.any(String),
+    runId: expect.any(String),
+    runNumber: 1,
+    cycle: 1,
+    settlement: "automatic",
+    ending: null,
+  });
   expectNoticePing(world.discord, notice);
   expect(noticesIn(world.discord)).toStrictEqual([notice]);
 });
 
-it("reaching Finish posts a completion notice without disclosing the chosen ending or its output", async (c) => {
+it("reaching Finish names the settlement and the exact ending, and neither the prompt nor the result", async (c) => {
   // Arrange
   const world = await startingWorld(c, optionalEndingFlow);
   const { worker } = await chatStartedRun(world);
@@ -199,9 +220,16 @@ it("reaching Finish posts a completion notice without disclosing the chosen endi
 
   // Assert
   const notice = await completionCreated(world.discord);
-  expect(notice.content).toBe(
-    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nReply here to inspect the result or choose what to do next.`,
+  expect(prose(notice.content)).toBe(
+    `✅ ${REQUESTER_MENTION} **Run #1 · Improve search** finished.\nSettled at Finish ending "Delivered".\nReply here to inspect the result or choose what to do next.`,
   );
+  expect(machineRecord(notice.content)).toMatchObject({
+    event: "completion",
+    cycle: 1,
+    settlement: "finish",
+    ending: "Delivered",
+  });
+  expect(notice.content).not.toContain("Implemented the requested result.");
   expectNoticePing(world.discord, notice);
 });
 
@@ -225,7 +253,31 @@ it("a Run posts a new completion when it settles again, even after its first not
     second,
   ]);
   expect(second.id).not.toBe(first.id);
+  expect(machineRecord(first.content)).toMatchObject({ event: "completion", cycle: 1 });
+  expect(machineRecord(second.content)).toMatchObject({ event: "completion", cycle: 2 });
+  expect(machineRecord(second.content).id).not.toBe(machineRecord(first.content).id);
   expectNoticePing(world.discord, second);
+});
+
+it("a completion's event id is the same in every attempt to deliver it", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  world.discord.faultMessages("rate-limited");
+
+  // Act
+  await finished(world, worker);
+
+  // Assert
+  const notice = await completionCreated(world.discord);
+  const attempts = world.discord
+    .requested("POST", MESSAGES)
+    .map((request) => (request.body as { content: string }).content)
+    .filter((content) => content.startsWith("✅"));
+  expect(attempts.length).toBeGreaterThan(1);
+  expect(new Set(attempts.map((content) => machineRecord(content).id))).toStrictEqual(
+    new Set([machineRecord(notice.content).id]),
+  );
 });
 
 it("reactivating a Run retires its completion waiting for a rate-limit retry", async (c) => {
@@ -493,12 +545,21 @@ it("a new Human step pings the requester once and points to a review in the thre
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(
+  expect(prose(notice.content)).toMatch(
     new RegExp(
       `^🙋 <@${PARTICIPANT_ID}> \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Human step Review waits for an answer — ask here to answer it$`,
     ),
   );
   expect(notice.components).toEqual([]);
+  expect(machineRecord(notice.content)).toStrictEqual({
+    v: 1,
+    event: "attention",
+    id: expect.any(String),
+    runId: expect.any(String),
+    runNumber: 1,
+    matters: [{ id: expect.any(String), kind: "human", act: "thread" }],
+    more: 0,
+  });
   expectNoticePing(world.discord, notice);
 });
 
@@ -515,7 +576,7 @@ it("answering the Human step edits its notice in place to resolved, without a ne
   // Assert
   assert(answered.ok, JSON.stringify(answered));
   const shown = await messageShows(world.discord, notice, /· ✅ resolved\n/);
-  expect(shown.content).toMatch(
+  expect(prose(shown.content)).toMatch(
     new RegExp(
       "^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input · ✅ resolved\\n• ~~Human step Review waits for an answer~~ ✅$",
     ),
@@ -534,11 +595,15 @@ it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(
+  expect(prose(notice.content)).toMatch(
     new RegExp(
       `^🙋 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 request — answer it in T3$`,
     ),
   );
+  expect(machineRecord(notice.content)).toMatchObject({
+    event: "attention",
+    matters: [{ kind: "native-request", act: "t3" }],
+  });
   expectNoticePing(world.discord, notice);
 });
 
@@ -557,7 +622,7 @@ it("catch-up reports a recorded request without adding an idle worker's T3 revie
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content.split("\n").slice(1)).toStrictEqual([
+  expect(notice.content.split("\n").slice(1, -1)).toStrictEqual([
     "• Entry worker has a T3 request — answer it in T3",
   ]);
   expect(noticesIn(world.discord)).toStrictEqual([notice]);
@@ -574,11 +639,15 @@ it("a confirmed Settle that could not stop workers posts a Problem notice in the
   // Assert
   const notice = await noticeCreated(world.discord);
   expect(notice.channelId).toBe(THREAD);
-  expect(notice.content).toMatch(
+  expect(prose(notice.content)).toMatch(
     new RegExp(
-      `^⚠️ ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers$`,
+      `^⚠️ ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers — check it in Factory$`,
     ),
   );
+  expect(machineRecord(notice.content)).toMatchObject({
+    event: "attention",
+    matters: [{ kind: "settlement-unresolved", act: "factory" }],
+  });
   expectNoticePing(world.discord, notice);
 });
 
@@ -597,7 +666,7 @@ it("manual settlement after a failed Stop resolves the Problem notice and posts 
   // Assert
   assert(settledRun.ok, JSON.stringify(settledRun));
   const shown = await messageShows(world.discord, notice, /· ✅ resolved\n/);
-  expect(shown.content).toMatch(
+  expect(prose(shown.content)).toMatch(
     new RegExp(
       "^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem · ✅ resolved\\n• ~~Settle could not stop workers~~ ✅$",
     ),
@@ -639,9 +708,9 @@ it("after Chat control was Off, one catch-up lists each matter still pending on 
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(
+  expect(prose(notice.content)).toMatch(
     new RegExp(
-      `^📬 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• Entry worker has a T3 request — answer it in T3\\n• Second entry: report missing$`,
+      `^📬 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• Entry worker has a T3 request — answer it in T3\\n• Second entry: report missing — check it in Factory$`,
     ),
   );
   expect(world.discord.created.slice(messages)).toStrictEqual([notice]);
@@ -660,8 +729,10 @@ it("resolving one matter of a catch-up edits only its own line in place", async 
 
   // Assert
   const shown = await messageShows(world.discord, notice, /~~/);
-  expect(shown.content).toMatch(
-    new RegExp("\\n• ~~Entry worker has a T3 request~~ ✅\\n• Second entry: report missing$"),
+  expect(prose(shown.content)).toMatch(
+    new RegExp(
+      "\\n• ~~Entry worker has a T3 request~~ ✅\\n• Second entry: report missing — check it in Factory$",
+    ),
   );
   expect(noticesIn(world.discord)).toHaveLength(1);
   expectSilentEdit(world.discord, shown);
@@ -695,9 +766,9 @@ it("resolving a hidden catch-up matter edits the existing message and removes th
   await turnedOn(world.factory, world.discord, 2);
   const notice = await noticeCreated(world.discord);
   expectNoticePing(world.discord, notice);
-  expect(notice.content).toContain("and 4 more");
+  expect(notice.content).toContain("and 8 more");
   expect(notice.content).not.toContain("Worker 11");
-  const visibleBefore = notice.content.split("\n").slice(1, -1);
+  const visibleBefore = notice.content.split("\n").slice(1, -2);
   world.t3.threads.recordThreadFacts(hidden.threadId, { pendingRequestCount: 0 });
 
   // Act
@@ -705,8 +776,8 @@ it("resolving a hidden catch-up matter edits the existing message and removes th
 
   // Assert
   assert(reconciled.ok, JSON.stringify(reconciled));
-  const shown = await messageShows(world.discord, notice, /and 4 more \(1 resolved\)/);
-  expect(shown.content.split("\n").slice(1, -1)).toEqual(visibleBefore);
+  const shown = await messageShows(world.discord, notice, /and 8 more \(1 resolved\)/);
+  expect(shown.content.split("\n").slice(1, -2)).toEqual(visibleBefore);
   expectSilentEdit(world.discord, shown);
   expect(noticesIn(world.discord)).toHaveLength(1);
 });
@@ -823,17 +894,16 @@ it("a rate-limited catch-up survives a restart and pings the requester once when
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(/\n• Entry worker has a T3 request — answer it in T3$/);
+  expect(prose(notice.content)).toMatch(/\n• Entry worker has a T3 request — answer it in T3$/);
   expect(noticesIn(world.discord)).toHaveLength(1);
   expectNoticePing(world.discord, notice);
 });
 
-it("Archive edits the pending matter's notice to resolved and the card to Archived, without a new message", async (c) => {
+it("Archive edits the pending matter's notice and the card, and posts one Archive notice to the requester", async (c) => {
   // Arrange
   const world = await startingWorld(c, humanReviewFlow);
   const { runId, card } = await reviewPending(world);
   const pending = await noticeCreated(world.discord);
-  const messages = world.discord.created.length;
 
   // Act
   const archived = await world.factory.archiveRun(runId);
@@ -846,7 +916,93 @@ it("Archive edits the pending matter's notice to resolved and the card to Archiv
     /^🙋 \*\*Run #1 · Improve search\*\* needs input · ✅ resolved\n/,
   );
   await messageShows(world.discord, card, / · 🗄️ Archived · /);
-  expect(world.discord.created).toHaveLength(messages);
+  const notice = await archiveNoticeCreated(world.discord);
+  expect(notice.channelId).toBe(THREAD);
+  expect(prose(notice.content)).toBe(
+    `🗄️ ${REQUESTER_MENTION} **Run #1 · Improve search** was archived.\nArchive is final; its history stays readable in Factory.`,
+  );
+  expect(machineRecord(notice.content)).toStrictEqual({
+    v: 1,
+    event: "archive",
+    id: expect.any(String),
+    runId,
+    runNumber: 1,
+  });
+  expectNoticePing(world.discord, notice);
+});
+
+it("an Archive notice is posted once, however often Factory restarts", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId } = await chatStartedRun(world);
+  assert((await world.factory.archiveRun(runId)).ok);
+  await archiveNoticeCreated(world.discord);
+
+  await turnedOff(world);
+
+  // Act
+  await world.factory.close();
+  const reopened = await world.open();
+  await turnedOn(reopened, world.discord, 2);
+
+  // Assert
+  expect(archiveNotices(world.discord)).toHaveLength(1);
+});
+
+it("an Archive notice owed while Chat control was Off is posted when it is turned on", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId } = await chatStartedRun(world);
+  await turnedOff(world);
+  assert((await world.factory.archiveRun(runId)).ok);
+  expect(archiveNotices(world.discord)).toEqual([]);
+
+  // Act
+  await turnedOn(world.factory, world.discord, 2);
+
+  // Assert
+  expectNoticePing(world.discord, await archiveNoticeCreated(world.discord));
+});
+
+it("a Run archived during revocation gets no Archive notice after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, card } = await chatStartedRun(world);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  assert((await world.factory.archiveRun(runId)).ok);
+
+  // Act
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+
+  // Assert
+  await messageShows(world.discord, card, / · 🗄️ Archived · /);
+  expect(archiveNotices(world.discord)).toEqual([]);
+});
+
+it("an unproven Archive notice requires warned Retry and posts once", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId } = await chatStartedRun(world);
+  world.discord.faultMessages(...unproven("failed"));
+  assert((await world.factory.archiveRun(runId)).ok);
+  const isUnknown = (item: { purpose: string; state: string }) =>
+    item.purpose === "archive" && item.state === "unknown";
+  const settings = await discordSettingsWhen(world.factory, (current) =>
+    current.delivery.problems.some(isUnknown),
+  );
+  const problem = settings.delivery.problems.find(isUnknown)!;
+
+  // Act
+  const retried = await world.factory.retryChatDelivery({
+    deliveryId: problem.id,
+    duplicateRiskAccepted: true,
+  });
+
+  // Assert
+  assert(retried.ok, JSON.stringify(retried));
+  expectNoticePing(world.discord, await archiveNoticeCreated(world.discord));
+  expect(archiveNotices(world.discord)).toHaveLength(1);
 });
 
 it("a Problem after regrant posts without replaying attention from the revoked interval", async (c) => {

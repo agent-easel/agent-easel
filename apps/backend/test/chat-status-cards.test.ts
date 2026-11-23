@@ -2,7 +2,7 @@ import { savedFlow, placingGraph } from "./support/subflow.ts";
 import { assert, expect, it } from "@effect/vitest";
 import {
   besidesReports,
-  clicked,
+  confirmed,
   isStatusCard,
   proposedStart,
   runsOf,
@@ -32,6 +32,7 @@ import { nativeRequestShown } from "./support/report-notices.ts";
 import {
   continuationFlow,
   exactLimitCardFlow,
+  nearLimitCardFlow,
   humanReviewFlow,
   largeStatusCardFlow,
   launchedWorkers,
@@ -109,7 +110,7 @@ it("ordinary Block activity edits the Run's one status card in its originating t
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("a new card shows every captured Block in breadth-first graph order and disables mentions", async (c) => {
+it("a new card shows every captured Block in breadth-first graph order and mentions only the requester", async (c) => {
   // Arrange
   const world = await startingWorld(c, statusCardFlow);
 
@@ -119,12 +120,15 @@ it("a new card shows every captured Block in breadth-first graph order and disab
   // Assert
   const shown = await messageShows(world.discord, card, /⚙️ \*\*Second @\u200bhere\*\* — working/);
   expect(shown.content).toMatch(
-    /^\*\*Run #1 · @\u200beveryone improve search\*\* · 🟢 Active · 🔀 Status card Flow\n⚙️ \*\*Entry worker\*\* — working(?: · not observed yet)?\n⚙️ \*\*Second @\u200bhere\*\* — working(?: · not observed yet)?\n○ Follow-up — not started\n○ Last Block — not started$/,
+    /^(?:<@\d+> )?\*\*Run #1 · @\u200beveryone improve search\*\* · 🟢 Active · 🔀 Status card Flow\n⚙️ \*\*Entry worker\*\* — working(?: · not observed yet)?\n⚙️ \*\*Second @\u200bhere\*\* — working(?: · not observed yet)?\n○ Follow-up — not started\n○ Last Block — not started$/,
   );
   const posted = world.discord
     .requested("POST", new RegExp(`^/api/v10/channels/${THREAD}/messages$`))
     .find((request) => isStatusCard(request.body as { content: string }));
-  expect(posted?.body).toMatchObject({ allowed_mentions: { parse: [] } });
+  expect(posted?.body).toMatchObject({
+    content: expect.stringMatching(new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #1 · `)),
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
 });
 
 it("Archiving preserves the captured Blocks and their final states after the Flow is edited", async (c) => {
@@ -468,6 +472,111 @@ it("a finished summary covering every Block shows no overflow line", async (c) =
   expect(shown.content.split("\n").slice(1)).toEqual(["✅ 12 Blocks finished"]);
 });
 
+async function exactLimitCardReady(world: World) {
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  const first = workers.find((worker) => worker.flowBlockId === "first")!;
+  const second = workers.find((worker) => worker.flowBlockId === "second")!;
+  await resultReported(world.world, first);
+  await observeFor(
+    "observe the settled first Block and other workers",
+    world.world,
+    runId,
+    (run) =>
+      run.blocks.find((block) => block.blockId === "first")?.state === "finished" &&
+      run.blocks.filter((block) => block.state === "working" && block.freshness === "fresh")
+        .length === 11,
+  );
+  await resultReported(world.world, second);
+  return { card };
+}
+
+const mentionedCardWithinLimit = (message: { content: string }) =>
+  isStatusCard(message) &&
+  message.content.startsWith(`<@${PARTICIPANT_ID}> `) &&
+  message.content.length <= 2_000;
+
+it("a new card that fits Discord's limit only without the mention is created as one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, nearLimitCardFlow);
+
+  // Act
+  const { card } = await chatStartedRun(world);
+
+  // Assert
+  expect(mentionedCardWithinLimit(card)).toBe(true);
+  expect(card.content.split("\n").slice(-1)).toEqual(["… and 1 more Blocks"]);
+  const posts = world.discord
+    .requested("POST", MESSAGES)
+    .filter((request) => isStatusCard(request.body as { content: string }));
+  expect(posts).toHaveLength(1);
+  expect(posts[0]!.body).toMatchObject({
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
+});
+
+it("a lost card whose stored text is at the old limit is replaced by one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, exactLimitCardFlow);
+  const { card } = await exactLimitCardReady(world);
+  world.discord.deleteMessage(card.id);
+
+  // Act
+  assert((await world.factory.reconcileRuns()).ok);
+
+  // Assert
+  await world.discord.createdWhere(isStatusCard, 2);
+  const replacements = statusCardsIn(world.discord).slice(1);
+  expect(replacements).toStrictEqual([expect.objectContaining({ channelId: THREAD })]);
+  expect(mentionedCardWithinLimit(replacements[0]!)).toBe(true);
+  expect(replacements[0]!.content).toContain("✅ 2 Blocks finished");
+  expect(replacements[0]!.content.split("\n").slice(-1)).toEqual(["… and 2 more Blocks"]);
+  const posts = world.discord
+    .requested("POST", MESSAGES)
+    .filter((request) => isStatusCard(request.body as { content: string }));
+  expect(posts.at(-1)?.body).toMatchObject({
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
+  const settings = await discordSettingsWhen(
+    world.factory,
+    (current) => current.delivery.problems.length === 0,
+  );
+  expect(settings.delivery.problems).toStrictEqual([]);
+});
+
+it("an application replacement of a card stored at the old limit posts one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, exactLimitCardFlow);
+  const { card } = await exactLimitCardReady(world);
+  assert((await world.factory.reconcileRuns()).ok);
+  const stored = await messageShows(world.discord, card, /✅ 2 Blocks finished/);
+  expect(stored.content).toHaveLength(2_000);
+  const before = statusCardsIn(world.discord).length;
+  world.discord.addBot(otherBot);
+  assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
+  const replaced = await world.factory.updateDiscordConnection(
+    discordConnectionSave({ revision: 1, token: { kind: "replace", value: otherBot.token } }),
+  );
+  assert(replaced.ok, JSON.stringify(replaced));
+
+  // Act
+  await turnedOn(world.factory, world.discord, 2);
+
+  // Assert
+  const fromNewBot = (message: { applicationId: string; content: string }) =>
+    message.applicationId === otherBot.applicationId && isStatusCard(message);
+  await world.discord.createdWhere(fromNewBot, 1);
+  const [replacement] = world.discord.created.filter(fromNewBot);
+  expect(statusCardsIn(world.discord)).toHaveLength(before + 1);
+  expect(mentionedCardWithinLimit(replacement!)).toBe(true);
+  expect(replacement!.content).toContain(NOTICE);
+  const settings = await discordSettingsWhen(
+    world.factory,
+    (current) => current.delivery.problems.length === 0,
+  );
+  expect(settings.delivery.problems).toStrictEqual([]);
+});
+
 it("Snooze keeps the card reported, and a failing language model does not stop it", async (c) => {
   // Arrange
   const world = await startingWorld(c);
@@ -561,9 +670,9 @@ it("removing only the initiating user from Access keeps the Run's card maintaine
 it("a regrant creates the card an Active Run never got because its destination was revoked", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.discord.faultMessages("refused");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await cardProblem(world.factory, "failed");
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
@@ -576,7 +685,9 @@ it("a regrant creates the card an Active Run never got because its destination w
   expect(statusCardsIn(world.discord)).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringMatching(/^\*\*Run #1 · Improve search\*\* · 🟢 Active · /),
+      content: expect.stringMatching(
+        new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #1 · Improve search\\*\\* · 🟢 Active · `),
+      ),
     }),
   ]);
   const settings = await discordSettingsWhen(
@@ -771,11 +882,11 @@ it("the host's Retry after a lost replacement creates one new card with the curr
 it("a card create Discord may already have performed is not repeated and is shown as unknown", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   world.discord.faultMessages(...unproven("lost"));
 
   // Act
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   const settings = await cardProblem(world.factory, "unknown");
@@ -794,10 +905,10 @@ it("a Status card accepted before revocation stays unknown when its response is 
   // Arrange
   const world = await startingWorld(c);
   const known = await chatStartedRun(world);
-  const button = await proposedStart(world, "600000000000000002", 4);
+  const confirmation = await proposedStart(world, "600000000000000002", 4);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   world.discord.faultMessages("paused-lost");
-  await clicked(world.discord, button, "610000000000000002", 2);
+  await confirmed(world.discord, confirmation, "610000000000000002", 2);
   await world.discord.createdWhere(isStatusCard, 2);
   const posts = world.discord.requested("POST", MESSAGES).length;
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
@@ -827,11 +938,11 @@ it("a Status card accepted before revocation stays unknown when its response is 
 it("an Active Run gets its card after revocation and regrant when Discord refused its first POST", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000000001", 2);
+  const confirmation = await proposedStart(world, "600000000000000001", 2);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   const posts = world.discord.requested("POST", MESSAGES).length;
   world.discord.faultMessages("paused-refusal");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.request("POST", MESSAGES, posts + 1);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
@@ -948,9 +1059,9 @@ it("after revocation and regrant, warned Retry of an unknown card posts the curr
 it("Retry still requires duplicate-risk acceptance after a lost create response followed by a definite refusal", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const button = await proposedStart(world, "600000000000091010", 2);
+  const confirmation = await proposedStart(world, "600000000000091010", 2);
   world.discord.faultMessages("lost", "refused");
-  await clicked(world.discord, button, "610000000000091010", 1);
+  await confirmed(world.discord, confirmation, "610000000000091010", 1);
   const settings = await discordSettingsWhen(
     world.factory,
     (current) => current.delivery.problems.length > 0,

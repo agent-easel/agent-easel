@@ -10,7 +10,6 @@ import {
   PermissionFlagsBits,
   RESTJSONErrorCodes,
   Routes,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type Interaction,
@@ -25,9 +24,10 @@ import { isSqlError } from "effect/sql/SqlError";
 import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
+import type { RequesterKind } from "./requesters.ts";
 import { isAccessTestMessage, recordReached } from "./access-test.ts";
-import { isConfirmation, type ClickAnswer, type ConfirmationClick } from "./actions.ts";
-import { buttonRow } from "./confirmation-buttons.ts";
+import type { ChatActions } from "./actions.ts";
+import { BOT_LOOP_REFUSAL, BOT_RATE_REFUSAL, type BotGuards } from "./bot-guards.ts";
 import type { ConversationGenerations, ConversationKey } from "./conversations.ts";
 import {
   BUSY_REPLY,
@@ -71,16 +71,12 @@ interface IngressSession {
   readonly post: (key: ConversationKey, text: string) => Promise<unknown>;
   /** The reply target the current MESSAGE_CREATE payload carried, taken once. */
   readonly referenced: (messageId: string) => ReferencedMessage | undefined;
-  /** Decides a confirmation button click and how to answer it. */
-  readonly confirm: (click: ConfirmationClick) => Effect.Effect<ClickAnswer, unknown>;
-  /**
-   * The Run a message this application published in `threadId` identifies, if Factory recorded
-   * one for it. Only the identity is returned: the message's content is never imported.
-   */
-  readonly publishedRun: (
+  readonly confirmations: Pick<ChatActions, "confirmationTarget" | "confirm">;
+  readonly botGuards: BotGuards;
+  readonly publishedDelivery: (
     threadId: string,
     messageId: string,
-  ) => Effect.Effect<string | undefined, unknown>;
+  ) => Effect.Effect<{ readonly runId: string | null } | undefined, unknown>;
 }
 
 const RESET_REPLIES = {
@@ -139,22 +135,25 @@ export const registerCommands = (client: Client<true>, applicationId: string) =>
 
 type Access = "permitted" | "denied" | "unavailable";
 
-/**
- * Where an explicit invocation was made: a new human message of an ordinary type that mentions
- * or replies to the bot in a text or announcement channel or a thread, a forum post included.
- * Anything else is ignored.
- */
-function explicitInvocation(message: Message<true>, botUserId: string) {
-  if (message.author.bot || message.webhookId !== null || message.system) return undefined;
+function messageRequester(message: Message<true>, botUserId: string): RequesterKind | undefined {
+  if (message.webhookId !== null || message.system || message.author.id === botUserId)
+    return undefined;
   if (message.type !== MessageType.Default && message.type !== MessageType.Reply) return undefined;
+  return message.author.bot ? "bot" : "human";
+}
+
+function explicitInvocation(message: Message<true>, botUserId: string, kind: RequesterKind) {
   const invoked =
-    message.mentions.users.has(botUserId) || message.mentions.repliedUser?.id === botUserId;
+    message.mentions.users.has(botUserId) ||
+    message.mentions.repliedUser?.id === botUserId ||
+    (kind === "bot" && message.type === MessageType.Reply);
   if (!invoked) return undefined;
+  const named = new RegExp(`<@!?${botUserId}>`).test(message.content);
   const channel = message.channel;
   if (channel.isThread())
-    return channel.parentId ? { thread: channel, parentId: channel.parentId } : undefined;
+    return channel.parentId ? { thread: channel, parentId: channel.parentId, named } : undefined;
   return channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement
-    ? { thread: null, parentId: channel.id }
+    ? { thread: null, parentId: channel.id, named }
     : undefined;
 }
 
@@ -193,8 +192,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       return rows.length > 0;
     });
 
-  const permittedProjects = (userId: string, parentChannelId: string) =>
-    Effect.map(grantedProjects(sql, userId, parentChannelId), (projects) => projects.length > 0);
+  const permittedProjects = (userId: string, kind: RequesterKind, parentChannelId: string) =>
+    Effect.map(
+      grantedProjects(sql, userId, parentChannelId, kind),
+      (projects) => projects.length > 0,
+    );
 
   /** Whether a private thread's member list includes the user, asked of Discord directly. */
   const privateThreadMember = (thread: ThreadChannel, userId: string) =>
@@ -255,6 +257,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   const permitted = (
     conversation: ConversationKey,
     requesterId: string,
+    requesterKind: RequesterKind,
     generation: number,
     initial: EvidenceToken,
     privateThread: boolean,
@@ -262,7 +265,8 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     let token = initial;
     return Effect.gen(function* () {
       if (!session.operating()) return false;
-      if (!(yield* permittedProjects(requesterId, conversation.parentChannelId))) return false;
+      if (!(yield* permittedProjects(requesterId, requesterKind, conversation.parentChannelId)))
+        return false;
       if (!(yield* generations.isCurrent(conversation, generation))) return false;
       if (evidence.isCurrent(token) && !privateThread) return true;
       const refreshed = evidence.token(conversation.guildId);
@@ -271,7 +275,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       token = refreshed;
       return (
         session.operating() &&
-        (yield* permittedProjects(requesterId, conversation.parentChannelId)) &&
+        (yield* permittedProjects(requesterId, requesterKind, conversation.parentChannelId)) &&
         (yield* generations.isCurrent(conversation, generation))
       );
     });
@@ -295,8 +299,10 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           target.channel_id === threadId &&
           target.webhook_id === undefined &&
           (target.type === MessageType.Default || target.type === MessageType.Reply);
-        const runId = ordinary ? yield* session.publishedRun(threadId, target.id) : undefined;
-        return runId === undefined ? { kind: "none" } : { kind: "run", runId };
+        const delivery = ordinary
+          ? yield* session.publishedDelivery(threadId, target.id)
+          : undefined;
+        return delivery?.runId ? { kind: "run", runId: delivery.runId } : { kind: "none" };
       }
       return selectedReply(target, threadId);
     });
@@ -334,7 +340,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       if (testMessage === undefined) return undefined;
       if (!(yield* isAccessTestMessage(sql, parentId, testMessage))) return undefined;
       session.referenced(message.id);
-      if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored";
+      if (!(yield* permittedProjects(message.author.id, "human", parentId))) return "ignored";
       if (!(yield* firstDelivery(message.id))) return "ignored";
       yield* recordReached(sql, message.author.id);
       return "reached";
@@ -344,10 +350,19 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
    * Authorizes and records an invocation, creating its thread, and queues it in its conversation;
    * the conversation, or nothing when it was not admitted.
    */
-  const admitMessage = (message: Message<true>, thread: ThreadChannel | null, parentId: string) =>
+  const admitMessage = (
+    message: Message<true>,
+    thread: ThreadChannel | null,
+    parentId: string,
+    requesterKind: RequesterKind,
+  ) =>
     Effect.gen(function* () {
-      if (!(yield* permittedProjects(message.author.id, parentId))) return undefined;
       if (!(yield* firstDelivery(message.id))) return undefined;
+      const refusal =
+        requesterKind === "bot"
+          ? botRefusal(message.author.id, thread, yield* Clock.currentTimeMillis)
+          : undefined;
+      if (refusal === "drop") return undefined;
       const token = evidence.token(message.guildId);
       const threadId =
         thread?.id ??
@@ -362,21 +377,26 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         threadId,
       };
       const generation = yield* generations.open(conversation);
+      const stillPermitted = permitted(
+        conversation,
+        message.author.id,
+        requesterKind,
+        generation,
+        token,
+        thread?.type === ChannelType.PrivateThread,
+      );
+      if (refusal)
+        return { kind: "refusal" as const, conversation, permitted: stillPermitted, text: refusal };
       const invocation: AdmittedInvocation = {
         conversation,
         generation,
         requesterId: message.author.id,
+        requesterKind,
         messageId: message.id,
         text: message.content,
         replyTarget: yield* replyTarget(message, threadId),
         admittedAt: yield* Clock.currentTimeMillis,
-        permitted: permitted(
-          conversation,
-          message.author.id,
-          generation,
-          token,
-          thread?.type === ChannelType.PrivateThread,
-        ),
+        permitted: stillPermitted,
       };
       yield* Effect.acquireRelease(
         Effect.map(interpreter.reserve(invocation), (reservation) => {
@@ -396,37 +416,47 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
               : Effect.void,
           ),
       );
-      return invocation;
+      if (requesterKind === "bot") session.botGuards.takeTurn(threadId, invocation.admittedAt);
+      return { kind: "invocation" as const, conversation };
     });
 
-  /**
-   * Each evaluation establishes current Discord access. The immutable interaction permissions
-   * can refuse its click, but cannot authorize acceptance after waiting on external preflight.
-   */
+  const botRefusal = (requesterId: string, thread: ThreadChannel | null, at: number) => {
+    const rate = session.botGuards.rate(requesterId, at);
+    if (rate !== "allow") return rate === "drop" ? rate : BOT_RATE_REFUSAL;
+    if (!thread) return undefined;
+    const loop = session.botGuards.checkThread(thread.id, at);
+    if (loop !== "allow") return loop === "drop" ? loop : BOT_LOOP_REFUSAL;
+    return undefined;
+  };
+
   const requesterAccess = (
-    interaction:
-      | ChatInputCommandInteraction<"cached" | "raw">
-      | ButtonInteraction<"cached" | "raw">,
+    user: {
+      readonly id: string;
+      readonly kind: RequesterKind;
+      readonly guildId: string;
+      readonly visible: boolean;
+    },
     thread: ThreadChannel,
   ) => {
     let qualified: EvidenceToken | undefined;
     const check = Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
       qualified = undefined;
-      const userId = interaction.user.id;
-      if (!thread.parentId || !(yield* permittedProjects(userId, thread.parentId))) return "denied";
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel)) return "denied";
-      const token = evidence.token(interaction.guildId);
+      const userId = user.id;
+      if (!thread.parentId || !(yield* permittedProjects(userId, user.kind, thread.parentId)))
+        return "denied";
+      if (!user.visible) return "denied";
+      const token = evidence.token(user.guildId);
       const access = yield* refreshedAccess(
         {
           applicationId,
-          guildId: interaction.guildId,
+          guildId: user.guildId,
           parentChannelId: thread.parentId,
           threadId: thread.id,
         },
         userId,
       );
       if (access !== "permitted") return access;
-      if (!(yield* permittedProjects(userId, thread.parentId))) return "denied";
+      if (!(yield* permittedProjects(userId, user.kind, thread.parentId))) return "denied";
       if (!evidence.isCurrent(token) || !session.operating()) return "unavailable";
       qualified = token;
       return "permitted";
@@ -439,11 +469,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
    * seconds and access checks may need Discord itself; its channel and thread, or nothing when
    * Discord refused the acknowledgement.
    */
-  const acknowledged = (
-    interaction:
-      | ChatInputCommandInteraction<"cached" | "raw">
-      | ButtonInteraction<"cached" | "raw">,
-  ) =>
+  const acknowledged = (interaction: ChatInputCommandInteraction<"cached" | "raw">) =>
     Effect.map(
       Effect.option(
         Effect.tryPromise(() => interaction.deferReply({ flags: MessageFlags.Ephemeral })),
@@ -463,7 +489,15 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       const { channel, thread } = place;
       let reply: keyof typeof RESET_REPLIES = channel ? "not-thread" : "unavailable";
       if (thread) {
-        const access = yield* requesterAccess(interaction, thread).check;
+        const access = yield* requesterAccess(
+          {
+            id: interaction.user.id,
+            kind: interaction.user.bot ? "bot" : "human",
+            guildId: interaction.guildId,
+            visible: interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel) === true,
+          },
+          thread,
+        ).check;
         reply = access === "permitted" ? "cleared" : access;
         if (access === "permitted" && session.operating())
           yield* generations.clear({
@@ -476,47 +510,75 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       yield* Effect.ignore(Effect.tryPromise(() => interaction.editReply(RESET_REPLIES[reply])));
     });
 
-  /**
-   * A confirmation button click: acknowledged at once as a deferred update of its message, then
-   * decided outside the gate, since performing an action may take longer than later events
-   * should wait. A click that decided the review disables the button for everyone; any other
-   * answer goes privately to the clicker and leaves the button as it is.
-   */
-  const confirmation = (interaction: ButtonInteraction<"cached" | "raw">) =>
+  const ownMention = new RegExp(`<@!?${botUserId}>`, "g");
+
+  const replyMessageId = (message: Message<true>, threadId: string) => {
+    const reference = message.type === MessageType.Reply ? message.reference : null;
+    return reference && (reference.type ?? 0) === 0 && reference.channelId === threadId
+      ? reference.messageId
+      : undefined;
+  };
+
+  const confirmationAttempt = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    requesterKind: RequesterKind,
+  ) =>
     Effect.gen(function* () {
-      if (!(yield* gate.withPermits(1)(firstDelivery(interaction.id)))) return;
-      const deferred = yield* Effect.option(Effect.tryPromise(() => interaction.deferUpdate()));
-      if (deferred._tag === "None") return;
-      const channel = interaction.channel;
-      const thread = channel?.isThread() ? channel : null;
-      const requester = thread ? requesterAccess(interaction, thread) : undefined;
-      const answer = yield* session.confirm({
-        customId: interaction.customId,
-        userId: interaction.user.id,
-        threadId: interaction.channelId,
+      const candidate = message.content.replace(ownMention, "").trim();
+      const repliedTo = replyMessageId(message, thread.id);
+      const target = yield* session.confirmations.confirmationTarget(
+        applicationId,
+        thread.id,
+        repliedTo,
+        candidate,
+      );
+      if (!target) return undefined;
+      session.referenced(message.id);
+      if (
+        requesterKind === "bot" &&
+        (!target.botCanConfirm ||
+          target.requesterId !== message.author.id ||
+          candidate !== message.content)
+      )
+        return "ignored" as const;
+      if (!(yield* firstDelivery(message.id))) return "ignored" as const;
+      return { proposalId: target.proposalId, text: message.content, repliedTo, requesterKind };
+    });
+
+  const confirmation = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    parentId: string,
+    attempt: Exclude<Effect.Success<ReturnType<typeof confirmationAttempt>>, "ignored" | undefined>,
+  ) =>
+    Effect.gen(function* () {
+      const { requesterKind, ...reply } = attempt;
+      const requester = requesterAccess(
+        { id: message.author.id, kind: requesterKind, guildId: message.guildId, visible: true },
+        thread,
+      );
+      const answer = yield* session.confirmations.confirm({
+        ...reply,
+        authorId: message.author.id,
+        threadId: thread.id,
         applicationId,
         operating: session.operating,
-        access: requester?.check ?? Effect.succeed("unavailable"),
-        accessCurrent: () => requester?.current() ?? false,
+        access: requester.check,
+        accessCurrent: requester.current,
       });
-      if (answer.kind === "ephemeral")
-        return yield* Effect.ignore(
-          Effect.tryPromise(() =>
-            interaction.followUp({
-              content: answer.text,
-              flags: MessageFlags.Ephemeral,
-              allowedMentions: { parse: [] },
-            }),
-          ),
-        );
-      // Editing the message is an external send, which never happens while Chat control is Off.
-      if (session.operating())
+      if (answer.kind === "reply" && session.operating())
         yield* Effect.ignore(
           Effect.tryPromise(() =>
-            interaction.editReply({
-              components: buttonRow(answer.customId, { disabled: answer.state }),
-              allowedMentions: { parse: [] },
-            }),
+            session.post(
+              {
+                applicationId,
+                guildId: message.guildId,
+                parentChannelId: parentId,
+                threadId: thread.id,
+              },
+              answer.text,
+            ),
           ),
         );
     });
@@ -526,40 +588,83 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   // Queue places are taken here too, so each conversation's queue follows admission order.
   const gate = Semaphore.makeUnsafe(1);
 
+  const botRepliesToDelivery = (message: Message<true>, thread: ThreadChannel) => {
+    const repliedTo = replyMessageId(message, thread.id);
+    return repliedTo === undefined
+      ? Effect.succeed(false)
+      : Effect.map(session.publishedDelivery(thread.id, repliedTo), Boolean);
+  };
+
+  const receiveThreadMessage = (
+    message: Message<true>,
+    thread: ThreadChannel,
+    parentId: string,
+    kind: RequesterKind,
+  ) =>
+    Effect.gen(function* () {
+      if (kind === "bot" && (yield* botRepliesToDelivery(message, thread)))
+        return "ignored" as const;
+      const attempt = yield* confirmationAttempt(message, thread, kind);
+      if (attempt === "ignored" || attempt === undefined) return attempt;
+      return { kind: "confirmation" as const, thread, parentId, attempt };
+    });
+
+  const receive = (message: Message<true>) =>
+    Effect.gen(function* () {
+      const kind = messageRequester(message, botUserId);
+      if (!kind) return;
+      if (kind === "human" && message.channel.isThread())
+        session.botGuards.resetThread(message.channel.id);
+      const place = explicitInvocation(message, botUserId, kind);
+      if (!place) return;
+      const { thread, parentId, named } = place;
+      if (kind === "human") {
+        const answered = yield* answerAccessTest(message, thread, parentId);
+        if (answered) return answered === "reached" ? { kind: "react" as const } : undefined;
+      }
+      if (!(yield* permittedProjects(message.author.id, kind, parentId))) return;
+      const received = thread && (yield* receiveThreadMessage(message, thread, parentId, kind));
+      if (received) return received;
+      if (kind === "bot" && !named) return;
+      return yield* admitMessage(message, thread, parentId, kind);
+    });
+
   return {
-    /**
-     * A Discord message; only explicit authorized invocations go further, and a reply to the
-     * access test only answers it.
-     */
     message: (message: Message) =>
       Effect.scoped(
         Effect.gen(function* () {
           if (!session.operating() || !message.inGuild()) return;
-          const place = explicitInvocation(message, botUserId);
-          if (!place) return;
-          const { thread, parentId } = place;
-          const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
-          // The reaction is an external send, which never happens while Chat control is Off.
-          if (answered === "reached" && session.operating())
-            yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
-          if (answered) return;
-          const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
-          if (!invocation) return;
+          const received = yield* gate.withPermits(1)(receive(message));
+          if (!received || received === "ignored") return;
+          if (received.kind === "react") {
+            // The reaction is an external send, which never happens while Chat control is Off.
+            if (session.operating())
+              yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
+            return;
+          }
+          if (received.kind === "confirmation")
+            return yield* confirmation(
+              message,
+              received.thread,
+              received.parentId,
+              received.attempt,
+            );
+          if (received.kind === "refusal") {
+            if (yield* received.permitted)
+              yield* Effect.ignore(
+                Effect.tryPromise(() => session.post(received.conversation, received.text)),
+              );
+            return;
+          }
           yield* Effect.promise(() =>
-            session.handOff(session.encodeThreadId(invocation.conversation), message),
+            session.handOff(session.encodeThreadId(received.conversation), message),
           );
         }),
       ),
-    /**
-     * A Discord interaction; only `/factory reset` and confirmation buttons of this application
-     * are handled.
-     */
     interaction: (interaction: Interaction) =>
       Effect.gen(function* () {
         if (!session.operating() || !interaction.inGuild()) return;
         if (interaction.applicationId !== applicationId) return;
-        if (interaction.isButton() && isConfirmation(interaction.customId))
-          return yield* confirmation(interaction);
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName !== "factory") return;
         if (interaction.options.getSubcommand(false) !== "reset") return;

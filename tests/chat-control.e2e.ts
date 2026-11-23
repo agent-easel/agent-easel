@@ -515,6 +515,86 @@ test("one Save writes the bot and then Access, and names the channel that got it
   await app.screenshot("chat-discord-access-saved");
 });
 
+test("the host can save a bot in Bots after correcting a wrong-list warning", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  const HERMES = "200000000000000050";
+  const ATLAS = "200000000000000060";
+  await completeChatControl(app.baseUrl);
+  await discord(app.baseUrl).botAccount({ userId: HERMES, username: "Hermes" });
+  await discord(app.baseUrl).botAccount({ userId: ATLAS, username: "Atlas" });
+  await app.open("/settings/chat-control/discord");
+  const access = screen.getByRole("region", "Access");
+  const bots = screen.getByRole("region", "Bots");
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(bots.getByText(/^Bots may talk to Factory and start Runs/)).toBeVisible();
+  await access.getByLabel("Users").fill(`200000000000000001, ${ATLAS}`);
+  await bots.getByLabel("Bot IDs").fill(HERMES);
+  await save.tap();
+  await screen.getByRole("button", "Check connection").tap();
+  await expect(bots.getByText(/^Hermes/)).toBeVisible({ timeout: 15_000 });
+  await expect(bots.getByText("Bot", { exact: true })).toBeVisible();
+  await expect(access.getByText("Atlas is a bot")).toBeVisible();
+  await expect(screen.getByText("1 ID is in the wrong list")).toBeVisible();
+  await expect(screen.getByText("Atlas is a bot. Move its ID to Bots, then save.")).toBeVisible();
+  const current = await discordSettings(app.baseUrl);
+  assert(current.ok);
+  const refused = await hostCall(app.baseUrl, "PUT", "/api/chat-control/discord/access", {
+    revision: current.value.access.revision,
+    users: ["200000000000000001", ATLAS],
+    bots: [HERMES],
+    channels: [],
+  });
+  assert(!refused.ok);
+  assert.strictEqual(refused.error.issues[0]?.code, "discord_access_bot_in_users");
+  await app.screenshot("chat-discord-bots-refused");
+  await access.getByLabel("Users").fill("200000000000000001");
+  await bots.getByLabel("Bot IDs").fill(`${HERMES}, ${ATLAS}`);
+
+  // Act
+  await save.tap();
+
+  // Assert
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toHaveCount(0);
+  await expect(screen.getByText("1 ID is in the wrong list")).toHaveCount(0);
+  await expect(bots.getByText("Bot", { exact: true })).toHaveCount(2);
+  const settings = await discordSettings(app.baseUrl);
+  expect(settings).toMatchObject({
+    ok: true,
+    value: { access: { users: ["200000000000000001"], bots: [HERMES, ATLAS] } },
+  });
+  await browser.reload();
+  await expect(bots.getByLabel("Bot IDs")).toHaveValue(`${HERMES}, ${ATLAS}`);
+  await app.screenshot("chat-discord-bots-saved");
+});
+
+test("with Chat control On, Access that allows only a bot in a channel granting a Project shows no empty-access notice", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const HERMES = "200000000000000050";
+  await discord(app.baseUrl).botAccount({ userId: HERMES, username: "Hermes" });
+  await operatingChatControl(app.baseUrl, {
+    users: [],
+    bots: [HERMES],
+    channels: ["400000000000000002"],
+  });
+
+  // Act
+  await app.open("/settings/chat-control/discord");
+
+  // Assert
+  const bots = screen.getByRole("region", "Bots");
+  await expect(bots.getByLabel("Bot IDs")).toHaveValue(HERMES);
+  await expect(screen.getByRole("switch", "Chat control")).toBeChecked();
+  await expect(screen.getByText("Nobody can use Chat control yet")).toHaveCount(0);
+  await app.screenshot("chat-discord-bot-only-access");
+});
+
 test("the host turns Chat control On with the switch and sees the connection badge", async ({
   app,
   screen,
@@ -704,7 +784,10 @@ async function settingsWhen<Settings>(
 /** Chat control On and serving, with the participant allowed in the fixture's channel. */
 async function operatingChatControl(
   baseUrl: string | undefined,
-  allowed = { users: ["200000000000000001"], channels: ["400000000000000002"] },
+  allowed: { users: string[]; bots?: string[]; channels: string[] } = {
+    users: ["200000000000000001"],
+    channels: ["400000000000000002"],
+  },
 ) {
   const project = await firstProject(baseUrl);
   await completeChatControl(baseUrl);
@@ -713,6 +796,7 @@ async function operatingChatControl(
   const access = await hostCall(baseUrl, "PUT", "/api/chat-control/discord/access", {
     revision: discord.value.access.revision,
     users: allowed.users,
+    bots: allowed.bots ?? [],
     channels: allowed.channels.map((channelId) => ({ channelId, projectIds: [project.id] })),
   });
   assert(access.ok, JSON.stringify(access));
@@ -775,7 +859,7 @@ test("an actual conversation failure shows on the Language model page and marks 
   await app.screenshot("chat-model-runtime-problem");
 });
 
-type FixtureMessage = { channelId: string; content: string; customId: string | null };
+type FixtureMessage = { id: string; channelId: string; content: string; phrase: string | null };
 
 /** The messages the controlled Discord created once `until` holds, read again after short pauses. */
 async function messagesWhen(
@@ -791,14 +875,10 @@ async function messagesWhen(
 }
 
 /** A status card: an accepted Start's only message, edited as its Run changes. */
-const CARD = /^\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
+const CARD = /^(?:<@\d+> )?\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
 const cards = (messages: FixtureMessage[]) =>
   messages.filter((message) => CARD.test(message.content));
 
-/**
- * A participant's Start of `prompt`, confirmed with its button after Discord was told to meet the
- * next message creates with `faults`. Returns the thread and the number of cards before it.
- */
 async function confirmedStart(baseUrl: string | undefined, prompt: string, faults: MessageFault[]) {
   const project = await firstProject(baseUrl);
   const flows = (await (await fetch(new URL("/api/flows", baseUrl))).json()) as Result<
@@ -813,14 +893,14 @@ async function confirmedStart(baseUrl: string | undefined, prompt: string, fault
   };
   const { id: thread } = await discord(baseUrl).invoke({ content: `start: ${prompt}` });
   const messages = await messagesWhen(baseUrl, (created) =>
-    created.some((message) => message.channelId === thread && message.customId !== null),
+    created.some((message) => message.channelId === thread && message.phrase !== null),
   );
-  const { customId } = messages.find(
-    (message) => message.channelId === thread && message.customId !== null,
+  const review = messages.find(
+    (message) => message.channelId === thread && message.phrase !== null,
   )!;
   const before = cards(messages).length;
   await discord(baseUrl).fault({ faults });
-  await discord(baseUrl).click({ thread, customId: customId! });
+  await discord(baseUrl).confirm({ thread, messageId: review.id });
   return { thread, before };
 }
 
@@ -843,11 +923,6 @@ async function cardRunId(baseUrl: string | undefined, thread: string) {
   return navigation.value.find((entry) => entry.number === number)!.id;
 }
 
-/**
- * A participant's Start, confirmed with its button, whose status card create Discord performed but
- * whose answers were lost, also for both re-attempts under its nonce: Factory owes a card it
- * cannot prove either way. Afterwards Discord's nonce uniqueness window passes.
- */
 async function unknownCard(baseUrl: string | undefined) {
   const { thread, before } = await confirmedStart(
     baseUrl,
@@ -865,16 +940,17 @@ async function unknownCard(baseUrl: string | undefined) {
  * Opens Settings → Discord at the Delivery row whose Retry is named `retry`, with the navigation
  * item marked, and returns that Retry button.
  */
-async function deliveryProblem(app: App, screen: Screen, retry: string, state: string) {
+async function deliveryProblem(app: App, screen: Screen, retry: string) {
   await app.open("/settings/chat-control/discord");
   const delivery = screen.getByRole("region", "Delivery");
-  await expect(delivery.getByText(state, { exact: true })).toBeVisible();
+  const action = delivery.getByRole("button", retry);
+  await expect(action).toBeVisible();
   await expect(
     screen
       .getByRole("navigation", "Settings sections")
       .getByRole("link", "Discord, failing", { exact: true }),
   ).toBeVisible();
-  return delivery.getByRole("button", retry);
+  return action;
 }
 
 test("the host retries a status card Discord may already show only after a duplicate warning, and the Start is not repeated", async ({
@@ -885,7 +961,7 @@ test("the host retries a status card Discord may already show only after a dupli
   // Arrange
   const { before, runId } = await unknownCard(app.baseUrl);
   startedRuns.push(runId);
-  const retry = await deliveryProblem(app, screen, "Retry the status card", "Unknown");
+  const retry = await deliveryProblem(app, screen, "Retry the status card");
   await app.screenshot("chat-discord-delivery-unknown");
   await retry.tap();
   const warning = screen.getByRole("alertdialog", "Retry this message?");
@@ -937,7 +1013,7 @@ test("the host retries the status card Discord refused in a locked thread once a
       (problem) => problem.purpose === "status-card" && problem.state === "failed",
     ),
   );
-  const retry = await deliveryProblem(app, screen, "Retry the status card", "Failed");
+  const retry = await deliveryProblem(app, screen, "Retry the status card");
   await app.screenshot("chat-discord-status-card-failed");
   await discord(app.baseUrl).thread({ thread, state: "unlocked" });
 
@@ -950,7 +1026,7 @@ test("the host retries the status card Discord refused in a locked thread once a
     created.some(
       (message) =>
         message.channelId === thread &&
-        /^\*\*Run [^\n]+\*\* · 🗄️ Archived · /.test(message.content),
+        /^(?:<@\d+> )?\*\*Run [^\n]+\*\* · 🗄️ Archived · /.test(message.content),
     ),
   );
   assert.strictEqual(
@@ -997,7 +1073,7 @@ test("the host retries a completion notice after unlocking its Discord thread", 
     messages.some(
       (message) =>
         message.channelId === thread &&
-        message.content.endsWith("Reply here to inspect the result or choose what to do next."),
+        message.content.split("\n").at(-1)?.startsWith('`{"v":1,"event":"completion",'),
     ),
   );
 });

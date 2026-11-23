@@ -29,25 +29,52 @@ const NOTICE_TEXT_LIMIT = MESSAGE_LIMIT - "<@99999999999999999999> ".length;
 
 const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversation-waiting"]);
 
-/** What each matter is, and while pending, where it is answered. */
-const MATTERS: Record<MatterKind, { what: (block: string) => string; pending?: string }> = {
-  human: {
-    what: (block) => `Human step ${block} waits for an answer`,
-    pending: "ask here to answer it",
-  },
-  "native-request": {
-    what: (block) => `${block} has a T3 request`,
-    pending: "answer it in T3",
-  },
-  "conversation-waiting": { what: (block) => `${block} asked a question` },
-  "missing-report": { what: (block) => `${block}: report missing` },
-  "execution-failed": { what: (block) => `${block}: execution failed` },
-  "report-problem": { what: (block) => `${block}: report problem` },
-  "condition-integrity": { what: (block) => `${block}: Condition cannot number its next arrival` },
-  "join-integrity": { what: (block) => `${block}: Join cannot forward its next round` },
-  "subflow-stop-unresolved": { what: (block) => block + " could not stop its workers" },
-  "settlement-unresolved": { what: () => "Settle could not stop workers" },
+type ActPlace = "thread" | "t3" | "factory";
+const ACT_TEXT: Record<ActPlace, string> = {
+  thread: "ask here to answer it",
+  t3: "answer it in T3",
+  factory: "check it in Factory",
 };
+
+const MATTERS: Record<MatterKind, { what: (block: string) => string; act: ActPlace }> = {
+  human: { what: (block) => `Human step ${block} waits for an answer`, act: "thread" },
+  "native-request": { what: (block) => `${block} has a T3 request`, act: "t3" },
+  "conversation-waiting": { what: (block) => `${block} asked a question`, act: "t3" },
+  "missing-report": { what: (block) => `${block}: report missing`, act: "factory" },
+  "execution-failed": { what: (block) => `${block}: execution failed`, act: "factory" },
+  "report-problem": { what: (block) => `${block}: report problem`, act: "factory" },
+  "condition-integrity": {
+    what: (block) => `${block}: Condition cannot number its next arrival`,
+    act: "factory",
+  },
+  "join-integrity": {
+    what: (block) => `${block}: Join cannot forward its next round`,
+    act: "factory",
+  },
+  "subflow-stop-unresolved": {
+    what: (block) => block + " could not stop its workers",
+    act: "factory",
+  },
+  "settlement-unresolved": { what: () => "Settle could not stop workers", act: "factory" },
+};
+
+type SettlementKind = "automatic" | "manual" | "finish";
+const SETTLEMENT_TEXT: Record<SettlementKind, string> = {
+  automatic: "Settled automatically.",
+  manual: "Settled manually.",
+  finish: "Settled at a Finish ending.",
+};
+
+const MACHINE_VERSION = 1;
+const machineLine = (record: Record<string, unknown>) =>
+  `\`${JSON.stringify({ v: MACHINE_VERSION, ...record })
+    .replaceAll("`", "\\u0060")
+    .replaceAll("@", "\\u0040")}\``;
+
+const machineRun = (notice: Pick<NoticeRow, "run_id" | "number">) => ({
+  runId: notice.run_id,
+  runNumber: notice.number,
+});
 
 type MatterRow = {
   matter_id: string;
@@ -68,14 +95,28 @@ type NoticeRow = {
   created_at: string;
   reference: string;
   title: string;
+  number: number | null;
 };
 
 const matterLine = (matter: MatterRow) => {
   const kind = MATTERS[matter.kind];
   const what = kind.what(name(matter.block));
   if (matter.resolved === 1) return `• ~~${what}~~ ✅`;
-  return `• ${what}${kind.pending ? ` — ${kind.pending}` : ""}`;
+  return `• ${what} — ${ACT_TEXT[kind.act]}`;
 };
+
+const attentionRecord = (notice: NoticeRow, matters: readonly MatterRow[]) =>
+  machineLine({
+    event: "attention",
+    id: notice.delivery_id,
+    ...machineRun(notice),
+    matters: matters.slice(0, MATTERS_PER_NOTICE).map((matter) => ({
+      id: matter.matter_id,
+      kind: matter.kind,
+      act: MATTERS[matter.kind].act,
+    })),
+    more: Math.max(0, matters.length - MATTERS_PER_NOTICE),
+  });
 
 /** An attention notice's first line: an emoji for its kind of matters, the Run and what it has. */
 function attentionHeading(heading: string, matters: readonly MatterRow[]) {
@@ -92,6 +133,8 @@ function attentionHeading(heading: string, matters: readonly MatterRow[]) {
 
 function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   const heading = runHeading(notice.reference, notice.title);
+  const record = attentionRecord(notice, matters);
+  const proseLimit = NOTICE_TEXT_LIMIT - record.length - 1;
   const render = (limit: number) => {
     const lines = matters.slice(0, limit).map(matterLine);
     const hidden = matters.slice(lines.length);
@@ -108,9 +151,9 @@ function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   };
   for (const limit of NOTICE_LIMITS) {
     const text = render(limit).join("\n");
-    if (text.length <= NOTICE_TEXT_LIMIT) return text;
+    if (text.length <= proseLimit) return `${text}\n${record}`;
   }
-  return clip(render(0).join("\n"), NOTICE_TEXT_LIMIT);
+  return `${clip(render(0).join("\n"), proseLimit)}\n${record}`;
 }
 
 /**
@@ -129,14 +172,15 @@ function nextState(notice: NoticeRow, text: string, obsolete: boolean): Delivery
     : notice.state;
 }
 
-const NOTICE_COLUMNS = `n.delivery_id,n.run_id,d.purpose,d.state,d.text,d.message_id,d.created_at,r.reference,r.title`;
+const NOTICE_COLUMNS = `n.delivery_id,n.run_id,d.purpose,d.state,d.text,d.message_id,d.created_at,r.reference,r.title,u.number`;
 
 /** Brings one notice's message record to the text its current records render. */
 const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
   Effect.gen(function* () {
     const [notice] = yield* sql<NoticeRow>`SELECT ${sql.literal(NOTICE_COLUMNS)}
       FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
-      JOIN chat_run_reporting r ON r.run_id=n.run_id WHERE n.delivery_id=${id}`;
+      JOIN chat_run_reporting r ON r.run_id=n.run_id JOIN runs u ON u.id=n.run_id
+      WHERE n.delivery_id=${id}`;
     const all = yield* sql<MatterRow>`SELECT matter_id,kind,block,appeared_at,resolved
       FROM chat_report_matters WHERE notice_id=${id} ORDER BY appeared_at,matter_id`;
     const announced = notice!.message_id !== null || notice!.state === "sending";
@@ -158,8 +202,8 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
   const insertNotice = (
     origin: ReportOrigin,
     report: RunReport,
-    purpose: MatterNoticePurpose | "completion",
-    text = "",
+    purpose: MatterNoticePurpose | "completion" | "archive",
+    textOf: (eventId: string) => string = () => "",
   ) =>
     Effect.gen(function* () {
       const id = yield* newId;
@@ -167,7 +211,7 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       const { destination } = origin;
       yield* sql`INSERT INTO chat_deliveries (id,purpose,run_id,guild_id,parent_channel_id,thread_id,project_ids_json,text,state,created_at)
         VALUES (${id},${purpose},${origin.runId},${destination.guildId},${destination.parentChannelId},${destination.threadId},
-          ${JSON.stringify([report.run.project.id])},${text},'owed',${createdAt})`;
+          ${JSON.stringify([report.run.project.id])},${textOf(id)},'owed',${createdAt})`;
       yield* sql`INSERT INTO chat_report_notices (delivery_id,run_id) VALUES (${id},${origin.runId})`;
       return id;
     });
@@ -240,19 +284,62 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
 
   const capturedCompletion = (origin: ReportOrigin, report: RunReport) =>
     Effect.gen(function* () {
-      const [cycle] = yield* sql<{ sequence: number }>`SELECT c.sequence FROM chat_settled_cycles c
+      const [cycle] = yield* sql<{
+        sequence: number;
+        ordinal: number;
+        reason: SettlementKind;
+      }>`SELECT c.sequence,
+          (SELECT COUNT(*) FROM run_events e WHERE e.run_id=c.run_id AND e.kind='run-settled'
+            AND e.sequence<=c.sequence) AS ordinal,
+          (SELECT e.cause_id FROM run_events e WHERE e.sequence=c.sequence) AS reason
+        FROM chat_settled_cycles c
         JOIN chat_run_reporting r ON r.run_id=c.run_id
-        JOIN chat_access_channel_projects g ON g.channel_id=${origin.destination.parentChannelId}
-          AND g.project_id=${report.run.project.id}
         WHERE c.run_id=${origin.runId} AND r.completion_sequence IS NOT c.sequence`;
       if (!cycle) return;
-      yield* insertNotice(
-        origin,
-        report,
-        "completion",
-        `✅ ${runHeading(runReference(report.run), report.run.title)} finished.\nReply here to inspect the result or choose what to do next.`,
+      const ending = cycle.reason === "finish" ? report.endingName : null;
+      const settlement =
+        ending === null
+          ? SETTLEMENT_TEXT[cycle.reason]
+          : `Settled at Finish ending "${name(ending)}".`;
+      yield* insertNotice(origin, report, "completion", (id) =>
+        [
+          `✅ ${runHeading(runReference(report.run), report.run.title)} finished.`,
+          settlement,
+          "Reply here to inspect the result or choose what to do next.",
+          machineLine({
+            event: "completion",
+            id,
+            runId: origin.runId,
+            runNumber: report.run.number,
+            cycle: cycle.ordinal,
+            settlement: cycle.reason,
+            ending,
+          }),
+        ].join("\n"),
       );
       yield* sql`UPDATE chat_run_reporting SET completion_sequence=${cycle.sequence} WHERE run_id=${origin.runId}`;
+    });
+
+  const capturedArchive = (origin: ReportOrigin, report: RunReport) =>
+    Effect.gen(function* () {
+      if (report.run.state !== "archived") return;
+      const [row] = yield* sql<{
+        archive_noticed: number;
+      }>`SELECT archive_noticed FROM chat_run_reporting WHERE run_id=${origin.runId}`;
+      if (row!.archive_noticed === 1) return;
+      yield* insertNotice(origin, report, "archive", (id) =>
+        [
+          `🗄️ ${runHeading(runReference(report.run), report.run.title)} was archived.`,
+          "Archive is final; its history stays readable in Factory.",
+          machineLine({
+            event: "archive",
+            id,
+            runId: origin.runId,
+            runNumber: report.run.number,
+          }),
+        ].join("\n"),
+      );
+      yield* sql`UPDATE chat_run_reporting SET archive_noticed=1 WHERE run_id=${origin.runId}`;
     });
 
   /**
@@ -291,13 +378,21 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       (rows) => rows.map((row) => row.delivery_id),
     );
 
+  const granted = (origin: ReportOrigin, report: RunReport) =>
+    Effect.map(
+      sql`SELECT 1 FROM chat_access_channel_projects
+        WHERE channel_id=${origin.destination.parentChannelId} AND project_id=${report.run.project.id}`,
+      (rows) => rows.length > 0,
+    );
+
   return {
     capture: (origin, report) =>
       Effect.gen(function* () {
-        if (!report) return;
+        if (!report || !(yield* granted(origin, report))) return;
         const { runId } = origin;
         const baseline = yield* accounting(runId, report);
         yield* capturedCompletion(origin, report);
+        yield* capturedArchive(origin, report);
         const touched = new Set(yield* capturedMatters(origin, report, baseline));
         if (baseline) yield* sql`UPDATE chat_run_reporting SET baseline=0 WHERE run_id=${runId}`;
         for (const id of yield* cancelledMessages(runId)) touched.add(id);
@@ -338,7 +433,7 @@ export const catchUpNotices = (sql: SqlClient.SqlClient) =>
       >`SELECT ${sql.literal(NOTICE_COLUMNS)},
           (${openNotice(sql)}) AS mergeable
         FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
-        JOIN chat_run_reporting r ON r.run_id=n.run_id
+        JOIN chat_run_reporting r ON r.run_id=n.run_id JOIN runs u ON u.id=n.run_id
         WHERE d.message_id IS NULL AND d.state IN ('owed','failed','unknown')
           AND d.purpose IN ('attention','catch-up')
         ORDER BY d.created_at,d.rowid`;

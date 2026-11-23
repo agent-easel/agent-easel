@@ -2,29 +2,33 @@ import { assert, expect, it } from "@effect/vitest";
 import {
   archiveCall,
   archivingWorld,
-  clicked,
+  confirmationAnswered,
+  confirmed,
   confirmations,
   lifecycleOf,
   statusCardsIn,
   proposed,
+  reply,
+  resolved,
 } from "./support/chat-actions.ts";
 import { servingAgain } from "./support/chat-control.ts";
+import { PARTICIPANT_ID } from "./support/controlled-discord.ts";
 import { invocation, toolResults } from "./support/chat-conversation.ts";
 import { addedProject, startedRun } from "./support/chat-runs.ts";
 import { nextThreadInterrupt } from "./support/run-worker.ts";
 
-const ACCEPTED = "✅ Confirmed (disabled)";
-const REJECTED = "🚫 No longer valid (disabled)";
+const ACCEPTED = "✅ Confirmed";
+const REJECTED = "🚫 No longer valid";
 
 it("an Archive proposal reviews the Run with final archival, cancelled owed work and pending items, one interruption request and retained history, and archives nothing", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
 
   // Act
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "stop #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "stop #1");
 
   // Assert
-  const [review, confirmation] = world.discord.created;
+  const [review, last] = world.discord.created;
   expect(review!.content).toBe(
     [
       "🗄️ **Archive Run #1 · Improve search?**",
@@ -34,19 +38,23 @@ it("an Archive proposal reviews the Run with final archival, cancelled owed work
       "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in Factory.",
     ].join("\n"),
   );
-  expect(confirmation!.content).toMatch(/^🔒 Only the requester can confirm · expires <t:\d+:R>$/);
-  expect(button).toMatch(/^factory-confirm:/);
+  expect(last!.content).toMatch(
+    new RegExp(
+      `^🔒 <@${PARTICIPANT_ID}> To confirm, reply to this message with \`confirm [A-Z0-9]{4}\` · only the requester can confirm · expires <t:\\d+:R>$`,
+    ),
+  );
+  expect(confirmation.phrase).toMatch(/^confirm [ACDEFHJKMNPQRTWXY34679]{4}$/);
   expect(await lifecycleOf(world.factory, world.runId)).toBe("active");
 });
 
 it("the requester's confirmation archives exactly the reviewed Run started in Factory, requests its worker's interruption once and posts the receipt in the request thread without giving the Run an origin", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
   const interrupt = nextThreadInterrupt(world.t3);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ACCEPTED);
@@ -63,13 +71,13 @@ it("the requester's confirmation archives exactly the reviewed Run started in Fa
 it("a Run archived in Factory meanwhile is not this action's Archive: the confirmation is rejected and requests no further interruption", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
   const interrupt = nextThreadInterrupt(world.t3);
   assert((await world.factory.archiveRun(world.runId)).ok);
   await interrupt;
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(REJECTED);
@@ -80,20 +88,21 @@ it("a Run archived in Factory meanwhile is not this action's Archive: the confir
   expect(world.t3.threads.threadStops).toHaveLength(1);
 });
 
-it("two clicks racing on one Archive review archive once and request interruption once", async (c) => {
+it("two confirmation replies racing on one Archive review archive once and request interruption once", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
   const interrupt = nextThreadInterrupt(world.t3);
 
   // Act
-  const answers = await Promise.all([
-    clicked(world.discord, button, "610000000000000001", 1),
-    clicked(world.discord, button, "610000000000000002", 2),
-  ]);
+  reply(world.discord, confirmation, "610000000000000001");
+  reply(world.discord, confirmation, "610000000000000002");
 
   // Assert
-  expect(answers).toContain(ACCEPTED);
+  expect(await resolved(world.discord, confirmation)).toBe(ACCEPTED);
+  expect(await confirmationAnswered(world.discord, 1)).toMatch(
+    /^(?:⏳|You already confirmed this review\.)/,
+  );
   await interrupt;
   expect(world.t3.threads.threadStops).toHaveLength(1);
   expect(await lifecycleOf(world.factory, world.runId)).toBe("archived");
@@ -102,26 +111,26 @@ it("two clicks racing on one Archive review archive once and request interruptio
 it("an Archive review presented before a backend restart is confirmed once after it", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
   await world.factory.close();
   const reopened = await world.open();
   await servingAgain(world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+  const answer = await confirmed(world.discord, confirmation, "610000000000000001", 1);
 
   // Assert
   expect(answer).toBe(ACCEPTED);
   expect(await lifecycleOf(reopened, world.runId)).toBe("archived");
 });
 
-it("after a restart that interrupted an accepted Archive's receipt, the repeated click reports the accepted result and archives or interrupts nothing again", async (c) => {
+it("after a restart that interrupted an accepted Archive's receipt, the reused confirmation phrase reports the accepted result and archives or interrupts nothing again", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
-  const button = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
+  const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
   const interrupt = nextThreadInterrupt(world.t3);
   world.discord.faultMessages("held");
-  await clicked(world.discord, button, "610000000000000001", 1);
+  await confirmed(world.discord, confirmation, "610000000000000001", 1);
   await world.discord.request("POST", /^\/api\/v10\/channels\/\d+\/messages$/, 3);
   await interrupt;
   await world.factory.close();
@@ -129,7 +138,8 @@ it("after a restart that interrupted an accepted Archive's receipt, the repeated
   await servingAgain(world.discord, 2);
 
   // Act
-  const answer = await clicked(world.discord, button, "610000000000000002", 2);
+  reply(world.discord, confirmation, "610000000000000002");
+  const answer = await confirmationAnswered(world.discord, 1);
 
   // Assert
   expect(answer).toBe(

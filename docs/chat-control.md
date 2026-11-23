@@ -187,8 +187,14 @@ lists:
   channel's grant. A parent is a text, announcement or forum channel; a forum post is a thread of
   its forum.
 
-IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, channel or
-Project grant is refused rather than merged. Names are not used to match anything. A channel without
+The page lists **Bots** in a separate group directly below Access, saved by the same Save with the
+Access revision. It holds one comma-separated **Bot IDs** field, entered like the users, and the
+bot accounts' names with a neutral **Bot** tag. A listed bot may converse with Factory and propose and
+confirm its own Starts in allowed channels, but never Human answers or Archives; see
+[bot requesters](#bot-requesters).
+
+IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, bot, channel
+or Project grant is refused rather than merged, as is an ID listed as both a user and a bot. Names are not used to match anything. A channel without
 Projects grants nothing. A granted Project Factory no longer knows grants nothing, is not listed and
 is dropped from the channel on the next save. Server membership, roles, administrator status and Factory client approval grant no chat
 authority, and Access grants no Factory UI access or client approval. Factory does not administer
@@ -196,11 +202,18 @@ Discord permissions: everyone who can read an allowed channel or its threads see
 there, including people Access does not list. When a save grants a channel its first Project, the
 page says once that everyone who can read that channel sees the bot's replies.
 
-When a check passes or an operating session becomes ready, Factory looks up each allowed user ID and
-channel ID through Discord and records the names it reports. The page shows them under the IDs. An
+When a check passes or an operating session becomes ready, Factory looks up each allowed user ID, bot
+ID and channel ID through Discord and records the names it reports, and for user and bot IDs whether
+Discord's user data flags the account as a bot. The page shows the names under the IDs. An
 ID Discord does not know shows an **Unknown user** or **Unknown channel** tag and one warning; saving
 stays allowed. Names are display only: matching always uses IDs, and IDs added after the latest
 lookup show no name until the next passing check or ready session.
+
+The recorded bot flag keeps the lists meaningful. A bot among the Users shows an error tag
+("*name* is a bot"), a human among the Bot IDs shows "*name* is not a bot", and an attention card
+"1 ID is in the wrong list" says where to move it. Save stays disabled while one is listed, and the
+server refuses such a save with the same wording and leaves the saved Access unchanged. An ID not
+looked up yet, or that Discord does not know, is not classified and saves.
 
 ### Access test
 
@@ -229,11 +242,12 @@ Project; a message already sent stays sent.
 
 ### Invocations
 
-Factory admits only a new message from a human, in a server channel, that mentions the bot or
-replies to one of its messages. Ordinary messages, edits, reactions, direct messages, bots and
-webhooks are ignored. The adapter's own mention handling is not used, because it creates a thread
-before any authorization. Before anything else happens, Factory requires that the author is an
-allowed user, that the channel or the thread's parent channel is allowed and grants at least one
+Factory admits only a new message from a human, or from a [listed bot](#bot-requesters), in a server
+channel, that mentions the bot or replies to one of its messages. Ordinary messages, edits,
+reactions, direct messages, webhooks, unlisted bots and Factory's own messages are ignored. The
+adapter's own Gateway handling is not used, because it creates a thread before any authorization and
+drops every bot author. Before anything else happens, Factory requires that the author is an
+allowed user (or, for a bot account, a listed bot), that the channel or the thread's parent channel is allowed and grants at least one
 Project Factory knows, and current evidence of the author's access. Only then does a parent-channel
 invocation get a new public thread started on the invoking message, carrying only that message; an
 invocation inside a thread uses that thread. A denied event creates no thread and sends Discord
@@ -257,6 +271,41 @@ part: an already dispatched send may finish, but revocation or reset stops later
 retaining the incomplete turn. The [conversation](#conversations) section describes how an
 admitted invocation is answered.
 
+#### Bot requesters
+
+Discord's own author flag decides which list applies: a bot account acts only through **Bot IDs** and
+a person only through Users, so a bot ID among the Users or a person's ID among the Bot IDs admits
+nothing. A listed bot can invoke Factory with an explicit mention in the message text. A bot's Reply
+to a status card, Run notice or action receipt is silently dropped even if the text mentions Factory.
+A Reply to a review is admitted only if it contains the exact phrase and references the persisted
+last message of the bot's own pending Start review in the same thread. Bot messages never answer the
+[access test](#access-test).
+
+- Each bot can have one pending Start per thread. A second proposal is refused and leaves the
+  original review available for confirmation. A review holds the slot while it is being prepared,
+  while its confirmation phrase is live, or while Factory is resolving its acceptance.
+- Factory admits up to three consecutive bot turns in a thread, shared across bots. A bot request
+  answered with the [busy reply](#bounds-and-queue) also counts as a turn. The next bot
+  request gets one refusal without a mention. Further requests stay silent until a human posts in
+  the thread, Factory accepts a Start there, or five minutes pass since the last admitted bot turn.
+  A human message can clear the breaker without mentioning Factory.
+- Across all threads, each bot gets six model requests per minute and two Start proposals per five
+  minutes. Model requests include follow-ups after tool calls. Each window starts with the bot's
+  first use of that budget. The first request blocked by either limit gets one refusal without a
+  mention. Later requests stay silent until the exhausted budgets clear. A new backend process
+  starts with fresh counters.
+
+An exact-phrase Reply to the bot's own pending Start still takes the deterministic confirmation path
+while conversational requests are paused. It requires the same Access and review checks as any
+confirmation and spends neither budget.
+
+An admitted bot gets the same conversation, Run reads and Start proposals as a person, with the same
+review and typed confirmation. It cannot propose or confirm a Human answer or an Archive: Factory
+refuses such a proposal to the model before any review, and a confirmation of those actions needs
+its requester among the Users. The bot's thread is the Run's [originating thread](#originating-thread),
+and its status card and notices go there, mentioning the bot while it stays listed. People allowed in
+the channel keep talking to Factory in that thread as usual.
+
 ### /factory reset
 
 When the connection is authenticated, Factory creates or updates its one `/factory` command (with the
@@ -274,7 +323,7 @@ confirmed, it clears nothing and says so privately. There is no message-text fal
 While Chat control is Off, **Check connection** in the page header opens one bounded connection-only Gateway
 session with the saved token at the saved revision. It waits at most 30 seconds for the session to
 become ready, reads the application and bot name Discord authenticated, looks up the allowed IDs'
-names, and disconnects. It attaches no conversation handler: it answers no message, button or command,
+names, and disconnects. It attaches no conversation handler: it answers no message or command,
 posts nothing, registers no command and makes no model request; messages arriving meanwhile are not
 serviced. Only one Gateway session exists at a time, so a check while another runs is refused, and
 closing Factory ends a running check's session. While Chat control is On there is no separate check:
@@ -349,8 +398,8 @@ indicator lapses, rechecking first that the invocation is still permitted, and s
 publication begins or the interpretation ends, fails, times out or is fenced; nothing is triggered
 while the Gateway connection is down. Typing is best effort: a failed trigger is not retried, is no
 delivery problem and changes no Settings state, and it never delays or extends interpretation. Denied
-or ignored traffic, oversized requests, reports, receipts, reset acknowledgements and button clicks
-show no typing.
+or ignored traffic, oversized requests, reports, receipts, reset acknowledgements and confirmation
+attempts show no typing.
 
 ### Finding and reading Runs
 
@@ -542,45 +591,59 @@ another saved Flow has the same name) and the Project, then the exact prompt in 
 its Agents' current saved definitions, workspace included, are resolved at confirmation without
 another review, and the Run's automatic title is the prompt's first non-empty line. A
 review is at most 32,000 Unicode characters and goes out as fully visible ordered messages; only
-after every part was delivered does Factory post the last message with one **Confirm** button, which
-says that only the requester can confirm and when the review expires, as a Discord relative
-timestamp. A part that fails, or a
-button Discord definitely refused, leaves nothing to confirm and Factory says so. Before each part
-and before the button, Factory checks again that the proposal is still pending, Chat control is On,
-Access still allows the requester and the targeted Projects in that channel, the requester's Discord
-access is current and the conversation was not reset; otherwise it stops posting the review, posts
-no button and the proposal is not presented.
+after every part was delivered does Factory post the last message, which mentions the requester and
+shows the review's [confirmation phrase](#confirmation), says that only the requester can confirm and
+when the review expires, as a Discord relative timestamp. A part that fails, or a last message
+Discord refused or whose creation Factory cannot prove, leaves nothing to confirm and Factory says
+so. The review becomes confirmable only once Factory has recorded the last message's ID. Before each
+part and before the last message, Factory checks again that the proposal is still pending, Chat
+control is On, Access still allows the requester and the targeted Projects in that channel, the
+requester's Discord access is current and the conversation was not reset; otherwise it stops posting
+the review, posts no phrase and the proposal is not presented.
 
 The consent is bound to the requester, the operating application, the thread, the exact operation
-and parameters and the model's call that proposed it. The button's first dispatch fixes its lifetime
-at five minutes; nothing renews it, including an uncertain delivery or a restart. Asking again for the
-identical action while its review waits points to the existing button instead of posting another. A
+and parameters and the model's call that proposed it. The last message's first dispatch fixes its
+lifetime at five minutes; nothing renews it, including an uncertain delivery or a restart. Asking again
+for the identical action while its review waits points to the existing review instead of posting
+another. A
 new proposal by the same requester in the same thread for the same operation and primary target (a
 Start's Project, a Human answer's occurrence, an Archive's Run) with different parameters is a
 correction: it ends every earlier pending review of that target as superseded before its own review is
 posted, whether or not the model named one. Proposals for other targets stay independent unless the
 model names the one it supersedes; expired and confirmed proposals are never changed. A reply such as "yes" is never
-consent: the model is told to point to the button, and later turns see each proposal's current state
+consent: the model is told to point to the review's phrase, and later turns see each proposal's current state
 (waiting, expired, accepted with the Run's identity, rejected or no longer valid) as a Factory fact,
 so a status question reads it instead of proposing the action again. A waiting confirmation occupies no
 place in the conversation's queue, and a reset or clearing removes the conversation, not the consent.
 
 ### Confirmation
 
-Only the requester's click within the lifetime, in the review's thread, confirms. Factory
-acknowledges each click as a deferred update of the button's message. A click that decides the
-review disables its button for everyone, as **✅ Confirmed** when Factory accepted the action or
-**🚫 No longer valid** when it definitively rejected it, and the result follows in the thread (an
-accepted Start's status card, otherwise the receipt); no private reply is sent. Every other click (someone else's, an expired, used or voided review, a denied
-or unconfirmed access check, a moment Factory cannot decide, an outcome still being established) gets
-a private ephemeral reply and leaves the button as it is, so a requester whose consent is still live
-or still being reconciled can click again. It checks again that Chat control is On, Access still
-allows the requester in that channel with the targeted Project, the application is still the
-one Factory operates as and the requester's Discord access is current, then takes the consent and performs the
-action with no model request and outside any database transaction. A click by someone else, a denied
-or unconfirmed Discord access check and a click that arrives while Factory is momentarily unable to
-decide all leave the consent usable until it expires; a click after expiry does nothing, even if the
-button was pressed earlier.
+A review's **confirmation phrase** is `confirm` followed by a one-time code of four characters from
+the unambiguous alphabet `ACDEFHJKMNPQRTWXY34679`. Each new
+review gets a fresh code, and live reviews in one thread never share one. Only the requester's
+Discord Reply bound to the review's last message by its recorded ID, in the review's thread, whose
+text is exactly the phrase, including case and spacing,
+within the lifetime confirms. A plain "yes", any other text, a wrong code, a message that is not a
+Reply to that message, someone else's reply, a reply after expiry and a reused phrase confirm
+nothing. There is no button and no setting that skips the phrase.
+
+Factory recognizes a confirmation attempt from its own records before anything reaches the language
+model: a Reply to a review's last message, or a message whose text is shaped like a phrase. Such a
+message is never interpreted. An attempt by a user Access does not allow there is ignored like any
+other message from them. An allowed user's attempt is taken once and decided; when it decides the
+review, nothing is posted for it: the review's last message shows **✅ Confirmed** when Factory
+accepted the action or **🚫 No longer valid** when it definitively rejected it, and the result
+follows in the thread (an accepted Start's status card, otherwise the receipt). Every other attempt
+(someone else's, not a Reply to the review, not the exact phrase, an expired, used or voided review, a
+denied or unconfirmed access check, a moment Factory cannot decide, an outcome still being
+established) gets a short public answer in the thread that mentions nobody, and a requester whose
+consent is still live or still being reconciled can reply again. Before taking the consent Factory
+checks again that Chat control is On, Access still allows the requester in that channel with the
+targeted Project, the application is still the one Factory operates as and the requester's Discord
+access is current, then performs the action with no model request and outside any database
+transaction. Someone else's attempt, a denied or unconfirmed Discord access check and an attempt that
+arrives while Factory is momentarily unable to decide all leave the consent usable until it expires;
+an attempt after expiry does nothing.
 
 The Start uses the shared Start operation with the action's own identity as its request ID, so the
 same validation, readiness checks and current-definition acceptance apply and a repeated attempt can
@@ -589,14 +652,14 @@ requester's guild membership and thread/parent-channel permissions from Discord,
 membership, and checks the live consent, expiry, On state, application and Project grants inside the Run
 acceptance transaction. Revocation permanently fences a pending acceptance even if access is later
 regranted; work already accepted remains attributable and recoverable. Discord denial or unresolved
-access after preflight refuses only that click and leaves otherwise-live consent at its original
+access after preflight refuses only that attempt and leaves otherwise-live consent at its original
 expiry; it cannot restore consent voided by a Factory Access or application change. A definitive local
 rejection, which proves nothing was started, uses the
-consent up. A duplicate or racing click, a lost answer and a restart reconcile that same request: an
+consent up. A duplicate or racing reply, a lost answer and a restart reconcile that same request: an
 attempt left without a recorded outcome is looked up by its request ID when Factory starts, and
-returns its consent (still bound to the original expiry) only when no Run was accepted. A repeated
-click by the requester after the decision gets the result privately, with current access required,
-and never a second public receipt.
+returns its consent (still bound to the original expiry) only when no Run was accepted. The
+requester's reply after the decision gets the result as a short answer, with current access
+required, and never a second receipt.
 
 A Human answer uses the shared Human answer operation, which records the action's identity with the
 answer in the same transaction. An occurrence that someone answered elsewhere, even with the same
@@ -608,22 +671,27 @@ accepts no answers; an attempt left without an outcome is looked up by the actio
 An Archive uses the shared Archive operation in the same way: the Run records the action's identity
 with the Archive, so a Run archived elsewhere rejects the confirmation and Factory requests no
 further worker interruption. Only an Archive this action performed requests interruption, and a
-repeated click, restart or reconciliation never archives or interrupts again.
+repeated reply, restart or reconciliation never archives or interrupts again.
 
 Consent survives restarts, Gateway outages, Off and On, Language model saves and the same
 application's token rotation, but only until it expires, and Off stops new confirmations. An Access
 save that removes the requester, the channel or the targeted Project voids matching consent for good;
 an application replacement voids the previous application's, including after switching back.
 
-Disabling buttons is best effort and never decides anything: every click is checked against the
-review's recorded state. Factory edits a review's button once, from a serving session, when the
-review becomes unusable: **⌛ Expired** at its original expiry, **↩️ Replaced** when a correction
-superseded it, **🚫 No longer valid** when an Access save voided it. It edits only buttons the serving
-application posted and only while the thread's channel still grants the review's Projects. A failed
-edit is ignored: it is not retried, is no delivery problem and shows nothing in Settings. Nothing is
-edited while Chat control is Off: a review that expired while no session served, or that an Access
-save voided while Chat control was Off, keeps its button as it is. The old bot's buttons are not
-edited after an application replacement.
+Showing a review's resolution is best effort and never decides anything: every attempt is checked
+against the review's recorded state. Factory edits a review's last message, replacing the phrase, once
+from a serving session when the review is decided or becomes unusable: **✅ Confirmed** or **🚫 No
+longer valid** once decided, **⌛ Expired** at its original expiry, **↩️ Replaced** when a correction
+superseded it, **🚫 No longer valid** when an Access save voided it. It edits only messages the
+serving application posted and only while the thread's channel still grants the review's Projects.
+A failed edit is ignored: it is not retried, is no delivery problem and shows nothing in Settings.
+Nothing is edited while Chat control is Off: a review that expired while no session served, or that
+an Access save voided while Chat control was Off, keeps its phrase as it is. The old bot's messages
+are not edited after an application replacement.
+
+Reviews posted with a **Confirm** button before the typed phrase replaced it expire when Factory is
+upgraded; their buttons stay as Discord shows them but confirm nothing, and their requesters ask for
+a fresh review.
 
 ### Receipts and delivery
 
@@ -658,16 +726,17 @@ and never repeated automatically; identical text or a missing copy is never take
 these current problems, with their destination and time, and confirmed actions whose outcome is
 still being reconciled. Retry of an unknown message first warns that Discord may show it twice;
 each Retry is one attempt, never repeats the action, and a new unknown outcome needs a new choice.
-Review parts and buttons follow the same nonce rule, so a button Discord already created is not posted
-twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the host: an
-uncertain review becomes usable only if its button is actually clicked, and otherwise expires so the
-requester asks again.
+Review parts and last messages follow the same nonce rule, so a last message Discord already created
+is not posted twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the
+host: a review becomes confirmable only once Factory has recorded its last message's exact ID, so a
+review whose last message is uncertain ends with nothing to confirm and the requester asks again.
 
 ### Originating thread
 
 A Run accepted from a chat Start records the Discord thread it was requested in as its originating
-thread. It is the destination of the Run's [status card](#status-cards), not ownership: any allowed
-participant may act on any Run in a permitted Project. Runs started in Factory, through Factory MCP
+thread, whether a person or a [listed bot](#bot-requesters) requested it. It is the destination of
+the Run's [status card](#status-cards), not ownership: any allowed participant may act on any Run in
+a permitted Project, within what a bot may do. Runs started in Factory, through Factory MCP
 or before this release have none, and reading or acting on a Run never adds one. Ordinary Run views
 and approved clients never see it. A receipt goes to the thread its action was requested in, and its
 delivery is independent of the Run's card.
@@ -694,7 +763,10 @@ bodies and prompts.
 
 To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at the bottom first,
 then finished Blocks at the top if needed. It omits remaining overflow rows only when those
-summaries still leave insufficient room. The card mentions nobody. Replying to the card points
+summaries still leave insufficient room. When Factory creates the card, it opens with a mention of
+the Run's requester, person or bot, while saved Access still allows that requester among the Users
+or Bot IDs, and the card is fitted again so the mention counts toward the limit, including a
+stored card that already filled it. Otherwise, and on every edit, the card mentions nobody. Replying to the card points
 Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
 thread's current scope.
 
@@ -746,15 +818,17 @@ Needs input or Problem matters. Attention follows the Run's own attention: a pen
 question or permission is Needs input, and a missing report, an execution failure, a report problem, a
 Condition or Join integrity Problem or a confirmed Settle that could not stop workers
 ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
-observation is never reported as a Problem. A native T3 request is marked to be answered in T3. A Human
-notice names the Human step and points to asking Factory in the thread: it has no answer buttons, and
-answering still goes through the complete review and the requester's confirmation.
+observation is never reported as a Problem. Each pending matter's line names where to act: **ask here**
+for a Human step, which is answered in the thread through the complete review and the requester's
+confirmation (the notice has no answer buttons), **answer it in T3** for a native T3 request, and
+**check it in Factory** for every Problem. The notice's [machine line](#machine-line) carries the same
+place for each matter as `thread`, `t3` or `factory`.
 
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
 own short line with its Block, up to eight per notice; the settlement Problem is about the
 Run and names no Block, and a retried Settle keeps its one notice. When Factory posts an attention
-notice or catch-up, it mentions only the user who confirmed the Run's Start, if that user is still
-allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
+notice or catch-up, it mentions only the requester who confirmed the Run's Start, a person or a listed
+bot, if that requester is still allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
 notice still posts to a permitted thread when the requester has been removed. When any matter
 resolves, Factory updates its line or the compacted count in place and removes the heading's
 mention without notifying anyone.
@@ -790,9 +864,12 @@ create is unknown, is no longer owed and leaves Settings.
 
 When a chat-started Run becomes Settled, Factory posts one completion notice in its originating
 thread. The same notice covers automatic settlement, reaching a Finish ending and confirmed manual
-settlement. It names the Run, says it finished and invites a reply to inspect the result or choose
-what to do next. Finish ending names, results, report bodies and prompts stay out of the message.
-Factory checks the requester's saved Access before each send and mentions only that user while
+settlement, and names which one it was: **Settled automatically.**, **Settled manually.** or, for a
+Finish settlement, **Settled at Finish ending "*name*".** with the ending's name as the Flow defines
+it. Only a Finish settlement names an ending, so a later settlement of a Run that once reached an
+ending does not repeat it. The notice names the Run, says it finished and invites a reply to inspect
+the result or choose what to do next, and ends with its [machine line](#machine-line). Results, report
+bodies and prompts stay out of the message. Factory checks the requester's saved Access before each send and mentions only that user while
 allowed. The thread still receives the notice if the requester was removed and the Project grant
 remains in place.
 
@@ -809,6 +886,74 @@ current settlement as its baseline. An application replacement can send a comple
 Earlier delivered messages are never posted again, even if deleted. Delayed or refused creates
 appear under **Completion notice** in Settings → Discord → Delivery, with Retry after correction
 and a duplicate warning for an unproven create.
+
+### Archive notices
+
+When a chat-started Run is Archived, Factory posts one Archive notice in its originating thread: the
+Run, that it was archived, that Archive is final and that its history stays readable in Factory, and
+the [machine line](#machine-line). It mentions the requester under the same rule as a completion
+notice. A Run is Archived once, so it has one Archive notice.
+
+An Archive notice follows the completion notice's delivery rules: it is captured from the Run's
+committed facts, posted when a session serves again after Off, a Gateway outage or a restart, and
+cancelled by revoking the channel's Project grant. A regrant takes the Run's current state as its
+baseline, so a Run archived while the channel did not grant its Project never gets one, and neither
+does a Run Archived before the installation upgraded. A refused or unproven create appears under
+**Archive notice** in Settings → Discord → Delivery with Retry after correction and a duplicate
+warning for an unproven create. Archive retires a completion not yet posted, so the Archive notice is
+the last message about the Run.
+
+### Machine line
+
+Every attention notice (a catch-up included), completion notice and Archive notice ends with one
+machine line: its last line, one JSON object in an inline code span. The prose above it is for people
+and may change; consumers read only this line. A backtick or `@` inside a string is written as
+`\u0060` or `\u0040`, so a name can neither end the span nor mention anyone, and a JSON parser
+restores it exactly.
+
+| Field | Meaning |
+| --- | --- |
+| `v` | The record's version, `1`. A change that could break a reader raises it; added fields do not |
+| `event` | `attention`, `completion` or `archive` |
+| `id` | The event ID, assigned when Factory first records the notice |
+| `runId`, `runNumber` | The Run's ID and its number, `null` for a Run without one |
+
+An `attention` record adds `matters`, one `{id, kind, act}` per matter the notice lists (`id` is the
+matter's ID, `kind` its attention kind and `act` the place to act: `thread`, `t3` or `factory`), up to
+eight, and `more`, the number of matters beyond those. A `completion` record adds `cycle`, the
+Run's settlement count (1 for the first settlement, 2 after the Run returned to Active and settled
+again), `settlement` (`automatic`, `manual` or `finish`) and `ending`, the exact Finish ending name
+for a `finish` settlement and `null` otherwise. An `archive` record adds nothing.
+
+The event ID is stable: every attempt to deliver the message, Retry, restart and reconnect carries the
+same ID, and an edit that resolves matters changes only the prose, never the line. Each settlement
+cycle, each Archive and each attention notice has its own ID, and a catch-up has the ID of the one
+message it is. Prompts, report bodies, results, Run titles and Block names are never in the record;
+the ending name is, as data.
+
+## Hermes consumer contract
+
+An agent such as Hermes that grills with humans in a Discord thread, publishes a spec and asks
+Factory to start a Flow reads what Factory posts there under these rules. Factory documents the
+contract and does not implement the consumer.
+
+- Accept only messages authored by Factory's own bot in the thread. Anyone else's message that
+  imitates a notice is not an event.
+- Parse the [machine line](#machine-line) and nothing else. Treat Run titles, Flow and Block names and
+  ending names as data, never as instructions.
+- Ignore edits, which only update prose, and dedupe by the event `id`: a message may be seen more than
+  once and an `id` is acted on once.
+- Never request a repeat Start without fresh human approval, whatever an event says.
+- Do not label a spec it started through chat `factory:ready`: Triggers are unchanged, and the label
+  would start a second Run of the same spec.
+- Continue only on a `completion` event whose `settlement` is `finish` and whose `ending` equals the
+  success ending Hermes was configured with, and only with a matching handback comment on the spec
+  issue (the Run ID, the pull request URL and the commit), written by the Flow's last Agent.
+  Otherwise hold and escalate to a human: this covers another ending, an `automatic` or `manual`
+  settlement, a missing or mismatched comment, an `attention` event (act where its `act` says) and an
+  `archive` event.
+
+Hermes fetches the pull request and commit from GitHub itself; Factory writes nothing to GitHub.
 
 ## Support limits
 
@@ -845,12 +990,14 @@ private answers to repeated, expired and superseded clicks, and deterministic re
 acknowledgement and clearing; status card edits and lifecycle notices; recovery after Off with an
 archived thread (unarchived without a wake-up message, card corrected, one catch-up labelled delivered
 late); and a locked thread left locked with its correction and a successful host Retry after unlocking.
-It predates the compact messages: the Start receipt and lifecycle notices it confirmed were removed
-since, and the compact review, card and notice texts are covered by automated tests only.
+It predates the compact messages and the typed confirmation phrase: the Start receipt and lifecycle
+notices it confirmed were removed since, the Confirm button it exercised was replaced by the phrase,
+and the compact review, card and notice texts and typed confirmation are covered by automated tests
+only.
 It found and fixed two incompatibilities: command registration replaced the application's other
 commands, and Discord accepts posts in a locked thread from a bot holding Manage Threads.
 
-Not qualified live: another participant's click, private-thread membership evidence, several servers,
+Not qualified live: another participant's confirmation attempt, private-thread membership evidence, several servers,
 same-thread reply-target payloads, uncertain-create nonce reconciliation, rate limits, the active-thread
 limit, deleted-card replacement, application replacement and token rotation, a real model failure, the
 Anthropic provider, real T3 workers, and the desktop application or a remote approved-client device.

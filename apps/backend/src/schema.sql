@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: join_lifecycle
+-- Newest applied migration: chat_archive_notices
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -72,6 +72,11 @@ CREATE TABLE agents (
   created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id), owner_changed_at TEXT);
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
+
+CREATE TABLE chat_access_bots (
+  user_id TEXT PRIMARY KEY,
+  position INTEGER NOT NULL
+);
 
 CREATE TABLE chat_access_channel_projects (
   channel_id TEXT NOT NULL REFERENCES chat_access_channels(channel_id),
@@ -178,7 +183,7 @@ CREATE TABLE chat_conversations (
 
 CREATE TABLE chat_deliveries (
   id TEXT PRIMARY KEY,
-  purpose TEXT NOT NULL CHECK (purpose IN ('receipt', 'status-card', 'attention', 'lifecycle', 'catch-up', 'completion')),
+  purpose TEXT NOT NULL CHECK (purpose IN ('receipt', 'status-card', 'attention', 'lifecycle', 'catch-up', 'completion', 'archive')),
   action_id TEXT REFERENCES chat_actions(id),
   run_id TEXT,
   guild_id TEXT NOT NULL,
@@ -240,7 +245,7 @@ CREATE TABLE chat_discord_names (
   kind TEXT NOT NULL CHECK (kind IN ('user', 'channel')),
   discord_id TEXT NOT NULL,
   -- Null when Discord does not know the ID.
-  name TEXT,
+  name TEXT, is_bot INTEGER CHECK (is_bot IN (0, 1)),
   PRIMARY KEY (kind, discord_id)
 );
 
@@ -304,8 +309,8 @@ CREATE TABLE chat_proposals (
   state TEXT NOT NULL CHECK (state IN ('preparing', 'presented', 'accepting', 'consumed', 'ended')),
   ended_reason TEXT CHECK (ended_reason IN ('failed', 'superseded', 'revoked', 'application')),
   created_at TEXT NOT NULL,
-  expires_at TEXT, button_message_id TEXT, button_settled INTEGER NOT NULL DEFAULT 0
-  CHECK (button_settled IN (0, 1)),
+  expires_at TEXT, confirmation_message_id TEXT, resolution_settled INTEGER NOT NULL DEFAULT 0
+  CHECK (resolution_settled IN (0, 1)), confirmation_code TEXT,
   CHECK ((state = 'ended') = (ended_reason IS NOT NULL)),
   CHECK (state = 'preparing' OR state = 'ended' OR expires_at IS NOT NULL)
 );
@@ -353,7 +358,7 @@ CREATE TABLE chat_run_reporting (
   reference TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',
   final INTEGER NOT NULL DEFAULT 0 CHECK (final IN (0, 1))
-, baseline INTEGER NOT NULL DEFAULT 0 CHECK (baseline IN (0, 1)), completion_sequence INTEGER);
+, baseline INTEGER NOT NULL DEFAULT 0 CHECK (baseline IN (0, 1)), completion_sequence INTEGER, archive_noticed INTEGER NOT NULL DEFAULT 0 CHECK (archive_noticed IN (0, 1)));
 
 CREATE TABLE chat_sdk_cache (
   cache_key TEXT PRIMARY KEY,
