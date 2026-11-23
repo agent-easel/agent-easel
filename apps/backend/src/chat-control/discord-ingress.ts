@@ -398,7 +398,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         admittedAt: yield* Clock.currentTimeMillis,
         permitted: stillPermitted,
       };
-      const reservation = yield* Effect.acquireRelease(
+      yield* Effect.acquireRelease(
         Effect.map(interpreter.reserve(invocation), (reservation) => {
           pending.set(message.id, { invocation, reservation });
           return reservation;
@@ -416,8 +416,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
               : Effect.void,
           ),
       );
-      if (requesterKind === "bot" && reservation !== "busy")
-        session.botGuards.takeTurn(threadId, invocation.admittedAt);
+      if (requesterKind === "bot") session.botGuards.takeTurn(threadId, invocation.admittedAt);
       return { kind: "invocation" as const, conversation };
     });
 

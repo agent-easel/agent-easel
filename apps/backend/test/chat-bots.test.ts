@@ -48,6 +48,8 @@ const SENTINEL = "390000000000000001";
 const LOOP_REFUSAL = /^Factory paused bot requests in this thread/;
 const RATE_REFUSAL = /^Factory paused requests from this bot/;
 const START_REJECTED = /^❌ \*\*Start not accepted\*\*/;
+const BUSY =
+  "Factory is already working on four requests in this thread: one is being answered and three are waiting. This message was not taken; send it again after Factory replies.";
 
 const namedReply = (target: CreatedMessage) => ({
   ...hermes,
@@ -94,7 +96,17 @@ it("a listed bot that mentions Factory gets a Start review that mentions it, and
   expect(answer).toBe("✅ Confirmed");
   expect(await runsOf(world.factory)).toStrictEqual([{ number: 1, title: "Improve search" }]);
   await world.discord.createdWhere(isStatusCard, 1);
-  expect(world.discord.created.find(isStatusCard)!.channelId).toBe(THREAD);
+  const card = world.discord.created.find(isStatusCard)!;
+  expect(card.channelId).toBe(THREAD);
+  expect(card.content).toContain(HERMES_MENTION);
+  expect(world.discord.requested("POST", /\/messages$/)).toContainEqual(
+    expect.objectContaining({
+      body: expect.objectContaining({
+        content: card.content,
+        allowed_mentions: { parse: [], users: [HERMES_ID] },
+      }),
+    }),
+  );
 });
 
 it("a listed bot's plain message and its reply to a Factory message are not admitted and never reach the language model", async (c) => {
@@ -242,6 +254,30 @@ it("the fourth consecutive bot turn gets one refusal without a mention, and the 
   expect(replies[3]).not.toContain("<@");
   expect(world.model.requests).toHaveLength(4);
   expect(userEnvelopes(world.model, 3).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
+});
+
+it("busy feedback to a bot in a full thread counts as its turn, so a replying bot gets one refusal and then silence", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  await hermesListed(world.factory);
+  world.model.held();
+  world.discord.deliver(invocation("300000000000000001"));
+  await world.model.requested(1);
+  world.discord.deliver(invocation("300000000000000002"));
+  world.discord.deliver(invocation("300000000000000003"));
+  world.discord.deliver(invocation("300000000000000004"));
+
+  // Act
+  await answered(world.discord, "300000000000000005", 1, hermes);
+  await answered(world.discord, "300000000000000006", 2, hermes);
+  await answered(world.discord, "300000000000000007", 3, hermes);
+  await answered(world.discord, "300000000000000008", 4, hermes);
+  world.discord.deliver(invocation("300000000000000009", hermes));
+
+  // Assert
+  const replies = await answered(world.discord, SENTINEL, 5);
+  expect(replies).toStrictEqual([BUSY, BUSY, BUSY, expect.stringMatching(LOOP_REFUSAL), BUSY]);
+  expect(world.model.requests).toHaveLength(1);
 });
 
 it("a bot's model request limit applies across threads with one unmentioned refusal", async (c) => {

@@ -47,6 +47,11 @@ import { retireApplicationProposals } from "./revocation.ts";
 
 type Run = <A>(effect: Effect.Effect<A, unknown>) => Promise<A>;
 
+const mentioning = (text: string, requesterId: string) =>
+  /^\p{Extended_Pictographic}/u.test(text)
+    ? text.replace(" ", ` <@${requesterId}> `)
+    : `<@${requesterId}> ${text}`;
+
 /** The ingress handlers of one operating session. */
 interface SessionIngress {
   readonly message: (message: Message) => Promise<void>;
@@ -91,7 +96,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
   }
 
   async create(threadId: string, text: string, { nonce, requesterId }: CreateMessageOptions) {
-    const raw = requesterId === undefined ? text : text.replace(" ", ` <@${requesterId}> `);
+    const raw = requesterId === undefined ? text : mentioning(text, requesterId);
     const { payload } = this.buildMessagePayload({ raw });
     const { channelId, threadId: discordThreadId } = this.decodeThreadId(threadId);
     const response = await this.discordFetch(

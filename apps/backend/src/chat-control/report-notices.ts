@@ -294,8 +294,6 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
           (SELECT e.cause_id FROM run_events e WHERE e.sequence=c.sequence) AS reason
         FROM chat_settled_cycles c
         JOIN chat_run_reporting r ON r.run_id=c.run_id
-        JOIN chat_access_channel_projects g ON g.channel_id=${origin.destination.parentChannelId}
-          AND g.project_id=${report.run.project.id}
         WHERE c.run_id=${origin.runId} AND r.completion_sequence IS NOT c.sequence`;
       if (!cycle) return;
       const ending = cycle.reason === "finish" ? report.endingName : null;
@@ -380,10 +378,17 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       (rows) => rows.map((row) => row.delivery_id),
     );
 
+  const granted = (origin: ReportOrigin, report: RunReport) =>
+    Effect.map(
+      sql`SELECT 1 FROM chat_access_channel_projects
+        WHERE channel_id=${origin.destination.parentChannelId} AND project_id=${report.run.project.id}`,
+      (rows) => rows.length > 0,
+    );
+
   return {
     capture: (origin, report) =>
       Effect.gen(function* () {
-        if (!report) return;
+        if (!report || !(yield* granted(origin, report))) return;
         const { runId } = origin;
         const baseline = yield* accounting(runId, report);
         yield* capturedCompletion(origin, report);
