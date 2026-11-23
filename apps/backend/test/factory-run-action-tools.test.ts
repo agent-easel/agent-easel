@@ -84,12 +84,14 @@ it("Approve through a Human target answers exactly that occurrence", async (c) =
 
 it("each pending Human occurrence has its own target", async (c) => {
   // Arrange
-  const world = await firstOccurrence(c);
+  const { run, client } = await reviewRun(c);
 
   // Act
-  const targets = [world.first.target, world.second.target];
+  const read = await readRun(client, run.id);
 
   // Assert
+  const targets = read.humanOccurrences.entries.map((entry: { target: string }) => entry.target);
+  expect(targets).toHaveLength(2);
   expect(new Set(targets).size).toBe(2);
 });
 
