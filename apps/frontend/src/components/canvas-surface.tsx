@@ -30,6 +30,7 @@ import { createCanvasGeometry } from "../flow-geometry.ts";
 import {
   addWire,
   canvasGraph,
+  sameNode,
   type CanvasBlockSelection,
   type BlockPosition,
   type CanvasBlock,
@@ -39,7 +40,7 @@ import {
   type WireTarget,
 } from "../flow-graph.ts";
 import { useCanvasViewport } from "../use-canvas-viewport.ts";
-import { useConnectionPreview, type PreviewSource } from "../use-connection-preview.ts";
+import { useConnectionPreview, type PreviewTarget } from "../use-connection-preview.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
 import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
@@ -54,6 +55,7 @@ import {
   ConnectionPreview,
   FlowWires,
   nestedWiresReach,
+  wireAt,
   type WirePresentation,
 } from "./flow-wires.tsx";
 import { JoinSourceList, joinExitCount, joinSources, type JoinSource } from "./join-block.tsx";
@@ -77,6 +79,7 @@ export type CanvasPort = {
   readonly className: string;
   /** Drawn at the highlight size, as the input a connection being drawn will use. */
   readonly highlighted?: boolean;
+  readonly problem?: boolean;
   readonly handle?: (frame: CSSProperties, circle: ReactNode) => ReactNode;
 };
 
@@ -172,6 +175,64 @@ const REVEAL_MARGIN = 24;
 /** Fit keeps this margin at the sides and room for the zoom controls at the bottom. */
 const FIT_MARGIN = { x: 48, bottom: 80 };
 
+type ScopePreview = {
+  readonly outgoing: CanvasNode | null;
+  readonly wire: string | null;
+  readonly frames: readonly CanvasNode[];
+  readonly source: WireSource | null;
+  readonly input: { readonly blockId: string; readonly index: number } | null;
+  readonly ending: string | null;
+};
+
+function scopePreview(
+  target: PreviewTarget | null,
+  scope: string,
+  graph: CanvasGraph,
+  geometry: Geometry,
+): ScopePreview | null {
+  if (target?.scope !== scope) return null;
+  if (target.kind === "block")
+    return {
+      outgoing: target.node,
+      wire: null,
+      frames: [target.node],
+      source: null,
+      input: null,
+      ending: null,
+    };
+  const wire = wireAt(graph, target.key);
+  if (!wire) return null;
+  const { source, targetBlockId, targetEndingId } = wire;
+  const ends = targetEndingId !== undefined;
+  return {
+    outgoing: null,
+    wire: target.key,
+    frames: [
+      source.kind === "flow-input" ? source : { kind: "block", blockId: source.sourceBlockId },
+      ends ? { kind: "finish" } : { kind: "block", blockId: targetBlockId },
+    ],
+    source,
+    input: ends
+      ? null
+      : { blockId: targetBlockId, index: geometry.incomingPortIndex(targetBlockId, source) },
+    ending: ends ? targetEndingId : null,
+  };
+}
+
+const framed = (preview: ScopePreview | null, node: CanvasNode) =>
+  preview?.frames.some((frame) => sameNode(frame, node)) === true;
+
+const accentedExit = (preview: ScopePreview | null, blockId: string) =>
+  preview?.source?.kind === "exit" && preview.source.sourceBlockId === blockId
+    ? preview.source.exitId
+    : null;
+
+const accentedInput = (preview: ScopePreview | null, blockId: string) =>
+  preview?.input?.blockId === blockId ? preview.input.index : null;
+
+const PORT_ACCENT = "border-foreground bg-foreground";
+const PROBLEM_PORT_ACCENT = "bg-foreground";
+
 /**
  * A port centred on its wire anchor: `center` below its container's inner top edge, on the
  * block's outer left or right edge. Anchors are measured from the block's outer edge, while the
@@ -182,8 +243,9 @@ function SurfacePort({
   center,
   border,
   port,
-  look,
+  look: adapterLook,
   graphY,
+  accented = false,
 }: {
   side: "left" | "right";
   center: number;
@@ -192,7 +254,17 @@ function SurfacePort({
   look: CanvasPort;
   /** An input's anchor below the block's top, for the journeys that read it. */
   graphY?: number;
+  accented?: boolean;
 }) {
+  const look = accented
+    ? {
+        ...adapterLook,
+        className: cn(
+          adapterLook.className,
+          adapterLook.problem ? PROBLEM_PORT_ACCENT : PORT_ACCENT,
+        ),
+      }
+    : adapterLook;
   const frame = (size: number): CSSProperties => ({
     position: "absolute",
     top: center - size / 2,
@@ -220,16 +292,40 @@ function SurfacePort({
   );
 }
 
+function ConnectionPreviewFrame({ border }: { border: number }) {
+  const inset = 4 + border;
+  const size = `calc(100% + ${inset * 2}px)`;
+  return (
+    <svg
+      aria-hidden
+      data-connection-preview
+      className="pointer-events-none absolute overflow-visible motion-safe:transition-opacity motion-safe:duration-75 motion-safe:starting:opacity-0"
+      style={{ top: -inset, left: -inset, width: size, height: size }}
+    >
+      <rect
+        width="100%"
+        height="100%"
+        rx={12}
+        strokeWidth={1}
+        strokeDasharray="4 3"
+        className="fill-none stroke-foreground"
+      />
+    </svg>
+  );
+}
+
 function SurfaceFlowInput({
   graph,
   geometry,
   dimensions,
   content,
+  preview,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
   dimensions: Dimensions;
   content: CanvasFlowInputContent;
+  preview: ScopePreview | null;
 }) {
   const input = dimensions.flowInput;
   const { prompt } = content;
@@ -271,7 +367,9 @@ function SurfaceFlowInput({
         border={input.border}
         port={dimensions.port}
         look={content.port}
+        accented={preview?.source?.kind === "flow-input"}
       />
+      {framed(preview, { kind: "flow-input" }) && <ConnectionPreviewFrame border={input.border} />}
     </article>
   );
 }
@@ -282,12 +380,14 @@ function SurfaceFinish({
   dimensions,
   content,
   pendingEnding,
+  preview,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
   dimensions: Dimensions;
   content: CanvasFinishContent;
   pendingEnding: string | null;
+  preview: ScopePreview | null;
 }) {
   const rows = dimensions.block;
   const box = geometry.finishBox;
@@ -322,10 +422,12 @@ function SurfaceFinish({
               border={rows.border}
               port={dimensions.port}
               look={content.endingPort(ending, ending.id === pendingEnding)}
+              accented={ending.id === preview?.ending}
             />
           )}
         />
       )}
+      {framed(preview, { kind: "finish" }) && <ConnectionPreviewFrame border={rows.border} />}
     </article>
   );
 }
@@ -337,6 +439,7 @@ function SurfaceBlock({
   dimensions,
   content,
   pendingInput,
+  preview,
 }: {
   block: CanvasBlock;
   sources: readonly JoinSource[];
@@ -345,7 +448,10 @@ function SurfaceBlock({
   content: CanvasBlockContent;
   /** The input a connection being drawn to this block will use. */
   pendingInput: number | null;
+  preview: ScopePreview | null;
 }) {
+  const accentedPort = accentedInput(preview, block.id);
+  const accentedExitId = accentedExit(preview, block.id);
   const rows = dimensions.block;
   const border = rows.border;
   const identity = <IdentityRows rows={rows} header={content.header} title={content.title} />;
@@ -360,6 +466,7 @@ function SurfaceBlock({
         port={dimensions.port}
         look={content.incomingPort(index === pendingInput)}
         graphY={graphY}
+        accented={index === accentedPort}
       />
     );
   };
@@ -389,6 +496,7 @@ function SurfaceBlock({
               border={border}
               port={dimensions.port}
               look={content.exitPort(exit)}
+              accented={exit.id === accentedExitId}
             />
           </li>
         ))}
@@ -432,6 +540,9 @@ function SurfaceBlock({
         Array.from({ length: inputs }, (_, index) =>
           inputPort(index, geometry.inputPoint(block, index).y - block.position.y - border),
         )}
+      {framed(preview, { kind: "block", blockId: block.id }) && (
+        <ConnectionPreviewFrame border={border} />
+      )}
     </article>
   );
 }
@@ -816,6 +927,7 @@ function SurfaceBlockItem({
   content,
   pendingInput,
   surface,
+  preview,
   scopePath = "",
   previews,
   area = null,
@@ -826,6 +938,7 @@ function SurfaceBlockItem({
   content: CanvasBlockContent;
   pendingInput: number | null;
   surface: CanvasSurfaceProps;
+  preview: ScopePreview | null;
   scopePath?: string;
   previews?: ReadonlyMap<string, SubflowPreview> | undefined;
   area?: Rect | null;
@@ -842,9 +955,12 @@ function SurfaceBlockItem({
         dimensions={dimensions}
         content={content}
         pendingInput={pendingInput}
+        preview={preview}
       />
     );
   }
+  const accentedPort = accentedInput(preview, block.id);
+  const accentedExitId = accentedExit(preview, block.id);
   const inputs = Math.max(1, drawn.incomingPorts(block).length);
   const incomingPorts = Array.from({ length: inputs }, (_, index) => ({
     key: `in:${index}`,
@@ -876,6 +992,11 @@ function SurfaceBlockItem({
       agents={previewAgents ?? EMPTY_PREVIEW_AGENTS}
       flows={flows ?? EMPTY_PREVIEW_FLOWS}
       frameClassName={content.className}
+      previewFrame={
+        framed(preview, { kind: "block", blockId: block.id }) && (
+          <ConnectionPreviewFrame border={dimensions.block.border} />
+        )
+      }
       border={dimensions.block.border}
       headerPress={content.press.render}
       trailingBadge={content.subflowBadge}
@@ -903,6 +1024,11 @@ function SurfaceBlockItem({
               : content.exitPort(block.exits.find((candidate) => `exit:${candidate.id}` === key)!)
           }
           {...(graphY !== undefined ? { graphY } : {})}
+          accented={
+            side === "left"
+              ? Number(key.slice(3)) === accentedPort
+              : key === `exit:${accentedExitId}`
+          }
         />
       )}
     />
@@ -930,20 +1056,27 @@ function SurfaceLayer({
   surface,
   view,
   area,
+  visible,
   surfaceGraph,
   startPan,
 }: {
   surface: CanvasSurfaceProps;
   view: CanvasView;
   area: Rect | null;
+  visible: Rect;
   surfaceGraph: SurfaceGraph;
   startPan: (event: PointerEvent<HTMLElement>) => void;
 }) {
   const { scope, shown = true, dimensions, wires, flowInput, finish, children } = surface;
   const gesture = surface.gesture ?? null;
   const { geometry, graph, drawn, pending, routes, content } = surfaceGraph;
-  // Kept here rather than in the surface, so a preview does not recompute every block's content.
-  const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
+  const preview = useConnectionPreview({
+    owner: shown && !gesture ? scope : null,
+    view,
+    geometry: drawn,
+    area,
+  });
+  const rootPreview = scopePreview(preview.target, "", graph, drawn);
   const [focused, setFocused] = useState<string | null>(null);
   const pinned = useMemo(() => new Set(pinnedBlockIds(gesture, focused)), [gesture, focused]);
   const layer = useMemo(() => layerSize([geometry, drawn]), [geometry, drawn]);
@@ -955,10 +1088,13 @@ function SurfaceLayer({
     <div
       data-canvas-pan
       className="absolute top-0 left-0 origin-top-left"
-      style={{
-        transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-        ...layer,
-      }}
+      style={
+        {
+          transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+          "--canvas-scale": view.scale,
+          ...layer,
+        } as CSSProperties
+      }
       onPointerDown={startPan}
       onFocusCapture={(event) => setFocused(blockOf(event.target))}
       onBlurCapture={(event) => setFocused(blockOf(event.relatedTarget))}
@@ -970,9 +1106,12 @@ function SurfaceLayer({
         presentation={wires}
         routes={routes}
         pendingWire={pending}
-        emphasized={preview.source?.scope === "" ? preview.source.node : null}
+        emphasized={rootPreview?.outgoing ?? null}
+        previewedWire={rootPreview?.wire ?? null}
         finish={finish !== undefined}
         area={area}
+        visible={visible}
+        scale={view.scale}
       />
       <GesturePreview graph={graph} geometry={drawn} gesture={gesture} />
       {children}
@@ -981,6 +1120,7 @@ function SurfaceLayer({
         geometry={drawn}
         dimensions={dimensions}
         content={flowInput}
+        preview={rootPreview}
       />
       {finish && (
         <SurfaceFinish
@@ -989,6 +1129,7 @@ function SurfaceLayer({
           dimensions={dimensions}
           content={finish}
           pendingEnding={pending?.targetEndingId ?? null}
+          preview={rootPreview}
         />
       )}
       {blocks.map((item) => (
@@ -1001,6 +1142,7 @@ function SurfaceLayer({
           pendingInput={pendingBlockInput(pending, drawn, item.id)}
           surface={surface}
           area={area}
+          preview={rootPreview}
         />
       ))}
       {surface.nested &&
@@ -1012,7 +1154,9 @@ function SurfaceLayer({
           graph,
           surface.subflowPreviews,
           area,
-          preview.source,
+          visible,
+          view.scale,
+          preview.target,
         )}
     </div>
   );
@@ -1027,6 +1171,40 @@ function containsRect(outer: Rect, inner: Rect) {
   );
 }
 
+function visibleBridges(group: SubflowPreview, local: Rect) {
+  const entry = group.incomingEntry;
+  const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
+  const showEntry = reaches(local, {
+    x: -group.offsetX,
+    y: innerEntry.y,
+    width: entry.x,
+    height: 0,
+  });
+  const exits = group.endingRoutes.filter(({ from, to }) =>
+    reaches(local, {
+      x: from.x - group.offsetX,
+      y: from.y - group.offsetY,
+      width: to.x - from.x,
+      height: 0,
+    }),
+  );
+  if (!showEntry && !exits.length) return null;
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
+    >
+      {showEntry && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
+      {exits.map(({ endingId, from, to }) => (
+        <path
+          key={endingId}
+          d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function NestedScopeLayer({
   surface,
   nested,
@@ -1035,7 +1213,9 @@ function NestedScopeLayer({
   offsetX,
   offsetY,
   local,
-  emphasized,
+  visible,
+  scale,
+  target,
 }: {
   surface: CanvasSurfaceProps;
   nested: NestedCanvas;
@@ -1044,9 +1224,12 @@ function NestedScopeLayer({
   offsetX: number;
   offsetY: number;
   local: Rect;
-  emphasized: CanvasNode | null;
+  visible: Rect;
+  scale: number;
+  target: PreviewTarget | null;
 }) {
   const { innerGraph, innerGeometry, innerPreviews } = group;
+  const preview = scopePreview(target, path, innerGraph, innerGeometry);
   const blocks = innerGraph.blocks.filter((item) => {
     const box = innerGeometry.blockBox(item);
     return reaches(local, box) && (!innerPreviews.has(item.id) || !containsRect(box, local));
@@ -1054,44 +1237,15 @@ function NestedScopeLayer({
   const input = reaches(local, innerGeometry.flowInputBox);
   const finish = reaches(local, innerGeometry.finishBox);
   const wire = nestedWiresReach(innerGraph, innerGeometry, local);
-  const entry = group.incomingEntry;
-  const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
-  const entryBridge = reaches(local, {
-    x: -group.offsetX,
-    y: innerEntry.y,
-    width: entry.x,
-    height: 0,
-  });
-  const exitBridges = group.endingRoutes.filter(({ from, to }) =>
-    reaches(local, {
-      x: from.x - group.offsetX,
-      y: from.y - group.offsetY,
-      width: to.x - from.x,
-      height: 0,
-    }),
-  );
-  if (!input && !finish && !wire && !blocks.length && !entryBridge && !exitBridges.length)
-    return null;
+  const bridges = visibleBridges(group, local);
+  if (!input && !finish && !wire && !blocks.length && !bridges) return null;
   return (
     <div
       data-canvas-scope={path}
       className="pointer-events-none absolute [&>article]:pointer-events-auto"
       style={{ left: offsetX, top: offsetY, width: 1, height: 1 }}
     >
-      {(entryBridge || exitBridges.length > 0) && (
-        <svg
-          aria-hidden
-          className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
-        >
-          {entryBridge && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
-          {exitBridges.map(({ endingId, from, to }) => (
-            <path
-              key={endingId}
-              d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
-            />
-          ))}
-        </svg>
-      )}
+      {bridges}
       {wire && (
         <FlowWires
           graph={innerGraph}
@@ -1099,9 +1253,12 @@ function NestedScopeLayer({
           presentation={surface.wires}
           routes={null}
           pendingWire={null}
-          emphasized={emphasized}
+          emphasized={preview?.outgoing ?? null}
+          previewedWire={preview?.wire ?? null}
           finish
           area={local}
+          visible={visible}
+          scale={scale}
           nested
         />
       )}
@@ -1111,6 +1268,7 @@ function NestedScopeLayer({
           geometry={innerGeometry}
           dimensions={surface.dimensions}
           content={nested.input(path)}
+          preview={preview}
         />
       )}
       {finish && (
@@ -1120,6 +1278,7 @@ function NestedScopeLayer({
           dimensions={surface.dimensions}
           content={nested.finish(path)}
           pendingEnding={null}
+          preview={preview}
         />
       )}
       {blocks.map((item) => (
@@ -1134,6 +1293,7 @@ function NestedScopeLayer({
           scopePath={path}
           previews={innerPreviews}
           area={local}
+          preview={preview}
         />
       ))}
     </div>
@@ -1146,7 +1306,9 @@ function drawNestedScopes(
   root: CanvasGraph,
   previews: ReadonlyMap<string, SubflowPreview>,
   area: Rect,
-  emphasized: PreviewSource | null,
+  visible: Rect,
+  scale: number,
+  target: PreviewTarget | null,
 ) {
   const layers: ReactNode[] = [];
   function visit(
@@ -1176,7 +1338,9 @@ function drawNestedScopes(
           offsetX={offsetX}
           offsetY={offsetY}
           local={{ ...area, x: area.x - offsetX, y: area.y - offsetY }}
-          emphasized={emphasized?.scope === path ? emphasized.node : null}
+          visible={{ ...visible, x: visible.x - offsetX, y: visible.y - offsetY }}
+          scale={scale}
+          target={target}
         />,
       );
       visit(group.innerGraph, group.innerPreviews, path, offsetX, offsetY);
@@ -1397,7 +1561,8 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     if (pause) stopFollowing();
   }, [pause, stopFollowing]);
   const nestedReveal = props.nested?.reveal;
-  const area = useDrawWindow(view, useSurfaceSize(surface));
+  const size = useSurfaceSize(surface);
+  const area = useDrawWindow(view, size);
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
   useRevealBounds({
     nestedReveal,
@@ -1415,13 +1580,17 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       data-following={focusTargets ? viewport.following : undefined}
       tabIndex={0}
       onKeyDown={viewport.onKeyDown}
-      className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-ring focus-visible:ring-inset"
+      className={cn(
+        "relative h-full min-h-0 w-full min-w-0 bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-ring focus-visible:ring-inset",
+        props.wires.kind === "curved" ? "overflow-clip" : "overflow-hidden",
+      )}
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer
         surface={{ ...props, subflowPreviews }}
         view={view}
         area={area}
+        visible={shownRect(view, size ?? { width: 0, height: 0 })}
         surfaceGraph={surfaceGraph}
         startPan={viewport.startPan}
       />

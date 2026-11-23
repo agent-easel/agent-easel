@@ -279,6 +279,7 @@ test("a ready Subflow preview with 119 child Blocks expands by default and can r
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   const group = screen.getByRole("article", "Subflow Review stage", { exact: true });
   await expect(group).toBeVisible();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await group.getByRole("button", "Collapse Review stage", { exact: true }).tap();
 
   // Act
@@ -404,6 +405,7 @@ test("renaming a child ending preserves its wire while removing Finish or the ch
 
   await removeChildFinish(app.baseUrl, renamedChild);
   await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await group.getByRole("button", /^Subflow Review step/).tap();
   const brokenSection = screen.getByRole("region", "Broken wires");
   await expect(brokenSection).toBeVisible();

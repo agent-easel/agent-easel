@@ -1,101 +1,148 @@
-import { useLayoutEffect, useRef, useState, type FocusEvent, type PointerEvent } from "react";
+import {
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
+import type { Rect } from "./canvas-culling.ts";
+import type { CanvasView } from "./canvas-viewport.ts";
+import type { createCanvasGeometry } from "./flow-geometry.ts";
 import { sameNode, type CanvasNode } from "./flow-graph.ts";
 
-export type PreviewSource = { readonly scope: string; readonly node: CanvasNode };
+const POINTER_LEAVE_GRACE_MS = 80;
 
-/** The card whose outgoing connections are previewed, and the input that chose it. */
-type Preview = { readonly source: PreviewSource; readonly via: "pointer" | "keyboard" };
+export type PreviewTarget = { readonly scope: string } & (
+  | { readonly kind: "block"; readonly node: CanvasNode }
+  | { readonly kind: "wire"; readonly key: string }
+);
 
-/** The canvas node a target belongs to; content portalled out of the layer belongs to none. */
-function cardOf(layer: HTMLElement, target: EventTarget | null): PreviewSource | null {
-  if (!(target instanceof Element) || !layer.contains(target)) return null;
-  const card = target.closest<HTMLElement>("[data-block-id], [data-flow-input]");
-  if (!card) return null;
-  const { blockId } = card.dataset;
-  const scope = card.closest<HTMLElement>("[data-canvas-scope]")?.dataset.canvasScope ?? "";
-  return {
-    scope,
-    node: blockId === undefined ? { kind: "flow-input" } : { kind: "block", blockId },
-  };
+type Preview = { readonly target: PreviewTarget; readonly via: "pointer" | "keyboard" };
+
+function targetOf(layer: HTMLElement, hit: EventTarget | null): PreviewTarget | null {
+  if (
+    !(hit instanceof Element) ||
+    !layer.contains(hit) ||
+    hit.closest("[data-passive-subflow-preview]")
+  )
+    return null;
+  const scope = hit.closest<HTMLElement>("[data-canvas-scope]")?.dataset.canvasScope ?? "";
+  const card = hit.closest<HTMLElement>("[data-block-id], [data-flow-input], [data-finish]");
+  if (card) {
+    if (card.hasAttribute("data-finish")) return null;
+    const { blockId } = card.dataset;
+    const node: CanvasNode =
+      blockId === undefined ? { kind: "flow-input" } : { kind: "block", blockId };
+    return { scope, kind: "block", node };
+  }
+  const key = hit.closest("[data-wire-key]")?.getAttribute("data-wire-key");
+  return key ? { scope, kind: "wire", key } : null;
 }
 
-function sameSource(a: PreviewSource | null, b: PreviewSource | null) {
-  return a?.scope === b?.scope && sameNode(a?.node ?? null, b?.node ?? null);
+function sameTarget(a: PreviewTarget | null, b: PreviewTarget | null) {
+  if (!a || !b) return a === b;
+  if (a.scope !== b.scope) return false;
+  if (a.kind === "wire") return b.kind === "wire" && a.key === b.key;
+  return b.kind === "block" && sameNode(a.node, b.node);
 }
 
 function samePreview(a: Preview | null, b: Preview | null) {
-  return a?.via === b?.via && sameSource(a?.source ?? null, b?.source ?? null);
+  return a?.via === b?.via && sameTarget(a?.target ?? null, b?.target ?? null);
 }
 
-/**
- * The card whose outgoing connections a read-only canvas emphasizes: the one under a mouse or
- * trackpad pointer, or the one holding keyboard-visible focus, whichever acted last. Touch never
- * previews. The preview clears when its card loses the pointer or focus, when the view moves the
- * card out from under a resting pointer, and when the canvas is covered or shows another scope.
- */
 export function useConnectionPreview({
-  enabled,
-  scope,
-  shown,
+  owner,
+  view,
+  geometry,
+  area,
 }: {
-  enabled: boolean;
-  scope: string | null;
-  shown: boolean;
+  owner: string | null;
+  view: CanvasView;
+  geometry: ReturnType<typeof createCanvasGeometry>;
+  area: Rect | null;
 }) {
-  const owner = shown ? scope : null;
   const [state, setState] = useState<{ owner: string | null; preview: Preview | null }>({
     owner,
     preview: null,
   });
   if (state.owner !== owner) setState({ owner, preview: null });
-  const preview = state.owner === owner ? state.preview : null;
-  /** The layer the handlers last ran on, and the resting mouse position over it. */
+  const preview = owner !== null && state.owner === owner ? state.preview : null;
   const layer = useRef<HTMLElement | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
-  const update = (next: (current: Preview | null) => Preview | null) =>
-    setState((current) => {
-      const preview = next(current.preview);
-      return samePreview(preview, current.preview) ? current : { owner: current.owner, preview };
-    });
+  const leave = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Neither source is guaranteed an event when it ends: pan, zoom and Follow active move the
-  // layer under a resting pointer, and a live update can remove the focused control without a
-  // blur. So after each render, check the source still holds the pointer or the focus.
+  function apply(next: Preview | null) {
+    clearTimeout(leave.current);
+    leave.current = undefined;
+    setState((current) =>
+      current.owner !== owner || samePreview(current.preview, next)
+        ? current
+        : { owner, preview: next },
+    );
+  }
+
+  function releasePointer() {
+    if (preview?.via !== "pointer" || leave.current !== undefined) return;
+    leave.current = setTimeout(() => apply(null), POINTER_LEAVE_GRACE_MS);
+  }
+
+  useLayoutEffect(() => () => clearTimeout(leave.current), []);
   useLayoutEffect(() => {
-    if (!preview || !layer.current) return;
-    const holder =
-      preview.via === "keyboard"
-        ? document.activeElement
-        : pointer.current && document.elementFromPoint(pointer.current.x, pointer.current.y);
-    if (!sameSource(cardOf(layer.current, holder), preview.source)) update(() => null);
-  });
+    clearTimeout(leave.current);
+    leave.current = undefined;
+  }, [owner]);
 
-  const releasePointer = (current: Preview | null) => (current?.via === "pointer" ? null : current);
-  const point = (event: PointerEvent<HTMLElement>) => {
-    if (event.pointerType !== "mouse") return;
+  const recheck = useEffectEvent(() => {
+    if (!preview || !layer.current) return;
+    const { ownerDocument } = layer.current;
+    const hit =
+      preview.via === "keyboard"
+        ? ownerDocument.activeElement
+        : pointer.current && ownerDocument.elementFromPoint(pointer.current.x, pointer.current.y);
+    apply(sameTarget(targetOf(layer.current, hit), preview.target) ? preview : null);
+  });
+  useLayoutEffect(() => recheck(), [view, geometry, area]);
+
+  function point(event: PointerEvent<HTMLElement>) {
+    if (event.pointerType !== "mouse") {
+      if (event.type === "pointerdown") apply(null);
+      return;
+    }
     layer.current = event.currentTarget;
     pointer.current = { x: event.clientX, y: event.clientY };
-    const source = cardOf(event.currentTarget, event.target);
-    update((current) => (source ? { source, via: "pointer" } : releasePointer(current)));
-  };
+    const hit = event.currentTarget.ownerDocument.elementFromPoint(event.clientX, event.clientY);
+    const target = targetOf(event.currentTarget, hit);
+    if (target) apply({ target, via: "pointer" });
+    else if (preview?.via === "keyboard" || event.type === "pointerdown") apply(null);
+    else releasePointer();
+  }
+
   const handlers = {
     onPointerMove: point,
-    // A press without movement also takes over from a keyboard preview; capturing keeps the
-    // layer's own pointerdown (pan) untouched.
     onPointerDownCapture: point,
-    onPointerLeave: () => update(releasePointer),
+    onPointerLeave: (event: PointerEvent<HTMLElement>) => {
+      if (event.pointerType !== "mouse") return;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      releasePointer();
+    },
     onFocus: (event: FocusEvent<HTMLElement>) => {
       layer.current = event.currentTarget;
-      const source = cardOf(event.currentTarget, event.target);
-      if (source && event.target.matches(":focus-visible"))
-        update(() => ({ source, via: "keyboard" }));
+      const target = targetOf(event.currentTarget, event.target);
+      if (event.target.matches(":focus-visible"))
+        apply(target ? { target, via: "keyboard" } : null);
+    },
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = targetOf(event.currentTarget, event.target);
+      if (target?.kind === "wire") apply({ target, via: "keyboard" });
     },
     onBlur: (event: FocusEvent<HTMLElement>) => {
-      const next = cardOf(event.currentTarget, event.relatedTarget);
-      update((current) =>
-        current?.via === "keyboard" && !sameSource(next, current.source) ? null : current,
-      );
+      if (preview?.via !== "keyboard") return;
+      const next = targetOf(event.currentTarget, event.relatedTarget);
+      if (!sameTarget(next, preview.target)) apply(null);
     },
   };
-  return { source: preview?.source ?? null, handlers: enabled ? handlers : {} };
+  return { target: preview?.target ?? null, handlers: owner === null ? {} : handlers };
 }

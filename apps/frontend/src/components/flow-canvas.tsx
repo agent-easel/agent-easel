@@ -1,3 +1,4 @@
+import { exitDisplayName, studioExitLabel } from "../connection-label.ts";
 import {
   useCallback,
   useImperativeHandle,
@@ -53,9 +54,10 @@ import {
 import { DragButton } from "./drag-button.tsx";
 import { finishIdentity } from "./finish-block.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-import { blockIdentity, conditionRoutes, exitDisplayName, IdentityRows } from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, IdentityRows } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 import { issueTag, outputKey, type ReadinessMarks } from "./flow-readiness.tsx";
+import { useSettings, useStudio } from "../settings-navigation.ts";
 
 /** Places a block dragged by `grab` at viewport point x/y, or null when x/y is outside the canvas. */
 export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | null;
@@ -94,6 +96,8 @@ function useMoveDrag(
           x: 0,
           y: 0,
         };
+        const position = place(origin.x, origin.y);
+        if (position) setDrag({ kind: "move", node, position });
       },
       onDragMove: (x, y) => {
         const position = place(x, y);
@@ -243,6 +247,7 @@ function connectionHandle(
       problem && "border-destructive",
       active && "border-primary bg-primary",
     ),
+    problem,
     handle: (frame: CSSProperties, circle) => (
       <DragButton
         aria-label={label}
@@ -272,6 +277,7 @@ const incomingPort =
       pending && "border-2 border-primary ring-4 ring-primary/25",
     ),
     highlighted: pending,
+    problem,
   });
 
 /**
@@ -343,12 +349,6 @@ function AuthoringExit({
   recipients: string;
   unconnected: boolean;
 }) {
-  const name =
-    exit.source === "wait"
-      ? "after the wait"
-      : exit.source === "continuation"
-        ? "response"
-        : exitDisplayName(exit, "output");
   return (
     <>
       {exit.source === "condition" && (
@@ -362,7 +362,7 @@ function AuthoringExit({
           exit.unavailable && "text-attention line-through",
         )}
       >
-        {name}
+        {studioExitLabel(exit)}
       </span>
       {exit.unavailable && <span className="sr-only">{exit.unavailable}</span>}
       <span className="sr-only">→ {recipients || "finish here"}</span>
@@ -374,8 +374,8 @@ function AuthoringExit({
 function exitPortLabel(exit: CanvasBlock["exits"][number], name: string) {
   if (isSingleOutput(exit)) return `Connect output of ${name}`;
   return exit.source === "condition"
-    ? `Connect output ${exit.name || "Unnamed output"} of ${name}`
-    : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`;
+    ? `Connect output ${exitDisplayName(exit)} of ${name}`
+    : `Connect exit ${exitDisplayName(exit)} of ${name}`;
 }
 
 /** A block frame's look for its kind, selection, readiness issue and the gestures in progress. */
@@ -829,6 +829,8 @@ function useSubflowPreviews({
 
 /** The editable Flow graph on the canvas surface: moving, connecting and selecting. */
 export function FlowCanvas({ ref, placementRef, ...rest }: FlowCanvasProps) {
+  const studio = useStudio();
+  const settings = useSettings();
   const { flowMap, blocked, subflowPreviews, expandSubflow, collapseSubflow } = useSubflowPreviews({
     flowId: rest.flowId,
     graph: rest.graph,
@@ -859,6 +861,7 @@ export function FlowCanvas({ ref, placementRef, ...rest }: FlowCanvasProps) {
       ref={ref}
       label="Flow canvas"
       scope={rest.savedGraph ? rest.flowId : null}
+      shown={studio?.tab === "flows" && !settings}
       graph={rest.graph}
       agents={rest.agents}
       flows={flowMap}

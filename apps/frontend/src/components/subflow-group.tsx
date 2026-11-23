@@ -1,3 +1,4 @@
+import { exitDisplayName, studioExitLabel } from "../connection-label.ts";
 import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Workflow } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowDraft } from "@t3-factory/contracts";
@@ -15,13 +16,7 @@ import {
 } from "../subflow-preview.ts";
 import { StudioLink } from "./app-link.tsx";
 import { FinishEndingList, finishIdentity, finishShowsRows } from "./finish-block.tsx";
-import {
-  blockIdentity,
-  conditionRoutes,
-  exitDisplayName,
-  flowInputIdentity,
-  IdentityRows,
-} from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, flowInputIdentity, IdentityRows } from "./flow-block.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 type Geometry = ReturnType<typeof createCanvasGeometry>;
@@ -192,13 +187,7 @@ function PreviewBlockCard({
               </span>
             )}
             <span className="flex-1" />
-            <span className="truncate text-xs text-muted-foreground">
-              {exit.source === "wait"
-                ? "after the wait"
-                : exit.source === "continuation"
-                  ? "response"
-                  : exitDisplayName(exit, "output")}
-            </span>
+            <span className="truncate text-xs text-muted-foreground">{studioExitLabel(exit)}</span>
           </li>
         ))}
       </ul>
@@ -304,6 +293,11 @@ function SubflowPreviewBody({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
+      <div
+        data-passive-subflow-preview
+        className="pointer-events-auto absolute inset-x-0 bottom-0"
+        style={{ top: SUBFLOW_HEADER_HEIGHT }}
+      />
       <PreviewWires preview={preview} />
       <PreviewFlowInputCard preview={preview} dimensions={dimensions} />
       <PreviewFinishCard preview={preview} dimensions={dimensions} />
@@ -380,6 +374,7 @@ export function SubflowGroup({
   agents,
   flows,
   frameClassName,
+  previewFrame,
   border,
   headerPress,
   trailingBadge,
@@ -396,6 +391,7 @@ export function SubflowGroup({
   agents: readonly AgentDefinition[];
   flows: ReadonlyMap<string, CanvasFlow>;
   frameClassName: string;
+  previewFrame: ReactNode;
   border: number;
   headerPress: (content: ReactNode) => ReactNode;
   trailingBadge?: ReactNode;
@@ -416,9 +412,7 @@ export function SubflowGroup({
 }) {
   const name = block.name || preview.childFlow.name;
   const headerLabel =
-    block.name && block.name !== preview.childFlow.name
-      ? `${block.name} · ${preview.childFlow.name}`
-      : preview.childFlow.name;
+    name === preview.childFlow.name ? name : `${name} · ${preview.childFlow.name}`;
   return (
     <article
       aria-label={`Subflow ${name}`}
@@ -482,6 +476,7 @@ export function SubflowGroup({
       <span className="sr-only">
         {geometry.incomingPorts(block).length} incoming, {block.exits.length} exits
       </span>
+      {previewFrame}
     </article>
   );
 }

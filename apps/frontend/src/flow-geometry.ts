@@ -134,11 +134,36 @@ export function wirePath(from: Point, to: Point, approachLane = 0) {
   }
   const top = Math.max(8, Math.min(from.y, to.y) - 70);
   const away = to.x - 20 - approachLane;
+  const points = [
+    from,
+    { x: from.x + 20, y: from.y },
+    { x: from.x + 20, y: top },
+    { x: away, y: top },
+    { x: away, y: to.y },
+    to,
+  ];
   return {
     d: `M${from.x},${from.y} H${from.x + 20} V${top} H${away} V${to.y} H${to.x}`,
     label: { x: (from.x + to.x) / 2, y: top },
-    bounds: pointsBounds([from, to, { x: from.x + 20, y: top }, { x: away, y: top }]),
+    bounds: pointsBounds(points),
+    returnMidpoint: longestSegmentMidpoint([points]),
   };
+}
+
+export function longestSegmentMidpoint(sections: readonly (readonly Point[])[]) {
+  let length = 0;
+  let midpoint: Point | undefined;
+  for (const points of sections) {
+    for (let index = 1; index < points.length; index++) {
+      const from = points[index - 1]!;
+      const to = points[index]!;
+      const distance = Math.hypot(to.x - from.x, to.y - from.y);
+      if (distance <= length) continue;
+      length = distance;
+      midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    }
+  }
+  return midpoint;
 }
 
 const CORNER = 4;
@@ -193,7 +218,11 @@ export function orthogonalWirePath(exit: Point, input: Point, below: number, app
           { x: approachX, y: to.y },
           to,
         ];
-  return { d: roundedPolyline(points), bounds: pointsBounds(points) };
+  return {
+    d: roundedPolyline(points),
+    bounds: pointsBounds(points),
+    returnMidpoint: to.x <= from.x + 24 ? longestSegmentMidpoint([points]) : undefined,
+  };
 }
 
 /** Horizontal lane offset for backward manual routes so returns do not share one vertical. */

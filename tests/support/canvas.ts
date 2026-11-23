@@ -2,6 +2,7 @@ import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import { saveLargeFlow } from "./large-flow.ts";
 import { liveRun } from "./live.ts";
+import { prepareScenario } from "./scenarios.ts";
 
 export const PAN_INTO_FILLERS = 2300;
 
@@ -243,4 +244,141 @@ export async function largestWirePortOffset(browser: Browser) {
       );
     })()`),
   );
+}
+
+export async function openRunWithWirePoint(app: App, screen: Screen, browser: Browser) {
+  await browser.setViewport({ width: 1440, height: 1100 });
+  const run = await prepareScenario(app, "working");
+  await app.open(`/runs/${run.id}`);
+  await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
+  const point = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
+    const canvas = document.querySelector('[aria-label="Execution canvas"]');
+    for (const path of canvas.querySelectorAll("path[data-wire-key]")) {
+      const at = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM());
+      if (document.elementFromPoint(at.x, at.y) === path) return { x: at.x, y: at.y };
+    }
+    return null;
+  })()`);
+  expect(point).not.toBeNull();
+  return point!;
+}
+
+export async function executionWireFocused(browser: Browser) {
+  return await browser.evaluate<boolean>(
+    `document.activeElement?.closest('[aria-label="Execution canvas"] [data-wire-key]') != null`,
+  );
+}
+
+export async function openParallelReviewStudio(app: App, screen: Screen, browser: Browser) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await browser.emulateMedia({ reducedMotion: "reduce" });
+  await app.open("/studio/flows");
+  await screen.getByRole("link", /^Demo · Parallel review 3 blocks/).tap();
+  await expect(
+    screen.getByRole("region", "Flow canvas").getByRole("article", "Block Implement change"),
+  ).toBeVisible();
+}
+
+export async function studioWirePoint(browser: Browser, index: number) {
+  const point = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const hits = [...canvas.querySelectorAll('g[role="button"][data-wire-key]')].map((g) => g.lastElementChild);
+    const points = hits
+      .map((path) => path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()))
+      .filter((at) => document.elementFromPoint(at.x, at.y)?.closest("[data-wire-key]"));
+    return points[${index}] ? { x: points[${index}].x, y: points[${index}].y } : null;
+  })()`);
+  expect(point).not.toBeNull();
+  return { x: point!.x, y: point!.y };
+}
+
+export async function studioPreview(browser: Browser) {
+  return await browser.evaluate<{ frames: number; emphasized: number; labels: string[] }>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    return {
+      frames: canvas.querySelectorAll("[data-connection-preview]").length,
+      emphasized: canvas.querySelectorAll("[data-connection-emphasis]").length,
+      labels: [...canvas.querySelectorAll("[data-wire-label]")]
+        .filter((chip) => getComputedStyle(chip).visibility === "visible")
+        .map((chip) => chip.textContent),
+    };
+  })()`);
+}
+
+export function studioSubflowBridgePoints(browser: Browser) {
+  return browser.evaluate<{ entry: { x: number; y: number }; ending: { x: number; y: number } }>(
+    `(() => {
+      const group = document.querySelector('article[aria-label="Subflow Review panel"]');
+      const paths = group.querySelectorAll(":scope > div > svg > path");
+      const at = (path, distance) => {
+        const { x, y } = path.getPointAtLength(distance).matrixTransform(path.getScreenCTM());
+        return { x, y };
+      };
+      const ending = paths[paths.length - 1];
+      return { entry: at(paths[0], 12), ending: at(ending, ending.getTotalLength() - 12) };
+    })()`,
+  );
+}
+
+export async function centerStudioSubflow(screen: Screen, browser: Browser) {
+  const canvas = screen.getByRole("region", "Flow canvas");
+  await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  const group = canvas.getByRole("article", "Subflow Review panel", { exact: true });
+  const surface = (await canvas.boundingBox())!;
+  const drawn = (await group.boundingBox())!;
+  const x = surface.x + surface.width / 2;
+  const y = surface.y + surface.height / 2;
+  await browser.mouse.move(x, y);
+  await browser.mouse.wheel(drawn.x + drawn.width / 2 - x, drawn.y + drawn.height / 2 - y);
+  await expect
+    .poll(async () => Math.abs((await group.boundingBox())!.x + drawn.width / 2 - x))
+    .toBeLessThan(3);
+  return group;
+}
+
+export const studioCanvasPosition = (browser: Browser) =>
+  browser.evaluate(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const layer = canvas.querySelector(":scope > div[style]");
+    const { x, y } = layer.getBoundingClientRect();
+    return { x, y, left: canvas.scrollLeft, top: canvas.scrollTop };
+  })()`);
+
+export async function firstStudioWireOffscreen(screen: Screen, browser: Browser) {
+  const canvas = screen.getByRole("region", "Flow canvas");
+  const wire = canvas.getByRole("button", /^Connection /).first();
+  const surface = (await canvas.boundingBox())!;
+  const drawn = (await wire.boundingBox())!;
+  const edge = surface.x + surface.width;
+  await browser.mouse.move(surface.x + surface.width / 2, surface.y + surface.height / 2);
+  await browser.mouse.wheel(drawn.x - edge - 20, 0);
+  await expect.poll(async () => (await wire.boundingBox())!.x).toBeGreaterThan(edge);
+  await canvas.focus();
+  return wire;
+}
+
+export const pointsAlongStudioWire = (browser: Browser, label: string) =>
+  browser.evaluate<{ x: number; y: number }[]>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const wire = [...canvas.querySelectorAll('g[role="button"]')].find(
+      (button) => button.getAttribute("aria-label") === ${JSON.stringify(label)},
+    );
+    const path = wire.querySelector("path");
+    return [0.4, 0.6].map((fraction) => {
+      const { x, y } = path.getPointAtLength(path.getTotalLength() * fraction)
+        .matrixTransform(path.getScreenCTM());
+      return { x, y };
+    });
+  })()`);
+
+export async function hoverImplementChange(screen: Screen) {
+  await screen
+    .getByRole("article", "Block Implement change", { exact: true })
+    .getByText("Implement change", { exact: true })
+    .hover();
+}
+
+export async function expectLabelledWirePreview(browser: Browser) {
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 2, emphasized: 1 });
+  expect((await studioPreview(browser)).labels).toHaveLength(1);
 }

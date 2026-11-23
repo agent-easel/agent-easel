@@ -8,13 +8,19 @@ import {
 import type { CanvasBlock } from "./flow-graph.ts";
 import type { CanvasFlow } from "./subflow-preview.ts";
 import type { Rect } from "./canvas-culling.ts";
-import { PORT_RIM, pointsBounds, roundedPolyline } from "./flow-geometry.ts";
+import {
+  longestSegmentMidpoint,
+  PORT_RIM,
+  pointsBounds,
+  roundedPolyline,
+} from "./flow-geometry.ts";
 
 export type FlowLayoutDimensions = LayoutDimensions<CanvasBlock>;
 export type WireRoute = {
   readonly d: string;
   readonly label: { x: number; y: number } | null;
   readonly bounds: Rect;
+  readonly returnMidpoint?: { x: number; y: number } | undefined;
 };
 export type FlowLayoutResult = FlowLayoutPositions & {
   readonly routes: ReadonlyMap<string, WireRoute>;
@@ -61,7 +67,11 @@ function parseRoutes(edges: ElkExtendedEdge[] | undefined) {
       section.endPoint,
     ]);
     if (!sections.length) continue;
+    const start = sections[0]?.[0];
+    const end = sections.at(-1)?.at(-1);
+    const returning = start && end && end.x <= start.x;
     routes.set(edge.id, {
+      returnMidpoint: returning ? longestSegmentMidpoint(sections) : undefined,
       d: sections.map(sectionPath).join(" "),
       bounds: pointsBounds(sections.flat()),
       label:

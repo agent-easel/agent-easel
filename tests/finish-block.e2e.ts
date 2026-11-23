@@ -28,6 +28,11 @@ async function undoFlowRemoval(browser: Browser) {
   await browser.keyboard.press(shortcut as string);
 }
 
+async function selectFittedFinish(screen: Screen) {
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Finish", { exact: true }).tap();
+}
+
 async function removeSelectedFinish(screen: Screen) {
   await screen.getByRole("button", "Remove block", { exact: true }).tap();
   await expect(finishBlock(screen)).toHaveCount(0);
@@ -289,8 +294,7 @@ test("removing the Finish block takes its endings and their wires, and the libra
   // Arrange
   const flowId = await saveDeliveredFlow(app.baseUrl, "Ship without a Finish");
   await app.open(`/studio/flows/${flowId}`);
-  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
-  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await selectFittedFinish(screen);
   await app.screenshot("finish-settings-remove-block");
 
   // Act
@@ -366,7 +370,7 @@ test("keeping local edits after another client saves preserves undo for a remove
   const flowId = await saveDeliveredFlow(app.baseUrl, "Keep the local Finish removal");
   const flow = await readFlow(app.baseUrl, flowId);
   await app.open(`/studio/flows/${flowId}`);
-  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await selectFittedFinish(screen);
   await removeSelectedFinish(screen);
   const latest = await saveFlowElsewhere(app.baseUrl, flow, { name: "Rename in another client" });
   await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();

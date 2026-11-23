@@ -380,7 +380,7 @@ Prompts, execution settings and exits belong to the Agent, and two blocks may sh
 one override is its optional [Revisit instruction](../GLOSSARY.md#revisit-instruction): two blocks sharing a reviewer Agent can play different loop roles, such as a single check and a
 correction loop, without duplicating the Agent and letting the copies drift apart. It is deliberately narrow: there is no first-visit block prompt and no execution, model or exit-definition
 override, so any other variant is a new or duplicated Agent. Clicking empty canvas, ✕ or Escape closes the panel. Blocks show kind, Agent, an input port and one port per exit with the exit's
-name in the secondary text colour; neither wires nor exit rows carry type or `exit → recipient` labels, and multiple incoming connections each anchor to their own
+name in the secondary text colour, and multiple incoming connections each anchor to their own
 input port (Flow input first, at least 18 px apart).
 
 An Agent block's panel always shows **On revisit** (**Keep context** by default, or **Fresh context** to start each revisit in a fresh provider session without earlier context) and the optional **Revisit instruction** plain-text field, edited like a Continuation's prompt (up to 120,000 characters; surrounding whitespace is
@@ -423,6 +423,25 @@ dragging a wire onto an ending's row on the Finish block connects to that ending
 ending, its row reads **Ending expects: *output description*** for a Required ending or **Ending takes an optional message: *…*** for an
 Optional one, and an exit wired straight to a Required ending shows **Message required**, in this Flow only. Click a wire to select it (the block panel closes); each wire is also a keyboard button (**Connection *exit* from *source* to *target***). With a
 connection selected, Delete/Backspace (outside form controls) or the **Delete connection** button removes it. Removing a block or exit removes its connections.
+
+Hover a block or Flow input with a mouse or trackpad, or give one of its controls keyboard focus, to see its direct
+outgoing wires above the others and a dashed frame around the source. Incoming wires, later hops and destination cards
+keep their resting style. The preview adds no labels and leaves selection and block settings unchanged. Finish and touch
+taps show no preview. One preview follows the latest pointer or keyboard interaction. Pointer leave has a brief grace
+period. A drag to move or connect, a covered canvas or a Flow change clears the preview immediately. Pan and zoom keep it
+while the same source remains under the pointer or holds keyboard focus.
+
+Hovering a wire, or giving it keyboard focus, draws it thicker above the other wires. Both endpoint cards get the dashed
+frame, including the Flow input and Finish. The source exit port and the target input port, or the Finish ending row's
+port, are filled in primary text colour. Several wires into one Join row or one ending accent that shared row while only
+the hovered wire thickens. A chip shows the source output only on wire hover, keyboard focus or selection. Flow input
+wires have no chip. Hidden exits show their name struck through, and removed exits show their stored ID struck through.
+A wire beats a block preview, and cards take the pointer over wires beneath them; where wires overlap, the topmost one responds. Each wire takes the pointer
+about 12 screen pixels wide at any zoom. Hovering never selects: clicking still selects the wire, press-drag on it stays
+inert, and a selected wire keeps its indigo stroke. A selected wire's chip hides while a block or another wire is
+previewed and returns when that preview ends. Keyboard focus never pans the canvas, and a focused wire stays drawn after
+it leaves the view. A port that marks a readiness problem keeps its error border under the accent, so the fill shows the
+preview and the border still shows the problem. The read-only preview inside an expanded Subflow does not respond.
 
 **Exits.** An Agent block offers its Agent's exits, minus those hidden in this Flow, followed by its Flow-local exits; inherited exits cannot be edited in a Flow. Hiding exits and adding
 Flow-local exits are stored with the Flow revision. **Exits** shows the inherited exits' names, each with its targets and **Hide** / **Show**.

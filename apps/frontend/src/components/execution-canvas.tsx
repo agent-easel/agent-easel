@@ -1,3 +1,4 @@
+import { connectionLabel, exitDisplayName } from "../connection-label.ts";
 import { placementKey } from "../subflow-preview.ts";
 import { selectComposedExecutionTargets, type RunSubflows } from "../run-subflows.ts";
 import type { SubflowInvocation } from "@t3-factory/contracts";
@@ -11,7 +12,6 @@ import {
   type RunBlock,
   type RunDetail,
 } from "@t3-factory/contracts";
-import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
@@ -35,7 +35,7 @@ import {
   type CanvasPort,
 } from "./canvas-surface.tsx";
 import type { FinishBlockState } from "./finish-block.tsx";
-import { conditionRoutes, exitDisplayName } from "./flow-block.tsx";
+import { conditionRoutes } from "./flow-block.tsx";
 import { pendingArrivals } from "../wait-display.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
@@ -292,13 +292,14 @@ function ExecutionExit({
   recipients,
   chosen,
 }: {
-  exit: EffectiveExit;
+  exit: CanvasBlock["exits"][number];
   /** When a Condition output is selected. */
   route: string;
   /** The names of the blocks its connections reach. */
   recipients: string;
   chosen: boolean;
 }) {
+  const label = connectionLabel(exit);
   return (
     <>
       {exit.source === "condition" && (
@@ -309,11 +310,10 @@ function ExecutionExit({
         className={cn(
           "truncate pr-1 text-xs font-medium",
           chosen ? "text-foreground" : "text-muted-foreground",
+          label.struck && "line-through",
         )}
       >
-        {exit.source === "continuation"
-          ? "Response"
-          : exitDisplayName(exit, exit.source === "join" ? "output" : "")}
+        {exit.source === "continuation" ? "Response" : exit.source === "wait" ? "" : label.text}
       </span>
       <span className="sr-only">
         {chosen ? "chosen" : "not chosen"} · configured → {recipients || "finish here"}

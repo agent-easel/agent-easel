@@ -19,7 +19,7 @@ import { TextLink } from "@/components/ui/text-link";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { FlowAgentLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
-import { exitDisplayName } from "./flow-block.tsx";
+import { exitDisplayName } from "../connection-label.ts";
 import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { BlockExitConfiguration, PanelHeading } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
