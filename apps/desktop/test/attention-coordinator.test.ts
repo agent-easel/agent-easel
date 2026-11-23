@@ -139,6 +139,9 @@ function run(
     },
     lifecycle: "active",
     settlement: null,
+    settledCycle: null,
+    settledReason: null,
+    endingName: null,
     pendingWork: false,
     blocks: [],
     attention: {

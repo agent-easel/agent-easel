@@ -251,6 +251,56 @@ it("reaching an ending stops the other workers and settles the Run with finish o
   expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
 });
 
+it("a Run that reached its ending exposes the captured ending name and the reason finish on its navigation row after a restart", async (c) => {
+  // Arrange
+  const f = await prepared(c, optionalEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker, { message: "https://example.test/pull/42" });
+  const reached = await endingReached(f.world, worker.runId);
+  assert(reached.result);
+  assert((await f.f.reconcileRuns()).ok);
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  const settledEvent = run.value.events.findLast((event) => event.kind === "run-settled");
+  await f.f.close();
+  const reopened = await f.h.open({ t3: f.t3, connectionRetryMs: 60_000 });
+
+  // Act
+  const navigation = await reopened.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  expect(navigation.value[0]).toMatchObject({
+    lifecycle: "settled",
+    settledCycle: settledEvent?.sequence,
+    settledReason: "finish",
+    endingName: reached.result.endingName,
+  });
+  expect(JSON.stringify(navigation.value)).not.toContain("example.test/pull/42");
+});
+
+it("a Settle on a Run that already has a Run result is reported as finish on its navigation row", async (c) => {
+  // Arrange
+  const f = await prepared(c, optionalEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker, { message: "https://example.test/pull/42" });
+  const reached = await endingReached(f.world, worker.runId);
+  assert(reached.result);
+
+  // Act
+  const settled = await f.f.settleRun(worker.runId, {});
+
+  // Assert
+  assert(settled.ok);
+  const navigation = await f.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value[0]).toMatchObject({
+    lifecycle: "settled",
+    settledReason: "finish",
+    endingName: reached.result.endingName,
+  });
+});
+
 it("settling after an ending cancels the Run's pending Human occurrence with reason finish", async (c) => {
   // Arrange
   const f = await prepared(c, endingBesideReviewFlow);

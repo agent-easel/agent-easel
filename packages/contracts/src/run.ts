@@ -453,6 +453,9 @@ export interface RunNavigationEntry {
   readonly lifecycle: Exclude<RunLifecycle, "archived">;
   /** A confirmed manual settlement in progress; see `RunDetail.settlement`. */
   readonly settlement: RunSettlement["state"] | null;
+  readonly settledCycle: number | null;
+  readonly settledReason: "automatic" | "manual" | "finish" | null;
+  readonly endingName: string | null;
   readonly blocks: readonly Pick<RunBlock, "state" | "freshness" | "workingMessage">[];
   /** Factory still owes delivery, an answer, or another local operation. */
   readonly pendingWork: boolean;

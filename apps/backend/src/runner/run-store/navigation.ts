@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import { currentProgress } from "./current-report.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { readRunSettlementStates } from "./manual-settlement.ts";
-import { pendingRunWork } from "./settlement.ts";
+import { pendingRunWork, type SettlementReason } from "./settlement.ts";
 import { runLifecycle } from "./lifecycle.ts";
 import { failure } from "../../result.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
@@ -45,7 +45,13 @@ export function openRunNavigation(database: RunnerDatabase) {
             workspace_root: string;
             availability: RunNavigationEntry["project"]["availability"];
             workspace_state: "preparing" | "bound" | "failed" | null;
+            settled_cycle: number | null;
+            settled_reason: SettlementReason | null;
+            ending_name: string | null;
           }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,w.state AS workspace_state,
+          (SELECT e.sequence FROM run_events e WHERE e.run_id=r.id AND e.kind='run-settled' ORDER BY e.sequence DESC LIMIT 1) AS settled_cycle,
+          (SELECT e.cause_id FROM run_events e WHERE e.run_id=r.id AND e.kind='run-settled' ORDER BY e.sequence DESC LIMIT 1) AS settled_reason,
+          (SELECT x.ending_name FROM run_results x WHERE x.run_id=r.id) AS ending_name,
           COALESCE((SELECT MAX(e.observed_at) FROM run_events e WHERE e.run_id=r.id AND e.kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')),r.started_at) AS last_activity_at,
           CASE WHEN r.settled_at IS NULL THEN EXISTS(${pendingRunWork(sql, sql`r.id`)}) ELSE 0 END AS pending_work,
           f.name AS flow_name,p.project_icon_json,p.favicon_path,
@@ -165,6 +171,9 @@ export function openRunNavigation(database: RunnerDatabase) {
                 },
                 lifecycle,
                 settlement,
+                settledCycle: row.settled_cycle,
+                settledReason: row.settled_reason,
+                endingName: row.ending_name,
                 blocks: byRun.get(row.id) ?? [],
                 presentation: {
                   snoozed: active && !!row.snoozed,
