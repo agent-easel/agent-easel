@@ -255,7 +255,9 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   });
   await expect(screen.getByRole("heading", "Installed in Claude and Codex, done")).toBeVisible();
   await expect(
-    screen.getByText("factory-runtime MCP · $factory-block · factory-start-run · setup-factory"),
+    screen.getByText(
+      "factory-runtime MCP · $factory-block · factory-start-run · setup-factory · factory-configure",
+    ),
   ).toBeVisible();
   await expect(screen.getByText("Open a new agent session")).toBeVisible();
   expect(await setupCompleted(app.baseUrl)).toBe(false);

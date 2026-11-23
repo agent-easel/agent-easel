@@ -129,9 +129,9 @@ changes neither the backend bind, nor the data home, nor Tailscale Serve/Funnel 
 ## Optional skills
 
 Explicit Install, Repair and Reinstall in **Settings → Agent reporting** distribute
-the required Factory Block skill and two optional skills to each supported harness
+the required Factory Block skill and three optional skills to each supported harness
 home. You invoke the optional skills yourself, by name, in a harness session; workers
-do not need them and neither runs on its own.
+do not need them and none runs on its own.
 
 - `factory-start-run` starts a Run with Factory. It resolves the conversation's
   Project, offers the global Flows and that Project's Flows, reviews the exact prompt and asks for explicit
@@ -146,8 +146,19 @@ do not need them and neither runs on its own.
   [ready label](../GLOSSARY.md#ready-label) named in the Run's start data (`factory:ready`
   when it names none) and add the "in progress" label, documents the ready label, and
   creates `factory:ready` and the "in progress" label in the tracker when they are missing.
-  It creates no [Trigger](studio.md#triggers). Factory itself never writes to the tracker;
+  It creates no [Trigger](studio.md#triggers) itself; its report offers to create one with
+  `factory-configure`. Factory itself never writes to the tracker;
   workers perform the claim, which is what stops a Trigger from starting the issue again.
+- `factory-configure` changes Agents, Flows and [Triggers](studio.md#triggers) from a
+  conversation. It resolves the conversation's Project (registering a repository goes
+  through T3's own Project registration, never Factory), reads compact lists and then only
+  the definitions you chose, and shows a plan before any write: whether each definition is
+  global or Project-owned, the prompt, model or graph changes, a Project override rather
+  than a shared edit for a Project-specific model, and a preview of each Trigger change.
+  It writes only after you confirm, saves against the revisions it read, checks each saved
+  Flow's readiness, creates a new Trigger switched off and enables it only after its
+  previewed settings are confirmed, and starts a Trigger check only when you ask. That
+  confirmation is the skill's instruction, not a server check.
 
 The optional skills share one installation status, shown separately from reporting:
 the least current state among their copies. It never blocks reporting readiness or

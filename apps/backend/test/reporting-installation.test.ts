@@ -14,6 +14,7 @@ import {
 import { prepared } from "./support/prepared-runner.ts";
 import { FACTORY_BLOCK_SKILL } from "../src/factory-block-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "../src/factory-start-run-skill.ts";
+import { FACTORY_CONFIGURE_SKILL } from "../src/factory-configure-skill.ts";
 import { SETUP_FACTORY_SKILL } from "../src/setup-factory-skill.ts";
 import { isolatedUserHome } from "./support/reporting-home.ts";
 
@@ -101,6 +102,9 @@ it.for([
     expect(await readFile(join(home, skills, "setup-factory", "SKILL.md"), "utf8")).toBe(
       SETUP_FACTORY_SKILL,
     );
+    expect(await readFile(join(home, skills, "factory-configure", "SKILL.md"), "utf8")).toBe(
+      FACTORY_CONFIGURE_SKILL,
+    );
     expect(await readFile(join(canonicalSkills, "factory-block", "SKILL.md"), "utf8")).toBe(
       FACTORY_BLOCK_SKILL,
     );
@@ -109,6 +113,9 @@ it.for([
     );
     expect(await readFile(join(canonicalSkills, "setup-factory", "SKILL.md"), "utf8")).toBe(
       SETUP_FACTORY_SKILL,
+    );
+    expect(await readFile(join(canonicalSkills, "factory-configure", "SKILL.md"), "utf8")).toBe(
+      FACTORY_CONFIGURE_SKILL,
     );
   },
 );
@@ -140,6 +147,9 @@ it("a configured Claude config directory keeps its config and skills directly in
   expect(await readFile(join(configDirectory, "skills", "setup-factory", "SKILL.md"), "utf8")).toBe(
     SETUP_FACTORY_SKILL,
   );
+  expect(
+    await readFile(join(configDirectory, "skills", "factory-configure", "SKILL.md"), "utf8"),
+  ).toBe(FACTORY_CONFIGURE_SKILL);
   expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
 });
 

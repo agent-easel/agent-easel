@@ -26,7 +26,7 @@ Tell the user these facts when you present the proposal in step 3:
 - The claim removes the ready label named in the Run's start data (\`factory:ready\` when it names none), so a Trigger does not start the issue again. Adding the ready label again restarts the issue.
 - Nobody removes the "in progress" label. Closing the issue is the completion signal.
 - The "in progress" label name can be changed later by editing the tracker document; rerunning this skill is not needed.
-- This skill creates no Trigger. Triggers are set up in Factory.
+- This skill itself creates no Trigger. Triggers are set up with the \`factory-configure\` skill or in Factory.
 
 ## Rules
 
@@ -73,7 +73,7 @@ Ask with the session's native question tool when one is available, and keep a fr
    - Another tracker: use the creation step the user described. When you cannot perform it, tell the user to create the labels themselves.
 
    Done when both labels exist in the tracker, or the user knows which do not and why.
-7. **Report.** List the files changed and, for each label, whether it was created or already existed. Leave committing to the user. Say that workers claim issues with the new claim from their next Run, that the tracker document is where to rename the "in progress" label, and that a Trigger set up in Factory starts issues carrying the ready label. Done when the report is sent.
+7. **Report.** List the files changed and, for each label, whether it was created or already existed. Leave committing to the user. Say that workers claim issues with the new claim from their next Run, that the tracker document is where to rename the "in progress" label, and that a Trigger starts issues carrying the ready label. Offer to create and review a Trigger for the ready label now: the user invokes the \`factory-configure\` skill for it in a conversation, or sets it up in Factory Studio. Done when the report is sent.
 
 ## Template: GitHub Issues
 

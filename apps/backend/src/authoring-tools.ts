@@ -3,6 +3,7 @@ import type {
   AgentDefinition,
   AgentExecutionSettingsStatus,
   FactoryOperations,
+  FlowDraft,
   Result,
 } from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
@@ -83,6 +84,10 @@ const listFilter = (kind: "Agents" | "Flows"): Tool["inputSchema"] => ({
     projectId: {
       type: "string",
       description: `A Project id from factory_list_projects: list only global ${kind} and the ${kind} that Project owns. Omit it to list every ${kind.slice(0, -1)}.`,
+    },
+    compact: {
+      type: "boolean",
+      description: `true returns one summary row per ${kind.slice(0, -1)} instead of the full definition. Default false.`,
     },
   },
   additionalProperties: false,
@@ -241,7 +246,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_list_agents",
     description:
-      "List the current Agents with their owning Project (projectId, null for a global Agent), revision and settings status.",
+      "List the current Agents with their owning Project (projectId, null for a global Agent), revision and settings status. With compact true it returns summaries only (id, name, projectId, revision, model or null, overrideProjectIds, updatedAt) and does not read the T3 catalog; read full definitions with factory_get_agent.",
     inputSchema: listFilter("Agents"),
   },
   {
@@ -323,7 +328,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_list_flows",
     description:
-      "List the current Flows with their owning Project (projectId, null for a global Flow), revision, graph, workspace and readiness. A Project Flow starts only in its owning Project; a global Flow in any Project.",
+      "List the current Flows with their owning Project (projectId, null for a global Flow), revision, graph, workspace and readiness. A Project Flow starts only in its owning Project; a global Flow in any Project. With compact true it returns summaries only (id, name, projectId, revision, workspace, ready, issueCount, updatedAt and each block's id, kind, name and agentId or flowId); read full definitions with factory_get_flow.",
     inputSchema: listFilter("Flows"),
   },
   {
@@ -575,6 +580,59 @@ const ownedBy =
     };
   };
 
+const compacted =
+  <A, S>(
+    list: (input: Record<string, unknown>) => Promise<Result<readonly A[]>>,
+    summarize: (definition: A) => S,
+    full: (listed: Result<readonly A[]>) => Promise<Result<unknown>>,
+  ) =>
+  async (input: Record<string, unknown>): Promise<Result<unknown>> => {
+    if (input.compact !== undefined && typeof input.compact !== "boolean")
+      return {
+        ok: false,
+        error: {
+          code: "validation",
+          message: "compact must be true or false.",
+          issues: [{ code: "invalid_flag", path: "compact", message: "Send true or false." }],
+        },
+      };
+    const listed = await list(input);
+    if (input.compact !== true) return full(listed);
+    return listed.ok ? { ok: true, value: listed.value.map(summarize) } : listed;
+  };
+
+const compactAgent = (agent: AgentDefinition) => ({
+  id: agent.id,
+  name: agent.name,
+  projectId: agent.projectId,
+  revision: agent.revision,
+  model: agent.execution && {
+    environmentId: agent.execution.environmentId,
+    providerInstanceId: agent.execution.providerInstanceId,
+    modelId: agent.execution.modelId,
+  },
+  overrideProjectIds: agent.projectOverrides.map((override) => override.projectId),
+  updatedAt: agent.updatedAt,
+});
+
+const compactFlow = (flow: FlowDraft) => ({
+  id: flow.id,
+  name: flow.name,
+  projectId: flow.projectId,
+  revision: flow.revision,
+  workspace: flow.workspace,
+  ready: flow.readiness.ready,
+  issueCount: flow.readiness.issues.length,
+  updatedAt: flow.updatedAt,
+  blocks: flow.graph.blocks.map((block) => ({
+    id: block.id,
+    kind: block.kind,
+    name: block.name,
+    ...(block.kind === "agent" && block.agentId !== null ? { agentId: block.agentId } : {}),
+    ...(block.kind === "subflow" && block.flowId !== null ? { flowId: block.flowId } : {}),
+  })),
+});
+
 /** A removal reply names only the removed id; removing an absent or removed id succeeds too. */
 export const removal = (
   key: "agentId" | "flowId" | "triggerId",
@@ -614,12 +672,11 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
   factory_get_agent_capabilities: ["agent", () => factory.getAgentCapabilities()],
   factory_list_agents: [
     "agent",
-    async (input) =>
-      withSettingsStatus(
-        factory,
-        await ownedBy(() => factory.listAgents())(input),
-        (agents, report) => agents.map(report),
-      ),
+    compacted(
+      ownedBy(() => factory.listAgents()),
+      compactAgent,
+      (listed) => withSettingsStatus(factory, listed, (agents, report) => agents.map(report)),
+    ),
   ],
   factory_get_agent: [
     "agent",
@@ -659,7 +716,14 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
       ),
     ),
   ],
-  factory_list_flows: ["flow", ownedBy(() => factory.listFlows())],
+  factory_list_flows: [
+    "flow",
+    compacted(
+      ownedBy(() => factory.listFlows()),
+      compactFlow,
+      async (listed) => listed,
+    ),
+  ],
   factory_get_flow: ["flow", withId("flowId", (id) => factory.getFlow(id))],
   factory_create_flow: ["flow", (input) => factory.createFlow(input)],
   factory_save_flow: ["flow", withId("flowId", (id, input) => factory.updateFlow(id, input))],
