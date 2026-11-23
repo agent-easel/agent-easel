@@ -13,6 +13,11 @@ import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./a
 import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
+import {
+  callRunLifecycleTool,
+  runLifecycleTools,
+  type RunLifecycleOperations,
+} from "./run-lifecycle-tools.ts";
 import { callTriggerTool, triggerTools, type TriggerToolOperations } from "./trigger-tools.ts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
@@ -237,7 +242,11 @@ async function callTool(
  */
 export function runtimeMcpHandler(
   runtime: RuntimeTools,
-  definitions: AuthoringOperations & LaunchOperations & RunReadOperations & TriggerToolOperations,
+  definitions: AuthoringOperations &
+    LaunchOperations &
+    RunReadOperations &
+    RunLifecycleOperations &
+    TriggerToolOperations,
 ): (request: Request) => Promise<Response> {
   const handler = createMcpHandler(
     () => {
@@ -246,7 +255,14 @@ export function runtimeMcpHandler(
         { capabilities: { tools: {} } },
       );
       server.setRequestHandler("tools/list", () => ({
-        tools: [...tools, ...authoringTools, ...launchTools, ...runReadTools, ...triggerTools],
+        tools: [
+          ...tools,
+          ...authoringTools,
+          ...launchTools,
+          ...runReadTools,
+          ...runLifecycleTools,
+          ...triggerTools,
+        ],
       }));
       server.setRequestHandler("tools/call", async (request) => {
         const { name, arguments: args } = request.params;
@@ -256,6 +272,7 @@ export function runtimeMcpHandler(
           (await callAuthoringTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
+          (await callRunLifecycleTool(definitions, name, args)) ??
           (await callTriggerTool(definitions, name, args)) ?? {
             isError: true,
             content: [{ type: "text", text: `Unknown tool ${name}.` }],

@@ -969,6 +969,8 @@ the Run Active. T3 reads are not an atomic cutoff, so direct T3 activity can arr
 certify result quality or one reviewed revision.
 A desktop installation can notify when a Run settles automatically or at a Finish ending; see
 [Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
+A T3 conversation can also settle a Run, with the same confirmation step before workers are stopped, through the
+[Run lifecycle tools](t3-integration.md#run-lifecycle-tools).
 
 **Settle** settles an Active or Snoozed Run manually and ends its automatic work; every entry point (row menu, Run detail,
 shortcut and desktop menu) uses the same rules. When fresh T3 reads confirm every bound worker thread finished, it settles at
@@ -1040,7 +1042,8 @@ as `archived` and shows activated blocks that had not finished, including waitin
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.
 
-An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer.
+An Archived Run leaves navigation and cannot be restored, settled, snoozed or renamed. A T3 conversation can archive a Run through the
+[Run lifecycle tools](t3-integration.md#run-lifecycle-tools), after stating these consequences to the owner. Archiving the open Run returns to the composer.
 Find an Archived Run by its number or title in the command palette. The **Archived** result opens its read-only history. Any later report from one of its Agents is
 acknowledged as a success that changes nothing and tells the Agent to stop work on the Block; Human answers and Request report are
 refused. Archive does not roll back edits or prevent new direct T3 chats; closing Factory or a browser tab is not Archive.
