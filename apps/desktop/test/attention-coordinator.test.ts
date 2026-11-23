@@ -15,9 +15,9 @@ import {
 } from "../src/attention-coordinator.ts";
 
 const server = "host";
-const selected = { server, access: "approved-credential" };
-const reapproved = { server, access: "reapproved-credential" };
-const other = { server: "other", access: "other-credential" };
+const selected = server;
+const reapproved = server;
+const other = "other";
 
 /** Records what the outside world sees; `show` answers as `answer` decides. */
 function recordingPort(permission: NotificationPermission = "granted") {
@@ -1784,6 +1784,40 @@ it("a surviving completion banner clicked to launch Factory opens its Run", asyn
   });
 });
 
+it("a completion clicked after the credential was replaced without a revocation opens its Run", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  const replaced = profile.coordinator.select(reapproved);
+  await replaced.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null, revealOverview: true });
+});
+
+it("a completion clicked to launch Factory opens its Run once the replaced credential is selected", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  await profile.restart();
+  const route = profile.coordinator.activate(id);
+  const replaced = profile.coordinator.select(reapproved);
+
+  // Act
+  await replaced.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(await route).toStrictEqual({
+    kind: "run",
+    runId: "a",
+    blockId: null,
+    revealOverview: true,
+  });
+});
+
 it("a revocation still queued when another server is selected keeps its completion from opening the Run after reapproval", async (c) => {
   // Arrange
   const { profile, id } = await postedCompletion(c);
@@ -2091,27 +2125,6 @@ it("an attention notification of a revocation the ledger could not record opens 
 
   // Assert
   expect(route).toBeNull();
-});
-
-it("a completion of a revocation the ledger could not record, clicked to launch Factory, opens only the window once the same server is approved again", async (c) => {
-  // Arrange
-  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
-  c.onTestFinished(() => warnings.mockRestore());
-  const { profile, id } = await postedCompletion(c);
-  profile.port.withdrawalIgnored = true;
-  await outcomesRecorded(profile.coordinator);
-  const writable = await unwritableLedger(profile.directory);
-  await profile.feed.revoked();
-  await writable();
-  await profile.restart();
-  const route = profile.coordinator.activate(id);
-  const approved = profile.coordinator.select(reapproved);
-
-  // Act
-  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
-
-  // Assert
-  expect(await route).toBeNull();
 });
 
 it("Factory starts with a changed permission although its attention ledger cannot be written", async (c) => {

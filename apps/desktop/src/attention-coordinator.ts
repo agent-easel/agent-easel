@@ -16,7 +16,6 @@ import type {
 } from "@t3-factory/contracts/desktop-bridge";
 import {
   AttentionLedger,
-  type AccessIdentity,
   type AppearanceState,
   type AttentionNotificationRecord,
   type CompletionLedger,
@@ -82,16 +81,12 @@ export interface AttentionFeed {
   revoked(): Promise<void>;
 }
 
-export type Selected = { readonly server: string; readonly access: AccessIdentity };
-
-const routable = (selection: Selected | null, server: string, notification: NotificationRecord) =>
-  selection?.server === server && (notification.access ?? null) === selection.access;
-
 /**
  * The selected server's latest ready state, with the epoch it was delivered under: it counts only
  * while no selection, readiness loss or revocation happened since.
  */
-type Ready = Selected & {
+type Ready = {
+  readonly server: string;
   readonly rows: readonly RunNavigationEntry[];
   readonly epoch: number;
 };
@@ -303,7 +298,7 @@ const deferred = (reason: DeferReason): AppearanceState => ({ state: "deferred",
 /** One notification per Run, recorded as attempted before the notifier is called. */
 function intend(
   ledger: ServerLedger,
-  { server, access }: Selected,
+  server: string,
   announcements: readonly Announcement[],
   showRunDetails: boolean,
 ): AlertNotification[] {
@@ -320,7 +315,6 @@ function intend(
       runId: row.id,
       blockId: blocks.size === 1 ? [...blocks][0]! : null,
       matters: appearances.map(({ matter, revision }) => ({ id: matter.id, revision })),
-      access,
       postedAt: new Date().toISOString(),
       withdrawn: false,
     };
@@ -390,7 +384,7 @@ function completionContent(
 
 function intendCompletions(
   ledger: ServerLedger,
-  { server, access }: Selected,
+  server: string,
   completions: readonly Completion[],
   showRunDetails: boolean,
 ): AlertNotification[] {
@@ -401,7 +395,6 @@ function intendCompletions(
       kind: "completion",
       runId: row.id,
       cycle,
-      access,
       postedAt: new Date().toISOString(),
       withdrawn: false,
     };
@@ -426,7 +419,7 @@ type Decision = {
 
 function decide(
   ledger: ServerLedger,
-  selected: Selected,
+  server: string,
   rows: readonly RunNavigationEntry[],
   { retry, held, withheld, settings }: Decision,
 ) {
@@ -443,8 +436,8 @@ function decide(
     shown: withheld
       ? account(ledger, announcements, withheld)
       : [
-          ...intend(ledger, selected, announcements, settings.showRunDetails),
-          ...intendCompletions(ledger, selected, completions, settings.showRunDetails),
+          ...intend(ledger, server, announcements, settings.showRunDetails),
+          ...intendCompletions(ledger, server, completions, settings.showRunDetails),
         ],
     trigger: waitsForPrompt ? completions[0] : undefined,
   };
@@ -492,7 +485,7 @@ export class AttentionCoordinator {
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
   /** The server whose feed is current; null with none selected or after revocation. */
-  private selection: Selected | null = null;
+  private selection: { readonly server: string } | null = null;
   /** The selection's latest delivered state; read through `ready`. */
   private latest: Ready | null = null;
   private requesting = false;
@@ -510,6 +503,14 @@ export class AttentionCoordinator {
    */
   private owedCatchUp = false;
   private observedRevocations = 0;
+  /** The server each notification of this launch was posted for. */
+  private readonly postedFor = new Map<string, string>();
+  /**
+   * Notifications posted before their selection was revoked. They open only the window even
+   * when the ledger could not record the revocation, so approving the server again never
+   * revives them; a later launch cannot know them.
+   */
+  private readonly revoked = new Set<string>();
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -552,15 +553,15 @@ export class AttentionCoordinator {
    * ignored. The badge clears until the new feed is ready. Switching to another server withdraws
    * the previous one's notifications and keeps its ledger, so switching back replays nothing.
    */
-  select(selected: Selected | null): AttentionFeed {
+  select(followed: string | null): AttentionFeed {
     const previous = this.selection;
-    const selection = selected && { server: selected.server, access: selected.access };
+    const selection = followed === null ? null : { server: followed };
     const server = selection?.server ?? null;
     this.selection = selection;
     this.epoch++;
     this.owedCatchUp = false;
     // A click held for another server never routes into this one.
-    if (this.held && !routable(selection, this.held.server, this.held.notification)) this.drop();
+    if (this.held && this.held.server !== server) this.drop();
     if (this.heldCompletion?.server !== server) this.heldCompletion = null;
     void this.enqueue(async () => {
       this.latest = null;
@@ -578,7 +579,7 @@ export class AttentionCoordinator {
             this.owedCatchUp ||= delivery.fresh;
             return;
           }
-          this.latest = { ...selection!, rows: delivery.rows, epoch };
+          this.latest = { server: selection!.server, rows: delivery.rows, epoch };
           this.showBadge();
           if (this.held?.server === selection!.server) {
             this.held.answer(notificationRoute(this.held.notification, delivery.rows));
@@ -601,6 +602,8 @@ export class AttentionCoordinator {
           this.selection = null;
           this.epoch++;
           this.observedRevocations++;
+          for (const [id, server] of this.postedFor)
+            if (server === selection!.server) this.revoked.add(id);
           this.owedCatchUp = false;
           this.drop();
         }
@@ -630,7 +633,7 @@ export class AttentionCoordinator {
         if (!selection) return answer(null);
         const { server } = selection;
         const notification = this.ledger.notification(server, id);
-        if (!notification || !routable(selection, server, notification)) return answer(null);
+        if (!notification || this.revoked.has(id)) return answer(null);
         if (this.ready) return answer(notificationRoute(notification, this.ready.rows));
         this.held = { server, notification, answer };
       });
@@ -742,14 +745,14 @@ export class AttentionCoordinator {
     return this.queue;
   }
 
-  private async announce({ server, access, rows, epoch }: Ready, requested: boolean) {
+  private async announce({ server, rows, epoch }: Ready, requested: boolean) {
     const catchUp = requested || this.owedCatchUp;
     const retry = (await this.observePermission()) || catchUp;
     if (this.epoch !== epoch) return this.abandon(server, [], retry);
     const withheld = this.withheld(this.observed);
     const held = this.releasable(server);
     const { due, shown, withdrawn, trigger } = await this.ledger.change(server, (ledger) =>
-      decide(ledger, { server, access }, rows, { retry, held, withheld, settings: this.settings }),
+      decide(ledger, server, rows, { retry, held, withheld, settings: this.settings }),
     );
     if (held) this.heldCompletion = null;
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
@@ -787,6 +790,7 @@ export class AttentionCoordinator {
   }
 
   private post(server: string, notification: AlertNotification) {
+    this.postedFor.set(notification.id, server);
     void this.port.show(notification).then(
       (outcome) => this.settle(server, notification.id, outcome),
       (error: unknown) => {

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   probeServer,
   RemoteTransport,
@@ -135,11 +134,6 @@ export class ApprovedClient {
     }
     if (generation !== this.generation) return;
     this.selection = { server, transport: new RemoteTransport(server), credential };
-  }
-
-  access(): string | null {
-    const credential = this.selection?.credential;
-    return credential ? createHash("sha256").update(credential).digest("hex") : null;
   }
 
   capture(): ApprovedConnection | null {

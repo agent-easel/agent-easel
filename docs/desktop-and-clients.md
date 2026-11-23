@@ -240,12 +240,11 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   when another server is selected or the credential is replaced before the deletion runs, so
   their clicks still open only the window after the same server approves this client again,
   also after a restart and for a click made before the revocation that was still waiting behind
-  other work. Each record also names a digest of the credential it was posted under, and a click
-  routes only while the selection uses that credential. A revoked credential never authenticates
-  again and approving this client again issues a new one, so the old notifications open only the
-  window even when the ledger could not record the revocation's deletion, before or after a
-  restart. A client's notifications posted by an earlier Factory version name no credential and
-  also open only the window; the server role has no credential and keeps routing them. Their
+  other work. A client that must be approved again without a revocation (an unreadable Keychain
+  credential, a session-only credential) keeps routing the notifications it posted, also after a
+  restart. A notification posted before a revocation stays window-only for the rest of that launch even when
+  the ledger could not record the revocation's deletion; a later launch cannot know it, so there
+  such a banner routes again once the server is selected. Their
   accounting stays: one macOS refuses only after the revocation is
   retried at the next catch-up, and one it accepted or whose outcome is unknown is not.
 - **Selection boundaries**: switching server or role, or the server refusing this client's

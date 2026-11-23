@@ -3,7 +3,7 @@ import { Socket } from "effect/socket";
 import { LIVE_PATH, type RunNavigationEntry, type RunViewLiveMessage } from "@t3-factory/contracts";
 import { rpcSessions, type LiveSession } from "@t3-factory/contracts/live-session";
 import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
-import type { AttentionCoordinator, AttentionFeed, Selected } from "./attention-coordinator.ts";
+import type { AttentionCoordinator, AttentionFeed } from "./attention-coordinator.ts";
 import { openLiveSocket } from "./live-relay.ts";
 import type { ApiTarget } from "./protocol.ts";
 
@@ -11,7 +11,8 @@ import type { ApiTarget } from "./protocol.ts";
  * The server the installation follows: its ledger identity and how to reach it. A null target
  * (the server role's backend is not running) keeps the selection without connecting.
  */
-export interface AttentionSelection extends Selected {
+export interface AttentionSelection {
+  readonly server: string;
   readonly target: ApiTarget;
 }
 
@@ -66,9 +67,9 @@ export class AttentionSubscription {
    */
   follow(selection: AttentionSelection | null) {
     this.stop();
-    this.feed = this.coordinator.select(selection);
+    this.feed = this.coordinator.select(selection?.server ?? null);
     if (selection?.target)
-      this.connect({ ...selection, target: selection.target }, this.generation, 0);
+      this.connect({ server: selection.server, target: selection.target }, this.generation, 0);
   }
 
   /** Quit: nothing later reaches the coordinator. */
@@ -81,7 +82,7 @@ export class AttentionSubscription {
   }
 
   private connect(
-    selection: Selected & { readonly target: NonNullable<ApiTarget> },
+    selection: { readonly server: string; readonly target: NonNullable<ApiTarget> },
     generation: number,
     failures: number,
   ) {
@@ -138,7 +139,7 @@ export class AttentionSubscription {
         }
         ready = true;
         failures = 0;
-        this.feed ??= this.coordinator.select(selection);
+        this.feed ??= this.coordinator.select(selection.server);
         void this.feed.deliver({ fresh, rows: [...rows.values()] });
         fresh = false;
       },
