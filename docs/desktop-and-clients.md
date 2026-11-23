@@ -197,7 +197,8 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   observed, so a grant made in System Settings while Factory was quit is noticed at the next
   launch and also announces no Run that is already Settled. A ledger that cannot be written
   does not stop Factory from starting; a grant it could not record is noticed again, with the
-  same baseline, at the next permission read once the ledger can be written. A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  same baseline, at the next permission read once the ledger can be written, and a grant that
+  follows a denial the ledger could not record has the same baseline. A denial leaves the badge working and Factory never asks again. Settings shows the permission
   status and, after a denial, **Open System Settings**, which opens this app's page in System
   Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
@@ -238,11 +239,14 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   the window. A revocation deletes the notification records the revoked selection had, also
   when another server is selected or the credential is replaced before the deletion runs, so
   their clicks still open only the window after the same server approves this client again,
-  also after a restart. Their accounting stays: one macOS refuses only after the revocation is
+  also after a restart and for a click made before the revocation that was still waiting behind
+  other work. Their accounting stays: one macOS refuses only after the revocation is
   retried at the next catch-up, and one it accepted or whose outcome is unknown is not.
 - **Selection boundaries**: switching server or role, or the server refusing this client's
   credential after a revocation, clears the badge, withdraws the previous selection's
-  notifications and ignores whatever the previous selection's subscription still delivers. The
+  notifications and ignores whatever the previous selection's subscription still delivers. A
+  notification macOS accepts, or whose outcome is unknown, after it was withdrawn is withdrawn
+  again, also when the ledger cannot record that outcome. The
   ledger is kept per server, so switching back without forgetting repeats nothing. **Forget
   server** deletes that server's ledger: connecting to it again announces what is still pending,
   at most one notification per Run. A revoked client keeps reconnecting; once its new access

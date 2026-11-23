@@ -502,6 +502,7 @@ export class AttentionCoordinator {
    * selection's next valid delivery runs it, since a recovery after a gap is not a snapshot.
    */
   private owedCatchUp = false;
+  private observedRevocations = 0;
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -591,6 +592,7 @@ export class AttentionCoordinator {
         if (ended) {
           this.selection = null;
           this.epoch++;
+          this.observedRevocations++;
           this.owedCatchUp = false;
           this.drop();
         }
@@ -611,9 +613,11 @@ export class AttentionCoordinator {
    * server answers it with null. The window opens regardless; nothing is ever acted on.
    */
   activate(id: string): Promise<DesktopRoute | null> {
+    const revocationsAtClick = this.observedRevocations;
     return new Promise((answer) => {
       void this.enqueue(async () => {
         this.drop();
+        if (this.observedRevocations !== revocationsAtClick) return answer(null);
         const server = this.selection?.server;
         const notification =
           server === undefined ? undefined : this.ledger.notification(server, id);
@@ -791,10 +795,10 @@ export class AttentionCoordinator {
   private settle(server: string, id: string, outcome: ShowOutcome | null) {
     void this.enqueue(async () => {
       const posted = this.ledger.notification(server, id);
-      if (outcome && this.ledger.follows(server))
-        await this.ledger.change(server, (ledger) => recordOutcome(ledger, id, outcome));
       const stillWanted = posted !== undefined && !posted.withdrawn;
       if (outcome?.kind !== "failed" && !stillWanted) this.port.withdraw([id]);
+      if (outcome && this.ledger.follows(server))
+        await this.ledger.change(server, (ledger) => recordOutcome(ledger, id, outcome));
     });
   }
 

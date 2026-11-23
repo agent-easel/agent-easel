@@ -1828,6 +1828,55 @@ it("a completion posted after the same server is approved again opens its Run", 
   expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null, revealOverview: true });
 });
 
+const pendingOperation = (
+  port: ReturnType<typeof recordingPort>,
+  coordinator: AttentionCoordinator,
+) => {
+  let open = () => {};
+  port.permissionGate = new Promise((resolve) => (open = resolve));
+  void coordinator.checkPermission();
+  return () => {
+    port.permissionGate = null;
+    open();
+  };
+};
+
+it("a completion clicked while an earlier operation is pending opens only the window when its selection is revoked and the same server approved again", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  const openQueue = pendingOperation(profile.port, profile.coordinator);
+  const route = profile.coordinator.activate(id);
+  void profile.feed.revoked();
+  const approved = profile.coordinator.select(server);
+  openQueue();
+
+  // Act
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(await route).toBeNull();
+});
+
+it("an attention notification clicked while an earlier operation is pending opens only the window when its selection is revoked and the same server approved again", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  port.withdrawalIgnored = true;
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  const openQueue = pendingOperation(port, coordinator);
+  const route = coordinator.activate(port.shown[0]!.id);
+  void feed.revoked();
+  const approved = coordinator.select(server);
+  openQueue();
+
+  // Act
+  await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect(await route).toBeNull();
+});
+
 const answeredLater = (port: ReturnType<typeof recordingPort>) => {
   const answer = { now: (_outcome: ShowOutcome | Error) => undefined as void };
   port.answer = () =>
@@ -1929,6 +1978,71 @@ const unwritableLedger = async (directory: string) => {
   return () => rm(blocker, { recursive: true });
 };
 
+const settledAnswer = async (coordinator: AttentionCoordinator) => {
+  await answerRecorded();
+  await coordinator.close();
+};
+
+it("a completion Notification Center accepts after revocation is withdrawn again although the ledger cannot record it", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed, directory } = await installation(c, recordingPort(), finished);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  const id = port.shown[0]!.id;
+  await feed.revoked();
+  await unwritableLedger(directory);
+
+  // Act
+  answer.now({ kind: "accepted" });
+  await settledAnswer(coordinator);
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([id, id]);
+});
+
+it("an attention notification Notification Center accepts after revocation is withdrawn again although the ledger cannot record it", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed, directory } = await installation(c);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  const id = port.shown[0]!.id;
+  await feed.revoked();
+  await unwritableLedger(directory);
+
+  // Act
+  answer.now({ kind: "accepted" });
+  await settledAnswer(coordinator);
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([id, id]);
+});
+
+it("a completion whose delivery became unknown after revocation is withdrawn again although the ledger cannot be written", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed, directory } = await installation(c, recordingPort(), finished);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  const id = port.shown[0]!.id;
+  await feed.revoked();
+  await unwritableLedger(directory);
+
+  // Act
+  answer.now(new Error("click listeners could not be restored"));
+  await settledAnswer(coordinator);
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([id, id]);
+});
+
 it("Factory starts with a changed permission although its attention ledger cannot be written", async (c) => {
   // Arrange
   const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
@@ -1987,4 +2101,43 @@ it("a permission grant that a re-check could not record replays no Run that is a
 
   // Assert
   expect(port.shown).toStrictEqual([]);
+});
+
+it("a permission grant after a denial that startup could not record replays no Run that is already Settled", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const profile = await installation(c, recordingPort(), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  const writable = await unwritableLedger(profile.directory);
+  profile.port.permission = "denied";
+  await profile.restart();
+  profile.port.permission = "granted";
+  await writable();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toStrictEqual([]);
+});
+
+it("a permission grant that could not be recorded after an unrecorded startup denial replays no Run that is already Settled once the ledger can be written", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const profile = await installation(c, recordingPort(), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  const writable = await unwritableLedger(profile.directory);
+  profile.port.permission = "denied";
+  await profile.restart();
+  profile.port.permission = "granted";
+  await profile.coordinator.checkPermission();
+  await writable();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toStrictEqual([]);
 });

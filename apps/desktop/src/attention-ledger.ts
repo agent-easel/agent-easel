@@ -138,6 +138,9 @@ function parseLedger(raw: unknown): LedgerFile | undefined {
  * the coordinator acts on it; a failed write leaves the previous state in memory and on disk.
  */
 export class AttentionLedger {
+  private observedPermission: NotificationPermission | undefined;
+  private grantUnrecorded = false;
+
   private constructor(
     private readonly path: string,
     private data: LedgerFile,
@@ -179,13 +182,18 @@ export class AttentionLedger {
   }
 
   async notePermission(permission: NotificationPermission): Promise<boolean> {
-    const previous = this.data.permission;
-    if (previous === permission) return false;
-    const granted = permission === "granted" && previous !== undefined;
+    const previous = this.observedPermission ?? this.data.permission;
+    this.observedPermission = permission;
+    this.grantUnrecorded =
+      permission === "granted" &&
+      (this.grantUnrecorded || (previous !== undefined && previous !== "granted"));
+    if (this.data.permission === permission && !this.grantUnrecorded) return false;
+    const granted = this.grantUnrecorded;
     await this.write(() => {
       this.data.permission = permission;
       if (granted) this.requireBaseline();
     });
+    this.grantUnrecorded = false;
     return granted;
   }
 
