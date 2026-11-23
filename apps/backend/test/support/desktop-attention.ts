@@ -36,6 +36,8 @@ function recordingAlerts() {
       badges.push(label);
       changed();
     },
+    delivered: () =>
+      Promise.resolve(shown.map(({ id }) => id).filter((id) => !withdrawn.includes(id))),
     permission: () => Promise.resolve("granted"),
     requestPermission: () => Promise.resolve("granted"),
   };
