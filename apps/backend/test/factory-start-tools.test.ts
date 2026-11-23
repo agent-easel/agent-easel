@@ -3,9 +3,10 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { failure } from "../src/result.ts";
 import { prepared } from "./support/prepared-runner.ts";
-import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
+import { base64, factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
+import { screenshots } from "./support/run-images.ts";
 import { assertOk } from "./support/domain-setup.ts";
-import { enableRunTitles, projectWorkerFlow } from "./support/scenarios.ts";
+import { enableRunTitles, projectWorkerFlow, sha256Hex } from "./support/scenarios.ts";
 
 /** factory_start_run arguments for the prepared Project and Flow. */
 const startArguments = (fixture: Awaited<ReturnType<typeof prepared>>) => ({
@@ -355,4 +356,147 @@ it("Start warns about a closed issue URL and a merged closing PR for a local iss
     },
   });
   expect(await f.f.listRunNavigation()).toEqual({ ok: true, value: [] });
+});
+
+const stageScreenshot = async (
+  client: Awaited<ReturnType<typeof factoryMcpClient>>,
+  image: { name: string; data: Uint8Array },
+) =>
+  toolReply(
+    await client.callTool({
+      name: "factory_stage_run_image",
+      arguments: { mimeType: "image/png", dataBase64: base64(image.data) },
+    }),
+  );
+
+const imageStartArguments = (fixture: Awaited<ReturnType<typeof prepared>>) => ({
+  ...startArguments(fixture),
+  title: "Fix Settings",
+  images: [
+    { sha256: sha256Hex(screenshots.red.data), name: screenshots.red.name },
+    { sha256: sha256Hex(screenshots.green.data), name: screenshots.green.name },
+  ],
+});
+
+it("a session starts a Run with its own title and staged images, and the workers receive the images in order", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+  await stageScreenshot(client, screenshots.red);
+  await stageScreenshot(client, screenshots.green);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_start_run",
+    arguments: imageStartArguments(fixture),
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const reply = toolReply(result);
+  expect(reply.run.title).toBe("Fix Settings");
+  const run = await fixture.f.getRun(reply.run.id);
+  assert(run.ok);
+  expect(run.value.title).toBe("Fix Settings");
+  expect(run.value.titleProvenance).toBe("manual");
+  expect(run.value.images.map((image) => image.name)).toStrictEqual([
+    "screenshot.png",
+    "mockup.png",
+  ]);
+  await fixture.f.reconcileRuns();
+  const [launch] = [...fixture.t3.threads.launches.values()].map((entry) => entry.payload);
+  expect(launch!.attachments?.map((attachment) => attachment.name)).toStrictEqual([
+    "image-1-screenshot.png",
+    "image-2-mockup.png",
+  ]);
+});
+
+it("an identical image Start retried after a lost receipt returns the same Run, and a changed title, prompt or image order conflicts", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const lossy = await factoryMcpClient(c, fixture.f, { loseCallResponses: true });
+  const client = await factoryMcpClient(c, fixture.f);
+  await stageScreenshot(client, screenshots.red);
+  await stageScreenshot(client, screenshots.green);
+  const start = imageStartArguments(fixture);
+  await expect(lossy.callTool({ name: "factory_start_run", arguments: start })).rejects.toThrow();
+
+  // Act
+  const retry = await client.callTool({ name: "factory_start_run", arguments: start });
+  const changes = await Promise.all(
+    [
+      { ...start, title: "Fix Preferences" },
+      { ...start, input: "Different prompt" },
+      { ...start, images: [...start.images].reverse() },
+      { ...start, images: start.images.slice(0, 1) },
+    ].map((changed) => client.callTool({ name: "factory_start_run", arguments: changed })),
+  );
+
+  // Assert
+  expect(retry.isError).toBe(false);
+  const navigation = await fixture.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value).toHaveLength(1);
+  expect(toolReply(retry).run.id).toBe(navigation.value[0]!.id);
+  expect(changes.map((changed) => changed.isError)).toStrictEqual([true, true, true, true]);
+  expect(changes.map((changed) => toolReply(changed).issues[0].code)).toStrictEqual(
+    Array(4).fill("start_key_conflict"),
+  );
+});
+
+it("a Start naming an image Factory does not hold, or on a T3 without attachments, creates no Run", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+  const missing = await client.callTool({
+    name: "factory_start_run",
+    arguments: imageStartArguments(fixture),
+  });
+  await stageScreenshot(client, screenshots.red);
+  await stageScreenshot(client, screenshots.green);
+  fixture.t3.contract.support.attachmentLimit = null;
+
+  // Act
+  const unsupported = await client.callTool({
+    name: "factory_start_run",
+    arguments: { ...imageStartArguments(fixture), requestId: "conversation-start-2" },
+  });
+
+  // Assert
+  expect(toolReply(missing)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "image_not_staged" }],
+  });
+  expect(toolReply(unsupported)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "attachments_unsupported" }],
+  });
+  const navigation = await fixture.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value).toStrictEqual([]);
+});
+
+it("staging refuses content that is not the declared image and takes no host path", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const notAnImage = await client.callTool({
+    name: "factory_stage_run_image",
+    arguments: { mimeType: "image/png", dataBase64: base64(new TextEncoder().encode("hello")) },
+  });
+  const path = await client.callTool({
+    name: "factory_stage_run_image",
+    arguments: { mimeType: "image/png", path: "/etc/hosts" },
+  });
+  const notBase64 = await client.callTool({
+    name: "factory_stage_run_image",
+    arguments: { mimeType: "image/png", dataBase64: "/etc/hosts" },
+  });
+
+  // Assert
+  expect(toolReply(notAnImage)).toMatchObject({ issues: [{ code: "image_signature" }] });
+  expect(path.isError).toBe(true);
+  expect(notBase64.isError).toBe(true);
 });

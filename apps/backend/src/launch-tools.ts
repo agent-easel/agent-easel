@@ -1,6 +1,13 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, resolve } from "node:path";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
 import { textResult } from "./authoring-tools.ts";
+import {
+  RUN_IMAGE_LIMIT,
+  RUN_IMAGE_MAX_BYTES,
+  RUN_IMAGE_MIME_TYPES,
+  TASK_TITLE_LIMIT,
+} from "@t3-factory/domain-validation";
 import type {
   FactoryOperations,
   FactoryProject,
@@ -13,8 +20,11 @@ import type {
 /** What the launch tools call: the Project catalog, the Run title setting and the shared Start operation. */
 export type LaunchOperations = Pick<
   FactoryOperations,
-  "recheckConnection" | "recheckProjects" | "listProjects" | "getRunTitleSetting"
+  "recheckConnection" | "recheckProjects" | "listProjects" | "getRunTitleSetting" | "stageRunImage"
 > & { startTextRun(input: unknown): Promise<Result<RunDetail>> };
+
+const STAGE_BASE64_LIMIT = Math.ceil(RUN_IMAGE_MAX_BYTES / 3) * 4;
+export const STAGE_REQUEST_LIMIT_BYTES = STAGE_BASE64_LIMIT + 4096;
 
 /** Run Start for any local session with the Factory MCP; no Block id. */
 export const launchTools: Tool[] = [
@@ -34,9 +44,22 @@ export const launchTools: Tool[] = [
     },
   },
   {
+    name: "factory_stage_run_image",
+    description: `Upload one image's bytes to Factory's staging so factory_start_run can attach it by digest. Send the content itself as base64: Factory reads no host path. PNG, JPEG, GIF or WebP, 1 byte to 10 MiB, sent unchanged. The reply is {sha256, mimeType, sizeBytes}; staging identical bytes again succeeds. Staged images that no Run uses are removed after a day. Call it only for images the user chose.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        mimeType: { type: "string", enum: [...RUN_IMAGE_MIME_TYPES] },
+        dataBase64: { type: "string", maxLength: STAGE_BASE64_LIMIT },
+      },
+      required: ["mimeType", "dataBase64"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "factory_start_run",
     description:
-      "Start a Run immediately, exactly as Factory's Start form does: the same checks, including that a Project Flow starts only in its owning Project, the current saved Flow and Agent revisions and the Flow's own workspace setting. Nothing here asks the user; call it only after the user confirmed the Project, Flow and exact prompt. The reply is an acceptance receipt, not proof that workers started. Retry an unknown outcome with the same requestId and identical arguments: an accepted request returns its Run, and changed content under that requestId is a conflict. A new submission needs a new requestId.",
+      "Start a Run immediately, exactly as Factory's Start form does: the same checks, including that a Project Flow starts only in its owning Project, the current saved Flow and Agent revisions and the Flow's own workspace setting. Nothing here asks the user; call it only after the user confirmed the Project, Flow, title (when set), exact prompt and ordered images. The reply is an acceptance receipt, not proof that workers started. Retry an unknown outcome with the same requestId and identical arguments: an accepted request returns its Run, and changed content under that requestId is a conflict. A new submission needs a new requestId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -62,7 +85,31 @@ export const launchTools: Tool[] = [
         input: {
           type: "string",
           description:
-            "The Run's prompt text, exactly as the user wrote it. Its first non-empty line becomes the Run title.",
+            "The Run's prompt text: exactly as the user wrote it, or the agent-composed text the user reviewed. Without title, its first non-empty line becomes the Run title.",
+        },
+        title: {
+          type: "string",
+          maxLength: TASK_TITLE_LIMIT,
+          description:
+            "The user's own Run title. Omit it to use the prompt's first non-empty line; a given title is kept as manual.",
+        },
+        images: {
+          type: "array",
+          maxItems: RUN_IMAGE_LIMIT,
+          description:
+            "The reviewed images in order, as staged by factory_stage_run_image: Image N is entry N. Workers receive them with the prompt.",
+          items: {
+            type: "object",
+            properties: {
+              sha256: {
+                type: "string",
+                description: "The digest factory_stage_run_image returned.",
+              },
+              name: { type: "string", description: "The image's display name." },
+            },
+            required: ["sha256", "name"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["requestId", "projectId", "flowId", "input"],
@@ -178,6 +225,37 @@ async function listProjects(factory: LaunchOperations, args: Record<string, unkn
   });
 }
 
+async function stageRunImage(factory: LaunchOperations, args: Record<string, unknown>) {
+  const { mimeType, dataBase64 } = args;
+  const invalid = (message: string) =>
+    textResult(true, {
+      code: "validation",
+      message,
+      issues: [{ code: "image_upload", path: "dataBase64", message }],
+      next: "Nothing was staged. Send the chosen image's bytes as base64 with its mimeType.",
+    });
+  if (
+    typeof mimeType !== "string" ||
+    typeof dataBase64 !== "string" ||
+    dataBase64.length > STAGE_BASE64_LIMIT ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(dataBase64)
+  )
+    return invalid("Send mimeType and the image's bytes as base64.");
+  const data = Buffer.from(dataBase64, "base64");
+  const sha256 = createHash("sha256").update(data).digest("hex");
+  const staged = await factory.stageRunImage(sha256, { mimeType, data });
+  if (!staged.ok) {
+    const { code, message, issues } = staged.error;
+    return textResult(true, {
+      code,
+      message,
+      issues,
+      next: "Nothing was staged. Explain what needs attention to the user.",
+    });
+  }
+  return textResult(false, staged.value);
+}
+
 async function startRun(factory: LaunchOperations, args: Record<string, unknown>) {
   const result = await factory.startTextRun(args);
   if (!result.ok) {
@@ -224,7 +302,11 @@ async function startRun(factory: LaunchOperations, args: Record<string, unknown>
 const launchCalls: Record<
   string,
   (factory: LaunchOperations, args: Record<string, unknown>) => Promise<CallToolResult>
-> = { factory_list_projects: listProjects, factory_start_run: startRun };
+> = {
+  factory_list_projects: listProjects,
+  factory_stage_run_image: stageRunImage,
+  factory_start_run: startRun,
+};
 
 /** Answers a launch tool call, or `undefined` when `name` is not a launch tool. */
 export async function callLaunchTool(

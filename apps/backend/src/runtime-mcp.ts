@@ -11,7 +11,12 @@ import {
 } from "@t3-factory/contracts";
 import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
 import { definitionBody } from "./http-support.ts";
-import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
+import {
+  callLaunchTool,
+  launchTools,
+  STAGE_REQUEST_LIMIT_BYTES,
+  type LaunchOperations,
+} from "./launch-tools.ts";
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
 import { callTriggerTool, triggerTools, type TriggerToolOperations } from "./trigger-tools.ts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
@@ -265,7 +270,7 @@ export function runtimeMcpHandler(
       return server;
     },
     // A Flow save carries a whole graph, as Studio's Flow document body does.
-    { maxRequestBodySize: definitionBody.bytes },
+    { maxRequestBodySize: Math.max(definitionBody.bytes, STAGE_REQUEST_LIMIT_BYTES) },
   );
   return (request) => handler.fetch(request);
 }
