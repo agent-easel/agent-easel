@@ -127,19 +127,18 @@ export function SidebarRow({
   title,
   kind,
   selected,
-  compact = false,
   disabled = false,
   onClick,
   preview,
   actions,
   children,
   label,
+  description,
 }: {
   id: string;
   title: string;
   kind: "run" | "draft";
   selected: boolean;
-  compact?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   preview: ReactNode;
@@ -147,6 +146,7 @@ export function SidebarRow({
   children: ReactNode;
   /** Overrides the draft row's accessible name. A draft awaiting Start has no status name. */
   label?: string;
+  description?: string;
 }) {
   const interaction = useRowInteractions(disabled, selected);
   const destination =
@@ -175,10 +175,8 @@ export function SidebarRow({
                 onClick={onClick}
                 aria-label={kind === "draft" ? label : undefined}
                 aria-current={selected ? "page" : undefined}
-                className={cn(
-                  "flex min-w-0 flex-1 rounded-md px-2.5 text-foreground no-underline hover:no-underline",
-                  compact ? "items-center gap-2 py-1.5" : "flex-col gap-1 py-1.5",
-                )}
+                aria-describedby={description ? `run-row-${id}-description` : undefined}
+                className="flex min-w-0 flex-1 flex-col gap-1 rounded-md px-2.5 py-1.5 text-foreground no-underline hover:no-underline"
               >
                 {children}
               </Link>
@@ -194,6 +192,9 @@ export function SidebarRow({
               {preview}
             </TooltipContent>
           </Tooltip>
+          <span id={`run-row-${id}-description`} className="sr-only">
+            {description}
+          </span>
           <Tooltip {...interaction.actionsTooltip}>
             <TooltipTrigger asChild>
               <Button

@@ -210,6 +210,9 @@ it("navigation and the open Run share one view and apply one commit together", (
     flowName: run.flowName,
     origin: run.origin,
     repositories: [],
+    boundBranch: null,
+    result: null,
+    flowHasEndings: false,
     project: {
       id: "project",
       title: "Project",

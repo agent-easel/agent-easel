@@ -17,6 +17,7 @@ import {
   CircleDashed,
   CirclePause,
   FilePen,
+  Flag,
   LoaderCircle,
   GitBranch,
   GitPullRequest,
@@ -49,7 +50,7 @@ import { ProjectIcon } from "./project-icon.tsx";
 import { RunNumber } from "./run-number.tsx";
 import { GeneratingTitle } from "./run-title-generation.tsx";
 import { RunOriginPreview } from "./run-origin.tsx";
-import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
+import { repositorySummary, runBranches, RunRepositories } from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
 import { fullDateTime } from "../time-format.ts";
 
@@ -623,27 +624,17 @@ function RunRow({
   searchMuted?: boolean;
 }) {
   const { busy } = useRunActions({ entry: run });
-  const state = execution(run);
-  const { branches, pullRequests } = repositorySummary(run.repositories);
-  const compact = run.lifecycle === "settled";
-  const muted = !selected && (searchMuted || compact);
-  const hasMetadata =
-    run.settlement !== null ||
-    branches.length > 0 ||
-    pullRequests.length > 0 ||
-    run.presentation.woke ||
-    run.attention.needsInput ||
-    run.attention.problem ||
-    run.project.availability !== "available";
+  const ending = run.lifecycle === "settled" ? run.result : null;
+  const muted = !selected && (searchMuted || run.lifecycle === "settled");
   return (
     <SidebarRow
       id={run.id}
       title={run.title}
       kind="run"
       selected={selected}
-      compact={compact}
       disabled={busy}
       preview={<RunPreview run={run} />}
+      {...(ending?.outputMissing ? { description: "Output missing" } : {})}
       actions={
         <RunActionItems
           subject={{ entry: run }}
@@ -652,24 +643,7 @@ function RunRow({
         />
       }
     >
-      {compact ? (
-        <span className="shrink-0 opacity-50">
-          <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
-        </span>
-      ) : (
-        <span className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
-          <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
-          <span className="min-w-0 truncate">{run.project.title}</span>
-          <RunNumber number={run.number} aria-hidden />
-          <state.Icon
-            aria-hidden
-            strokeWidth={1.5}
-            className={cn("ml-auto size-3.5 shrink-0", state.className)}
-          />
-          <ActivityAge at={run.lastActivityAt} />
-        </span>
-      )}
-      {compact && <RunNumber number={run.number} aria-hidden />}
+      <RunRowMeta run={run} ending={ending} />
       <span className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
@@ -681,34 +655,111 @@ function RunRow({
         </span>
         <GeneratingTitle generation={run.titleGeneration} />
       </span>
-      {compact && run.project.availability !== "available" && (
-        <StatusBadge kind="neutral">Not in T3</StatusBadge>
-      )}
-      {!compact && hasMetadata && (
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-          {branches.length > 0 && (
-            <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <GitBranch aria-hidden className="size-3.5 shrink-0" />
-              <span className="truncate">
-                {branches.length === 1 ? branches[0]![0] : `${branches.length} branches`}
-              </span>
-            </span>
-          )}
-          {pullRequests.length > 0 && (
-            <span
-              aria-label={`${pullRequests.length} pull requests`}
-              className="inline-flex shrink-0 items-center gap-1"
-            >
-              <GitPullRequest aria-hidden className="size-3.5" />
-              {pullRequests.length}
-            </span>
-          )}
-          <RunRowIndicators run={run} />
-        </span>
-      )}
-      <span className="sr-only">, {state.label}</span>
+      <RunRowDetails run={run} />
+      <RunRowAnnouncement run={run} ending={ending} />
     </SidebarRow>
   );
+}
+
+type RunEnding = RunNavigationEntry["result"];
+
+function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
+  const state = execution(run);
+  const unavailable = run.project.availability !== "available";
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
+      <span className="shrink-0">
+        <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
+      </span>
+      <span className="min-w-0 truncate">{run.project.title}</span>
+      <RunNumber number={run.number} aria-hidden />
+      {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={unavailable} />}
+      {run.lifecycle === "settled" && unavailable && (
+        <StatusBadge kind="neutral" aria-hidden>
+          Not in T3
+        </StatusBadge>
+      )}
+      <state.Icon
+        aria-hidden
+        strokeWidth={1.5}
+        className={cn("ml-auto size-3.5 shrink-0", state.className)}
+      />
+      <ActivityAge at={run.lastActivityAt} />
+    </span>
+  );
+}
+
+function RunRowDetails({ run }: { run: RunNavigationEntry }) {
+  const { pullRequests } = repositorySummary(run.repositories);
+  const branches = runBranches(run);
+  const hasDetails =
+    run.settlement !== null ||
+    branches.length > 0 ||
+    pullRequests.length > 0 ||
+    run.presentation.woke ||
+    run.attention.needsInput ||
+    run.attention.problem ||
+    run.project.availability !== "available";
+  if (!hasDetails) return null;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+      {branches.length > 0 && (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <GitBranch aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">
+            {branches.length === 1 ? branches[0] : `${branches.length} branches`}
+          </span>
+        </span>
+      )}
+      {pullRequests.length > 0 && (
+        <span
+          aria-label={`${pullRequests.length} pull requests`}
+          className="inline-flex shrink-0 items-center gap-1"
+        >
+          <GitPullRequest aria-hidden className="size-3.5" />
+          {pullRequests.length}
+        </span>
+      )}
+      <RunRowIndicators run={run} />
+    </span>
+  );
+}
+
+function RunRowAnnouncement({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
+  return (
+    <span className="sr-only">
+      , {execution(run).label}
+      {ending && `, ended ${ending.endingName}`}
+      {run.lifecycle === "settled" && run.project.availability !== "available" && ", not in T3"}
+    </span>
+  );
+}
+
+function EndingBadge({ name, iconOnlyWhenNarrow }: { name: string; iconOnlyWhenNarrow: boolean }) {
+  return (
+    <StatusBadge
+      kind="neutral"
+      icon={Flag}
+      aria-hidden
+      className="max-w-16 @min-[260px]/sidebar:max-w-22"
+    >
+      <span className={cn(iconOnlyWhenNarrow && "@max-[259px]/sidebar:hidden")}>{name}</span>
+    </StatusBadge>
+  );
+}
+
+function RunPreviewResult({ run }: { run: RunNavigationEntry }) {
+  if (run.result)
+    return (
+      <div className="flex flex-wrap items-start gap-2">
+        <Flag aria-hidden className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+        <span className="min-w-0 break-words">{run.result.endingName}</span>
+        {run.result.outputMissing && <StatusBadge kind="attention">Output missing</StatusBadge>}
+      </div>
+    );
+  if (run.lifecycle === "settled" && run.flowHasEndings)
+    return <p className="text-muted-foreground">No result</p>;
+  return null;
 }
 
 function RunPreview({ run }: { run: RunNavigationEntry }) {
@@ -730,6 +781,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
         <span>{state.label}</span>
         <RunRowIndicators run={run} />
       </div>
+      <RunPreviewResult run={run} />
       {run.blocks
         .filter((block) => block.workingMessage)
         .map((block, index) => (

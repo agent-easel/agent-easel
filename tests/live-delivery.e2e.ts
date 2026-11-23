@@ -11,6 +11,7 @@ import {
 } from "./support/live.ts";
 import { manualRunView } from "./support/canvas.ts";
 import { findRun } from "./support/run-history.ts";
+import { applyRunState, prepareScenario } from "./support/scenarios.ts";
 import { elapse, openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const writes = expect.arrayContaining([expect.stringMatching(/^(POST|PUT|PATCH|DELETE) /)]);
@@ -64,6 +65,87 @@ test("an Agent's MCP report updates the open Run and the sidebar without polling
   // Longer than several former polling periods of Run, navigation and connection reads.
   await elapse(8_000);
   expect(await browserRequests(app)).toEqual([]);
+});
+
+test("an ending reached while the sidebar is open shows in the preview while stopping, as a badge once Settled, and after a reload", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 1000 });
+  const { id: run } = await prepareScenario(app, "ending-open");
+  await app.open(`/runs/${run}`);
+  const open = screen.getByRole("navigation", "Open Runs").getByRole("link", /Ending still open/);
+  const preview = browser.locator('[data-slot="tooltip-content"]');
+  await open.hover();
+  await expect(preview).toBeVisible();
+  await expect(preview).not.toContainText("Shipped");
+  await browser.keyboard.press("Escape");
+  await screen.getByRole("navigation", "Sidebar footer").hover();
+
+  // Act
+  await applyRunState(app, run, "Stop taken while the turn continues");
+  await fixture.scenarios.reportFrom({
+    id: run,
+    blockId: "worker",
+    exit: "Done",
+    message: "https://github.com/example/atlas/pull/44",
+  });
+
+  // Assert
+  await screen.getByRole("navigation", "Sidebar footer").hover();
+  await open.hover();
+  await expect(preview).toContainText("Shipped");
+  await expect(preview).toContainText("Stopping");
+  await expect(preview).not.toContainText("Output missing");
+  await expect(open).not.toContainText("Shipped");
+  await app.screenshot("ending-preview-while-stopping");
+  await browser.keyboard.press("Escape");
+  await applyRunState(app, run, "stopped turns ended");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  const settled = screen
+    .getByRole("navigation", "Settled Runs")
+    .getByRole("link", /Ending still open/);
+  await expect(settled).toContainText("Shipped");
+  await app.screenshot("ending-badge-settled");
+  await app.open(`/runs/${run}`);
+  await expect(settled).toContainText("Shipped");
+});
+
+test("a Settled Run that recorded Output missing shows its ending on the row, and Output missing only in the preview, after a reload", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 1000 });
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  const row = screen
+    .getByRole("navigation", "Settled Runs")
+    .getByRole("link", /Approved without the required release notes link/);
+  const preview = browser.locator('[data-slot="tooltip-content"]');
+
+  // Act
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  await row.hover();
+
+  // Assert
+  await expect(row).toContainText("Approved");
+  await expect(row).not.toContainText("Output missing");
+  await expect(preview).toContainText("Output missing");
+  await app.screenshot("ending-output-missing-preview");
+  await browser.evaluate(
+    "document.documentElement.style.setProperty('--factory-sidebar-width', '224px')",
+  );
+  const badge = browser.locator(
+    'a[id^="run-row-"]:has-text("Approved without") [data-slot="status-badge"]',
+  );
+  expect((await badge.boundingBox())!.width).toBeLessThanOrEqual(64);
+  await app.screenshot("ending-badge-narrow-sidebar");
 });
 
 test("a lost live connection keeps the last Run read-only, then resynchronizes without replaying commands", async ({

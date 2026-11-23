@@ -265,6 +265,18 @@ export async function seedScenario(
     await settled(context, first);
     return first.runId;
   }
+  if (scenario.state === "ending reached without output") {
+    const review = await resultReleasedToHumanReview(
+      context,
+      await resultReported(context, await workerAtWork(context, start), scenario.report),
+    );
+    requireSuccess(
+      await context.factory.answerHumanOccurrence(review.occurrence.id, { exitId: "approve" }),
+    );
+    await endingReached(context, review.runId);
+    await settled(context, review);
+    return review.runId;
+  }
   if (scenario.state === "Run worktree bound") return (await worktreeBound(context, start)).runId;
   if (scenario.state === "generated title applied")
     return generatedTitleRun(context, start, `${namespace.titlePrefix}${scenario.generatedTitle}`);
@@ -373,6 +385,7 @@ async function finishScenario(
         | "results released to a Condition"
         | "Join round forwarded, next round partial"
         | "ending reached"
+        | "ending reached without output"
         | "subflow closing"
         | "subflow returned"
         | "progress overdue"

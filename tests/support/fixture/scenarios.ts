@@ -867,6 +867,24 @@ export async function scenariosFixture(host: Host) {
         return first.runId;
       },
     ],
+    [
+      "ending-open",
+      async (keyNamespace) => {
+        const [first] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.endings,
+            "ending-open",
+            "UI worker · Ending still open",
+            "Ship the Atlas search ranking fix while another worker explores an alternative.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        return first.runId;
+      },
+    ],
     ["ending-stopping", (keyNamespace) => endingWithStop(keyNamespace, "stopping")],
     ["ending-unresolved", (keyNamespace) => endingWithStop(keyNamespace, "unresolved")],
     [

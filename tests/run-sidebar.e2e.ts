@@ -350,7 +350,7 @@ test("Run repository details retain branch ownership and PR links after reload",
   await app.screenshot("run-branches-and-pull-requests");
 });
 
-test("expanding Settled shows compact single-line rows without repository metadata", async ({
+test("expanding Settled shows muted rows with the Run meta line", async ({
   app,
   screen,
   browser,
@@ -367,10 +367,8 @@ test("expanding Settled shows compact single-line rows without repository metada
 
   // Assert
   await expect(row).toBeVisible();
-  const bounds = await row.boundingBox();
-  expect(bounds!.height).toBeLessThanOrEqual(36);
-  await expect(row).not.toContainText("copy/welcome");
-  await app.screenshot("sidebar-compact-settled");
+  await expect(row).toContainText("copy/welcome");
+  await app.screenshot("sidebar-settled-rows");
 });
 
 test("expanded Settled stays pinned below the open Runs instead of scrolling them away", async ({
@@ -382,9 +380,7 @@ test("expanded Settled stays pinned below the open Runs instead of scrolling the
   await browser.setViewport({ width: 1440, height: 700 });
   await app.open("/runs/new");
   const firstOpen = screen.getByRole("navigation", "Open Runs").getByRole("link").first();
-  const settledRow = screen
-    .getByRole("navigation", "Settled Runs")
-    .getByRole("link", /Demo · Settled · Clearer onboarding copy/);
+  const settledRow = screen.getByRole("navigation", "Settled Runs").getByRole("link").first();
 
   // Act
   await screen.getByRole("button", /^Settled \d+$/).tap();
@@ -421,7 +417,7 @@ test("on a short sidebar the pinned groups yield so an open Run stays fully visi
   await app.screenshot("sidebar-short-pinned-groups");
 });
 
-test("the Settled preview exposes repository details omitted from its compact row", async ({
+test("the Settled preview exposes the pull request details its row omits", async ({
   app,
   screen,
   browser,

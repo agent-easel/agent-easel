@@ -154,6 +154,7 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     ...(await createWaitFlows(factory, agents)),
     ...(await createConditionFlows(factory, agents)),
     endings: await createEndingsFlow(factory, agents),
+    approvedEnding: await createApprovedEndingFlow(factory, agents),
     joinReview: await createJoinFlow(factory, agents),
   };
 }
@@ -186,6 +187,39 @@ async function createJoinFlow(factory: Factory, agents: DemoAgents) {
       connection("results", JOIN_OUTPUT, "decision"),
       connection("decision", "request-changes", "worker"),
     ],
+  });
+}
+
+function createApprovedEndingFlow(factory: Factory, agents: DemoAgents) {
+  return saveFlow(factory, "Demo · Approve and ship", {
+    flowInput: flowInput(["worker"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 }),
+      humanStep("approval", "Approve release", { x: 700, y: 180 }),
+      conditionBlock("gate", "Release gate", [], { x: 1080, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "approval"),
+      connection("approval", "approve", "gate"),
+      {
+        sourceBlockId: "gate",
+        exitId: OTHERWISE,
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "approved",
+      },
+    ],
+    finish: {
+      position: { x: 1460, y: 180 },
+      endings: [
+        {
+          id: "approved",
+          name: "Approved",
+          description: "You approved the release.",
+          output: "required",
+          outputDescription: "The release notes link.",
+        },
+      ],
+    },
   });
 }
 

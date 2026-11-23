@@ -47,6 +47,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - `condition-arrivals`: Demo · Condition · Second approval ended at the gate
 - `join-partial`: Demo · Join · Second review round waits for accessibility
 - `ending-reached`: Demo · Ended · Shipped while an alternative was stopped
+- `ending-output-missing`: Demo · Ended · Approved without the required release notes link
 - `worktree`: Demo · Worktree · Search fix on its own branch
 - `working-report`: Demo · Monitoring · Agent is watching CI for the search fix
 - `continuation-sent`: Demo · Continuation · Spec prompt sent to the planning thread
@@ -73,6 +74,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
   **Approved** ending with **Stop acknowledged** and **Release pending** together. The
   `subflow-returned` Run shows **Released** and an **Acknowledged** recipient at **Release notes**.
   These scenarios use controlled Stop behavior.
+- The `ending-output-missing` Run is approved by you without a message on a Flow whose Finish ending requires output, so its result records **Output missing**, and it settles with reason `finish`.
 - The `join-partial` Run forwarded its first Join round to **Your decision**, which requested changes; on the second
   pass Code review arrived with a different exit than in round 1, rechecked at once (queued as **+1** for round 3), and
   Accessibility review is still working, so round 2 waits. No seeded Run shows a Join integrity Problem, for the same

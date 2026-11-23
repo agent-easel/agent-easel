@@ -1,5 +1,9 @@
 import { Fragment } from "react";
-import type { RunPullRequest, RunWorkerRepository } from "@t3-factory/contracts";
+import type {
+  RunNavigationEntry,
+  RunPullRequest,
+  RunWorkerRepository,
+} from "@t3-factory/contracts";
 import { ExternalLink, GitBranch, GitPullRequest } from "lucide-react";
 import { TextLink } from "@/components/ui/text-link";
 
@@ -15,6 +19,11 @@ export function repositorySummary(workers: readonly RunWorkerRepository[]) {
     branches: [...branches].sort(([a], [b]) => a.localeCompare(b)),
     pullRequests: [...prs.values()],
   };
+}
+
+export function runBranches(run: Pick<RunNavigationEntry, "boundBranch" | "repositories">) {
+  const reported = repositorySummary(run.repositories).branches.map(([branch]) => branch);
+  return [...new Set(run.boundBranch ? [run.boundBranch, ...reported] : reported)];
 }
 
 /** A branch name that wraps only after "/" or "-", never inside a word, unless one word alone is

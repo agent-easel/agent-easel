@@ -531,7 +531,7 @@ fixed Human exits their old exits were mapped to.
   line says **Stop unresolved** and the existing settlement Problem provides the next action. Before a result it reads **No result
   yet** while the Run can still reach an ending, and **No result** once it was settled or archived without one. A Run whose
   captured Flow has no endings, including every Run started before endings existed, shows no Result section. The sidebar
-  Run row, the Run list and Chat control do not show the result. Selecting the Finish block shows **Finish** with
+  Run row shows only the ending name, as described under [Run list](#run-list), and its hover preview the ending and **Output missing**; Chat control and Run-list surfaces outside the sidebar do not show the result. Selecting the Finish block shows **Finish** with
   **Reached · *ending* · *time*** and the **Reached** tag, the result under **Result · ending *name***, which workers reaching
   it stopped (**Ended the Run**), each captured ending with **Reached *time*** or **Not reached** (neutral before any
   ending is reached) and its output, the incoming wires, and the Finish block id, Flow revision and delivery under
@@ -612,18 +612,26 @@ client's clock. Active rows show the project icon and name, execution indicator 
 Run activity, followed by the title. The execution indicator shows activity, never state: a spinner while an Agent works, a
 pause while it waits, and the neutral **Idle** ring when nothing works but something is pending; it never becomes a Problem
 glyph, since the **Problem** or **Needs input** chip shows the state. Idle is an icon state only, not a Run status. The [Run number](../GLOSSARY.md) appears as a `#N` pill after the project name in
-active rows, before the title in compact rows and palette results, and first in the Run top bar meta line; Runs without a number show none.
-A third line appears for known worker branches, linked PRs or attention:
-one branch shows its name, several show a count, and a PR icon shows the number of distinct linked PRs.
+active and Settled rows, before the title in palette results, and first in the Run top bar meta line; Runs without a number show none.
+A third line appears for known branches, linked PRs or attention:
+a branch is the Run's bound worktree branch or a worker-reported one, each shown once. One branch shows its name, several show a count, and a PR icon shows the number of distinct linked PRs.
 Branches and PRs are independent; neither requires the other and missing data has no placeholder or Flow fallback.
 The age advances from execution changes, accepted reports, Human answers, attention appearing, handoff release
 and settling or returning to Active, not unchanged observations, viewing or renaming. It does not change creation-based ordering.
 Missing projects keep readable history; an unavailable open Run stays open.
 
+A Settled row that recorded a Run result shows the reached ending's name as a neutral flag badge on its meta line, after the
+Run number and before **Not in T3**. The badge is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, with an ellipsis, and the Project name truncates first.
+Where **Not in T3** also shows at the narrow width, the badge collapses to the flag. An Active row never shows the badge, including one that is stopping or
+whose stop is unresolved, and a row never shows **Output missing**; that appears in the row's accessible description. The accessible name announces each fact once,
+for example "Settled, ended Merged, not in T3". Rows and the preview read the same recorded result, so first load, live navigation and a reload agree.
+
 Hovering or focusing a row opens one information card to the right, aligned to the row and constrained to
 the viewport. It shows the full title, project, captured Flow, a Trigger-started Run's
 [origin](#starting-from-a-trigger), execution/attention, working messages and known repository metadata, even when the
-title fits. Opening a row menu dismisses and blocks the card; hovering
+title fits. Below the execution line a Result line shows the flag, the full ending name and the **Output missing** tag when
+flagged, never the output text. It also shows while a Run is **Stopping** or **Stop unresolved**. A Settled Run without a result shows **No result**
+only when its captured Flow has endings; an Active Run without a result shows no Result line. Opening a row menu dismisses and blocks the card; hovering
 menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission, or an Agent to review in T3 (see
@@ -633,7 +641,7 @@ menu items never opens a row preview.
   **Not in T3** tag on its row and after the Project in the meta line. Its saved Run stays listed, and the Run page
   hides T3 thread links. An Active Run with finished work and nothing pending shows the green Finished check without
   a badge, and Progress says it is waiting for T3 to confirm workers finished.
-- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with the project icon, number and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. With no Runs, the list is one muted line, **No Runs yet**, the search field stays, and both groups stay hidden. Opening a Run in a collapsed group expands that group and scrolls its selected row into view. Archived Runs are not listed.
+- **Settled** (collapsed, with a count) holds Settled Runs as muted rows with the same meta line as Active rows, plus the ending badge; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. With no Runs, the list is one muted line, **No Runs yet**, the search field stays, and both groups stay hidden. Opening a Run in a collapsed group expands that group and scrolls its selected row into view. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
 - **Needs you (N)** filters the list to exactly the Runs the desktop
   [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input

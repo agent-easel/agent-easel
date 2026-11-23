@@ -441,6 +441,9 @@ export interface RunNavigationEntry {
   /** Null for a Run that no Trigger started; see `RunDetail.origin`. */
   readonly origin: RunOrigin | null;
   readonly repositories: readonly RunWorkerRepository[];
+  readonly boundBranch: string | null;
+  readonly result: Pick<RunResult, "endingName" | "outputMissing"> | null;
+  readonly flowHasEndings: boolean;
   /**
    * Orders entries with equal `createdAt` (ascending): the Start request key, which the
    * composer takes from the draft's id so its Run keeps the draft's place.
