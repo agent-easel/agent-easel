@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { assertOk } from "./support/domain-setup.ts";
 import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
-import { controlledExecution } from "./support/scenarios.ts";
+import { continuationStep, controlledExecution, flowInput } from "./support/scenarios.ts";
 import { composition } from "./support/subflow.ts";
 
 type Client = Awaited<ReturnType<typeof factoryMcpClient>>;
@@ -82,4 +82,33 @@ it("an import of a document that is not a Factory export fails with the shared r
   // Assert
   expect(reviewed.isError).toBe(true);
   expect(toolReply(reviewed)).toMatchObject({ code: "validation" });
+});
+
+it("an export that the MCP import could not accept is refused with a pointer to Studio", async (context) => {
+  // Arrange
+  const { factory, client } = await exportedRelease(context);
+  const quotes = '"'.repeat(120_000);
+  const large = assertOk(
+    await factory.createFlow({
+      name: "Large",
+      graph: {
+        blocks: Array.from({ length: 8 }, (_, index) =>
+          continuationStep(`step-${index}`, `Step ${index}`, quotes),
+        ),
+        connections: [],
+        flowInput: flowInput(),
+      },
+      workspace: { mode: "checkout" },
+    }),
+  );
+
+  // Act
+  const exported = await callTool(client, "factory_export_definition", { flowId: large.id });
+
+  // Assert
+  expect(exported.isError).toBe(true);
+  expect(toolReply(exported)).toMatchObject({
+    code: "too_large",
+    next: expect.stringContaining("Studio"),
+  });
 });
