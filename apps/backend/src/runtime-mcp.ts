@@ -18,6 +18,11 @@ import {
   runLifecycleTools,
   type RunLifecycleOperations,
 } from "./run-lifecycle-tools.ts";
+import {
+  callRunTitleSettingTool,
+  runTitleSettingTools,
+  type RunTitleSettingOperations,
+} from "./run-title-setting-tools.ts";
 import { callTriggerTool, triggerTools, type TriggerToolOperations } from "./trigger-tools.ts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
@@ -246,6 +251,7 @@ export function runtimeMcpHandler(
     LaunchOperations &
     RunReadOperations &
     RunLifecycleOperations &
+    RunTitleSettingOperations &
     TriggerToolOperations,
 ): (request: Request) => Promise<Response> {
   const handler = createMcpHandler(
@@ -261,6 +267,7 @@ export function runtimeMcpHandler(
           ...launchTools,
           ...runReadTools,
           ...runLifecycleTools,
+          ...runTitleSettingTools,
           ...triggerTools,
         ],
       }));
@@ -273,6 +280,7 @@ export function runtimeMcpHandler(
           (await callLaunchTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
           (await callRunLifecycleTool(definitions, name, args)) ??
+          (await callRunTitleSettingTool(definitions, name, args)) ??
           (await callTriggerTool(definitions, name, args)) ?? {
             isError: true,
             content: [{ type: "text", text: `Unknown tool ${name}.` }],

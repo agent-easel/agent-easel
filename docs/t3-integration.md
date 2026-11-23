@@ -431,6 +431,15 @@ Each success reply carries the Run's resulting `lifecycle` (`active`, `snoozed`,
 
 These tools are not offline reads: Settle reads workers in T3, Archive asks T3 to interrupt them and Rename syncs worker titles. Their confirmation guidance is advice in the descriptions, not a server check, and the lifecycle authority is part of the Widened local trust described under [Authoring tools](#authoring-tools).
 
+## Run title setting tools
+
+Any harness session with Factory MCP registered can read and change [Generate Run titles](runs.md#run-title-generation) without a Block id, so a user can ask a T3 conversation to switch the title model to a cheaper one:
+
+- `factory_get_run_title_setting` is host-local and inspect-only: it reads Factory's stored setting and never contacts T3. The reply has `enabled`, `model` (provider instance, model and options, or `null`) and the latest `diagnostic`, as Settings → Run titles shows them.
+- `factory_update_run_title_setting` takes `enabled` and `model` and calls the same operation as `PUT /api/settings/run-titles`, so enabling checks the choice against the live T3 catalog. The agent picks a provider instance, model and options from `factory_get_agent_capabilities`. A rejected choice returns the `validation` error with its issues and leaves the setting unchanged; success returns the saved setting.
+
+The change is installation-wide and follows the [capture rules](runs.md#run-title-generation): Runs already started keep what they captured, and every Run started afterwards while the setting is on spends provider budget on one title thread. The tool description separates this change from the read, and the confirmation it asks for is guidance rather than a server check. Under the [widened local trust](#factory-mcp-and-block-ids) any local caller may change the setting; approved clients still only read it over REST.
+
 ## Trigger tools
 
 Any harness session with Factory MCP registered can inspect, set up, enable, check and remove [Triggers](studio.md#triggers) without a Block id. Only `factory_run_trigger_check` starts Runs immediately; enabling and some saves let the schedule start Runs later, and every tool description says which of these a tool can do. The inspection tools start nothing:

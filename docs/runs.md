@@ -147,7 +147,8 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
 provider instance and model, with options, that the live T3 catalog offers (a provider whose harness cannot report to
 Factory is refused); an unknown instance, model or option is rejected and the setting is unchanged. Turning it off keeps
 the chosen model. Only the Factory host changes it (`PUT /api/settings/run-titles`); approved clients read it, with its
-latest diagnostic (`GET /api/settings/run-titles`).
+latest diagnostic (`GET /api/settings/run-titles`). Any local session with Factory MCP reads and changes it through the
+[Run title setting tools](t3-integration.md#run-title-setting-tools), which call the same operations.
 
 **Settings → Run titles** holds the setting. The host can switch generation On before choosing a model.
 The Worker rows unlock, and the header shows **Not saved yet** until the host chooses a provider.
