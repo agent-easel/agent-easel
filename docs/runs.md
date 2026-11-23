@@ -955,6 +955,8 @@ working report, every Human step is answered, no Wait arrival is pending, no del
 a fresh read finds every worker thread finished in T3. Never-visited branches need not run. A report or T3 completion alone keeps
 the Run Active. T3 reads are not an atomic cutoff, so direct T3 activity can arrive just before the Run settles; settling does not
 certify result quality or one reviewed revision.
+A desktop installation can notify when a Run settles automatically or at a Finish ending; see
+[Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
 
 **Settle** settles an Active or Snoozed Run manually and ends its automatic work; every entry point (row menu, Run detail,
 shortcut and desktop menu) uses the same rules. When fresh T3 reads confirm every bound worker thread finished, it settles at

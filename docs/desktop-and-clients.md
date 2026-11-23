@@ -145,6 +145,19 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   **Run details in notifications** adds the project, Run title and Block name; message,
   report or question text and paths never appear. Notifications play no sound and the Dock icon
   never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Run finished**: with **Notify when a Run finishes** on, each time a Run newly becomes Settled
+  automatically or at a Finish ending, one notification is posted for that Settled cycle. A
+  manual Settle never notifies, whether it was made here, from another client, or from another
+  client while this installation was offline. A Settle on a Run that already has a Run result
+  counts as reaching its Finish ending and notifies, and so does a Finish settlement that
+  completes after Retry settlement. Nothing is posted while a settlement is stopping or
+  unresolved. A Run that returns to Active and settles again notifies again. By default the
+  title is "A Run has settled"; **Run details in notifications** makes it
+  "<Project> · <Run title>". The body is "Settled at Finish ending “X”" or "Settled": it never
+  names the settlement kind and never includes prompt, report or output text or paths. [Chat
+  control](chat-control.md) still reports "Settled manually." for its own notices; the desktop
+  deliberately stays silent for manual settlement. Completion notifications leave the Dock badge
+  and **Needs you** unchanged, and are not withdrawn because the Run has no pending matter.
 - **Snooze and Settle hold**: a [Snoozed](runs.md#snooze-and-woke) Run is silent. Matters
   pending or appearing while it is Snoozed never notify, also after **Restore**, which returns it
   to the badge without a notification; new attention that wakes it (Woke) notifies as usual.
@@ -157,18 +170,24 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   resolve only in part is withdrawn and not replaced; the rest stay on the badge and never
   notify again. Withdrawing never makes a matter notify again.
 - **Focused window**: while any Factory window of this installation is focused, no notification
-  is shown. Matters that became pending meanwhile count as seen and never notify later, also
-  after switching to another app.
+  is shown. Matters that became pending and Runs that settled meanwhile count as seen and never
+  notify later, also after switching to another app.
 - **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
-  **Notifications** (on), **Dock badge** (on) and **Run details in notifications** (off).
+  **Notifications** (on), **Notify when a Run finishes** (off), **Dock badge** (on) and **Run
+  details in notifications** (off). While **Notifications** is off, **Notify when a Run
+  finishes** keeps its value but is disabled.
   They are stored with the desktop settings, apply immediately and are never synchronized
   through the server, so each Mac is tuned on its own. While **Notifications** is off nothing is
   shown; turning it on shows what is still pending, at most one notification per Run.
+  Turning **Notifications** or **Notify when a Run finishes** on announces no Run that is
+  already Settled.
 - **Permission**: macOS asks the first time a notification would be shown, never at launch and
   never while it would be suppressed. Factory reads the permission without a window at startup,
   before each delivery, when the app becomes active or the Mac wakes, and about every 60
   seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
-  A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  A newly noticed grant announces no Run that is already Settled, except the completion that
+  prompted the request: it is posted after **Allow** if its Run is still in the same Settled
+  cycle. A denial leaves the badge working and Factory never asks again. Settings shows the permission
   status and, after a denial, **Open System Settings**, which opens this app's page in System
   Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
@@ -176,12 +195,20 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   the fresh snapshot catches up with at most one notification per Run for matters still pending
   that were never announced; matters that appeared and resolved meanwhile are never reported. A
   notification is recorded as attempted before it is posted, so a crash can lose a banner but
-  never repeats one; one macOS refused is retried only at the next catch-up.
+  never repeats one; one macOS refused is retried only at the next catch-up. Catch-up also posts
+  one notification for each Run still Settled, automatically or at a Finish ending, in a cycle
+  that was neither announced nor counted as seen; Runs that returned to Active or were Archived
+  meanwhile stay silent, and no summary is posted. Cycles from a period when **Notify when a Run
+  finishes** or **Notifications** was off are never replayed. The first ready snapshot of a server
+  with no completion history, after an upgrade or **Forget server**, counts every Settled Run as
+  seen; a switch turned on or a grant noticed while no snapshot is ready makes the next ready
+  snapshot do the same. Completion records are kept until the Run leaves Settled or is Archived.
 - **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
   now: with the Block selected while exactly one matter the notification announced is still
   pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
   Archived Run opens its read-only history and a Run that no longer exists shows that it is
-  unavailable. A notification clicked after Quit relaunches Factory and opens its Run once the
+  unavailable. A completion notification opens the Run overview with no Block selected. A
+  notification clicked after Quit relaunches Factory and opens its Run once the
   connection is ready, behind the connection gate. A Dock click with no window open opens the
   single waiting Run (its Block selected when it has one matter), the Run list's
   [Needs you (N)](runs.md#run-list) filter when several wait, or the last view when none does; with

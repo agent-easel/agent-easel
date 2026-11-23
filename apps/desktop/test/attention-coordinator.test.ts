@@ -933,3 +933,405 @@ it("a Dock click with no window and nothing waiting reopens the last view", asyn
   // Assert
   expect(route).toBeNull();
 });
+
+const finished = { notifyRunFinished: true };
+
+function settledRun(
+  id: string,
+  settledCycle: number,
+  settledReason: RunNavigationEntry["settledReason"],
+  fields: Partial<RunNavigationEntry> = {},
+): RunNavigationEntry {
+  return run(id, [], {
+    lifecycle: "settled",
+    settledCycle,
+    settledReason,
+    endingName: settledReason === "finish" ? "Shipped" : null,
+    ...fields,
+  });
+}
+
+it("a Run that settles automatically shows one silent banner that says only that it settled", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [settledRun("a", 7, "automatic", { title: "Rotate /Users/owner/secrets.txt" })],
+  });
+
+  // Assert
+  expect(port.shown).toStrictEqual([
+    {
+      id: expect.any(String),
+      groupId: expect.any(String),
+      title: "A Run has settled",
+      body: "Settled",
+    },
+  ]);
+});
+
+it("with Run details shown a Finish settlement names the project, the Run and the ending", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), {
+    ...finished,
+    showRunDetails: true,
+  });
+  await feed.deliver({ fresh: true, rows: [run("a", [], { title: "Release notes" })] });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [settledRun("a", 7, "finish", { title: "Release notes" })],
+  });
+
+  // Assert
+  expect(port.shown.map(({ title, body }) => ({ title, body }))).toStrictEqual([
+    { title: "Project · Release notes", body: "Settled at Finish ending “Shipped”" },
+  ]);
+});
+
+it("a manual Settle never notifies", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "manual")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("a manual Settle made from another client while offline stays silent at catch-up", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.notReady();
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "manual")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("nothing is posted while a settlement is stopping or unresolved, even with an earlier cycle on the row", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", []), run("b", [])] });
+  const earlier = { settledCycle: 3, settledReason: "automatic", endingName: "Shipped" } as const;
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [
+      run("a", [], { ...earlier, settlement: "stopping" }),
+      run("b", [], { ...earlier, settlement: "unresolved" }),
+    ],
+  });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("a Finish settlement that completes after Retry settlement notifies", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [], { settlement: "unresolved" })] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 9, "finish")] });
+
+  // Assert
+  expect(port.shown.map(({ body }) => body)).toStrictEqual(["Settled at Finish ending “Shipped”"]);
+});
+
+it("each Settled cycle notifies once, and a new cycle on the same Run notifies again", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await feed.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 12, "automatic")] });
+
+  // Assert
+  expect(port.shown).toHaveLength(2);
+});
+
+it("with Notify when a Run finishes off a settled Run never notifies", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("with Notifications off a settled Run never notifies, although Notify when a Run finishes is on", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), {
+    ...finished,
+    notifications: false,
+  });
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("a Run that settled while a Factory window was focused never notifies after switching away", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  coordinator.focus(true);
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  coordinator.focus(false);
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("turning Notify when a Run finishes on replays no Run that is already Settled, and a later one notifies", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic"), run("b", [])] });
+  await coordinator.configure({ ...defaultSettings, ...finished });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [settledRun("a", 7, "automatic"), settledRun("b", 8, "finish")],
+  });
+
+  // Assert
+  expect(port.shown.map(({ body }) => body)).toStrictEqual(["Settled at Finish ending “Shipped”"]);
+});
+
+it("turning Notifications back on replays no Run that settled while they were off", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await coordinator.configure({ ...defaultSettings, ...finished, notifications: false });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  await coordinator.configure({ ...defaultSettings, ...finished });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("a permission grant noticed later replays no Run that is already Settled", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort("denied"), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  port.permission = "granted";
+
+  // Act
+  await coordinator.checkPermission();
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("the first ready snapshot of a server with no completion history announces no Run that is already Settled", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("turning Notify when a Run finishes on while offline makes the next ready snapshot the baseline", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await coordinator.configure(defaultSettings);
+  await feed.notReady();
+  await coordinator.configure({ ...defaultSettings, ...finished });
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("the completion that asked for permission is delivered once after Allow", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(
+    c,
+    recordingPort("undetermined"),
+    finished,
+  );
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  port.grant("granted");
+  await coordinator.close();
+
+  // Assert
+  expect({ requests: port.requests, bodies: port.shown.map(({ body }) => body) }).toStrictEqual({
+    requests: 1,
+    bodies: ["Settled"],
+  });
+});
+
+it("the completion that asked for permission is dropped when its Run left that Settled cycle before Allow", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(
+    c,
+    recordingPort("undetermined"),
+    finished,
+  );
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await feed.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
+
+  // Act
+  port.grant("granted");
+  await coordinator.close();
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
+});
+
+it("after a restart each Run still Settled in an unannounced cycle notifies once, and Runs back to Active or Archived stay silent", async (c) => {
+  // Arrange
+  const profile = await installation(c, recordingPort(), finished);
+  await profile.feed.deliver({
+    fresh: true,
+    rows: [run("a", []), run("b", []), run("c", []), run("d", [])],
+  });
+  await profile.restart();
+
+  // Act
+  await profile.feed.deliver({
+    fresh: true,
+    rows: [
+      settledRun("a", 7, "automatic"),
+      settledRun("b", 8, "finish"),
+      run("c", [], { settledCycle: 9, settledReason: "automatic" }),
+    ],
+  });
+
+  // Assert
+  expect(profile.port.shown.map(({ body }) => body)).toStrictEqual([
+    "Settled",
+    "Settled at Finish ending “Shipped”",
+  ]);
+});
+
+it("a delivered completion is not repeated after a restart", async (c) => {
+  // Arrange
+  const profile = await installation(c, recordingPort(), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await profile.restart();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toHaveLength(1);
+});
+
+it("a completion whose notifier never answered before a restart is not repeated", async (c) => {
+  // Arrange
+  const profile = await installation(c, recordingPort(), finished);
+  profile.port.answer = () => new Promise(() => undefined);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await profile.restart();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toHaveLength(1);
+});
+
+it("a refused completion is retried at the next catch-up while its cycle still qualifies", async (c) => {
+  // Arrange
+  const profile = await installation(c, recordingPort(), finished);
+  profile.port.answer = () => Promise.resolve({ kind: "failed" });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await profile.restart();
+  profile.port.answer = () => Promise.resolve({ kind: "accepted" });
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toHaveLength(2);
+});
+
+it("a delivered completion is not withdrawn for having no pending matter", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [settledRun("a", 7, "automatic"), run("b", [matter("b1")])],
+  });
+
+  // Assert
+  expect({ shown: port.shown.length, withdrawn: port.withdrawn }).toStrictEqual({
+    shown: 2,
+    withdrawn: [],
+  });
+});
+
+it("clicking a completion notification opens the Run overview with no Block selected", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "finish")] });
+  const completion = port.shown.at(-1)!;
+
+  // Act
+  const route = await coordinator.activate(completion.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("a completion clicked at a relaunch opens its Run overview from the kept ledger record", async (c) => {
+  // Arrange
+  const profile = await installation(c, recordingPort(), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await profile.restart();
+  const route = profile.coordinator.activate(profile.port.shown[0]!.id);
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(await route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});

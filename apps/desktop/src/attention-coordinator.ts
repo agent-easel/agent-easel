@@ -17,6 +17,10 @@ import type {
 import {
   AttentionLedger,
   type AppearanceState,
+  type AttentionNotificationRecord,
+  type CompletionLedger,
+  type CompletionNotificationRecord,
+  type CompletionRecord,
   type DeferReason,
   type NotificationRecord,
   type ServerLedger,
@@ -184,8 +188,10 @@ function withdrawable(ledger: ServerLedger, rows: readonly RunNavigationEntry[])
   const eligible = new Set(rows.flatMap((row) => mattersNeedingOwner(row).map(({ id }) => id)));
   return withdrawWhere(
     ledger,
-    ({ matters }) =>
-      matters.some(({ id }) => !pending.has(id)) || !matters.some(({ id }) => eligible.has(id)),
+    (notification) =>
+      notification.kind !== "completion" &&
+      (notification.matters.some(({ id }) => !pending.has(id)) ||
+        !notification.matters.some(({ id }) => eligible.has(id))),
   );
 }
 
@@ -227,6 +233,8 @@ function notificationRoute(
   notification: NotificationRecord,
   rows: readonly RunNavigationEntry[],
 ): DesktopRoute {
+  if (notification.kind === "completion")
+    return { kind: "run", runId: notification.runId, blockId: null };
   const announced = new Set(notification.matters.map(({ id }) => id));
   const pending = (
     rows.find((row) => row.id === notification.runId)?.attention.matters ?? []
@@ -307,6 +315,177 @@ function intend(
   });
 }
 
+type Completion = { readonly row: RunNavigationEntry; readonly cycle: number };
+
+const announcedReasons = new Set<RunNavigationEntry["settledReason"]>(["automatic", "finish"]);
+
+function announcedCompletion(row: RunNavigationEntry): Completion | null {
+  if (row.lifecycle !== "settled" || row.settlement !== null || row.settledCycle === null)
+    return null;
+  return announcedReasons.has(row.settledReason) ? { row, cycle: row.settledCycle } : null;
+}
+
+const unaccounted = (record: CompletionRecord | undefined, cycle: number, retry: boolean) =>
+  record?.cycle !== cycle || (retry && record.state === "definitely-failed");
+
+function observeCompletions(
+  ledger: ServerLedger,
+  rows: readonly RunNavigationEntry[],
+  catchUp: boolean,
+  held: ReadonlyMap<string, number>,
+): Completion[] {
+  const completions: CompletionLedger = (ledger.completions ??= {
+    baselinePending: true,
+    runs: {},
+  });
+  const settled = new Set(rows.filter((row) => row.lifecycle === "settled").map(({ id }) => id));
+  for (const runId of Object.keys(completions.runs))
+    if (!settled.has(runId)) delete completions.runs[runId];
+  const due = rows
+    .map(announcedCompletion)
+    .filter((completion) => completion !== null)
+    .filter(({ row, cycle }) => unaccounted(completions.runs[row.id], cycle, catchUp));
+  if (!completions.baselinePending) return due;
+  completions.baselinePending = false;
+  const released = due.filter(({ row, cycle }) => held.get(row.id) === cycle);
+  const releasedRuns = new Set(released.map(({ row }) => row.id));
+  for (const row of rows) {
+    if (row.lifecycle !== "settled" || row.settledCycle === null || releasedRuns.has(row.id))
+      continue;
+    if (unaccounted(completions.runs[row.id], row.settledCycle, true))
+      completions.runs[row.id] = { cycle: row.settledCycle, state: "seen" };
+  }
+  return released;
+}
+
+function completionContent(
+  row: RunNavigationEntry,
+  showRunDetails: boolean,
+): Pick<AlertNotification, "title" | "body"> {
+  return {
+    title: showRunDetails
+      ? [row.project.title, row.title].filter(Boolean).join(" · ")
+      : "A Run has settled",
+    body:
+      row.settledReason === "finish" && row.endingName !== null
+        ? `Settled at Finish ending “${row.endingName}”`
+        : "Settled",
+  };
+}
+
+function intendCompletions(
+  ledger: ServerLedger,
+  server: string,
+  completions: readonly Completion[],
+  showRunDetails: boolean,
+): AlertNotification[] {
+  return completions.map(({ row, cycle }) => {
+    const id = randomUUID();
+    ledger.completions!.runs[row.id] = { cycle, state: "attempted-unknown", notification: id };
+    ledger.notifications[id] = {
+      kind: "completion",
+      runId: row.id,
+      cycle,
+      postedAt: new Date().toISOString(),
+      withdrawn: false,
+    };
+    return { id, groupId: groupOf(server), ...completionContent(row, showRunDetails) };
+  });
+}
+
+function seeCompletions(ledger: ServerLedger, completions: readonly Completion[]) {
+  for (const { row, cycle } of completions)
+    ledger.completions!.runs[row.id] = { cycle, state: "seen" };
+}
+
+const announcesCompletions = (settings: DesktopAlertSettings) =>
+  settings.notifications && settings.notifyRunFinished;
+
+type Decision = {
+  readonly retry: boolean;
+  readonly held: ReadonlyMap<string, number>;
+  readonly withheld: AppearanceState | null;
+  readonly settings: DesktopAlertSettings;
+};
+
+function decide(
+  ledger: ServerLedger,
+  server: string,
+  rows: readonly RunNavigationEntry[],
+  { retry, held, withheld, settings }: Decision,
+) {
+  const announcements = observe(ledger, rows, retry);
+  const completions = announcesCompletions(settings)
+    ? observeCompletions(ledger, rows, retry, held)
+    : [];
+  if (withheld?.state === "foreground-accounted") seeCompletions(ledger, completions);
+  const waitsForPrompt =
+    withheld?.state === "deferred" && withheld.reason === "permission-undetermined";
+  return {
+    due: announcements.length > 0 || completions.length > 0,
+    withdrawn: withdrawable(ledger, rows),
+    shown: withheld
+      ? account(ledger, announcements, withheld)
+      : [
+          ...intend(ledger, server, announcements, settings.showRunDetails),
+          ...intendCompletions(ledger, server, completions, settings.showRunDetails),
+        ],
+    waiting: waitsForPrompt ? completions : [],
+  };
+}
+
+const answered = (id: string, outcome: ShowOutcome) =>
+  outcome.kind === "accepted"
+    ? ({ state: "delivered", notification: id } as const)
+    : ({ state: "definitely-failed", notification: id } as const);
+
+function recordCompletionOutcome(
+  ledger: ServerLedger,
+  id: string,
+  notification: CompletionNotificationRecord,
+  outcome: ShowOutcome,
+) {
+  const record = ledger.completions?.runs[notification.runId];
+  if (record?.state !== "attempted-unknown" || record.notification !== id) return;
+  ledger.completions!.runs[notification.runId] = { cycle: record.cycle, ...answered(id, outcome) };
+}
+
+function recordAttentionOutcome(
+  ledger: ServerLedger,
+  id: string,
+  notification: AttentionNotificationRecord | undefined,
+  outcome: ShowOutcome,
+) {
+  for (const { id: matterId, revision } of notification?.matters ?? []) {
+    const record = ledger.matters[matterId];
+    const appearance = record?.appearances[revision];
+    if (appearance?.state !== "attempted-unknown" || appearance.notification !== id) continue;
+    record!.appearances[revision] = answered(id, outcome);
+  }
+}
+
+function unpostCompletion(
+  ledger: ServerLedger,
+  notification: CompletionNotificationRecord,
+  state: AppearanceState | null,
+) {
+  const runs = ledger.completions!.runs;
+  if (state) runs[notification.runId] = { cycle: notification.cycle, state: "seen" };
+  else delete runs[notification.runId];
+}
+
+function unpostAttention(
+  ledger: ServerLedger,
+  notification: AttentionNotificationRecord | undefined,
+  state: AppearanceState | null,
+) {
+  for (const { id: matterId, revision } of notification?.matters ?? []) {
+    const appearances = ledger.matters[matterId]!.appearances;
+    if (state) appearances[revision] = state;
+    else delete appearances[revision];
+  }
+}
+
 export class AttentionCoordinator {
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
@@ -317,6 +496,10 @@ export class AttentionCoordinator {
   private requesting = false;
   private focused = false;
   private held: HeldClick | null = null;
+  private heldCompletions: {
+    readonly server: string;
+    readonly cycles: Map<string, number>;
+  } | null = null;
   /**
    * Changes synchronously with every selection, lost readiness and revocation, before their
    * queued work runs, so an announcement can tell that its state ended while it awaited.
@@ -372,6 +555,7 @@ export class AttentionCoordinator {
     this.owedCatchUp = false;
     // A click held for another server never routes into this one.
     if (this.held && this.held.server !== server) this.drop();
+    if (this.heldCompletions?.server !== server) this.heldCompletions = null;
     void this.enqueue(async () => {
       this.latest = null;
       this.showBadge();
@@ -473,9 +657,13 @@ export class AttentionCoordinator {
   configure(settings: DesktopAlertSettings): Promise<void> {
     return this.enqueue(async () => {
       const enabled = settings.notifications && !this.settings.notifications;
+      const completionsEnabled =
+        announcesCompletions(settings) && !announcesCompletions(this.settings);
       this.settings = settings;
       this.showBadge();
-      if (enabled && this.ready) await this.announce(this.ready, true);
+      if (!announcesCompletions(settings)) this.heldCompletions = null;
+      if (completionsEnabled) await this.ledger.requireCompletionBaseline();
+      if ((enabled || completionsEnabled) && this.ready) await this.announce(this.ready, enabled);
     });
   }
 
@@ -540,16 +728,17 @@ export class AttentionCoordinator {
     const catchUp = requested || this.owedCatchUp;
     const granted = await this.observePermission();
     const withheld = this.withheld(this.observed);
-    const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {
-      const announcements = observe(ledger, rows, catchUp || granted);
-      return {
-        due: announcements.length > 0,
-        withdrawn: withdrawable(ledger, rows),
-        shown: withheld
-          ? account(ledger, announcements, withheld)
-          : intend(ledger, server, announcements, this.settings.showRunDetails),
-      };
-    });
+    const held = this.releasable(server);
+    const { due, shown, withdrawn, waiting } = await this.ledger.change(server, (ledger) =>
+      decide(ledger, server, rows, {
+        retry: catchUp || granted,
+        held,
+        withheld,
+        settings: this.settings,
+      }),
+    );
+    if (held.size > 0) this.heldCompletions = null;
+    if (waiting.length > 0) this.hold(server, waiting);
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
     if (this.epoch !== epoch) return this.abandon(server, shown, catchUp || granted);
     if (catchUp || granted) this.owedCatchUp = false;
@@ -573,6 +762,17 @@ export class AttentionCoordinator {
     if (this.selection?.server === server) this.owedCatchUp ||= catchUp;
   }
 
+  private releasable(server: string): ReadonlyMap<string, number> {
+    if (this.observed !== "granted" || this.heldCompletions?.server !== server) return new Map();
+    return this.heldCompletions.cycles;
+  }
+
+  private hold(server: string, completions: readonly Completion[]) {
+    if (this.heldCompletions?.server !== server)
+      this.heldCompletions = { server, cycles: new Map() };
+    for (const { row, cycle } of completions) this.heldCompletions.cycles.set(row.id, cycle);
+  }
+
   private post(server: string, notification: AlertNotification) {
     void this.port.show(notification).then(
       (outcome) => this.settle(server, notification.id, outcome),
@@ -594,15 +794,9 @@ export class AttentionCoordinator {
       }
       const late = await this.ledger.change(server, (ledger) => {
         const notification = ledger.notifications[id];
-        for (const { id: matterId, revision } of notification?.matters ?? []) {
-          const record = ledger.matters[matterId];
-          const appearance = record?.appearances[revision];
-          if (appearance?.state !== "attempted-unknown" || appearance.notification !== id) continue;
-          record!.appearances[revision] =
-            outcome.kind === "accepted"
-              ? { state: "delivered", notification: id }
-              : { state: "definitely-failed", notification: id };
-        }
+        if (notification?.kind === "completion")
+          recordCompletionOutcome(ledger, id, notification, outcome);
+        else recordAttentionOutcome(ledger, id, notification, outcome);
         return outcome.kind === "accepted" && notification?.withdrawn === true;
       });
       if (late) this.port.withdraw([id]);
@@ -620,11 +814,9 @@ export class AttentionCoordinator {
   ) {
     await this.ledger.change(server, (ledger) => {
       for (const { id } of notifications) {
-        for (const { id: matterId, revision } of ledger.notifications[id]?.matters ?? []) {
-          const appearances = ledger.matters[matterId]!.appearances;
-          if (state) appearances[revision] = state;
-          else delete appearances[revision];
-        }
+        const notification = ledger.notifications[id];
+        if (notification?.kind === "completion") unpostCompletion(ledger, notification, state);
+        else unpostAttention(ledger, notification, state);
         delete ledger.notifications[id];
       }
     });
@@ -635,7 +827,10 @@ export class AttentionCoordinator {
     const previous = this.observed;
     this.observed = await this.port.permission();
     if (this.observed !== previous) this.permissionChanged(this.observed);
-    return this.observed === "granted" && previous !== "granted";
+    if (this.observed === "denied") this.heldCompletions = null;
+    const granted = this.observed === "granted" && previous !== "granted";
+    if (granted) await this.ledger.requireCompletionBaseline();
+    return granted;
   }
 
   /** Asked at the first delivery, never at launch; a grant catches up on what waited. */

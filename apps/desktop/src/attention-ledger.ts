@@ -33,7 +33,8 @@ export interface MatterRecord {
 }
 
 /** What a posted notification represents, for withdrawal and routing after a relaunch. */
-export interface NotificationRecord {
+export interface AttentionNotificationRecord {
+  readonly kind?: undefined;
   readonly runId: string;
   /** The Block when every represented matter is about the same Block. */
   readonly blockId: string | null;
@@ -43,9 +44,33 @@ export interface NotificationRecord {
   withdrawn: boolean;
 }
 
+export interface CompletionNotificationRecord {
+  readonly kind: "completion";
+  readonly runId: string;
+  readonly cycle: number;
+  readonly postedAt: string;
+  withdrawn: boolean;
+}
+
+export type NotificationRecord = AttentionNotificationRecord | CompletionNotificationRecord;
+
+export type CompletionState =
+  | { readonly state: "seen" }
+  | { readonly state: "attempted-unknown"; readonly notification: string }
+  | { readonly state: "delivered"; readonly notification: string }
+  | { readonly state: "definitely-failed"; readonly notification: string };
+
+export type CompletionRecord = CompletionState & { readonly cycle: number };
+
+export interface CompletionLedger {
+  baselinePending: boolean;
+  runs: Record<string, CompletionRecord>;
+}
+
 export interface ServerLedger {
   matters: Record<string, MatterRecord>;
   notifications: Record<string, NotificationRecord>;
+  completions?: CompletionLedger;
 }
 
 interface LedgerFile {
@@ -55,7 +80,7 @@ interface LedgerFile {
 
 const fileName = "desktop-attention.json";
 
-const notifiedBy = (appearance: AppearanceState) =>
+const notifiedBy = (appearance: AppearanceState | CompletionState) =>
   "notification" in appearance ? appearance.notification : null;
 
 /** Resolved history is only needed while its process can still act on it. */
@@ -65,13 +90,16 @@ function withoutResolved(ledger: ServerLedger): ServerLedger {
       Object.values(record.appearances).some((appearance) => appearance.state !== "resolved"),
     ),
   );
-  const referenced = new Set(
-    Object.values(matters).flatMap((record) => Object.values(record.appearances).map(notifiedBy)),
-  );
+  const referenced = new Set([
+    ...Object.values(matters).flatMap((record) =>
+      Object.values(record.appearances).map(notifiedBy),
+    ),
+    ...Object.values(ledger.completions?.runs ?? {}).map(notifiedBy),
+  ]);
   const notifications = Object.fromEntries(
     Object.entries(ledger.notifications).filter(([id]) => referenced.has(id)),
   );
-  return { matters, notifications };
+  return { ...ledger, matters, notifications };
 }
 
 function parseLedger(raw: unknown): LedgerFile | undefined {
@@ -120,6 +148,13 @@ export class AttentionLedger {
   async forget(server: string): Promise<void> {
     await this.write(() => {
       delete this.data.servers[server];
+    });
+  }
+
+  async requireCompletionBaseline(): Promise<void> {
+    await this.write(() => {
+      for (const ledger of Object.values(this.data.servers))
+        if (ledger.completions) ledger.completions.baselinePending = true;
     });
   }
 

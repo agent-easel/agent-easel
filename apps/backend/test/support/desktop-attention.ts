@@ -1,4 +1,5 @@
 import type { TestContext } from "@effect/vitest";
+import type { DesktopAlertSettings } from "@t3-factory/contracts/desktop-bridge";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +63,11 @@ function recordingAlerts() {
  * One desktop installation's coordinator, following `selection` with its own subscription.
  * `follow` and `forget` act as the shell does on a selection change and on Forget server.
  */
-export async function desktopAttention(context: TestContext, selection: AttentionSelection) {
+export async function desktopAttention(
+  context: TestContext,
+  selection: AttentionSelection,
+  settings: Partial<DesktopAlertSettings> = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-attention-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const alerts = recordingAlerts();
@@ -72,6 +77,7 @@ export async function desktopAttention(context: TestContext, selection: Attentio
       notifyRunFinished: false,
       dockBadge: true,
       showRunDetails: false,
+      ...settings,
     },
     permissionChanged: () => undefined,
   });
