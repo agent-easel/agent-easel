@@ -199,6 +199,10 @@ export class AttentionLedger {
     return this.data.servers[server]?.notifications[id];
   }
 
+  follows(server: string): boolean {
+    return Object.hasOwn(this.data.servers, server);
+  }
+
   /** Applies `change` to the server's ledger and persists it, or leaves everything unchanged. */
   async change<A>(server: string, change: (ledger: ServerLedger) => A): Promise<A> {
     return this.write(() =>

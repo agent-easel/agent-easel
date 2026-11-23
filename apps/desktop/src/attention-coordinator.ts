@@ -439,7 +439,7 @@ function decide(
           ...intend(ledger, server, announcements, settings.showRunDetails),
           ...intendCompletions(ledger, server, completions, settings.showRunDetails),
         ],
-    trigger: waitsForPrompt && announcements.length === 0 ? completions[0] : undefined,
+    trigger: waitsForPrompt ? completions[0] : undefined,
   };
 }
 
@@ -448,29 +448,15 @@ const answered = (id: string, outcome: ShowOutcome) =>
     ? ({ state: "delivered", notification: id } as const)
     : ({ state: "definitely-failed", notification: id } as const);
 
-function recordCompletionOutcome(
-  ledger: ServerLedger,
-  id: string,
-  notification: CompletionNotificationRecord,
-  outcome: ShowOutcome,
-) {
-  const record = ledger.completions?.runs[notification.runId];
-  if (record?.state !== "attempted-unknown" || record.notification !== id) return;
-  ledger.completions!.runs[notification.runId] = { cycle: record.cycle, ...answered(id, outcome) };
-}
-
-function recordAttentionOutcome(
-  ledger: ServerLedger,
-  id: string,
-  notification: AttentionNotificationRecord | undefined,
-  outcome: ShowOutcome,
-) {
-  for (const { id: matterId, revision } of notification?.matters ?? []) {
-    const record = ledger.matters[matterId];
-    const appearance = record?.appearances[revision];
-    if (appearance?.state !== "attempted-unknown" || appearance.notification !== id) continue;
-    record!.appearances[revision] = answered(id, outcome);
-  }
+function recordOutcome(ledger: ServerLedger, id: string, outcome: ShowOutcome) {
+  const runs = ledger.completions?.runs ?? {};
+  for (const [runId, record] of Object.entries(runs))
+    if (record.state === "attempted-unknown" && record.notification === id)
+      runs[runId] = { cycle: record.cycle, ...answered(id, outcome) };
+  for (const record of Object.values(ledger.matters))
+    for (const [revision, appearance] of Object.entries(record.appearances))
+      if (appearance.state === "attempted-unknown" && appearance.notification === id)
+        record.appearances[revision] = answered(id, outcome);
 }
 
 function unpostCompletion(
@@ -537,7 +523,9 @@ export class AttentionCoordinator {
   ): Promise<AttentionCoordinator> {
     const ledger = await AttentionLedger.open(directory, new Set(await port.delivered()));
     const permission = await port.permission();
-    await ledger.notePermission(permission);
+    await ledger.notePermission(permission).catch((error: unknown) => {
+      process.emitWarning(`Desktop attention could not be recorded: ${String(error)}`);
+    });
     return new AttentionCoordinator(
       ledger,
       port,
@@ -599,12 +587,16 @@ export class AttentionCoordinator {
         });
       },
       revoked: () => {
-        if (current()) this.epoch++;
-        return this.enqueue(async () => {
-          if (!current()) return;
+        const ended = current();
+        if (ended) {
           this.selection = null;
-          this.latest = null;
+          this.epoch++;
+          this.owedCatchUp = false;
           this.drop();
+        }
+        return this.enqueue(async () => {
+          if (!ended) return;
+          this.latest = null;
           this.showBadge();
           await this.withdrawAll(selection!.server, { forget: true });
         });
@@ -799,23 +791,10 @@ export class AttentionCoordinator {
   private settle(server: string, id: string, outcome: ShowOutcome | null) {
     void this.enqueue(async () => {
       const posted = this.ledger.notification(server, id);
-      // Its server was forgotten meanwhile: withdraw it again and record no history for it.
-      if (!posted) {
-        if (outcome?.kind !== "failed") this.port.withdraw([id]);
-        return;
-      }
-      if (!outcome) {
-        if (posted.withdrawn) this.port.withdraw([id]);
-        return;
-      }
-      const late = await this.ledger.change(server, (ledger) => {
-        const notification = ledger.notifications[id];
-        if (notification?.kind === "completion")
-          recordCompletionOutcome(ledger, id, notification, outcome);
-        else recordAttentionOutcome(ledger, id, notification, outcome);
-        return outcome.kind === "accepted" && notification?.withdrawn === true;
-      });
-      if (late) this.port.withdraw([id]);
+      if (outcome && this.ledger.follows(server))
+        await this.ledger.change(server, (ledger) => recordOutcome(ledger, id, outcome));
+      const stillWanted = posted !== undefined && !posted.withdrawn;
+      if (outcome?.kind !== "failed" && !stillWanted) this.port.withdraw([id]);
     });
   }
 

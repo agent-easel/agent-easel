@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunAttentionMatter, RunNavigationEntry } from "@t3-factory/contracts";
@@ -84,6 +84,7 @@ async function installation(
   context.onTestFinished(() => coordinator.close());
   return {
     port,
+    directory,
     get coordinator() {
       return coordinator;
     },
@@ -1288,7 +1289,7 @@ it("a Run that settles while the permission prompt is open stays silent after Al
   expect(port.shown.map(({ title }) => title)).toStrictEqual(["Project · Run a"]);
 });
 
-it("a permission prompt that a pending matter asked for announces no completion after Allow", async (c) => {
+it("a completion that asked for permission together with a pending matter is delivered once after Allow", async (c) => {
   // Arrange
   const { port, coordinator, feed } = await installation(
     c,
@@ -1306,7 +1307,52 @@ it("a permission prompt that a pending matter asked for announces no completion 
   await coordinator.close();
 
   // Assert
+  expect({ requests: port.requests, titles: port.shown.map(({ title }) => title) }).toStrictEqual({
+    requests: 1,
+    titles: ["A Run needs your input", "A Run has settled"],
+  });
+});
+
+it("a permission prompt that only a pending matter asked for announces no completion that arrived during it", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(
+    c,
+    recordingPort("undetermined"),
+    finished,
+  );
+  await feed.deliver({ fresh: true, rows: [run("a", []), run("b", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")]), run("b", [])] });
+  await feed.deliver({
+    fresh: false,
+    rows: [run("a", [matter("a1")]), settledRun("b", 8, "automatic")],
+  });
+
+  // Act
+  port.grant("granted");
+  await coordinator.close();
+
+  // Assert
   expect(port.shown.map(({ title }) => title)).toStrictEqual(["A Run needs your input"]);
+});
+
+it("a later Settled cycle of the Run that asked for permission stays silent after Allow", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(
+    c,
+    recordingPort("undetermined"),
+    finished,
+  );
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await feed.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 9, "automatic")] });
+
+  // Act
+  port.grant("granted");
+  await coordinator.close();
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
 });
 
 it("after a restart each Run still Settled in an unannounced cycle notifies once, and Runs back to Active or Archived stay silent", async (c) => {
@@ -1733,4 +1779,212 @@ it("a surviving completion banner clicked to launch Factory opens its Run", asyn
     blockId: null,
     revealOverview: true,
   });
+});
+
+it("a revocation still queued when another server is selected keeps its completion from opening the Run after reapproval", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  void profile.feed.revoked();
+  profile.coordinator.select("other");
+  const approved = profile.coordinator.select(server);
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("a revocation still queued when the credential is replaced keeps its completion from opening the Run", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  void profile.feed.revoked();
+  const replaced = profile.coordinator.select(server);
+  await replaced.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("a completion posted after the same server is approved again opens its Run", async (c) => {
+  // Arrange
+  const { profile } = await postedCompletion(c);
+  await profile.feed.revoked();
+  const approved = profile.coordinator.select(server);
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+  await approved.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
+  await approved.deliver({ fresh: false, rows: [settledRun("a", 9, "automatic")] });
+
+  // Act
+  const route = await profile.coordinator.activate(profile.port.shown[1]!.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null, revealOverview: true });
+});
+
+const answeredLater = (port: ReturnType<typeof recordingPort>) => {
+  const answer = { now: (_outcome: ShowOutcome | Error) => undefined as void };
+  port.answer = () =>
+    new Promise((resolve, reject) => {
+      answer.now = (outcome) => (outcome instanceof Error ? reject(outcome) : resolve(outcome));
+    });
+  return answer;
+};
+
+const answerRecorded = () => new Promise((resolve) => setImmediate(resolve));
+
+it("a completion refused after its selection was revoked is retried once the same server is approved again", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  await feed.revoked();
+  answer.now({ kind: "failed" });
+  await answerRecorded();
+  port.answer = () => Promise.resolve({ kind: "accepted" });
+  const approved = coordinator.select(server);
+
+  // Act
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toHaveLength(2);
+});
+
+it("an attention notification refused after its selection was revoked is retried once the same server is approved again", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  await feed.revoked();
+  answer.now({ kind: "failed" });
+  await answerRecorded();
+  port.answer = () => Promise.resolve({ kind: "accepted" });
+  const approved = coordinator.select(server);
+
+  // Act
+  await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect(port.shown).toHaveLength(2);
+});
+
+it("a completion accepted after its selection was revoked is withdrawn again, stays counted and opens only the window", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c, recordingPort(), finished);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  const id = port.shown[0]!.id;
+  await feed.revoked();
+  answer.now({ kind: "accepted" });
+  await answerRecorded();
+  const approved = coordinator.select(server);
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  const route = await coordinator.activate(id);
+
+  // Assert
+  expect({ route, shown: port.shown.length, withdrawn: port.withdrawn }).toStrictEqual({
+    route: null,
+    shown: 1,
+    withdrawn: [id, id],
+  });
+});
+
+it("an attention notification whose delivery became unknown after revocation stays counted and opens only the window", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed } = await installation(c);
+  const answer = answeredLater(port);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  const id = port.shown[0]!.id;
+  await feed.revoked();
+  answer.now(new Error("click listeners could not be restored"));
+  await answerRecorded();
+  const approved = coordinator.select(server);
+  await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Act
+  const route = await coordinator.activate(id);
+
+  // Assert
+  expect({ route, shown: port.shown.length }).toStrictEqual({ route: null, shown: 1 });
+});
+
+const unwritableLedger = async (directory: string) => {
+  const blocker = join(directory, "desktop-attention.json.next");
+  await mkdir(blocker);
+  return () => rm(blocker, { recursive: true });
+};
+
+it("Factory starts with a changed permission although its attention ledger cannot be written", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const profile = await installation(c, recordingPort("denied"), {
+    notifications: false,
+    dockBadge: false,
+  });
+  await unwritableLedger(profile.directory);
+  profile.port.permission = "granted";
+
+  // Act
+  await profile.restart();
+
+  // Assert
+  expect(profile.coordinator.permission).toBe("granted");
+});
+
+it("a permission grant that startup could not record replays no Run that is already Settled once the ledger can be written", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const profile = await installation(c, recordingPort("denied"), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  const writable = await unwritableLedger(profile.directory);
+  profile.port.permission = "granted";
+  await profile.restart();
+  await writable();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(profile.port.shown).toStrictEqual([]);
+});
+
+it("a permission grant that a re-check could not record replays no Run that is already Settled once the ledger can be written", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed, directory } = await installation(
+    c,
+    recordingPort("denied"),
+    finished,
+  );
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  const writable = await unwritableLedger(directory);
+  port.permission = "granted";
+  await coordinator.checkPermission();
+  await writable();
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([]);
 });
