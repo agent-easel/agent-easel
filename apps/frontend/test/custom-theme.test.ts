@@ -390,3 +390,70 @@ it("applying a theme with an unreadable mapped color while storage is unavailabl
   expect(notices[0]?.title).toBe("Custom colors applied for this tab only");
   expect(notices[1]?.title).toBe("1 color Factory cannot read was ignored");
 });
+
+it("low-contrast dark borders and inputs are lifted to stay visible on muted, card, canvas and sidebar surfaces", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "Vesper",
+    appearance: "dark",
+    colors: {
+      canvas: "oklch(0.173042 0 0)",
+      surfaceRaised: "oklch(0.200193 0 0)",
+      border: "oklch(0.22645 0 0)",
+      input: "oklch(0.22645 0 0)",
+      sidebar: "oklch(0.173042 0 0)",
+      text: "oklch(1 0 0)",
+      textMuted: "oklch(0.705757 0 0)",
+      placeholder: "oklch(0.431281 0 0)",
+      focus: "oklch(0.86889 0.087746 60.679)",
+      accent: "oklch(0.86889 0.087746 60.679)",
+      accentForeground: "oklch(0 0 0)",
+      sidebarForeground: "oklch(1 0 0)",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.dark.kind === "custom");
+  const c = result.presentation.modes.dark.colors;
+  expect(contrastRatio(c.border, c.background)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.muted)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.card)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.sidebar)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c["sidebar-border"], c.sidebar)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.input, c.muted)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.input, c.card)).toBeGreaterThanOrEqual(1.3);
+});
+
+it("low-contrast light borders and inputs are darkened to stay visible on muted, card, canvas and sidebar surfaces", () => {
+  // Arrange
+  const json = JSON.stringify({
+    name: "SoftPaper",
+    appearance: "light",
+    colors: {
+      canvas: "#ffffff",
+      surfaceRaised: "#ffffff",
+      sidebar: "#f7f7f8",
+      border: "#f4f4f5",
+      input: "#f4f4f5",
+    },
+  });
+
+  // Act
+  const result = parseCustomThemeJson(json);
+
+  // Assert
+  assert(result.ok);
+  assert(result.presentation.modes.light.kind === "custom");
+  const c = result.presentation.modes.light.colors;
+  expect(contrastRatio(c.border, c.background)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.muted)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.card)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.border, c.sidebar)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c["sidebar-border"], c.sidebar)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.input, c.muted)).toBeGreaterThanOrEqual(1.3);
+  expect(contrastRatio(c.input, c.card)).toBeGreaterThanOrEqual(1.3);
+});
