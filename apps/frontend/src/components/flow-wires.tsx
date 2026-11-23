@@ -22,7 +22,9 @@ import {
   type FlowWire,
 } from "../flow-graph.ts";
 import { type WireRoute } from "../flow-layout-elk.ts";
-import { wireReaches, type Rect } from "../canvas-culling.ts";
+import { reaches, wireReaches, type Rect } from "../canvas-culling.ts";
+import { connectionLabel } from "../connection-label.ts";
+import { WireLabelChip } from "./wire-label-chip.tsx";
 
 /** Selecting and deleting a wire. */
 type WireSelection = {
@@ -31,10 +33,6 @@ type WireSelection = {
   readonly onDelete: (wire: FlowWire) => void;
 };
 
-/**
- * How a canvas presents its wires: curved and selectable, or orthogonal. Neither draws labels;
- * `label` names the wires for assistive technology.
- */
 export type WirePresentation =
   | ({ readonly kind: "curved"; readonly label: string } & WireSelection)
   | { readonly kind: "orthogonal"; readonly label: string };
@@ -73,6 +71,7 @@ type Wire = {
   readonly path: WireRoute;
   /** The exit's name for its accessible name; Flow input and Continuation wires are unnamed. */
   readonly exit: string | null;
+  readonly chip: ReturnType<typeof connectionLabel>;
   readonly source: string;
   readonly target: string;
 };
@@ -126,6 +125,7 @@ export function exitWires(
     const wire = connectionWire(connection);
     const key = wireRouteKey(wire.source, connection.targetBlockId, connection.targetEndingId);
     const routed = routes?.get(key);
+    const exit = geometry.exit(source, connection.exitId);
     const from = geometry.exitPoint(source, connection.exitId);
     const fromBottom = source.position.y + geometry.blockHeight(source);
     return [
@@ -133,10 +133,10 @@ export function exitWires(
         key,
         wire,
         path: routed ?? routedPath(kind, from, fromBottom, target),
-        exit:
-          source.kind === "continuation"
-            ? null
-            : geometry.exit(source, connection.exitId)?.name || "exit",
+        exit: source.kind === "continuation" ? null : exit?.name || "exit",
+        chip: connectionLabel(
+          exit ?? { id: connection.exitId, name: "", source: "agent", unavailable: "removed" },
+        ),
         source: source.name || "Unnamed block",
         target: target.name,
       },
@@ -176,6 +176,7 @@ function flowInputWires(
         wire: { source: { kind: "flow-input" }, targetBlockId },
         path: routed ?? routedPath(kind, from, from.y, blockEnd(geometry, target, incomingIndex)),
         exit: null,
+        chip: connectionLabel(null),
         source: "Flow input",
         target: target.name || "Unnamed block",
       },
@@ -414,6 +415,80 @@ function WireStrokes({
   );
 }
 
+const DELETE_SIZE = 28;
+const DELETE_GAP = 14;
+
+function chipObstacles(geometry: Geometry, visible: Rect, deleteAt: Point | null | undefined) {
+  const margin = 6;
+  const boxes = geometry.boxes().filter((box) => reaches(visible, box, margin));
+  if (deleteAt) {
+    boxes.push({
+      x: deleteAt.x - DELETE_SIZE / 2,
+      y: deleteAt.y - DELETE_GAP - DELETE_SIZE,
+      width: DELETE_SIZE,
+      height: DELETE_SIZE,
+    });
+  }
+  return boxes.map(({ x, y, width, height }) => ({
+    x: x - margin,
+    y: y - margin,
+    width: width + 2 * margin,
+    height: height + 2 * margin,
+  }));
+}
+
+function renderWireLabel(
+  wire: Wire | null | undefined,
+  geometry: Geometry,
+  visible: Rect,
+  scale: number,
+  deleteAt: Point | null | undefined,
+) {
+  if (!wire?.chip) return null;
+  return (
+    <WireLabelChip
+      key={wire.key}
+      label={wire.chip}
+      route={wire.path}
+      scale={scale}
+      visible={visible}
+      obstacles={chipObstacles(geometry, visible, deleteAt)}
+    />
+  );
+}
+
+function WireOverlays({
+  selected,
+  previewedWire,
+  wires,
+  geometry,
+  visible,
+  scale,
+  selection,
+}: {
+  selected: Wire | null | undefined;
+  previewedWire: string | null;
+  wires: readonly Wire[];
+  geometry: Geometry;
+  visible: Rect;
+  scale: number;
+  selection: WireSelection | null;
+}) {
+  const previewed = wires.find((wire) => wire.key === previewedWire);
+  const deleteAt = selected?.path.label;
+  return (
+    <>
+      {renderWireLabel(previewed, geometry, visible, scale, deleteAt)}
+      {selected !== previewed && renderWireLabel(selected, geometry, visible, scale, deleteAt)}
+      {selected && deleteAt && (
+        <DeleteConnection at={deleteAt} onDelete={() => selection?.onDelete(selected.wire)} />
+      )}
+    </>
+  );
+}
+
+const MARKER_BY_KIND = { curved: "arrow", orthogonal: "execution-arrow" } as const;
+
 export function FlowWires({
   graph,
   geometry,
@@ -424,6 +499,8 @@ export function FlowWires({
   previewedWire,
   finish,
   area,
+  visible,
+  scale,
   nested,
 }: {
   graph: CanvasGraph;
@@ -437,10 +514,12 @@ export function FlowWires({
   emphasized: CanvasNode | null;
   previewedWire: string | null;
   area: Rect | null;
+  visible: Rect;
+  scale: number;
   nested?: boolean;
 }) {
   const selection = presentation.kind === "curved" ? presentation : null;
-  const marker = selection ? "arrow" : "execution-arrow";
+  const marker = MARKER_BY_KIND[presentation.kind];
   const current = selection?.selected ?? null;
   const [focused, setFocused] = useState<string | null>(null);
   const { inputs, connections, wires } = useVisibleWires({
@@ -478,12 +557,15 @@ export function FlowWires({
           marker={marker}
         />
       </svg>
-      {selected?.path.label && (
-        <DeleteConnection
-          at={selected.path.label}
-          onDelete={() => selection?.onDelete(selected.wire)}
-        />
-      )}
+      <WireOverlays
+        selected={selected}
+        previewedWire={previewedWire}
+        wires={wires}
+        geometry={geometry}
+        visible={visible}
+        scale={scale}
+        selection={selection}
+      />
     </>
   );
 }
@@ -558,7 +640,7 @@ function DeleteConnection({
           size="icon-sm"
           aria-label="Delete connection"
           className="absolute z-5 -translate-x-1/2 -translate-y-full text-destructive shadow-panel hover:text-destructive"
-          style={{ left: at.x, top: at.y - 14 }}
+          style={{ left: at.x, top: at.y - DELETE_GAP, width: DELETE_SIZE, height: DELETE_SIZE }}
           onClick={onDelete}
         >
           <Trash2 aria-hidden />

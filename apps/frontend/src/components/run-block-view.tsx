@@ -27,7 +27,7 @@ import {
 } from "./execution-canvas.tsx";
 import { ExecutionStateBadge } from "./execution-state.tsx";
 import { clockTime } from "../time-format.ts";
-import { exitDisplayName } from "./flow-block.tsx";
+import { exitDisplayName } from "../connection-label.ts";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
 import { RequestReport, ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";

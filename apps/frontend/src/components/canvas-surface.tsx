@@ -1048,12 +1048,14 @@ function SurfaceLayer({
   surface,
   view,
   area,
+  visible,
   surfaceGraph,
   startPan,
 }: {
   surface: CanvasSurfaceProps;
   view: CanvasView;
   area: Rect | null;
+  visible: Rect;
   surfaceGraph: SurfaceGraph;
   startPan: (event: PointerEvent<HTMLElement>) => void;
 }) {
@@ -1100,6 +1102,8 @@ function SurfaceLayer({
         previewedWire={rootPreview?.wire ?? null}
         finish={finish !== undefined}
         area={area}
+        visible={visible}
+        scale={view.scale}
       />
       <GesturePreview graph={graph} geometry={drawn} gesture={gesture} />
       {children}
@@ -1142,6 +1146,8 @@ function SurfaceLayer({
           graph,
           surface.subflowPreviews,
           area,
+          visible,
+          view.scale,
           preview.target,
         )}
     </div>
@@ -1157,6 +1163,40 @@ function containsRect(outer: Rect, inner: Rect) {
   );
 }
 
+function visibleBridges(group: SubflowPreview, local: Rect) {
+  const entry = group.incomingEntry;
+  const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
+  const showEntry = reaches(local, {
+    x: -group.offsetX,
+    y: innerEntry.y,
+    width: entry.x,
+    height: 0,
+  });
+  const exits = group.endingRoutes.filter(({ from, to }) =>
+    reaches(local, {
+      x: from.x - group.offsetX,
+      y: from.y - group.offsetY,
+      width: to.x - from.x,
+      height: 0,
+    }),
+  );
+  if (!showEntry && !exits.length) return null;
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
+    >
+      {showEntry && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
+      {exits.map(({ endingId, from, to }) => (
+        <path
+          key={endingId}
+          d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function NestedScopeLayer({
   surface,
   nested,
@@ -1165,6 +1205,8 @@ function NestedScopeLayer({
   offsetX,
   offsetY,
   local,
+  visible,
+  scale,
   target,
 }: {
   surface: CanvasSurfaceProps;
@@ -1174,6 +1216,8 @@ function NestedScopeLayer({
   offsetX: number;
   offsetY: number;
   local: Rect;
+  visible: Rect;
+  scale: number;
   target: PreviewTarget | null;
 }) {
   const { innerGraph, innerGeometry, innerPreviews } = group;
@@ -1185,44 +1229,15 @@ function NestedScopeLayer({
   const input = reaches(local, innerGeometry.flowInputBox);
   const finish = reaches(local, innerGeometry.finishBox);
   const wire = nestedWiresReach(innerGraph, innerGeometry, local);
-  const entry = group.incomingEntry;
-  const innerEntry = { x: entry.x - group.offsetX, y: entry.y - group.offsetY };
-  const entryBridge = reaches(local, {
-    x: -group.offsetX,
-    y: innerEntry.y,
-    width: entry.x,
-    height: 0,
-  });
-  const exitBridges = group.endingRoutes.filter(({ from, to }) =>
-    reaches(local, {
-      x: from.x - group.offsetX,
-      y: from.y - group.offsetY,
-      width: to.x - from.x,
-      height: 0,
-    }),
-  );
-  if (!input && !finish && !wire && !blocks.length && !entryBridge && !exitBridges.length)
-    return null;
+  const bridges = visibleBridges(group, local);
+  if (!input && !finish && !wire && !blocks.length && !bridges) return null;
   return (
     <div
       data-canvas-scope={path}
       className="pointer-events-none absolute [&>article]:pointer-events-auto"
       style={{ left: offsetX, top: offsetY, width: 1, height: 1 }}
     >
-      {(entryBridge || exitBridges.length > 0) && (
-        <svg
-          aria-hidden
-          className="pointer-events-none absolute overflow-visible fill-none stroke-muted-foreground/70 stroke-[1.5]"
-        >
-          {entryBridge && <path d={`M${-group.offsetX},${innerEntry.y} H${innerEntry.x}`} />}
-          {exitBridges.map(({ endingId, from, to }) => (
-            <path
-              key={endingId}
-              d={`M${from.x - group.offsetX},${from.y - group.offsetY} H${to.x - group.offsetX}`}
-            />
-          ))}
-        </svg>
-      )}
+      {bridges}
       {wire && (
         <FlowWires
           graph={innerGraph}
@@ -1234,6 +1249,8 @@ function NestedScopeLayer({
           previewedWire={preview?.wire ?? null}
           finish
           area={local}
+          visible={visible}
+          scale={scale}
           nested
         />
       )}
@@ -1281,6 +1298,8 @@ function drawNestedScopes(
   root: CanvasGraph,
   previews: ReadonlyMap<string, SubflowPreview>,
   area: Rect,
+  visible: Rect,
+  scale: number,
   target: PreviewTarget | null,
 ) {
   const layers: ReactNode[] = [];
@@ -1311,6 +1330,8 @@ function drawNestedScopes(
           offsetX={offsetX}
           offsetY={offsetY}
           local={{ ...area, x: area.x - offsetX, y: area.y - offsetY }}
+          visible={{ ...visible, x: visible.x - offsetX, y: visible.y - offsetY }}
+          scale={scale}
           target={target}
         />,
       );
@@ -1532,7 +1553,8 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     if (pause) stopFollowing();
   }, [pause, stopFollowing]);
   const nestedReveal = props.nested?.reveal;
-  const area = useDrawWindow(view, useSurfaceSize(surface));
+  const size = useSurfaceSize(surface);
+  const area = useDrawWindow(view, size);
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
   useRevealBounds({
     nestedReveal,
@@ -1557,6 +1579,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         surface={{ ...props, subflowPreviews }}
         view={view}
         area={area}
+        visible={shownRect(view, size ?? { width: 0, height: 0 })}
         surfaceGraph={surfaceGraph}
         startPan={viewport.startPan}
       />

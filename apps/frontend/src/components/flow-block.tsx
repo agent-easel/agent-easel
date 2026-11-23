@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { TextCursorInput } from "lucide-react";
 import type { ConditionRule, FlowBlock } from "@t3-factory/contracts";
-import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { cn } from "@/lib/utils";
-import { BLOCK_KINDS, isSingleOutput } from "../block-kind.ts";
+import { BLOCK_KINDS } from "../block-kind.ts";
 
 const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   agent: "text-link",
@@ -14,16 +13,6 @@ const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   condition: "text-muted-foreground",
   subflow: "text-muted-foreground",
 };
-
-/** An exit's name as rows show it; a Wait's or Continuation's single output has none, so it shows
- * `singleOutputLabel`. */
-export function exitDisplayName(
-  exit: Pick<EffectiveExit, "name" | "source">,
-  singleOutputLabel = "",
-) {
-  if (isSingleOutput(exit)) return singleOutputLabel;
-  return exit.name || (exit.source === "condition" ? "Unnamed output" : "Unnamed exit");
-}
 
 /** One formatter for every row: `toLocaleString` builds a new one per call, which thousands of
  * Condition rows make costly. */

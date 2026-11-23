@@ -41,10 +41,6 @@ export const WAIT_OUTPUT: BlockExit = {
   messageRequired: false,
 };
 
-/**
- * A Continuation's single output. It has no name: wires from it carry no label, and a worker may
- * finish the Continuation without naming an exit. Its message is the forwarded response.
- */
 export const CONTINUATION_EXIT: BlockExit = {
   id: "output",
   name: "",

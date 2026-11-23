@@ -3,7 +3,7 @@ import type {
   ConditionArrivalPage,
   RunDetail,
 } from "@t3-factory/contracts";
-import { exitDisplayName } from "./components/flow-block.tsx";
+import { exitDisplayName } from "./connection-label.ts";
 import { capturedExits } from "./flow-graph.ts";
 
 /** Arrival numbers and counts can reach 9,007,199,254,740,991, so they read with separators. */

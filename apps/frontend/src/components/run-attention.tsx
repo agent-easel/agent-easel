@@ -35,7 +35,7 @@ import { reviewInT3Since } from "../run-block-state.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
 import { clockTime, dayAndTime } from "../time-format.ts";
-import { exitDisplayName } from "./flow-block.tsx";
+import { exitDisplayName } from "../connection-label.ts";
 import { Disclosure } from "./disclosure.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";

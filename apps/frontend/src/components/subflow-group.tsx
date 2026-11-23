@@ -1,3 +1,4 @@
+import { connectionLabel } from "../connection-label.ts";
 import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Workflow } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowDraft } from "@t3-factory/contracts";
@@ -15,13 +16,7 @@ import {
 } from "../subflow-preview.ts";
 import { StudioLink } from "./app-link.tsx";
 import { FinishEndingList, finishIdentity, finishShowsRows } from "./finish-block.tsx";
-import {
-  blockIdentity,
-  conditionRoutes,
-  exitDisplayName,
-  flowInputIdentity,
-  IdentityRows,
-} from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, flowInputIdentity, IdentityRows } from "./flow-block.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 type Geometry = ReturnType<typeof createCanvasGeometry>;
@@ -192,12 +187,13 @@ function PreviewBlockCard({
               </span>
             )}
             <span className="flex-1" />
-            <span className="truncate text-xs text-muted-foreground">
-              {exit.source === "wait"
-                ? "after the wait"
-                : exit.source === "continuation"
-                  ? "response"
-                  : exitDisplayName(exit, "output")}
+            <span
+              className={cn(
+                "truncate text-xs text-muted-foreground",
+                exit.unavailable && "line-through",
+              )}
+            >
+              {connectionLabel(exit).text}
             </span>
           </li>
         ))}
@@ -457,7 +453,7 @@ export function SubflowGroup({
         >
           {exit.unavailable && (
             <span className="rounded bg-card/90 px-1 text-2xs text-attention line-through">
-              {exitDisplayName(exit)}
+              {connectionLabel(exit).text}
             </span>
           )}
         </div>

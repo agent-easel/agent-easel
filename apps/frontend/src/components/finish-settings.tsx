@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { fieldAria } from "./field-state.ts";
-import { exitDisplayName } from "./flow-block.tsx";
+import { exitDisplayName } from "../connection-label.ts";
 import { fieldProblem, type BlockIssue } from "./flow-readiness.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { ScrollPane } from "./screen-layout.tsx";

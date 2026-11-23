@@ -380,7 +380,7 @@ Prompts, execution settings and exits belong to the Agent, and two blocks may sh
 one override is its optional [Revisit instruction](../GLOSSARY.md#revisit-instruction): two blocks sharing a reviewer Agent can play different loop roles, such as a single check and a
 correction loop, without duplicating the Agent and letting the copies drift apart. It is deliberately narrow: there is no first-visit block prompt and no execution, model or exit-definition
 override, so any other variant is a new or duplicated Agent. Clicking empty canvas, ✕ or Escape closes the panel. Blocks show kind, Agent, an input port and one port per exit with the exit's
-name in the secondary text colour; neither wires nor exit rows carry type or `exit → recipient` labels, and multiple incoming connections each anchor to their own
+name in the secondary text colour, and multiple incoming connections each anchor to their own
 input port (Flow input first, at least 18 px apart).
 
 An Agent block's panel always shows **On revisit** (**Keep context** by default, or **Fresh context** to start each revisit in a fresh provider session without earlier context) and the optional **Revisit instruction** plain-text field, edited like a Continuation's prompt (up to 120,000 characters; surrounding whitespace is
@@ -434,8 +434,9 @@ while the same source remains under the pointer or holds keyboard focus.
 Hovering a wire, or giving it keyboard focus, draws it thicker above the other wires. Both endpoint cards get the dashed
 frame, including the Flow input and Finish. The source exit port and the target input port, or the Finish ending row's
 port, are filled in primary text colour. Several wires into one Join row or one ending accent that shared row while only
-the hovered wire thickens. Wires from hidden or removed exits respond the same way. A wire beats a block preview, and
-cards take the pointer over wires beneath them; where wires overlap, the topmost one responds. Each wire takes the pointer
+the hovered wire thickens. A chip shows the source output only on wire hover, keyboard focus or selection. Flow input
+wires have no chip. Hidden exits show their name struck through, and removed exits show their stored ID struck through.
+A wire beats a block preview, and cards take the pointer over wires beneath them; where wires overlap, the topmost one responds. Each wire takes the pointer
 about 12 screen pixels wide at any zoom. Hovering never selects: clicking still selects the wire, press-drag on it stays
 inert, and a selected wire keeps its indigo stroke. The read-only preview inside an expanded Subflow does not respond.
 

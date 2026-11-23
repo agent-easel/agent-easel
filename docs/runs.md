@@ -461,7 +461,8 @@ fixed Human exits their old exits were mapped to.
 - Hovering a connection with a mouse or trackpad draws it thicker above the others, frames both endpoint cards
   (including the Flow input and Finish) and fills the source exit port and the target input port, or the Finish ending
   row's port. A Join row or ending reached by several connections is accented while only the hovered connection
-  thickens. A connection beats a block preview, cards take the pointer over connections beneath them, and the topmost of
+  thickens. The hovered connection shows its source output in a chip, except for Flow input and Incoming message.
+  A connection beats a block preview, cards take the pointer over connections beneath them, and the topmost of
   overlapping connections responds. Each connection takes the pointer about 12 screen pixels wide at any zoom.
   Connections are never selectable or focusable: a press-drag that starts on one pans the canvas, and a click without
   movement acts like a click on empty canvas and returns the inspector to the Overview. Inside an expanded Subflow,

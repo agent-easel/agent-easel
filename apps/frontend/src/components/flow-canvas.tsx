@@ -1,3 +1,4 @@
+import { connectionLabel, exitDisplayName } from "../connection-label.ts";
 import {
   useCallback,
   useImperativeHandle,
@@ -53,7 +54,7 @@ import {
 import { DragButton } from "./drag-button.tsx";
 import { finishIdentity } from "./finish-block.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-import { blockIdentity, conditionRoutes, exitDisplayName, IdentityRows } from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, IdentityRows } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 import { issueTag, outputKey, type ReadinessMarks } from "./flow-readiness.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
@@ -346,12 +347,7 @@ function AuthoringExit({
   recipients: string;
   unconnected: boolean;
 }) {
-  const name =
-    exit.source === "wait"
-      ? "after the wait"
-      : exit.source === "continuation"
-        ? "response"
-        : exitDisplayName(exit, "output");
+  const label = connectionLabel(exit);
   return (
     <>
       {exit.source === "condition" && (
@@ -362,10 +358,10 @@ function AuthoringExit({
         className={cn(
           "truncate text-xs text-muted-foreground",
           unconnected && "text-destructive",
-          exit.unavailable && "text-attention line-through",
+          label.struck && "text-attention line-through",
         )}
       >
-        {name}
+        {label.text}
       </span>
       {exit.unavailable && <span className="sr-only">{exit.unavailable}</span>}
       <span className="sr-only">→ {recipients || "finish here"}</span>
@@ -377,8 +373,8 @@ function AuthoringExit({
 function exitPortLabel(exit: CanvasBlock["exits"][number], name: string) {
   if (isSingleOutput(exit)) return `Connect output of ${name}`;
   return exit.source === "condition"
-    ? `Connect output ${exit.name || "Unnamed output"} of ${name}`
-    : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`;
+    ? `Connect output ${exitDisplayName(exit)} of ${name}`
+    : `Connect exit ${exitDisplayName(exit)} of ${name}`;
 }
 
 /** A block frame's look for its kind, selection, readiness issue and the gestures in progress. */
