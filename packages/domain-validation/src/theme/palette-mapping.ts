@@ -45,6 +45,7 @@ type StatusToken =
 
 const TEXT_CONTRAST = 4.5;
 const NON_TEXT_CONTRAST = 3;
+const BORDER_CONTRAST = 1.3;
 
 const NEUTRAL_STEP = { muted: [0.04, -0.035], hover: [0.08, -0.06], selected: [0.06, -0.05] };
 
@@ -131,8 +132,9 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
     "sidebar text",
   );
   const ring = readable(t3.focus, [background, card, sidebar], NON_TEXT_CONTRAST, "focus");
-  const border = toRgb(t3.border);
   const statusSurfaces = [...surfaces, sidebar];
+  const border = readable(t3.border, statusSurfaces, BORDER_CONTRAST, "borders");
+  const input = readable(t3.input, statusSurfaces, BORDER_CONTRAST, "inputs");
   const status = Object.fromEntries(
     Object.entries(FACTORY_STATUS[mode]).map(([token, value]) => [
       token,
@@ -174,7 +176,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
     border: formatHex(border),
     "border-strong": formatHex(mix(border, foreground, 0.12)),
     "border-hover": formatHex(mix(border, foreground, 0.22)),
-    input: formatHex(toRgb(t3.input)),
+    input: formatHex(input),
     ring: formatHex(ring),
     overlay:
       mode === "dark" ? formatTranslucent(background, 0.8) : formatTranslucent(foreground, 0.43),

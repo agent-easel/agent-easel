@@ -39,7 +39,8 @@ they stay neutral and never take the accent. Status colors keep Factory's hue fa
 mode's baseline. A mode must keep its own polarity (a dark canvas in Dark, a light one in Light).
 
 Contrast policy: text, secondary text, action labels, links and status colors need 4.5:1 on
-every surface they appear on, and focus rings and section labels 3:1. A color that misses is moved
+every surface they appear on, focus rings and section labels need 3:1, and borders and inputs
+need 1.3:1. A color that misses is moved
 in lightness only, toward black or white, until it passes; if a required pair cannot pass, that
 whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
 shows **Technical details** when Factory cannot use the config at all.
