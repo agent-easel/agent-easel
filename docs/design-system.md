@@ -4,6 +4,14 @@ Factory uses shadcn/ui on Tailwind CSS v4 with one set of semantic tokens, each 
 Light and a Dark value. Reuse the existing primitives and token vocabulary; do not introduce
 parallel stylesheets, global element styling or per-screen color palettes.
 
+## Figma source
+
+The design system and screen designs live in the
+[MatchJob — Design System](https://www.figma.com/design/CZq3JAlXLjh5ie1QCpBqqf/MatchJob-%E2%80%94-Design-System?node-id=0-1)
+Figma file (file key `CZq3JAlXLjh5ie1QCpBqqf`). Pages named in this document, such as
+🧩 Components, are pages of that file. Agents using the Figma MCP open this file key when
+reading or updating designs.
+
 ## Light and Dark
 
 **Settings → Appearance** offers **System**, **Light** and **Dark**. System is the
