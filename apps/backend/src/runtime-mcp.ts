@@ -10,6 +10,11 @@ import {
   SUBFLOW_INVOCATION_PAGE_MAX,
 } from "@t3-factory/contracts";
 import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
+import {
+  callDefinitionTransferTool,
+  definitionTransferTools,
+  type DefinitionTransferOperations,
+} from "./definition-transfer-tools.ts";
 import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
@@ -237,7 +242,11 @@ async function callTool(
  */
 export function runtimeMcpHandler(
   runtime: RuntimeTools,
-  definitions: AuthoringOperations & LaunchOperations & RunReadOperations & TriggerToolOperations,
+  definitions: AuthoringOperations &
+    LaunchOperations &
+    RunReadOperations &
+    TriggerToolOperations &
+    DefinitionTransferOperations,
 ): (request: Request) => Promise<Response> {
   const handler = createMcpHandler(
     () => {
@@ -246,7 +255,14 @@ export function runtimeMcpHandler(
         { capabilities: { tools: {} } },
       );
       server.setRequestHandler("tools/list", () => ({
-        tools: [...tools, ...authoringTools, ...launchTools, ...runReadTools, ...triggerTools],
+        tools: [
+          ...tools,
+          ...authoringTools,
+          ...definitionTransferTools,
+          ...launchTools,
+          ...runReadTools,
+          ...triggerTools,
+        ],
       }));
       server.setRequestHandler("tools/call", async (request) => {
         const { name, arguments: args } = request.params;
@@ -254,6 +270,7 @@ export function runtimeMcpHandler(
           return callTool(runtime, name as keyof typeof operations, args);
         return (
           (await callAuthoringTool(definitions, name, args)) ??
+          (await callDefinitionTransferTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
           (await callTriggerTool(definitions, name, args)) ?? {
