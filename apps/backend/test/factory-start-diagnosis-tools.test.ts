@@ -1,8 +1,11 @@
-import { assert, expect, it } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { FACTORY_BLOCK_SKILL } from "../src/factory-block-skill.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
+import { assertOk } from "./support/domain-setup.ts";
+import { projectWorkerFlow } from "./support/scenarios.ts";
 
 const codexConfig = (fixture: Awaited<ReturnType<typeof prepared>>) =>
   join(fixture.h.processHome, "codex-home", "config.toml");
@@ -33,9 +36,9 @@ it("a preflight of a Flow whose harness lacks Factory reporting is blocked by th
   expect(result.isError).toBe(false);
   const reply = toolReply(result);
   expect(reply.status).toBe("blocked");
-  expect(reply.blockers.map((blocker: { code: string }) => blocker.code)).toContain(
+  expect(reply.blockers.map((blocker: { code: string }) => blocker.code)).toStrictEqual([
     "reporting_installation",
-  );
+  ]);
   expect(reply.next).toMatch(/factory_list_reporting_installations/);
   expect(await fixture.f.listRuns(fixture.project.id)).toStrictEqual({ ok: true, value: [] });
 });
@@ -74,21 +77,25 @@ it("a preflight while T3 is unreachable is blocked by the connection with the co
   expect(reply.connection.state).toBe("unavailable");
 });
 
-it("a preflight of a Project Flow against another Project is blocked by ownership", async (c) => {
+it("a preflight of a Flow another Project owns is blocked by ownership and creates no Run", async (c) => {
   // Arrange
-  const fixture = await prepared(c);
+  const fixture = await prepared(c, projectWorkerFlow);
+  const other = assertOk(await fixture.f.addRepository({ path: "/repos/other" }));
   const client = await factoryMcpClient(c, fixture.f);
 
   // Act
   const result = await client.callTool({
     name: "factory_check_start",
-    arguments: { projectId: "another-project", flowId: fixture.flow.id },
+    arguments: { projectId: other.id, flowId: fixture.flow.id },
   });
 
   // Assert
   const reply = toolReply(result);
   expect(reply.status).toBe("blocked");
-  expect(reply.blockers.length).toBeGreaterThan(0);
+  expect(reply.blockers).toStrictEqual([
+    { code: "flow_project_mismatch", path: "flowId", message: expect.any(String) },
+  ]);
+  expect(await fixture.f.listRuns(other.id)).toStrictEqual({ ok: true, value: [] });
 });
 
 it("a preflight without a Flow id is a validation error", async (c) => {
@@ -104,7 +111,10 @@ it("a preflight without a Flow id is a validation error", async (c) => {
 
   // Assert
   expect(result.isError).toBe(true);
-  expect(toolReply(result).code).toBe("validation");
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "invalid_argument", path: "flowId" }],
+  });
 });
 
 it("the reporting listing names each target's status and the install action it offers", async (c) => {
@@ -165,7 +175,11 @@ it("installing an unknown target id writes nothing", async (c) => {
 
   // Assert
   expect(result.isError).toBe(true);
-  expect(toolReply(result).code).toBe("validation");
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    message: "This target is not listed. Nothing was written.",
+    issues: [{ path: "targetId" }],
+  });
   expect(await readFile(codexConfig(fixture), "utf8")).toBe("");
 });
 
@@ -186,11 +200,15 @@ it("installing an already installed target is refused and leaves its configurati
 
   // Assert
   expect(result.isError).toBe(true);
-  expect(toolReply(result).code).toBe("validation");
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    message: expect.stringContaining("Nothing to install or repair here."),
+    issues: [{ path: "targetId" }],
+  });
   expect(await readFile(codexConfig(fixture), "utf8")).toBe(before);
 });
 
-it("the connection read reports the last check and a recheck reports T3's current state", async (c) => {
+it("a connection recheck reports T3's current state", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);
@@ -238,7 +256,31 @@ it("a connection that needs authorization is reported with the host's approval p
 
   // Assert
   const reply = toolReply(result);
-  assert(reply.state !== "ready");
-  expect(reply.next).toMatch(/Settings/);
+  expect(reply.state).toBe("authorization-required");
+  expect(reply.next).toMatch(/approves T3 access on the Factory host/);
   expect(Object.keys(reply)).not.toContain("authorizationContext");
+});
+
+it("an outdated Factory skill is listed for repair, blocks the preflight and is restored by installing that target", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const skill = join(fixture.h.processHome, "codex-home", "skills", "factory-block", "SKILL.md");
+  await writeFile(skill, "outdated");
+  const client = await factoryMcpClient(c, fixture.f);
+  const listed = toolReply(
+    await client.callTool({ name: "factory_list_reporting_installations", arguments: {} }),
+  );
+  expect(listed.installations[0]).toMatchObject({ status: "needs-attention", action: "repair" });
+  expect(toolReply(await checkStart(client, fixture)).status).toBe("blocked");
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_install_reporting",
+    arguments: { targetId: listed.installations[0].id },
+  });
+
+  // Assert
+  expect(toolReply(result).installation).toMatchObject({ status: "installed", action: "none" });
+  expect(await readFile(skill, "utf8")).toBe(FACTORY_BLOCK_SKILL);
+  expect(toolReply(await checkStart(client, fixture)).status).toBe("ready");
 });
