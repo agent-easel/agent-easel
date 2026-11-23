@@ -20,7 +20,6 @@ export type AppearancePreference = "system" | Appearance;
 export interface DesktopAlertSettings {
   /** macOS notifications for matters that newly need the owner; on by default. */
   readonly notifications: boolean;
-  /** One silent notification when a Run newly becomes Settled; off by default. */
   readonly notifyRunFinished: boolean;
   /** The Dock badge counting Runs that need the owner; on by default. */
   readonly dockBadge: boolean;

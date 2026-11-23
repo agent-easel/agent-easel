@@ -46,7 +46,12 @@ export function desktopBridgeScript({
     server: role === "client" ? { url: "https://factory.example", fingerprint: "fixture" } : null,
     launchAtLogin: false,
     menuBarIcon: false,
-    alerts: { notifications: true, notifyRunFinished: false, dockBadge: true, showRunDetails: false },
+    alerts: {
+      notifications: true,
+      notifyRunFinished: false,
+      dockBadge: true,
+      showRunDetails: false,
+    },
     notificationPermission: "undetermined",
     updateChannel: "stable",
     backend: { state: role === "server" ? "running" : "stopped", message: null },

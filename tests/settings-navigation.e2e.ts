@@ -138,7 +138,11 @@ test("searching for notifications finds Desktop app and keeps the open page", as
   await app.screenshot("settings-search-notifications");
 });
 
-test("searching for Run finished notifications finds Desktop app", async ({ app, screen, browser }) => {
+test("searching for Run finished notifications finds Desktop app", async ({
+  app,
+  screen,
+  browser,
+}) => {
   // Arrange
   await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
   await app.open("/settings/connection");

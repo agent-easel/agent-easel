@@ -59,7 +59,7 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
   // Act
   await screen.getByRole("switch", "Notifications").tap();
 
-  // Assert: turning Notifications back on restores the stored Run-finished choice.
+  // Assert
   await expect(notifyFinished).toBeChecked();
   await expect(notifyFinished).not.toBeDisabled();
 });
