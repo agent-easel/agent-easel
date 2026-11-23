@@ -875,7 +875,7 @@ async function messagesWhen(
 }
 
 /** A status card: an accepted Start's only message, edited as its Run changes. */
-const CARD = /^\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
+const CARD = /^(?:<@\d+> )?\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
 const cards = (messages: FixtureMessage[]) =>
   messages.filter((message) => CARD.test(message.content));
 
@@ -1026,7 +1026,7 @@ test("the host retries the status card Discord refused in a locked thread once a
     created.some(
       (message) =>
         message.channelId === thread &&
-        /^\*\*Run [^\n]+\*\* · 🗄️ Archived · /.test(message.content),
+        /^(?:<@\d+> )?\*\*Run [^\n]+\*\* · 🗄️ Archived · /.test(message.content),
     ),
   );
   assert.strictEqual(

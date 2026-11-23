@@ -109,7 +109,7 @@ it("ordinary Block activity edits the Run's one status card in its originating t
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("a new card shows every captured Block in breadth-first graph order and disables mentions", async (c) => {
+it("a new card shows every captured Block in breadth-first graph order and mentions only the requester", async (c) => {
   // Arrange
   const world = await startingWorld(c, statusCardFlow);
 
@@ -119,12 +119,15 @@ it("a new card shows every captured Block in breadth-first graph order and disab
   // Assert
   const shown = await messageShows(world.discord, card, /⚙️ \*\*Second @\u200bhere\*\* — working/);
   expect(shown.content).toMatch(
-    /^\*\*Run #1 · @\u200beveryone improve search\*\* · 🟢 Active · 🔀 Status card Flow\n⚙️ \*\*Entry worker\*\* — working(?: · not observed yet)?\n⚙️ \*\*Second @\u200bhere\*\* — working(?: · not observed yet)?\n○ Follow-up — not started\n○ Last Block — not started$/,
+    /^(?:<@\d+> )?\*\*Run #1 · @\u200beveryone improve search\*\* · 🟢 Active · 🔀 Status card Flow\n⚙️ \*\*Entry worker\*\* — working(?: · not observed yet)?\n⚙️ \*\*Second @\u200bhere\*\* — working(?: · not observed yet)?\n○ Follow-up — not started\n○ Last Block — not started$/,
   );
   const posted = world.discord
     .requested("POST", new RegExp(`^/api/v10/channels/${THREAD}/messages$`))
     .find((request) => isStatusCard(request.body as { content: string }));
-  expect(posted?.body).toMatchObject({ allowed_mentions: { parse: [] } });
+  expect(posted?.body).toMatchObject({
+    content: expect.stringMatching(new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #1 · `)),
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
 });
 
 it("Archiving preserves the captured Blocks and their final states after the Flow is edited", async (c) => {
@@ -576,7 +579,9 @@ it("a regrant creates the card an Active Run never got because its destination w
   expect(statusCardsIn(world.discord)).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringMatching(/^\*\*Run #1 · Improve search\*\* · 🟢 Active · /),
+      content: expect.stringMatching(
+        new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #1 · Improve search\\*\\* · 🟢 Active · `),
+      ),
     }),
   ]);
   const settings = await discordSettingsWhen(

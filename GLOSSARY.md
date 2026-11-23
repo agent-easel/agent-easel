@@ -446,8 +446,9 @@ The one maintained Discord message Factory posts in a chat-started Run's origina
 It shows the Run's identity, lifecycle and Flow, then the captured Flow's Blocks in graph order
 with their current or final state on each row. Large Flows summarize not-started Blocks first
 and then finished Blocks to fit one message. Factory edits the card as Blocks and the Run change.
-On create, the card of a bot-started Run mentions that bot while saved Access lists it; otherwise,
-and on every edit, the card mentions nobody. It omits results, report bodies and prompts. See
+On create, the card mentions the Run's requester, person or bot, while saved Access allows that
+requester; otherwise, and on every edit, the card mentions nobody. It omits results, report bodies
+and prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 

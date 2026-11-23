@@ -960,7 +960,9 @@ it("a UI-started Run gets no status card, while a chat-started Run in the same P
   expect(statusCardsIn(world.discord)).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringMatching(/^\*\*Run #2 · Improve search\*\* · 🟢 Active · 🔀 /),
+      content: expect.stringMatching(
+        new RegExp(`^<@${PARTICIPANT_ID}> \\*\\*Run #2 · Improve search\\*\\* · 🟢 Active · 🔀 `),
+      ),
     }),
   ]);
 });

@@ -239,12 +239,12 @@ const ONE_SHOT_PURPOSES: readonly DeliveryRow["purpose"][] = ["completion", "arc
 const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
   Effect.map(
     sql<{ user_id: string | null }>`SELECT (
-      SELECT p.requester_id FROM chat_run_origins o
+      SELECT u.user_id FROM chat_run_origins o
       JOIN chat_actions a ON a.id=o.action_id
       JOIN chat_proposals p ON p.id=a.proposal_id
+      JOIN (SELECT user_id FROM chat_access_users UNION SELECT user_id FROM chat_access_bots) u
+        ON u.user_id=p.requester_id
       WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_PURPOSES)}
-        AND (p.requester_id IN (SELECT user_id FROM chat_access_bots)
-          OR (d.purpose<>'status-card' AND p.requester_id IN (SELECT user_id FROM chat_access_users)))
     ) AS user_id FROM chat_deliveries d
       WHERE d.id=${deliveryId} AND d.state='sending' AND d.problem IS NOT ${REVOKED_CREATE}`,
     ([access]) => {
