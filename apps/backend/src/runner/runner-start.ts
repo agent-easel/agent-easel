@@ -381,7 +381,10 @@ export function openRunnerStart(
       return yield* getRun(accepted.value);
     });
   }
-  function stagedManifest(references: unknown): Effect.Effect<Result<RunImage[]>, unknown> {
+  function stagedManifest(
+    references: unknown,
+    alreadyAccepted: boolean,
+  ): Effect.Effect<Result<RunImage[]>, unknown> {
     return Effect.gen(function* () {
       if (references === undefined) return { ok: true as const, value: [] };
       const issue = (code: string, path: string, message: string) =>
@@ -399,7 +402,21 @@ export function openRunnerStart(
             `images.${index}`,
             "Each image needs its lowercase hex sha256 and a name.",
           );
-        const staged = yield* images.getRunImageInfo(sha256);
+        const staged = yield* alreadyAccepted
+          ? images.getStagedImageRecord(sha256)
+          : images.getRunImageInfo(sha256);
+        if (!staged.ok && alreadyAccepted)
+          return failure(
+            "conflict",
+            "This Start key was already accepted with different content.",
+            [
+              {
+                code: "start_key_conflict",
+                path: "requestId",
+                message: "This Start request was accepted with other content.",
+              },
+            ],
+          );
         if (!staged.ok)
           return issue(
             "image_not_staged",
@@ -437,10 +454,10 @@ export function openRunnerStart(
         return failure("validation", "Give the Run a title or omit it.", [
           { code: "run_title", path: "title", message: "Send a non-empty title or omit it." },
         ]);
-      const manifest = yield* stagedManifest(references);
-      if (!manifest.ok) return manifest;
       const accepted =
         typeof requestId === "string" ? yield* store.acceptedStart(requestId) : undefined;
+      const manifest = yield* stagedManifest(references, accepted !== undefined);
+      if (!manifest.ok) return manifest;
       return yield* start(
         {
           requestId,

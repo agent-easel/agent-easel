@@ -127,6 +127,8 @@ const startNext: Partial<Record<OperationError["code"], string>> = {
   conflict:
     "Nothing new was accepted. Call factory_start_run again with the same requestId and identical arguments; if Factory is shutting down, wait for it to restart first.",
   not_found: "Find a current Flow id with factory_list_flows.",
+  missing_images:
+    "No Run was accepted. A staged image is no longer in Factory. Stage each image again with factory_stage_run_image, then call factory_start_run with the same requestId and identical arguments.",
 };
 
 type ProjectMatch =

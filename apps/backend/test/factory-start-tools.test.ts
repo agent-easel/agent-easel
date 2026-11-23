@@ -500,3 +500,109 @@ it("staging refuses content that is not the declared image and takes no host pat
   expect(path.isError).toBe(true);
   expect(notBase64.isError).toBe(true);
 });
+
+it("an image Start changed to an image Factory does not hold conflicts under an accepted request identity", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+  await stageScreenshot(client, screenshots.red);
+  await stageScreenshot(client, screenshots.green);
+  await client.callTool({ name: "factory_start_run", arguments: imageStartArguments(fixture) });
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_start_run",
+    arguments: {
+      ...imageStartArguments(fixture),
+      images: [{ sha256: sha256Hex(screenshots.blue.data), name: "blue.png" }],
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "start_key_conflict" }],
+  });
+});
+
+it("an identical image Start retried after the accepted Run's image bytes were deleted returns the same Run", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+  await stageScreenshot(client, screenshots.red);
+  await stageScreenshot(client, screenshots.green);
+  const first = toolReply(
+    await client.callTool({ name: "factory_start_run", arguments: imageStartArguments(fixture) }),
+  );
+  assert((await fixture.f.archiveRun(first.run.id)).ok);
+  const deleted = await fixture.f.deleteRunImages({
+    sha256: [sha256Hex(screenshots.red.data), sha256Hex(screenshots.green.data)],
+  });
+  assert(deleted.ok);
+  expect(deleted.value.deleted).toHaveLength(2);
+
+  // Act
+  const retry = await client.callTool({
+    name: "factory_start_run",
+    arguments: imageStartArguments(fixture),
+  });
+
+  // Assert
+  expect(retry.isError).toBe(false);
+  expect(toolReply(retry).run.id).toBe(first.run.id);
+});
+
+it("a Start refused because a staged image vanished before acceptance says no Run was accepted and to stage the image again", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, {
+    ...fixture.f,
+    startTextRun: async () =>
+      failure(
+        "missing_images",
+        "Some images are no longer uploaded. Upload them and retry the same Start.",
+      ),
+  });
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_start_run",
+    arguments: imageStartArguments(fixture),
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  const { next } = toolReply(result);
+  expect(next).toContain("No Run was accepted");
+  expect(next).toContain("factory_stage_run_image");
+  expect(next).not.toContain("outcome is unknown");
+});
+
+it("an image larger than the definition limit stages, while an authoring call over the definition limit is refused and saves nothing", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const client = await factoryMcpClient(c, fixture.f);
+  const large = new Uint8Array(3 * 1024 * 1024);
+  large.set(screenshots.red.data);
+
+  // Act
+  const staged = await client.callTool({
+    name: "factory_stage_run_image",
+    arguments: { mimeType: "image/png", dataBase64: base64(large) },
+  });
+  const flowsBefore = await fixture.f.listFlows();
+  const oversized = await client.callTool({
+    name: "factory_create_flow",
+    arguments: { name: "x".repeat(3 * 1024 * 1024) },
+  });
+
+  // Assert
+  expect(staged.isError).toBe(false);
+  expect(oversized.isError).toBe(true);
+  expect(toolReply(oversized)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "request_too_large" }],
+  });
+  expect(await fixture.f.listFlows()).toStrictEqual(flowsBefore);
+});

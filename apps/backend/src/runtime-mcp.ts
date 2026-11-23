@@ -9,7 +9,12 @@ import {
   CONDITION_ARRIVAL_PAGE_MAX,
   SUBFLOW_INVOCATION_PAGE_MAX,
 } from "@t3-factory/contracts";
-import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
+import {
+  authoringTools,
+  callAuthoringTool,
+  textResult,
+  type AuthoringOperations,
+} from "./authoring-tools.ts";
 import { definitionBody } from "./http-support.ts";
 import {
   callLaunchTool,
@@ -234,6 +239,9 @@ async function callTool(
   }
 }
 
+const fitsDefinitionBody = (args: unknown) =>
+  Buffer.byteLength(JSON.stringify(args ?? null)) <= definitionBody.bytes;
+
 /**
  * Stateless Streamable HTTP MCP server for harness reporting, Run titles, definition authoring and
  * Run Start. Reporting calls name their Block by Block id and title calls their title generation;
@@ -255,6 +263,19 @@ export function runtimeMcpHandler(
       }));
       server.setRequestHandler("tools/call", async (request) => {
         const { name, arguments: args } = request.params;
+        if (name !== "factory_stage_run_image" && !fitsDefinitionBody(args))
+          return textResult(true, {
+            code: "validation",
+            message: "Send arguments up to 2 MB.",
+            issues: [
+              {
+                code: "request_too_large",
+                path: "arguments",
+                message: "Only image staging accepts a larger call.",
+              },
+            ],
+            next: "Nothing was changed. Send a smaller call.",
+          });
         if (Object.hasOwn(operations, name))
           return callTool(runtime, name as keyof typeof operations, args);
         return (
