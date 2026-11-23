@@ -10,6 +10,7 @@ import { FactoryService } from "./factory-service.ts";
 import type { RuntimeReports } from "./runtime.ts";
 import type { RuntimeReply } from "./runtime-types.ts";
 import type { RunListExtras } from "./runner/run-store/navigation.ts";
+import type { RunReadSource } from "./run-read-source.ts";
 import type { LiveStreams } from "./live-streams.ts";
 import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
@@ -18,6 +19,9 @@ export interface Factory extends FactoryOperations {
   /** Factory MCP's text-only Start through the same Start operation as `startRun`. */
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
   listRunListExtras(): Promise<Result<RunListExtras>>;
+  readRunByReference(
+    reference: { id: string } | { number: number },
+  ): Promise<Result<RunReadSource | null>>;
   /** Scoped live observation; each stream needs no services and runs on any Effect runtime. */
   readonly live: LiveStreams;
   readonly telemetry: Pick<Telemetry, "enabled" | "disabledReason"> & {
@@ -74,6 +78,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     runtime: reports,
     startTextRun,
     listRunListExtras,
+    readRunByReference,
     setRuntimeBackendUrl,
     live,
     telemetry,
@@ -86,6 +91,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     runtime: promiseOperations(runtime, reports),
     startTextRun: (input) => runtime.runPromise(startTextRun(input)),
     listRunListExtras: () => runtime.runPromise(listRunListExtras()),
+    readRunByReference: (reference) => runtime.runPromise(readRunByReference(reference)),
     setRuntimeBackendUrl,
     live,
     recordTelemetry: (event, properties) => runtime.runPromise(telemetry.record(event, properties)),

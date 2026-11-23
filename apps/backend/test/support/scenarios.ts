@@ -897,6 +897,22 @@ export const humanReviewFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+/** `count` entry workers whose "Done" all reach one Human Review. */
+export const parallelReviewsFlow =
+  (count: number): ReadyFlowShape =>
+  (world) =>
+    workerShape(world, "Parallel reviews", (agentId) => {
+      const ids = Array.from({ length: count }, (_, index) => `worker-${index + 1}`);
+      return {
+        flowInput: flowInput(...ids),
+        blocks: [
+          ...ids.map((id, index) => agentBlock(id, `Worker ${index + 1}`, agentId)),
+          reviewStep,
+        ],
+        connections: ids.map((id) => connection(id, "done", "review")),
+      };
+    });
+
 /** Entry worker hands "Done" to Parallel work and its Flow-local "Revise" to Follow-up. */
 export const twoExitFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Two exits", (agentId) => ({
@@ -2156,6 +2172,26 @@ export function resultReleasedToHumanReview(world: ScenarioWorld, worker: Worker
       Boolean(pending(detail)),
     );
     return { ...worker, occurrence: pending(run)! };
+  });
+}
+
+/** Each worker reported `message` and ended its turn; Factory observed every end and released
+ * each result to a Human review as its own pending occurrence. */
+export function resultsReleasedToHumanReviews(
+  world: ScenarioWorld,
+  workers: readonly WorkerHandle[],
+  message: string,
+) {
+  return reach("results released to Human reviews", async () => {
+    for (const worker of workers) await resultReported(world, worker, { message });
+    return observeFor(
+      "observe every review",
+      world,
+      workers[0]!.runId,
+      (run) =>
+        run.humanOccurrences.filter((occurrence) => occurrence.state === "pending").length ===
+        workers.length,
+    );
   });
 }
 

@@ -242,8 +242,8 @@ input card carries it rather than a Block.
 A T3 conversation on the Factory host, including one driven from a phone, can start a text-only Run through the [Run Start tools](t3-integration.md#run-start-tools), normally by the user invoking the [`factory-start-run` skill](installation.md#optional-skills). It shares the composer's Start operation, readiness gates, captured definitions, workspace behavior and idempotency; its title is the prompt's first non-empty line with automatic provenance and its creation time is when Factory first accepted the request. It has no draft, images or per-Run workspace override. Unless the skill has seen **Generate Run titles** reported off, its review adds one line saying the title may be replaced by a generated title; the receipt still reports the accepted automatic title, and generation then applies as for any automatic Run.
 
 The receipt carries the Run id and number but no link, and the conversation has no Block id, so it cannot use the Block
-runtime tools to watch progress. Open the Run in Factory, or read it on the host with `GET /api/runs/:id`
-([Run HTTP API](#run-http-api)).
+runtime tools to watch progress. It follows the Run with `factory_read_run` and finds Runs with `factory_list_runs`, the
+[Run read tools](t3-integration.md#run-read-tools).
 
 ### Starting from a Trigger
 

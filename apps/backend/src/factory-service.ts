@@ -22,6 +22,7 @@ import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
 import type { RunListExtras } from "./runner/run-store/navigation.ts";
+import { runReadSource, type RunReadSource } from "./run-read-source.ts";
 import { makeClientAccess } from "./client-access.ts";
 import { makeRunImages } from "./run-images.ts";
 import { makeRunTitles } from "./run-titles.ts";
@@ -56,6 +57,9 @@ export class FactoryService extends Context.Service<
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
     readonly listRunListExtras: () => Effect.Effect<Result<RunListExtras>>;
+    readonly readRunByReference: (
+      reference: { id: string } | { number: number },
+    ) => Effect.Effect<Result<RunReadSource | null>>;
     readonly setRuntimeBackendUrl: (url: string) => void;
     readonly live: LiveStreams;
     readonly telemetry: Telemetry;
@@ -385,6 +389,8 @@ export const makeFactoryService = (
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
       listRunListExtras: () => guard(runner.listRunListExtras()),
+      readRunByReference: (reference) =>
+        guard(runReadSource(sql, (id) => runner.getRun(id))(reference)),
       setRuntimeBackendUrl: (url) => {
         runtimeBackendUrl = url;
       },

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { Result, RunDetail } from "@t3-factory/contracts";
 import { referenceOf, runOverview } from "../runner/run-overview.ts";
+import { RUN_SEARCH_MAX_WORDS, searchWords } from "../runner/run-search-words.ts";
 import type { ReadTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";
 import { conversationHandles, type ConversationHandles } from "./conversation-handles.ts";
 import { conversationGenerations } from "./conversations.ts";
@@ -25,7 +26,6 @@ const OVERVIEW_PAGE = 10;
 /** Unicode characters per section page; a section of any length stays reachable page by page. */
 const SECTION_PAGE = 4000;
 const MAX_TEXT = 200;
-const MAX_WORDS = 8;
 
 export const NOT_PERMITTED =
   "No Run with this reference is in the Projects this thread permits. It may not exist, or it belongs to a Project this thread does not permit.";
@@ -173,8 +173,8 @@ function searchRequest(input: unknown): SearchRequest | string {
 function searchQuery({ text, projectId, includeArchived }: Arguments): SearchRequest | string {
   if (text !== undefined && !isText(text))
     return `text must be non-empty and at most ${MAX_TEXT} characters.`;
-  const words = text === undefined ? [] : text.trim().split(/\s+/);
-  if (words.length > MAX_WORDS) return `Use at most ${MAX_WORDS} words.`;
+  const words = text === undefined ? [] : searchWords(text);
+  if (words.length > RUN_SEARCH_MAX_WORDS) return `Use at most ${RUN_SEARCH_MAX_WORDS} words.`;
   if (projectId !== undefined && !isText(projectId)) return "projectId must be a Project ID.";
   if (includeArchived !== undefined && typeof includeArchived !== "boolean")
     return "includeArchived must be true or false.";

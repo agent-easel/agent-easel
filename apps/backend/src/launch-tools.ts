@@ -217,7 +217,7 @@ async function startRun(factory: LaunchOperations, args: Record<string, unknown>
         workspace: flow.workspace,
       },
     },
-    note: "Factory accepted this Run. Workers start asynchronously; Factory shows their progress.",
+    note: "Factory accepted this Run. Workers start asynchronously. Follow this Run with factory_read_run({run}) using its number or id; Factory shows their progress.",
   });
 }
 
