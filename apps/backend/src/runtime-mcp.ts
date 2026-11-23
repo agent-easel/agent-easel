@@ -18,6 +18,11 @@ import {
 import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
+import {
+  callRunTitleSettingTool,
+  runTitleSettingTools,
+  type RunTitleSettingOperations,
+} from "./run-title-setting-tools.ts";
 import { callTriggerTool, triggerTools, type TriggerToolOperations } from "./trigger-tools.ts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
@@ -245,6 +250,7 @@ export function runtimeMcpHandler(
   definitions: AuthoringOperations &
     LaunchOperations &
     RunReadOperations &
+    RunTitleSettingOperations &
     TriggerToolOperations &
     DefinitionTransferOperations,
 ): (request: Request) => Promise<Response> {
@@ -261,6 +267,7 @@ export function runtimeMcpHandler(
           ...definitionTransferTools,
           ...launchTools,
           ...runReadTools,
+          ...runTitleSettingTools,
           ...triggerTools,
         ],
       }));
@@ -273,6 +280,7 @@ export function runtimeMcpHandler(
           (await callDefinitionTransferTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
+          (await callRunTitleSettingTool(definitions, name, args)) ??
           (await callTriggerTool(definitions, name, args)) ?? {
             isError: true,
             content: [{ type: "text", text: `Unknown tool ${name}.` }],
