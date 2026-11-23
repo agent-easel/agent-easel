@@ -1,6 +1,7 @@
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import {
+  executionWireFocused,
   expectFollowingReview,
   manualRunView,
   openFollowedLargeRun,
@@ -8,6 +9,7 @@ import {
   openLargeFlow,
   openLargeFlowPannedToFillers,
   openLargeFlowWithReturnedFiller,
+  openRunWithWirePoint,
   PAN_INTO_FILLERS,
   panFlowCanvas,
   runCanvasCenterOffset,
@@ -441,4 +443,53 @@ test("following a large Run brings its offscreen active Block into view without 
   await expectFollowingReview(screen);
   await expect(canvas.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(0);
   await app.screenshot("large-run-followed-to-offscreen-reviewer");
+});
+
+test("a press-drag that starts on an Execution canvas wire pans the canvas", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const point = await openRunWithWirePoint(app, screen, browser);
+  const block = screen.getByRole("button", "Agent Implement change", { exact: false });
+  const target = screen.getByRole("article", "Block Implement change", { exact: true });
+  const before = (await target.boundingBox())!;
+
+  // Act
+  await browser.mouse.move(point.x, point.y);
+  await browser.mouse.down();
+  await browser.mouse.move(point.x + 60, point.y + 30);
+  await browser.mouse.move(point.x + 120, point.y + 60);
+  await browser.mouse.up();
+
+  // Assert
+  const after = (await target.boundingBox())!;
+  expect(after.x - before.x).toBeCloseTo(120, 0);
+  expect(after.y - before.y).toBeCloseTo(60, 0);
+  await expect(block).toHaveAttribute("aria-pressed", "true");
+  expect(await executionWireFocused(browser)).toBe(false);
+});
+
+test("a click on an Execution canvas wire returns the inspector to the Run overview", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const point = await openRunWithWirePoint(app, screen, browser);
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await expect(inspector.getByRole("heading", "Implement change", { exact: true })).toBeVisible();
+
+  // Act
+  await browser.mouse.move(point.x, point.y);
+  await browser.mouse.down();
+  await browser.mouse.up();
+
+  // Assert
+  await expect(inspector.getByRole("heading", "Overview", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByRole("button", "Agent Implement change", { exact: false }),
+  ).toHaveAttribute("aria-pressed", "false");
+  expect(await executionWireFocused(browser)).toBe(false);
 });

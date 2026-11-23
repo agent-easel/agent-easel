@@ -2,6 +2,7 @@ import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import { saveLargeFlow } from "./large-flow.ts";
 import { liveRun } from "./live.ts";
+import { prepareScenario } from "./scenarios.ts";
 
 export const PAN_INTO_FILLERS = 2300;
 
@@ -242,5 +243,28 @@ export async function largestWirePortOffset(browser: Browser) {
         }),
       );
     })()`),
+  );
+}
+
+export async function openRunWithWirePoint(app: App, screen: Screen, browser: Browser) {
+  await browser.setViewport({ width: 1440, height: 1100 });
+  const run = await prepareScenario(app, "working");
+  await app.open(`/runs/${run.id}`);
+  await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
+  const point = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
+    const canvas = document.querySelector('[aria-label="Execution canvas"]');
+    for (const path of canvas.querySelectorAll("path[data-wire-key]")) {
+      const at = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM());
+      if (document.elementFromPoint(at.x, at.y) === path) return { x: at.x, y: at.y };
+    }
+    return null;
+  })()`);
+  expect(point).not.toBeNull();
+  return point!;
+}
+
+export async function executionWireFocused(browser: Browser) {
+  return await browser.evaluate<boolean>(
+    `document.activeElement?.closest('[aria-label="Execution canvas"] [data-wire-key]') != null`,
   );
 }

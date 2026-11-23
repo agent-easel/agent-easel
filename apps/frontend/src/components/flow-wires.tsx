@@ -144,6 +144,18 @@ export function exitWires(
   });
 }
 
+export function wireAt(graph: CanvasGraph, key: string): FlowWire | null {
+  for (const targetBlockId of graph.flowInput.targetBlockIds)
+    if (wireRouteKey({ kind: "flow-input" }, targetBlockId) === key)
+      return { source: { kind: "flow-input" }, targetBlockId };
+  for (const connection of graph.connections) {
+    const wire = connectionWire(connection);
+    if (wireRouteKey(wire.source, connection.targetBlockId, connection.targetEndingId) === key)
+      return wire;
+  }
+  return null;
+}
+
 function flowInputWires(
   graph: CanvasGraph,
   kind: WirePresentation["kind"],
@@ -331,11 +343,22 @@ function EmphasizedWire({
       data-connection-emphasis
       markerEnd={`url(#${arrow})`}
       className={cn(
-        "fill-none stroke-[2.5] [stroke-linecap:round] [stroke-linejoin:round]",
+        "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
         selected
-          ? "stroke-primary"
-          : "stroke-foreground motion-safe:transition-[stroke,stroke-width] motion-safe:duration-75 motion-safe:starting:stroke-[1.4] motion-safe:starting:stroke-subtle-foreground",
+          ? "stroke-primary stroke-[2]"
+          : "stroke-foreground stroke-[2.5] motion-safe:transition-[stroke,stroke-width] motion-safe:duration-75 motion-safe:starting:stroke-[1.4] motion-safe:starting:stroke-subtle-foreground",
       )}
+    />
+  );
+}
+
+function WireHitPath({ wire }: { wire: Wire }) {
+  return (
+    <path
+      d={wire.path.d}
+      data-wire-key={wire.key}
+      data-canvas-pan-through
+      className="fill-none stroke-transparent [pointer-events:stroke] [stroke-width:calc(12px/var(--canvas-scale,1))]"
     />
   );
 }
@@ -345,16 +368,21 @@ function WireStrokes({
   selection,
   selected,
   emphasized,
+  previewedWire,
   marker,
 }: {
   wires: readonly Wire[];
   selection: WireSelection | null;
   selected: Wire | undefined | null;
   emphasized: CanvasNode | null;
+  previewedWire: string | null;
   marker: string;
 }) {
   const outgoing = new Set(
-    emphasized ? wires.filter((wire) => leavesNode(wire.wire, emphasized)) : [],
+    wires.filter(
+      (wire) =>
+        wire.key === previewedWire || (emphasized !== null && leavesNode(wire.wire, emphasized)),
+    ),
   );
   return (
     <>
@@ -381,6 +409,7 @@ function WireStrokes({
       {Array.from(outgoing, (wire) => (
         <EmphasizedWire key={wire.key} wire={wire} marker={marker} selected={wire === selected} />
       ))}
+      {!selection && wires.map((wire) => <WireHitPath key={wire.key} wire={wire} />)}
     </>
   );
 }
@@ -392,6 +421,7 @@ export function FlowWires({
   routes,
   pendingWire,
   emphasized,
+  previewedWire,
   finish,
   area,
   nested,
@@ -405,6 +435,7 @@ export function FlowWires({
   /** Rendered separately by the drag preview, but reserves its incoming port. */
   pendingWire: FlowWire | null;
   emphasized: CanvasNode | null;
+  previewedWire: string | null;
   area: Rect | null;
   nested?: boolean;
 }) {
@@ -443,6 +474,7 @@ export function FlowWires({
           selection={selection}
           selected={selected}
           emphasized={emphasized}
+          previewedWire={previewedWire}
           marker={marker}
         />
       </svg>
@@ -498,13 +530,13 @@ function SelectableWire({
         d={wire.path.d}
         markerEnd={`url(#${selected ? "arrow-selected" : marker})`}
         className={cn(
-          "fill-none stroke-muted-foreground stroke-[1.5] transition-colors group-hover/wire:stroke-foreground",
-          selected && "stroke-primary stroke-[2.5] group-hover/wire:stroke-primary",
+          "fill-none stroke-muted-foreground stroke-[1.5]",
+          selected && "stroke-primary stroke-[2]",
         )}
       />
       <path
         d={wire.path.d}
-        className="fill-none stroke-transparent stroke-[12] [pointer-events:stroke]"
+        className="fill-none stroke-transparent [pointer-events:stroke] [stroke-width:calc(12px/var(--canvas-scale,1))]"
       />
     </g>
   );

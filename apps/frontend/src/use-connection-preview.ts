@@ -13,12 +13,10 @@ import { sameNode, type CanvasNode } from "./flow-graph.ts";
 
 const POINTER_LEAVE_GRACE_MS = 80;
 
-type PreviewTarget = { readonly scope: string } & (
+export type PreviewTarget = { readonly scope: string } & (
   | { readonly kind: "block"; readonly node: CanvasNode }
   | { readonly kind: "wire"; readonly key: string }
 );
-
-export type PreviewSource = Extract<PreviewTarget, { kind: "block" }>;
 
 type Preview = { readonly target: PreviewTarget; readonly via: "pointer" | "keyboard" };
 

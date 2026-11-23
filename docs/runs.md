@@ -458,6 +458,15 @@ fixed Human exits their old exits were mapped to.
   and clear it immediately if it no longer holds hover or focus. Opening Studio, Settings or another Run clears the
   preview immediately. It works on ended Runs from the captured revision and leaves selection, recorded outcomes and
   Follow active unchanged. Finish and touch taps show no preview.
+- Hovering a connection with a mouse or trackpad draws it thicker above the others, frames both endpoint cards
+  (including the Flow input and Finish) and fills the source exit port and the target input port, or the Finish ending
+  row's port. A Join row or ending reached by several connections is accented while only the hovered connection
+  thickens. A connection beats a block preview, cards take the pointer over connections beneath them, and the topmost of
+  overlapping connections responds. Each connection takes the pointer about 12 screen pixels wide at any zoom.
+  Connections are never selectable or focusable: a press-drag that starts on one pans the canvas, and a click without
+  movement acts like a click on empty canvas and returns the inspector to the Overview. Inside an expanded Subflow,
+  inner connections highlight only within their own placement, so two placements of the same Flow respond
+  independently; the entry and ending bridges stay passive.
 - Exit rows name each exit in muted text until a report, an answer, a Condition selection or a forward has chosen it; a
   chosen exit reads in primary text. Condition outputs keep their rule (**from arrival *N* onward**, **when no rule
   matches**); other exits carry no source label.

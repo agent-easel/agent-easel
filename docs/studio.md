@@ -431,6 +431,14 @@ taps show no preview. One preview follows the latest pointer or keyboard interac
 period. A drag to move or connect, a covered canvas or a Flow change clears the preview immediately. Pan and zoom keep it
 while the same source remains under the pointer or holds keyboard focus.
 
+Hovering a wire, or giving it keyboard focus, draws it thicker above the other wires. Both endpoint cards get the dashed
+frame, including the Flow input and Finish. The source exit port and the target input port, or the Finish ending row's
+port, are filled in primary text colour. Several wires into one Join row or one ending accent that shared row while only
+the hovered wire thickens. Wires from hidden or removed exits respond the same way. A wire beats a block preview, and
+cards take the pointer over wires beneath them; where wires overlap, the topmost one responds. Each wire takes the pointer
+about 12 screen pixels wide at any zoom. Hovering never selects: clicking still selects the wire, press-drag on it stays
+inert, and a selected wire keeps its indigo stroke. The read-only preview inside an expanded Subflow does not respond.
+
 **Exits.** An Agent block offers its Agent's exits, minus those hidden in this Flow, followed by its Flow-local exits; inherited exits cannot be edited in a Flow. Hiding exits and adding
 Flow-local exits are stored with the Flow revision. **Exits** shows the inherited exits' names, each with its targets and **Hide** / **Show**.
 Hidden rows remain visible in the panel but are absent from worker choices and cannot start new connections; they still reserve their names and IDs against local exits. Hiding a wired exit preserves its connection and reports a readiness issue until the exit is shown or the wire removed.

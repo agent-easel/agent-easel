@@ -8,7 +8,12 @@ import {
 } from "./canvas-viewport.ts";
 
 function canvasPanTarget(event: ReactPointerEvent<HTMLElement>) {
-  return event.button === 0 && event.target === event.currentTarget;
+  const { target, currentTarget } = event;
+  return (
+    event.button === 0 &&
+    (target === currentTarget ||
+      (target instanceof Element && target.hasAttribute("data-canvas-pan-through")))
+  );
 }
 
 /** Pointer pan on empty canvas; a click without movement runs `onTap`. */
