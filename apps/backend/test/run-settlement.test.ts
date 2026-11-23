@@ -258,6 +258,69 @@ it("a Run settles automatically once its reported worker's thread is finished", 
   expect(navigation.value.map((entry) => entry.lifecycle)).toStrictEqual(["settled"]);
 });
 
+it("an automatically settled Run's navigation row carries its Settled cycle and the reason automatic without an ending", async (c) => {
+  // Arrange
+  const setup = await prepared(c);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  await f.f.reconcileRuns();
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  const settledEvent = run.value.events.findLast((event) => event.kind === "run-settled");
+
+  // Act
+  const navigation = await f.f.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  expect(navigation.value[0]).toMatchObject({
+    settledCycle: settledEvent?.sequence,
+    settledReason: "automatic",
+    endingName: null,
+  });
+});
+
+it("a manually settled Run's navigation row carries its Settled cycle and the reason manual without an ending", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  const result = await f.f.settleRun(f.runId, {});
+  assert(result.ok);
+  const settledEvent = result.value.run.events.findLast((event) => event.kind === "run-settled");
+
+  // Act
+  const navigation = await f.f.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  expect(navigation.value[0]).toMatchObject({
+    settledCycle: settledEvent?.sequence,
+    settledReason: "manual",
+    endingName: null,
+  });
+});
+
+it("a Run that returned to Active and settled again exposes a new Settled cycle", async (c) => {
+  // Arrange
+  const setup = await prepared(c);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const reported = await resultReported(setup.world, atWork);
+  const f = { ...setup, ...(await settled(setup.world, reported)) };
+  const first = await f.f.listRunNavigation();
+  assert(first.ok);
+  expect((await f.f.runtime.submit(workerFinal(f.blockId))).code).toBe("ACCEPTED");
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const second = await f.f.listRunNavigation();
+  assert(second.ok);
+  expect(second.value[0]?.lifecycle).toBe("settled");
+  expect(second.value[0]?.settledCycle).toBeGreaterThan(first.value[0]?.settledCycle ?? 0);
+});
+
 it("a Run stays Active while T3 has not answered that its worker's delegated work settled", async (c) => {
   // Arrange
   const setup = await prepared(c);

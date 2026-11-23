@@ -426,7 +426,15 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **26**. The server and the Desktop and browser clients require protocol **26**.
+The current protocol is **27**. The server and the Desktop and browser clients require protocol **27**.
+
+Protocol 27 adds three fields to each Run navigation row: the Settled-cycle id (the sequence of the
+Run's latest `run-settled` event, which changes when a Run returns to Active and settles again), the
+settlement reason (`automatic`, `manual` or `finish`) and the ending name captured in the Run result.
+The ending name comes from the Run result, not the live Flow, and output text is never included. A
+Settle on a Run that already has a Run result is recorded as `finish`. A protocol 26 client cannot
+read the fields and a protocol 27 client needs a server that sends them, so each side shows the update
+gate naming the peer to update. Existing approvals, credentials and stored data carry forward.
 
 Protocol 25 removes the `WatchAppearance` live RPC and `ClientScope.appearanceSource` because
 custom color themes are configured per device rather than polled from T3. Protocol 24 and older
