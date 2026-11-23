@@ -424,6 +424,13 @@ ending, its row reads **Ending expects: *output description*** for a Required en
 Optional one, and an exit wired straight to a Required ending shows **Message required**, in this Flow only. Click a wire to select it (the block panel closes); each wire is also a keyboard button (**Connection *exit* from *source* to *target***). With a
 connection selected, Delete/Backspace (outside form controls) or the **Delete connection** button removes it. Removing a block or exit removes its connections.
 
+Hover a block or Flow input with a mouse or trackpad, or give one of its controls keyboard focus, to see its direct
+outgoing wires above the others and a dashed frame around the source. Incoming wires, later hops and destination cards
+keep their resting style. The preview adds no labels and leaves selection and block settings unchanged. Finish and touch
+taps show no preview. One preview follows the latest pointer or keyboard interaction. Pointer leave has a brief grace
+period. A drag to move or connect, a covered canvas or a Flow change clears the preview immediately. Pan and zoom keep it
+while the same source remains under the pointer or holds keyboard focus.
+
 **Exits.** An Agent block offers its Agent's exits, minus those hidden in this Flow, followed by its Flow-local exits; inherited exits cannot be edited in a Flow. Hiding exits and adding
 Flow-local exits are stored with the Flow revision. **Exits** shows the inherited exits' names, each with its targets and **Hide** / **Show**.
 Hidden rows remain visible in the panel but are absent from worker choices and cannot start new connections; they still reserve their names and IDs against local exits. Hiding a wired exit preserves its connection and reports a readiness issue until the exit is shown or the wire removed.

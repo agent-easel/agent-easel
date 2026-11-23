@@ -297,29 +297,94 @@ function WireMarkers({ selection, marker }: { selection: boolean; marker: string
           >
             <path d="M0,0 L6,4 L0,8 z" className="fill-subtle-foreground" />
           </marker>
-          <marker
-            id="execution-arrow-emphasis"
-            markerWidth="9"
-            markerHeight="11"
-            refX="9"
-            refY="5.5"
-            orient="auto"
-            markerUnits="userSpaceOnUse"
-          >
-            <path d="M0,0 L9,5.5 L0,11 z" className="fill-foreground" />
-          </marker>
         </>
       )}
+      <marker
+        id={`${marker}-emphasis`}
+        markerWidth="9"
+        markerHeight="11"
+        refX="9"
+        refY="5.5"
+        orient="auto"
+        markerUnits="userSpaceOnUse"
+      >
+        <path d="M0,0 L9,5.5 L0,11 z" className="fill-foreground" />
+      </marker>
     </defs>
   );
 }
 
-/**
- * Configured connections and the Flow input's wires in one neutral style, without labels.
- * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
- * Orthogonal wires leaving the emphasized node are drawn heavier and in higher contrast, above
- * the others.
- */
+function EmphasizedWire({
+  wire,
+  marker,
+  selected,
+}: {
+  wire: Wire;
+  marker: string;
+  selected: boolean;
+}) {
+  const arrow = selected ? "arrow-selected" : `${marker}-emphasis`;
+  return (
+    <path
+      d={wire.path.d}
+      aria-hidden
+      data-connection-emphasis
+      markerEnd={`url(#${arrow})`}
+      className={cn(
+        "fill-none stroke-[2.5] [stroke-linecap:round] [stroke-linejoin:round]",
+        selected
+          ? "stroke-primary"
+          : "stroke-foreground motion-safe:transition-[stroke,stroke-width] motion-safe:duration-75 motion-safe:starting:stroke-[1.4] motion-safe:starting:stroke-subtle-foreground",
+      )}
+    />
+  );
+}
+
+function WireStrokes({
+  wires,
+  selection,
+  selected,
+  emphasized,
+  marker,
+}: {
+  wires: readonly Wire[];
+  selection: WireSelection | null;
+  selected: Wire | undefined | null;
+  emphasized: CanvasNode | null;
+  marker: string;
+}) {
+  const outgoing = new Set(
+    emphasized ? wires.filter((wire) => leavesNode(wire.wire, emphasized)) : [],
+  );
+  return (
+    <>
+      {selection
+        ? wires.map((wire) => (
+            <SelectableWire
+              key={wire.key}
+              wire={wire}
+              marker={marker}
+              selected={wire === selected}
+              onSelect={() => selection.onSelect(wire.wire)}
+            />
+          ))
+        : wires
+            .filter((wire) => !outgoing.has(wire))
+            .map((wire) => (
+              <path
+                key={wire.key}
+                d={wire.path.d}
+                markerEnd={`url(#${marker})`}
+                className="fill-none stroke-subtle-foreground stroke-[1.4] [stroke-linecap:round] [stroke-linejoin:round]"
+              />
+            ))}
+      {Array.from(outgoing, (wire) => (
+        <EmphasizedWire key={wire.key} wire={wire} marker={marker} selected={wire === selected} />
+      ))}
+    </>
+  );
+}
+
 export function FlowWires({
   graph,
   geometry,
@@ -360,7 +425,6 @@ export function FlowWires({
     nested,
   });
   const selected = current && wires.find((wire) => sameWire(wire.wire, current));
-  const emphasis = (item: Wire) => emphasized !== null && leavesNode(item.wire, emphasized);
   return (
     <>
       <svg
@@ -374,30 +438,13 @@ export function FlowWires({
         onBlur={(event) => setFocused(wireKeyOf(event.relatedTarget))}
       >
         <WireMarkers selection={selection !== null} marker={marker} />
-        {selection
-          ? wires.map((wire) => (
-              <SelectableWire
-                key={wire.key}
-                wire={wire}
-                marker={marker}
-                selected={wire === selected}
-                onSelect={() => selection.onSelect(wire.wire)}
-              />
-            ))
-          : // Emphasized wires come last, so they cross over the resting ones.
-            [...wires.filter((wire) => !emphasis(wire)), ...wires.filter(emphasis)].map((wire) => (
-              <path
-                key={wire.key}
-                d={wire.path.d}
-                markerEnd={`url(#${emphasis(wire) ? "execution-arrow-emphasis" : marker})`}
-                className={cn(
-                  "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
-                  emphasis(wire)
-                    ? "stroke-foreground stroke-[2.5]"
-                    : "stroke-subtle-foreground stroke-[1.4]",
-                )}
-              />
-            ))}
+        <WireStrokes
+          wires={wires}
+          selection={selection}
+          selected={selected}
+          emphasized={emphasized}
+          marker={marker}
+        />
       </svg>
       {selected?.path.label && (
         <DeleteConnection

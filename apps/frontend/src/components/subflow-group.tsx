@@ -380,6 +380,7 @@ export function SubflowGroup({
   agents,
   flows,
   frameClassName,
+  previewFrame,
   border,
   headerPress,
   trailingBadge,
@@ -396,6 +397,7 @@ export function SubflowGroup({
   agents: readonly AgentDefinition[];
   flows: ReadonlyMap<string, CanvasFlow>;
   frameClassName: string;
+  previewFrame: ReactNode;
   border: number;
   headerPress: (content: ReactNode) => ReactNode;
   trailingBadge?: ReactNode;
@@ -416,9 +418,7 @@ export function SubflowGroup({
 }) {
   const name = block.name || preview.childFlow.name;
   const headerLabel =
-    block.name && block.name !== preview.childFlow.name
-      ? `${block.name} · ${preview.childFlow.name}`
-      : preview.childFlow.name;
+    name === preview.childFlow.name ? name : `${name} · ${preview.childFlow.name}`;
   return (
     <article
       aria-label={`Subflow ${name}`}
@@ -482,6 +482,7 @@ export function SubflowGroup({
       <span className="sr-only">
         {geometry.incomingPorts(block).length} incoming, {block.exits.length} exits
       </span>
+      {previewFrame}
     </article>
   );
 }

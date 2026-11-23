@@ -220,16 +220,40 @@ function SurfacePort({
   );
 }
 
+function ConnectionPreviewFrame({ border }: { border: number }) {
+  const inset = 4 + border;
+  const size = `calc(100% + ${inset * 2}px)`;
+  return (
+    <svg
+      aria-hidden
+      data-connection-preview
+      className="pointer-events-none absolute overflow-visible motion-safe:transition-opacity motion-safe:duration-75 motion-safe:starting:opacity-0"
+      style={{ top: -inset, left: -inset, width: size, height: size }}
+    >
+      <rect
+        width="100%"
+        height="100%"
+        rx={12}
+        strokeWidth={1}
+        strokeDasharray="4 3"
+        className="fill-none stroke-foreground"
+      />
+    </svg>
+  );
+}
+
 function SurfaceFlowInput({
   graph,
   geometry,
   dimensions,
   content,
+  previewed,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
   dimensions: Dimensions;
   content: CanvasFlowInputContent;
+  previewed: boolean;
 }) {
   const input = dimensions.flowInput;
   const { prompt } = content;
@@ -272,6 +296,7 @@ function SurfaceFlowInput({
         port={dimensions.port}
         look={content.port}
       />
+      {previewed && <ConnectionPreviewFrame border={input.border} />}
     </article>
   );
 }
@@ -337,6 +362,7 @@ function SurfaceBlock({
   dimensions,
   content,
   pendingInput,
+  previewed,
 }: {
   block: CanvasBlock;
   sources: readonly JoinSource[];
@@ -345,6 +371,7 @@ function SurfaceBlock({
   content: CanvasBlockContent;
   /** The input a connection being drawn to this block will use. */
   pendingInput: number | null;
+  previewed: boolean;
 }) {
   const rows = dimensions.block;
   const border = rows.border;
@@ -432,6 +459,7 @@ function SurfaceBlock({
         Array.from({ length: inputs }, (_, index) =>
           inputPort(index, geometry.inputPoint(block, index).y - block.position.y - border),
         )}
+      {previewed && <ConnectionPreviewFrame border={border} />}
     </article>
   );
 }
@@ -816,6 +844,7 @@ function SurfaceBlockItem({
   content,
   pendingInput,
   surface,
+  previewed,
   scopePath = "",
   previews,
   area = null,
@@ -826,6 +855,7 @@ function SurfaceBlockItem({
   content: CanvasBlockContent;
   pendingInput: number | null;
   surface: CanvasSurfaceProps;
+  previewed: boolean;
   scopePath?: string;
   previews?: ReadonlyMap<string, SubflowPreview> | undefined;
   area?: Rect | null;
@@ -842,6 +872,7 @@ function SurfaceBlockItem({
         dimensions={dimensions}
         content={content}
         pendingInput={pendingInput}
+        previewed={previewed}
       />
     );
   }
@@ -876,6 +907,7 @@ function SurfaceBlockItem({
       agents={previewAgents ?? EMPTY_PREVIEW_AGENTS}
       flows={flows ?? EMPTY_PREVIEW_FLOWS}
       frameClassName={content.className}
+      previewFrame={previewed && <ConnectionPreviewFrame border={dimensions.block.border} />}
       border={dimensions.block.border}
       headerPress={content.press.render}
       trailingBadge={content.subflowBadge}
@@ -942,8 +974,14 @@ function SurfaceLayer({
   const { scope, shown = true, dimensions, wires, flowInput, finish, children } = surface;
   const gesture = surface.gesture ?? null;
   const { geometry, graph, drawn, pending, routes, content } = surfaceGraph;
-  // Kept here rather than in the surface, so a preview does not recompute every block's content.
-  const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
+  const preview = useConnectionPreview({
+    owner: shown && !gesture ? scope : null,
+    view,
+    geometry: drawn,
+    area,
+  });
+  const source = preview.target?.kind === "block" ? preview.target : null;
+  const emphasized = source?.scope === "" ? source.node : null;
   const [focused, setFocused] = useState<string | null>(null);
   const pinned = useMemo(() => new Set(pinnedBlockIds(gesture, focused)), [gesture, focused]);
   const layer = useMemo(() => layerSize([geometry, drawn]), [geometry, drawn]);
@@ -970,7 +1008,7 @@ function SurfaceLayer({
         presentation={wires}
         routes={routes}
         pendingWire={pending}
-        emphasized={preview.source?.scope === "" ? preview.source.node : null}
+        emphasized={emphasized}
         finish={finish !== undefined}
         area={area}
       />
@@ -981,6 +1019,7 @@ function SurfaceLayer({
         geometry={drawn}
         dimensions={dimensions}
         content={flowInput}
+        previewed={emphasized?.kind === "flow-input"}
       />
       {finish && (
         <SurfaceFinish
@@ -1001,19 +1040,13 @@ function SurfaceLayer({
           pendingInput={pendingBlockInput(pending, drawn, item.id)}
           surface={surface}
           area={area}
+          previewed={emphasized?.kind === "block" && emphasized.blockId === item.id}
         />
       ))}
       {surface.nested &&
         area &&
         surface.subflowPreviews &&
-        drawNestedScopes(
-          surface,
-          surface.nested,
-          graph,
-          surface.subflowPreviews,
-          area,
-          preview.source,
-        )}
+        drawNestedScopes(surface, surface.nested, graph, surface.subflowPreviews, area, source)}
     </div>
   );
 }
@@ -1111,6 +1144,7 @@ function NestedScopeLayer({
           geometry={innerGeometry}
           dimensions={surface.dimensions}
           content={nested.input(path)}
+          previewed={emphasized?.kind === "flow-input"}
         />
       )}
       {finish && (
@@ -1134,6 +1168,7 @@ function NestedScopeLayer({
           scopePath={path}
           previews={innerPreviews}
           area={local}
+          previewed={emphasized?.kind === "block" && emphasized.blockId === item.id}
         />
       ))}
     </div>
