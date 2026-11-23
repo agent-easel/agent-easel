@@ -21,6 +21,7 @@ import type { GitAdapter } from "./adapters/git.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
+import type { RunListExtras } from "./runner/run-store/navigation.ts";
 import { makeClientAccess } from "./client-access.ts";
 import { makeRunImages } from "./run-images.ts";
 import { makeRunTitles } from "./run-titles.ts";
@@ -54,6 +55,7 @@ export class FactoryService extends Context.Service<
     readonly runtime: RuntimeReports;
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
+    readonly listRunListExtras: () => Effect.Effect<Result<RunListExtras>>;
     readonly setRuntimeBackendUrl: (url: string) => void;
     readonly live: LiveStreams;
     readonly telemetry: Telemetry;
@@ -382,6 +384,7 @@ export const makeFactoryService = (
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
+      listRunListExtras: () => guard(runner.listRunListExtras()),
       setRuntimeBackendUrl: (url) => {
         runtimeBackendUrl = url;
       },
