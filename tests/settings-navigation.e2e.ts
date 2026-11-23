@@ -138,6 +138,22 @@ test("searching for notifications finds Desktop app and keeps the open page", as
   await app.screenshot("settings-search-notifications");
 });
 
+test("searching for Run finished notifications finds Desktop app", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("notify when a run finishes");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Desktop app", { exact: true })).toBeVisible();
+});
+
 // The shared focus ring is 3 px of `--ring` at half opacity.
 const focusShadow = `getComputedStyle(document.activeElement).boxShadow`;
 const noShadow = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";

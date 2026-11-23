@@ -148,7 +148,11 @@ function useRoutedInspection(setInspected: (inspected: Inspected) => void) {
   });
   const routedBlock = useLocation({ select: ({ state }) => state.routedBlock ?? null });
   const routedAttentionId = useLocation({ select: ({ state }) => state.routedAttentionId });
+  const routedOverview = useLocation({ select: ({ state }) => state.routedOverview === true });
   const [appliedKey, setAppliedKey] = useState<string>();
+  useEffect(() => {
+    if (routedKey !== undefined && routedOverview) openRunInspector();
+  }, [routedKey, routedOverview]);
   if (routedKey !== undefined && routedKey !== appliedKey) {
     setAppliedKey(routedKey);
     setInspected(

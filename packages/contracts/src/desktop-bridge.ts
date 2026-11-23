@@ -20,6 +20,7 @@ export type AppearancePreference = "system" | Appearance;
 export interface DesktopAlertSettings {
   /** macOS notifications for matters that newly need the owner; on by default. */
   readonly notifications: boolean;
+  readonly notifyRunFinished: boolean;
   /** The Dock badge counting Runs that need the owner; on by default. */
   readonly dockBadge: boolean;
   /** Adds the project, Run title and Block name to notifications; off by default. */
@@ -43,6 +44,7 @@ export type DesktopRoute =
       readonly runId: string;
       readonly blockId: string | null;
       readonly attentionId?: string;
+      readonly revealOverview?: true;
     }
   | { readonly kind: "needs-you" };
 

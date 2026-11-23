@@ -17,6 +17,10 @@ import type {
 import {
   AttentionLedger,
   type AppearanceState,
+  type AttentionNotificationRecord,
+  type CompletionLedger,
+  type CompletionNotificationRecord,
+  type CompletionRecord,
   type DeferReason,
   type NotificationRecord,
   type ServerLedger,
@@ -31,6 +35,7 @@ export interface DesktopAlertPort {
   show(notification: AlertNotification): Promise<ShowOutcome>;
   /** Removes delivered notifications best effort, also ones posted by an earlier process. */
   withdraw(ids: readonly string[]): void;
+  delivered(): Promise<readonly string[]>;
   /** The Dock badge text; an empty label removes the badge. Independent of permission. */
   setBadge(label: string): void;
   /** Read without a window; never prompts. */
@@ -182,10 +187,18 @@ function observe(
 function withdrawable(ledger: ServerLedger, rows: readonly RunNavigationEntry[]): string[] {
   const pending = new Set(rows.flatMap((row) => row.attention.matters.map(({ id }) => id)));
   const eligible = new Set(rows.flatMap((row) => mattersNeedingOwner(row).map(({ id }) => id)));
-  return withdrawWhere(
-    ledger,
-    ({ matters }) =>
-      matters.some(({ id }) => !pending.has(id)) || !matters.some(({ id }) => eligible.has(id)),
+  const settledCycles = new Map(
+    rows.flatMap((row) =>
+      row.lifecycle === "settled" && row.settledCycle !== null
+        ? [[row.id, row.settledCycle] as const]
+        : [],
+    ),
+  );
+  return withdrawWhere(ledger, (notification) =>
+    notification.kind === "completion"
+      ? settledCycles.get(notification.runId) !== notification.cycle
+      : notification.matters.some(({ id }) => !pending.has(id)) ||
+        !notification.matters.some(({ id }) => eligible.has(id)),
   );
 }
 
@@ -227,6 +240,8 @@ function notificationRoute(
   notification: NotificationRecord,
   rows: readonly RunNavigationEntry[],
 ): DesktopRoute {
+  if (notification.kind === "completion")
+    return { kind: "run", runId: notification.runId, blockId: null, revealOverview: true };
   const announced = new Set(notification.matters.map(({ id }) => id));
   const pending = (
     rows.find((row) => row.id === notification.runId)?.attention.matters ?? []
@@ -307,6 +322,165 @@ function intend(
   });
 }
 
+type Completion = { readonly row: RunNavigationEntry; readonly cycle: number };
+
+const announcedReasons = new Set<RunNavigationEntry["settledReason"]>(["automatic", "finish"]);
+
+function announcedCompletion(row: RunNavigationEntry): Completion | null {
+  if (row.lifecycle !== "settled" || row.settlement !== null || row.settledCycle === null)
+    return null;
+  return announcedReasons.has(row.settledReason) ? { row, cycle: row.settledCycle } : null;
+}
+
+const unaccounted = (record: CompletionRecord | undefined, cycle: number, retry: boolean) =>
+  record?.cycle !== cycle || (retry && record.state === "definitely-failed");
+
+type HeldCompletion = { readonly runId: string; readonly cycle: number };
+
+function observeCompletions(
+  ledger: ServerLedger,
+  rows: readonly RunNavigationEntry[],
+  catchUp: boolean,
+  held: HeldCompletion | null,
+): Completion[] {
+  const completions: CompletionLedger = (ledger.completions ??= {
+    baselinePending: true,
+    runs: {},
+  });
+  const settled = new Set(rows.filter((row) => row.lifecycle === "settled").map(({ id }) => id));
+  for (const runId of Object.keys(completions.runs))
+    if (!settled.has(runId)) delete completions.runs[runId];
+  const due = rows
+    .map(announcedCompletion)
+    .filter((completion) => completion !== null)
+    .filter(({ row, cycle }) => unaccounted(completions.runs[row.id], cycle, catchUp));
+  if (!completions.baselinePending) return due;
+  completions.baselinePending = false;
+  const released = due.filter(({ row, cycle }) => row.id === held?.runId && cycle === held.cycle);
+  const releasedRuns = new Set(released.map(({ row }) => row.id));
+  for (const row of rows) {
+    if (row.lifecycle !== "settled" || row.settledCycle === null || releasedRuns.has(row.id))
+      continue;
+    if (unaccounted(completions.runs[row.id], row.settledCycle, true))
+      completions.runs[row.id] = { cycle: row.settledCycle, state: "seen" };
+  }
+  return released;
+}
+
+function completionContent(
+  row: RunNavigationEntry,
+  showRunDetails: boolean,
+): Pick<AlertNotification, "title" | "body"> {
+  return {
+    title: showRunDetails
+      ? [row.project.title, row.title].filter(Boolean).join(" · ")
+      : "A Run has settled",
+    body:
+      row.settledReason === "finish" && row.endingName !== null
+        ? `Settled at Finish ending “${row.endingName}”`
+        : "Settled",
+  };
+}
+
+function intendCompletions(
+  ledger: ServerLedger,
+  server: string,
+  completions: readonly Completion[],
+  showRunDetails: boolean,
+): AlertNotification[] {
+  return completions.map(({ row, cycle }) => {
+    const id = randomUUID();
+    ledger.completions!.runs[row.id] = { cycle, state: "attempted-unknown", notification: id };
+    ledger.notifications[id] = {
+      kind: "completion",
+      runId: row.id,
+      cycle,
+      postedAt: new Date().toISOString(),
+      withdrawn: false,
+    };
+    return { id, groupId: groupOf(server), ...completionContent(row, showRunDetails) };
+  });
+}
+
+function seeCompletions(ledger: ServerLedger, completions: readonly Completion[]) {
+  for (const { row, cycle } of completions)
+    ledger.completions!.runs[row.id] = { cycle, state: "seen" };
+}
+
+const announcesCompletions = (settings: DesktopAlertSettings) =>
+  settings.notifications && settings.notifyRunFinished;
+
+type Decision = {
+  readonly retry: boolean;
+  readonly held: HeldCompletion | null;
+  readonly withheld: AppearanceState | null;
+  readonly settings: DesktopAlertSettings;
+};
+
+function decide(
+  ledger: ServerLedger,
+  server: string,
+  rows: readonly RunNavigationEntry[],
+  { retry, held, withheld, settings }: Decision,
+) {
+  const announcements = observe(ledger, rows, retry);
+  const completions = announcesCompletions(settings)
+    ? observeCompletions(ledger, rows, retry, held)
+    : [];
+  if (withheld?.state === "foreground-accounted") seeCompletions(ledger, completions);
+  const waitsForPrompt =
+    withheld?.state === "deferred" && withheld.reason === "permission-undetermined";
+  return {
+    due: announcements.length > 0 || completions.length > 0,
+    withdrawn: withdrawable(ledger, rows),
+    shown: withheld
+      ? account(ledger, announcements, withheld)
+      : [
+          ...intend(ledger, server, announcements, settings.showRunDetails),
+          ...intendCompletions(ledger, server, completions, settings.showRunDetails),
+        ],
+    trigger: waitsForPrompt ? completions[0] : undefined,
+  };
+}
+
+const answered = (id: string, outcome: ShowOutcome) =>
+  outcome.kind === "accepted"
+    ? ({ state: "delivered", notification: id } as const)
+    : ({ state: "definitely-failed", notification: id } as const);
+
+function recordOutcome(ledger: ServerLedger, id: string, outcome: ShowOutcome) {
+  const runs = ledger.completions?.runs ?? {};
+  for (const [runId, record] of Object.entries(runs))
+    if (record.state === "attempted-unknown" && record.notification === id)
+      runs[runId] = { cycle: record.cycle, ...answered(id, outcome) };
+  for (const record of Object.values(ledger.matters))
+    for (const [revision, appearance] of Object.entries(record.appearances))
+      if (appearance.state === "attempted-unknown" && appearance.notification === id)
+        record.appearances[revision] = answered(id, outcome);
+}
+
+function unpostCompletion(
+  ledger: ServerLedger,
+  notification: CompletionNotificationRecord,
+  state: AppearanceState | null,
+) {
+  const runs = ledger.completions!.runs;
+  if (state) runs[notification.runId] = { cycle: notification.cycle, state: "seen" };
+  else delete runs[notification.runId];
+}
+
+function unpostAttention(
+  ledger: ServerLedger,
+  notification: AttentionNotificationRecord | undefined,
+  state: AppearanceState | null,
+) {
+  for (const { id: matterId, revision } of notification?.matters ?? []) {
+    const appearances = ledger.matters[matterId]!.appearances;
+    if (state) appearances[revision] = state;
+    else delete appearances[revision];
+  }
+}
+
 export class AttentionCoordinator {
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
@@ -317,6 +491,7 @@ export class AttentionCoordinator {
   private requesting = false;
   private focused = false;
   private held: HeldClick | null = null;
+  private heldCompletion: (HeldCompletion & { readonly server: string }) | null = null;
   /**
    * Changes synchronously with every selection, lost readiness and revocation, before their
    * queued work runs, so an announcement can tell that its state ended while it awaited.
@@ -327,6 +502,9 @@ export class AttentionCoordinator {
    * selection's next valid delivery runs it, since a recovery after a gap is not a snapshot.
    */
   private owedCatchUp = false;
+  private observedRevocations = 0;
+  private readonly postedFor = new Map<string, string>();
+  private readonly revokedNotifications = new Set<string>();
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -346,11 +524,16 @@ export class AttentionCoordinator {
       readonly permissionChanged: (permission: NotificationPermission) => void;
     },
   ): Promise<AttentionCoordinator> {
+    const ledger = await AttentionLedger.open(directory, new Set(await port.delivered()));
+    const permission = await port.permission();
+    await ledger.notePermission(permission).catch((error: unknown) => {
+      process.emitWarning(`Desktop attention could not be recorded: ${String(error)}`);
+    });
     return new AttentionCoordinator(
-      await AttentionLedger.open(directory),
+      ledger,
       port,
       options.settings,
-      await port.permission(),
+      permission,
       options.permissionChanged,
     );
   }
@@ -364,14 +547,16 @@ export class AttentionCoordinator {
    * ignored. The badge clears until the new feed is ready. Switching to another server withdraws
    * the previous one's notifications and keeps its ledger, so switching back replays nothing.
    */
-  select(server: string | null): AttentionFeed {
+  select(followed: string | null): AttentionFeed {
     const previous = this.selection;
-    const selection = server === null ? null : { server };
+    const selection = followed === null ? null : { server: followed };
+    const server = selection?.server ?? null;
     this.selection = selection;
     this.epoch++;
     this.owedCatchUp = false;
     // A click held for another server never routes into this one.
     if (this.held && this.held.server !== server) this.drop();
+    if (this.heldCompletion?.server !== server) this.heldCompletion = null;
     void this.enqueue(async () => {
       this.latest = null;
       this.showBadge();
@@ -406,14 +591,21 @@ export class AttentionCoordinator {
         });
       },
       revoked: () => {
-        if (current()) this.epoch++;
-        return this.enqueue(async () => {
-          if (!current()) return;
+        const ended = current();
+        if (ended) {
           this.selection = null;
-          this.latest = null;
+          this.epoch++;
+          this.observedRevocations++;
+          for (const [id, server] of this.postedFor)
+            if (server === selection!.server) this.revokedNotifications.add(id);
+          this.owedCatchUp = false;
           this.drop();
+        }
+        return this.enqueue(async () => {
+          if (!ended) return;
+          this.latest = null;
           this.showBadge();
-          await this.withdrawAll(selection!.server);
+          await this.withdrawAll(selection!.server, { forget: true });
         });
       },
     };
@@ -426,13 +618,16 @@ export class AttentionCoordinator {
    * server answers it with null. The window opens regardless; nothing is ever acted on.
    */
   activate(id: string): Promise<DesktopRoute | null> {
+    const revocationsAtClick = this.observedRevocations;
     return new Promise((answer) => {
       void this.enqueue(async () => {
         this.drop();
-        const server = this.selection?.server;
-        const notification =
-          server === undefined ? undefined : this.ledger.notification(server, id);
-        if (!server || !notification) return answer(null);
+        if (this.observedRevocations !== revocationsAtClick) return answer(null);
+        const selection = this.selection;
+        if (!selection) return answer(null);
+        const { server } = selection;
+        const notification = this.ledger.notification(server, id);
+        if (!notification || this.revokedNotifications.has(id)) return answer(null);
         if (this.ready) return answer(notificationRoute(notification, this.ready.rows));
         this.held = { server, notification, answer };
       });
@@ -473,9 +668,13 @@ export class AttentionCoordinator {
   configure(settings: DesktopAlertSettings): Promise<void> {
     return this.enqueue(async () => {
       const enabled = settings.notifications && !this.settings.notifications;
+      const completionsEnabled =
+        announcesCompletions(settings) && !announcesCompletions(this.settings);
       this.settings = settings;
       this.showBadge();
-      if (enabled && this.ready) await this.announce(this.ready, true);
+      if (!announcesCompletions(settings)) this.heldCompletion = null;
+      if (completionsEnabled) await this.ledger.requireCompletionBaseline();
+      if ((enabled || completionsEnabled) && this.ready) await this.announce(this.ready, enabled);
     });
   }
 
@@ -511,8 +710,12 @@ export class AttentionCoordinator {
   }
 
   /** Best effort: Notification Center may already have dropped some of them. */
-  private async withdrawAll(server: string) {
-    const ids = await this.ledger.change(server, (ledger) => withdrawWhere(ledger, () => true));
+  private async withdrawAll(server: string, { forget = false } = {}) {
+    const ids = await this.ledger.change(server, (ledger) => {
+      const withdrawn = withdrawWhere(ledger, () => true);
+      if (forget) ledger.notifications = {};
+      return withdrawn;
+    });
     if (ids.length > 0) this.port.withdraw(ids);
   }
 
@@ -538,29 +741,31 @@ export class AttentionCoordinator {
 
   private async announce({ server, rows, epoch }: Ready, requested: boolean) {
     const catchUp = requested || this.owedCatchUp;
-    const granted = await this.observePermission();
+    const retry = (await this.observePermission()) || catchUp;
+    if (this.epoch !== epoch) return this.abandon(server, [], retry);
     const withheld = this.withheld(this.observed);
-    const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {
-      const announcements = observe(ledger, rows, catchUp || granted);
-      return {
-        due: announcements.length > 0,
-        withdrawn: withdrawable(ledger, rows),
-        shown: withheld
-          ? account(ledger, announcements, withheld)
-          : intend(ledger, server, announcements, this.settings.showRunDetails),
-      };
-    });
+    const held = this.releasable(server);
+    const { due, shown, withdrawn, trigger } = await this.ledger.change(server, (ledger) =>
+      decide(ledger, server, rows, { retry, held, withheld, settings: this.settings }),
+    );
+    if (held) this.heldCompletion = null;
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
-    if (this.epoch !== epoch) return this.abandon(server, shown, catchUp || granted);
-    if (catchUp || granted) this.owedCatchUp = false;
+    if (this.epoch !== epoch) return this.abandon(server, shown, retry);
+    if (retry) this.owedCatchUp = false;
     // A window was focused meanwhile: the owner sees the Run list, so these count as seen.
     if (shown.length > 0 && this.focused)
       return this.unpost(server, shown, { state: "foreground-accounted" });
+    if (due) this.askForPermission(server, trigger);
+    for (const notification of shown) this.post(server, notification);
+  }
+
+  private askForPermission(server: string, trigger: Completion | undefined) {
     // Asked only when a banner would otherwise show now, never at launch.
     const bannerWaitsForPermission =
       !this.focused && this.settings.notifications && this.observed === "undetermined";
-    if (due && bannerWaitsForPermission && !this.requesting) this.request();
-    for (const notification of shown) this.post(server, notification);
+    if (!bannerWaitsForPermission || this.requesting) return;
+    this.heldCompletion = trigger ? { server, runId: trigger.row.id, cycle: trigger.cycle } : null;
+    this.request();
   }
 
   /**
@@ -573,10 +778,19 @@ export class AttentionCoordinator {
     if (this.selection?.server === server) this.owedCatchUp ||= catchUp;
   }
 
+  private releasable(server: string): HeldCompletion | null {
+    if (this.observed !== "granted" || this.heldCompletion?.server !== server) return null;
+    return this.heldCompletion;
+  }
+
   private post(server: string, notification: AlertNotification) {
+    this.postedFor.set(notification.id, server);
     void this.port.show(notification).then(
       (outcome) => this.settle(server, notification.id, outcome),
-      () => this.settle(server, notification.id, { kind: "failed" }),
+      (error: unknown) => {
+        process.emitWarning(`A desktop notification's delivery is unknown: ${String(error)}`);
+        this.settle(server, notification.id, null);
+      },
     );
   }
 
@@ -585,27 +799,13 @@ export class AttentionCoordinator {
    * accepted after it was withdrawn (its matters resolved or its selection ended meanwhile) is
    * withdrawn again.
    */
-  private settle(server: string, id: string, outcome: ShowOutcome) {
+  private settle(server: string, id: string, outcome: ShowOutcome | null) {
     void this.enqueue(async () => {
-      // Its server was forgotten meanwhile: withdraw it again and record no history for it.
-      if (!this.ledger.notification(server, id)) {
-        if (outcome.kind === "accepted") this.port.withdraw([id]);
-        return;
-      }
-      const late = await this.ledger.change(server, (ledger) => {
-        const notification = ledger.notifications[id];
-        for (const { id: matterId, revision } of notification?.matters ?? []) {
-          const record = ledger.matters[matterId];
-          const appearance = record?.appearances[revision];
-          if (appearance?.state !== "attempted-unknown" || appearance.notification !== id) continue;
-          record!.appearances[revision] =
-            outcome.kind === "accepted"
-              ? { state: "delivered", notification: id }
-              : { state: "definitely-failed", notification: id };
-        }
-        return outcome.kind === "accepted" && notification?.withdrawn === true;
-      });
-      if (late) this.port.withdraw([id]);
+      const posted = this.ledger.notification(server, id);
+      const stillWanted = posted !== undefined && !posted.withdrawn;
+      if (outcome?.kind !== "failed" && !stillWanted) this.port.withdraw([id]);
+      if (outcome && this.ledger.follows(server))
+        await this.ledger.change(server, (ledger) => recordOutcome(ledger, id, outcome));
     });
   }
 
@@ -620,11 +820,9 @@ export class AttentionCoordinator {
   ) {
     await this.ledger.change(server, (ledger) => {
       for (const { id } of notifications) {
-        for (const { id: matterId, revision } of ledger.notifications[id]?.matters ?? []) {
-          const appearances = ledger.matters[matterId]!.appearances;
-          if (state) appearances[revision] = state;
-          else delete appearances[revision];
-        }
+        const notification = ledger.notifications[id];
+        if (notification?.kind === "completion") unpostCompletion(ledger, notification, state);
+        else unpostAttention(ledger, notification, state);
         delete ledger.notifications[id];
       }
     });
@@ -635,7 +833,8 @@ export class AttentionCoordinator {
     const previous = this.observed;
     this.observed = await this.port.permission();
     if (this.observed !== previous) this.permissionChanged(this.observed);
-    return this.observed === "granted" && previous !== "granted";
+    if (this.observed === "denied") this.heldCompletion = null;
+    return this.ledger.notePermission(this.observed);
   }
 
   /** Asked at the first delivery, never at launch; a grant catches up on what waited. */

@@ -145,6 +145,19 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   **Run details in notifications** adds the project, Run title and Block name; message,
   report or question text and paths never appear. Notifications play no sound and the Dock icon
   never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Run finished**: with **Notify when a Run finishes** on, each time a Run newly becomes Settled
+  automatically or at a Finish ending, one notification is posted for that Settled cycle. A
+  manual Settle never notifies, whether it was made here, from another client, or from another
+  client while this installation was offline. A Settle on a Run that already has a Run result
+  counts as reaching its Finish ending and notifies, and so does a Finish settlement that
+  completes after Retry settlement. Nothing is posted while a settlement is stopping or
+  unresolved. A Run that returns to Active and settles again notifies again. By default the
+  title is "A Run has settled"; **Run details in notifications** makes it
+  "<Project> · <Run title>". The body is "Settled at Finish ending “X”" or "Settled": it never
+  names the settlement kind and never includes prompt, report or output text or paths. [Chat
+  control](chat-control.md) still reports "Settled manually." for its own notices; the desktop
+  deliberately stays silent for manual settlement. Completion notifications leave the Dock badge
+  and **Needs you** unchanged, and are not withdrawn because the Run has no pending matter.
 - **Snooze and Settle hold**: a [Snoozed](runs.md#snooze-and-woke) Run is silent. Matters
   pending or appearing while it is Snoozed never notify, also after **Restore**, which returns it
   to the badge without a notification; new attention that wakes it (Woke) notifies as usual.
@@ -155,20 +168,37 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   it announced still counts: they resolved, or the Run was Snoozed, Settled, Archived or held by
   a confirmed Settle. macOS alerts again for a notification posted again, so one whose matters
   resolve only in part is withdrawn and not replaced; the rest stay on the badge and never
-  notify again. Withdrawing never makes a matter notify again.
+  notify again. Withdrawing never makes a matter notify again. A completion notification is
+  withdrawn, best effort and without alerting again, once its Run returned to Active, was
+  Archived or no longer has a row, or its Settled cycle differs from the one in the current
+  ready snapshot, also when the cycle changed while Factory was offline or quit. Opening the Run
+  in Factory does not withdraw it, and a later Rename leaves a delivered banner unchanged.
 - **Focused window**: while any Factory window of this installation is focused, no notification
-  is shown. Matters that became pending meanwhile count as seen and never notify later, also
-  after switching to another app.
+  is shown. Matters that became pending and Runs that settled meanwhile count as seen and never
+  notify later, also after switching to another app.
 - **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
-  **Notifications** (on), **Dock badge** (on) and **Run details in notifications** (off).
+  **Notifications** (on), **Notify when a Run finishes** (off), **Dock badge** (on) and **Run
+  details in notifications** (off). While **Notifications** is off, **Notify when a Run
+  finishes** keeps its value but is disabled.
   They are stored with the desktop settings, apply immediately and are never synchronized
   through the server, so each Mac is tuned on its own. While **Notifications** is off nothing is
   shown; turning it on shows what is still pending, at most one notification per Run.
+  Turning **Notifications** or **Notify when a Run finishes** on announces no Run that is
+  already Settled.
 - **Permission**: macOS asks the first time a notification would be shown, never at launch and
   never while it would be suppressed. Factory reads the permission without a window at startup,
   before each delivery, when the app becomes active or the Mac wakes, and about every 60
   seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
-  A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  A newly noticed grant announces no Run that is already Settled, except the one completion that
+  prompted the request: it is posted after **Allow** if its Run is still in the same Settled
+  cycle, also when a pending matter prompted the request together with it. A prompt that only a
+  pending matter prompted exempts no completion, and Runs or cycles that settle while the prompt
+  is open count as seen at **Allow**. The ledger keeps the last permission it
+  observed, so a grant made in System Settings while Factory was quit is noticed at the next
+  launch and also announces no Run that is already Settled. A ledger that cannot be written
+  does not stop Factory from starting; a grant it could not record is noticed again, with the
+  same baseline, at the next permission read once the ledger can be written, and a grant that
+  follows a denial the ledger could not record has the same baseline. A denial leaves the badge working and Factory never asks again. Settings shows the permission
   status and, after a denial, **Open System Settings**, which opens this app's page in System
   Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
@@ -176,22 +206,52 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   the fresh snapshot catches up with at most one notification per Run for matters still pending
   that were never announced; matters that appeared and resolved meanwhile are never reported. A
   notification is recorded as attempted before it is posted, so a crash can lose a banner but
-  never repeats one; one macOS refused is retried only at the next catch-up.
+  never repeats one; one macOS refused is retried only at the next catch-up. An attempt that
+  fails after macOS may have accepted it, such as one whose click listeners cannot be restored,
+  stays counted and is never retried. Catch-up also posts
+  one notification for each Run still Settled, automatically or at a Finish ending, in a cycle
+  that was neither announced nor counted as seen; Runs that returned to Active or were Archived
+  meanwhile stay silent, and no summary is posted. Cycles from a period when **Notify when a Run
+  finishes** or **Notifications** was off are never replayed. The first ready snapshot of a server
+  with no completion history, after an upgrade or **Forget server**, counts every Settled Run as
+  seen; a switch turned on or a grant noticed while no snapshot is ready makes the next ready
+  snapshot do the same. A Run's completion record is kept until the Run leaves Settled or is
+  Archived, with no age limit, so a click after a cold launch opens it. After that the posted
+  notification's record is kept while its banner is still in Notification Center, because
+  withdrawal is best effort, and through the launch after it left, so a banner that outlived its
+  Run still routes when it launches Factory.
 - **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
   now: with the Block selected while exactly one matter the notification announced is still
   pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
   Archived Run opens its read-only history and a Run that no longer exists shows that it is
-  unavailable. A notification clicked after Quit relaunches Factory and opens its Run once the
+  unavailable; both also hold for a completion notification, which always opens the Run
+  overview with no Block selected, whatever state the Run is in, and opens the inspector where
+  the overview and the Run result show, also when it was closed. Every click applies its route
+  again, also when the window already shows that Run after the owner closed the inspector or
+  changed the selected Block. A
+  notification clicked after Quit relaunches Factory and opens its Run once the
   connection is ready, behind the connection gate. A Dock click with no window open opens the
   single waiting Run (its Block selected when it has one matter), the Run list's
   [Needs you (N)](runs.md#run-list) filter when several wait, or the last view when none does; with
   a window open it only brings the window forward. Routing only navigates, never acts on a Run:
   Settings and Studio still ask before discarding unsaved edits, and leaving the New Run view
   keeps its draft. Clicks on another server's or a revoked selection's notifications open only
-  the window.
+  the window. A revocation deletes the notification records the revoked selection had, also
+  when another server is selected or the credential is replaced before the deletion runs, so
+  their clicks still open only the window after the same server approves this client again,
+  also after a restart and for a click made before the revocation that was still waiting behind
+  other work. A client that must be approved again without a revocation (an unreadable Keychain
+  credential, a session-only credential) keeps routing the notifications it posted, also after a
+  restart. A notification posted before a revocation stays window-only for the rest of that launch even when
+  the ledger could not record the revocation's deletion; a later launch cannot know it, so there
+  such a banner routes again once the server is selected. Their
+  accounting stays: one macOS refuses only after the revocation is
+  retried at the next catch-up, and one it accepted or whose outcome is unknown is not.
 - **Selection boundaries**: switching server or role, or the server refusing this client's
   credential after a revocation, clears the badge, withdraws the previous selection's
-  notifications and ignores whatever the previous selection's subscription still delivers. The
+  notifications and ignores whatever the previous selection's subscription still delivers. A
+  notification macOS accepts, or whose outcome is unknown, after it was withdrawn is withdrawn
+  again, also when the ledger cannot record that outcome. The
   ledger is kept per server, so switching back without forgetting repeats nothing. **Forget
   server** deletes that server's ledger: connecting to it again announces what is still pending,
   at most one notification per Run. A revoked client keeps reconnecting; once its new access
@@ -426,7 +486,15 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **26**. The server and the Desktop and browser clients require protocol **26**.
+The current protocol is **27**. The server and the Desktop and browser clients require protocol **27**.
+
+Protocol 27 adds three fields to each Run navigation row: the Settled-cycle id (the sequence of the
+Run's latest `run-settled` event, which changes when a Run returns to Active and settles again), the
+settlement reason (`automatic`, `manual` or `finish`) and the ending name captured in the Run result.
+The ending name comes from the Run result, not the live Flow, and output text is never included. A
+Settle on a Run that already has a Run result is recorded as `finish`. A protocol 26 client cannot
+read the fields and a protocol 27 client needs a server that sends them, so each side shows the update
+gate naming the peer to update. Existing approvals, credentials and stored data carry forward.
 
 Protocol 25 removes the `WatchAppearance` live RPC and `ClientScope.appearanceSource` because
 custom color themes are configured per device rather than polled from T3. Protocol 24 and older

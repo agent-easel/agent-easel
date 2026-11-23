@@ -2,7 +2,13 @@ import { expect, it, type TestContext } from "@effect/vitest";
 import { desktopAttention } from "./support/desktop-attention.ts";
 import { currentConnection, desktopProfile, selectServer } from "./support/desktop-client.ts";
 import { remotePrepared, remoteServer } from "./support/remote-clients.ts";
-import { observeFor, workerLaunched } from "./support/scenarios.ts";
+import {
+  observeFor,
+  resultReported,
+  settled,
+  workerAtWork,
+  workerLaunched,
+} from "./support/scenarios.ts";
 
 type Prepared = Awaited<ReturnType<typeof remotePrepared>>;
 
@@ -45,6 +51,26 @@ it("a desktop server's own subscription badges and announces a Run that newly ne
   // Assert
   await alerts.until(() => alerts.shown.length > 0 && alerts.badges.at(-1) === "1");
   expect(alerts.shown.map(({ title }) => title)).toStrictEqual(["A Run needs your input"]);
+});
+
+it("an automatically settled Run announces", async (c) => {
+  // Arrange
+  const prepared = await remotePrepared(c);
+  const alerts = await desktopAttention(c, hostSelection(prepared.server), {
+    notifyRunFinished: true,
+  });
+  await alerts.until(() => alerts.badges.length > 1);
+  const world = { factory: prepared.server.factory, t3: prepared.t3 };
+  const worker = await resultReported(world, await workerAtWork(world, prepared.input));
+
+  // Act
+  await settled(world, worker);
+
+  // Assert
+  await alerts.until(() => alerts.shown.length > 0);
+  expect(alerts.shown.map(({ title, body }) => ({ title, body }))).toStrictEqual([
+    { title: "A Run has settled", body: "Settled" },
+  ]);
 });
 
 it("an approved desktop client's own subscription badges and announces a Run that newly needs input", async (c) => {
