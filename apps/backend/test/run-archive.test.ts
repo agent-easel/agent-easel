@@ -87,10 +87,12 @@ it("an archived Run is left out of navigation and keeps its history", async (c) 
 it("explicit Run search finds archived history by title or exact number", async (c) => {
   // Arrange
   const { world, input, f } = await prepared(c, handoffFlow);
-  const { runId } = await archived(world, await workerAtWork(world, input));
+  const worker = await workerAtWork(world, input);
+  const { runId } = worker;
   const renamed = await f.renameRun(runId, { title: "Earlier navigation experiment" });
   assert(renamed.ok);
   const { number, title } = renamed.value;
+  await archived(world, worker);
 
   // Act
   const byTitle = await f.searchArchivedRuns("NAVIGATION");
