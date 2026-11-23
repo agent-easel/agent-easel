@@ -28,7 +28,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="T3 Factory: Compose AI development workflows. Run them on T3. Keep humans in the loop. Beside it, a Run detail screen with Coder finished and Code reviewer working."
+      content="T3 Factory: Compose AI development workflows. Run them on T3. Keep humans in the loop. Beside it, a Run detail screen showing parallel Code review and Accessibility review converging into a Join block."
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="T3 Factory: compose AI development workflows" />
@@ -116,9 +116,9 @@
         </p>
         <img
           src="/screens/run-detail.png"
-          width="2400"
-          height="1500"
-          alt="The Add Google sign-in Run in T3 Factory: the Runs sidebar, the Flow canvas with the Coder block finished and the Code reviewer working, the Overview inspector with progress, branch, pull request and result, and the Timeline showing key events."
+          width="1472"
+          height="920"
+          alt="A Run in T3 Factory showing parallel Code review and Accessibility review branches converging into a Join block before Your decision, with the Runs sidebar, docked Overview inspector and Timeline."
           class="mx-auto mt-20 w-full max-w-[1200px] rounded-xl border border-zinc-800 shadow-[0_24px_96px_rgb(99_102_242/0.18)]"
         />
       </section>
@@ -166,7 +166,7 @@
                 width="1472"
                 height="920"
                 loading="lazy"
-                alt="The New Run composer asking what to work on in northwind-app. The prompt asks for Google sign-in and references two screenshots, with the project and Flow pickers and the Start button below."
+                alt="The New Run composer asking what to work on in Northwind. The prompt asks for Google sign-in with an inline login-mock.png screenshot reference and thumbnail, with the Northwind project, Northwind release Flow and Start button below."
                 class="w-full rounded-xl border border-zinc-800"
               />
             </article>
@@ -177,27 +177,27 @@
                 width="1472"
                 height="920"
                 loading="lazy"
-                alt="The Studio Flow editor for Grill + Spec + Tickets: a Grill Agent followed by Spec and Tickets Continuation blocks, with the selected Continuation block's prompt and once-per-Run rules in the side panel."
+                alt="The Studio Flow editor showing the Author and Automate sidebar, the Block library with Human step, Wait, Continuation, Condition, Join, Finish and Agents, and a ready Flow wiring parallel Code review and Accessibility review into a Join block and Human step."
                 class="w-full rounded-xl border border-zinc-800 max-md:order-last"
               />
               <div>
                 <p class="text-xs font-semibold tracking-[0.08em] text-cyan-400">DESIGN</p>
                 <h3 class="mt-4 text-3xl font-bold tracking-[-0.015em] md:text-[32px]">
-                  Flows that loop and wait
+                  Flows that branch, join and compose
                 </h3>
                 <p class="mt-4 leading-[1.55] text-zinc-400">
-                  Connect Agents and Human steps with named exits, correction loops and parallel
-                  branches. Continuations prompt an earlier Agent again in its own thread; Wait
-                  blocks hold work on a durable timer.
+                  Connect Agents, Human steps, Continuations and Waits with named exits and
+                  correction loops. Route by arrival with Conditions, synchronize parallel branches
+                  with Joins, nest saved Subflows and declare named Finish endings.
                 </p>
                 <ul class="mt-10 space-y-2.5 text-[15px] leading-[1.2] font-medium">
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-cyan-400"></span>Named exits
-                    &amp; correction loops
+                    <span class="size-1.5 shrink-0 rounded-full bg-cyan-400"></span>Subflows,
+                    Conditions, Joins &amp; Finish endings
                   </li>
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-cyan-400"></span>Continuations
-                    &amp; Wait blocks
+                    <span class="size-1.5 shrink-0 rounded-full bg-cyan-400"></span>Continuations,
+                    Waits &amp; correction loops
                   </li>
                   <li class="flex items-center gap-2.5">
                     <span class="size-1.5 shrink-0 rounded-full bg-cyan-400"></span>Readiness checks
@@ -214,13 +214,14 @@
                   Follow every Run at a glance
                 </h3>
                 <p class="mt-4 leading-[1.55] text-zinc-400">
-                  The canvas follows the active block while one docked inspector shows progress,
-                  branches, pull requests and results. The timeline keeps the key events up front.
+                  The canvas follows active blocks and highlights outgoing connections while one
+                  docked inspector shows progress, visits, pull requests and results. The timeline
+                  keeps key events up front.
                 </p>
                 <ul class="mt-10 space-y-2.5 text-[15px] leading-[1.2] font-medium">
                   <li class="flex items-center gap-2.5">
                     <span class="size-1.5 shrink-0 rounded-full bg-amber-500"></span>Canvas follows
-                    the active block
+                    active blocks &amp; highlights connections
                   </li>
                   <li class="flex items-center gap-2.5">
                     <span class="size-1.5 shrink-0 rounded-full bg-amber-500"></span>One docked
@@ -237,7 +238,7 @@
                 width="1472"
                 height="920"
                 loading="lazy"
-                alt="A Run with the Code reviewer block selected: the docked inspector shows its current working report, the result it received from the Coder and its exits, above a collapsed Timeline."
+                alt="A Run with Review implementation selected on the Execution canvas: its outgoing connection to Your review is highlighted, and the docked inspector shows Visits, Received handoffs and Activations above the collapsed Timeline."
                 class="w-full rounded-xl border border-zinc-800"
               />
             </article>
@@ -248,7 +249,7 @@
                 width="1472"
                 height="920"
                 loading="lazy"
-                alt="The Coder's result opened as a readable report titled Implemented Google sign-in, with Changes, Verification and Open questions sections and an Open thread in T3 button."
+                alt="The context reader dialog displaying a formatted Markdown review summary with Empty state, Reset action, code block and Decide sections, a copy action and an Esc shortcut."
                 class="w-full rounded-xl border border-zinc-800 max-md:order-last"
               />
               <div>
@@ -257,22 +258,22 @@
                   Read the result, then decide
                 </h3>
                 <p class="mt-4 leading-[1.55] text-zinc-400">
-                  Open any handoff as a readable report with changes, verification and open
-                  questions. Answer Human steps in Factory, or jump to the exact T3 thread when an
-                  agent asks.
+                  Open any handoff as a formatted Markdown report with headings, code blocks and
+                  open questions. Answer Human steps in Factory, or jump to the exact T3 thread when
+                  an agent asks.
                 </p>
                 <ul class="mt-10 space-y-2.5 text-[15px] leading-[1.2] font-medium">
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-green-500"></span>Readable result
-                    reports
+                    <span class="size-1.5 shrink-0 rounded-full bg-green-500"></span>Formatted
+                    Markdown result reports
                   </li>
                   <li class="flex items-center gap-2.5">
                     <span class="size-1.5 shrink-0 rounded-full bg-green-500"></span>Needs input and
                     Problem states
                   </li>
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-green-500"></span>Settle or
-                    Archive when done
+                    <span class="size-1.5 shrink-0 rounded-full bg-green-500"></span>Named Finish
+                    endings, Settle or Archive
                   </li>
                 </ul>
               </div>
@@ -285,22 +286,22 @@
                   Reuse and share Agents
                 </h3>
                 <p class="mt-4 leading-[1.55] text-zinc-400">
-                  Save a prompt, exits and worker settings once and reuse the Agent in any Flow.
-                  Export Agents and Flows as JSON with optional model hints, and import them
-                  anywhere.
+                  Save a prompt, exits and worker settings once and reuse the Agent across Flows.
+                  Keep definitions global with per-project Worker overrides or owned by one Project,
+                  and share them as JSON.
                 </p>
                 <ul class="mt-10 space-y-2.5 text-[15px] leading-[1.2] font-medium">
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>Prompt, exits
-                    &amp; worker settings
+                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>Global &amp;
+                    Project-owned definitions
                   </li>
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>Import and
-                    export as JSON
+                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>Per-project
+                    Worker overrides
                   </li>
                   <li class="flex items-center gap-2.5">
-                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>Immutable
-                    revisions
+                    <span class="size-1.5 shrink-0 rounded-full bg-indigo-500"></span>JSON
+                    import/export &amp; immutable revisions
                   </li>
                 </ul>
               </div>
@@ -309,7 +310,7 @@
                 width="1472"
                 height="920"
                 loading="lazy"
-                alt="The Studio Agents editor with Import and Add agent buttons above the Agents list, and the selected Coder Agent's worker, model, thinking and prompt settings beside Duplicate, Export, Delete and Save."
+                alt="The Studio Agents editor with Global and Northwind Project-owned Agents on the left, and the selected Coder Agent showing its compact Worker model picker, prompt and exits on the right."
                 class="w-full rounded-xl border border-zinc-800"
               />
             </article>
@@ -327,10 +328,31 @@
           <p
             class="mx-auto mt-4 max-w-[640px] text-center text-[17px] leading-normal text-zinc-400"
           >
-            Start Runs from your agent chat or Discord, let agents author Flows, and share
-            definitions with your team.
+            Start Runs from GitHub issues, your agent chat or Discord, let agents author Flows and
+            Triggers, and tailor Factory to your setup.
           </p>
           <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+              <svg
+                class="size-9 rounded-lg border border-zinc-800 bg-[#0c0c0e] p-2 text-indigo-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+                />
+              </svg>
+              <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">GitHub Issues Triggers</h3>
+              <p class="mt-3 text-sm leading-normal text-zinc-400">
+                Start Runs automatically from open GitHub issues matching your query, up to a cap on
+                active Runs, on a schedule or on demand.
+              </p>
+            </div>
             <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
               <svg
                 class="size-9 rounded-lg border border-zinc-800 bg-[#0c0c0e] p-2 text-indigo-500"
@@ -368,10 +390,12 @@
                 <path d="M7 11v4a2 2 0 0 0 2 2h4" />
                 <rect width="8" height="8" x="13" y="13" rx="2" />
               </svg>
-              <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">Agents author Flows</h3>
+              <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">
+                Agents author Flows &amp; Triggers
+              </h3>
               <p class="mt-3 text-sm leading-normal text-zinc-400">
-                Factory MCP lets an agent create, edit, check and remove Agents and Flows. Open
-                Studio views refresh live.
+                Factory MCP lets an agent create, edit, check and remove Agents, Flows and Triggers.
+                Open Studio views refresh live.
               </p>
             </div>
             <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -391,8 +415,8 @@
               </svg>
               <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">Chat control on Discord</h3>
               <p class="mt-3 text-sm leading-normal text-zinc-400">
-                Start and follow Runs from Discord through an outbound-only bot with its own model.
-                Off until you turn it on.
+                Start and follow Runs from Discord with live status cards, notices, listed bots and
+                typed reply confirmation. Off until you turn it on.
               </p>
             </div>
             <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -453,6 +477,48 @@
               <p class="mt-3 text-sm leading-normal text-zinc-400">
                 Command palette, customizable shortcuts, a cheat sheet and a native macOS menu that
                 stay in sync.
+              </p>
+            </div>
+            <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+              <svg
+                class="size-9 rounded-lg border border-zinc-800 bg-[#0c0c0e] p-2 text-indigo-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" x2="20" y1="19" y2="19" />
+              </svg>
+              <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">
+                Guided setup &amp; reporting
+              </h3>
+              <p class="mt-3 text-sm leading-normal text-zinc-400">
+                A one-time First-run setup connects T3 and installs Factory MCP reporting for
+                Claude, Codex, Antigravity and Mistral Vibe.
+              </p>
+            </div>
+            <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+              <svg
+                class="size-9 rounded-lg border border-zinc-800 bg-[#0c0c0e] p-2 text-indigo-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+              <h3 class="mt-3 text-[17px] leading-[1.2] font-semibold">Desktop notifications</h3>
+              <p class="mt-3 text-sm leading-normal text-zinc-400">
+                Native notifications and a Dock badge count Runs that need your input or hit a
+                Problem, without watching the window.
               </p>
             </div>
           </div>
