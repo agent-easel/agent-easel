@@ -17,6 +17,12 @@ import {
   workingReported,
   workingReportedIdle,
 } from "./support/scenarios.ts";
+import {
+  elevenPlacementsWithNested,
+  joinProblemInEarlierInvocation,
+  queuedReviewPanel,
+  returnedReviewPanel,
+} from "./support/run-read-subflows.ts";
 
 const listRuns = (
   client: Awaited<ReturnType<typeof factoryMcpClient>>,
@@ -989,4 +995,124 @@ it("the Start receipt note names factory_read_run", async (c) => {
 
   // Assert
   expect(toolReply(result).note).toContain("factory_read_run");
+});
+
+it("a Subflow placement with several invocations shows its default invocation with the queued and total counts and its Blocks from the captured Flow", async (c) => {
+  // Arrange
+  const fixture = await queuedReviewPanel(c);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await readRun(client, { run: fixture.runId });
+
+  // Assert
+  const reply = toolReply(result);
+  expect(reply.subflowPlacements.total).toBe(1);
+  expect(reply.subflowPlacements.entries).toMatchObject([
+    {
+      placement: "Inner 0",
+      within: [],
+      total: 3,
+      queued: 2,
+      defaultInvocation: {
+        number: 1,
+        state: "active",
+        ending: null,
+        blocks: [
+          { name: "Security reviewer", kind: "agent", state: "working", exit: null },
+          { name: "Style reviewer", kind: "agent", state: "working", exit: null },
+        ],
+      },
+    },
+  ]);
+  expect(JSON.stringify(result)).not.toContain(fixture.reviewers[0]);
+  expect(JSON.stringify(result)).not.toContain(fixture.reviewers[1]);
+});
+
+it("a returned default invocation names its nested Blocks' exits and its ending from the Flow it captured", async (c) => {
+  // Arrange
+  const fixture = await returnedReviewPanel(c);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const reply = toolReply(await readRun(client, { run: fixture.runId }));
+
+  // Assert
+  expect(reply.subflowPlacements.entries).toMatchObject([
+    {
+      placement: "Inner 0",
+      total: 1,
+      queued: 0,
+      defaultInvocation: {
+        number: 1,
+        state: "returned",
+        ending: "Approved",
+        blocks: [
+          { name: "Security reviewer", kind: "agent", exit: "Done" },
+          { name: "Style reviewer", kind: "agent", exit: null },
+        ],
+      },
+    },
+  ]);
+});
+
+it("Subflow placements beyond ten, a nested placement among them, are read on page 2", async (c) => {
+  // Arrange
+  const fixture = await elevenPlacementsWithNested(c);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const first = toolReply(await readRun(client, { run: fixture.runId }));
+  const second = toolReply(await readRun(client, { run: fixture.runId, page: 2 }));
+
+  // Assert
+  expect(first).toMatchObject({ page: 1, pageCount: 2, subflowPlacements: { total: 12 } });
+  expect(first.subflowPlacements.entries).toHaveLength(10);
+  expect(second).toMatchObject({ page: 2, pageCount: 2, subflowPlacements: { total: 12 } });
+  expect(
+    [...first.subflowPlacements.entries, ...second.subflowPlacements.entries].map(
+      (entry: { placement: string }) => entry.placement,
+    ),
+  ).toStrictEqual([...Array.from({ length: 11 }, (_, i) => `Inner ${i}`), "Nested leaf"]);
+  expect(second.subflowPlacements.entries.at(-1)).toMatchObject({
+    placement: "Nested leaf",
+    within: [{ placement: "Inner 0", number: 1 }],
+    total: 1,
+    queued: 0,
+    defaultInvocation: {
+      number: 1,
+      state: "active",
+      blocks: [{ name: "Leaf work", kind: "agent", state: "working" }],
+    },
+  });
+  expect(second.subflowPlacements.entries[0]).toMatchObject({
+    placement: "Inner 10",
+    within: [],
+    total: 0,
+    defaultInvocation: null,
+  });
+  expect(JSON.stringify(second)).not.toContain(fixture.work.blockId);
+});
+
+it("a pending Problem raised inside an earlier invocation keeps its own Block and invocation while the placement shows a later default", async (c) => {
+  // Arrange
+  const fixture = await joinProblemInEarlierInvocation(c);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await readRun(client, { run: fixture.runId });
+
+  // Assert
+  const reply = toolReply(result);
+  expect(reply.problems.entries).toMatchObject([
+    {
+      kind: "join-integrity",
+      block: "Merge",
+      invocation: [{ placement: "Inner 0", number: 1 }],
+    },
+  ]);
+  expect(reply.subflowPlacements.entries).toMatchObject([
+    { placement: "Inner 0", total: 2, queued: 0, defaultInvocation: { number: 2 } },
+  ]);
+  expect(JSON.stringify(result)).not.toContain(fixture.merge);
 });
