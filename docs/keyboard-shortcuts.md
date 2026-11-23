@@ -16,7 +16,7 @@ desktop app can use.
 | Command palette | Mod+K | Mod+K |
 | Settings | Mod+, | Mod+, |
 | New Run | Mod+N | Mod+Alt+N |
-| Filter Run titles | Mod+F | Mod+Shift+F |
+| Search Runs | Mod+F | Mod+Shift+F |
 | Studio | Mod+Shift+S | Mod+Shift+S |
 | Keyboard shortcuts (cheat sheet) | Mod+/ | Mod+/ |
 | Back | Mod+[ | Unbound |
@@ -116,10 +116,10 @@ Run composer and detail **inert**; see
 
 **Navigation** uses one **visible sidebar row** list, top to bottom: open Runs and
 drafts in creation order, then rows from expanded **Snoozed** and **Settled** groups when
-not searching. Title search replaces that list with matching Runs and drafts in creation
+not searching, also while a Project filter narrows them. A search replaces that list with matching Runs and drafts in creation
 order, without group headers. **Open row *n*** opens the *n*th visible row (Run or
 draft). **Previous Run** and **Next Run** move among visible rows from the current
-selection **without wrap-around**. If the current selection is not visible, stepping does nothing. **Filter Run titles** focuses the sidebar search field.
+selection **without wrap-around**. If the current selection is not visible, stepping does nothing. **Search Runs** focuses the sidebar search field.
 Back and Forward use browser history.
 
 **Toggle inspector** shows or hides the docked inspector of the Run open in detail, also

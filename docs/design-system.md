@@ -176,6 +176,9 @@ covers, extend the owning component or add a new one here (and on the Figma 🧩
 first, then use it; a one-off styled at the call site becomes the next consistency review.
 
 - **State tag**: StatusBadge, with the Run kinds or the Setting kinds above.
+- **Run row**: RunRow (Figma Run/RunRow), with Show ending for a Settled Run's recorded ending: a neutral
+  StatusBadge with the Flag icon and the ending name on the meta line, after the Run number and before **Not in T3**.
+  It is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, and shortens to its flag so **Not in T3** beside it stays in full.
 - **Problem, notice or explanation**: ProblemCard, one card per issue with its next step. Its
   tones are the Setting kinds Error, Attention, Info and Neutral, so a field tag and its card
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
@@ -224,13 +227,16 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
   title, an optional body and an optional action; on a muted surface, such as Studio, the icon tile
   takes the accent fill, which every palette keeps distinct from muted. Compact is for a panel list
-  that is empty for a reason worth explaining, such as a Run sidebar title search with no match: a
+  that is empty for a reason worth explaining, such as a Run sidebar search with no match: a
   left-aligned title and a short body. A one-line hint without an explanation stays plain status
   text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
   list loading, no-match and error lines.
 - **Choice**: ChoiceMenu for every dropdown choice, a select-only combobox named by its field, with
   or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
-  wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
+  wrap. Its icon trigger form (Figma ChoiceMenu/IconTrigger) is a 32 px icon and chevron for a
+  compact header, such as the Run list's Project filter: the chosen label is in its tooltip and
+  name, and a choice other than the default one gives it the indigo border and a link-coloured
+  icon. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
   workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
   for a short exclusive choice that stays visible; in a labelled row it fills the row in equal
   segments, as a Finish ending's Output.

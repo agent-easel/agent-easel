@@ -117,7 +117,13 @@ export function openRunNavigation(database: RunnerDatabase) {
             workspace_root: string;
             availability: RunNavigationEntry["project"]["availability"];
             workspace_state: "preparing" | "bound" | "failed" | null;
-          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,w.state AS workspace_state,
+            bound_branch: string | null;
+            result_ending_name: string | null;
+            result_output_missing: 0 | 1 | null;
+            flow_has_endings: number;
+          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,w.state AS workspace_state,w.branch AS bound_branch,
+          x.ending_name AS result_ending_name,x.output_missing AS result_output_missing,
+          EXISTS(SELECT 1 FROM flow_revision_endings e WHERE e.flow_revision_id=r.flow_revision_id) AS flow_has_endings,
           COALESCE((SELECT MAX(e.observed_at) FROM run_events e WHERE e.run_id=r.id AND e.kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')),r.started_at) AS last_activity_at,
           CASE WHEN r.settled_at IS NULL THEN EXISTS(${pendingRunWork(sql, sql`r.id`)}) ELSE 0 END AS pending_work,
           f.name AS flow_name,p.project_icon_json,p.favicon_path,
@@ -125,7 +131,8 @@ export function openRunNavigation(database: RunnerDatabase) {
           FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
           JOIN flow_revisions f ON f.id=r.flow_revision_id
           LEFT JOIN run_presentation rp ON rp.run_id=r.id
-          LEFT JOIN run_workspaces w ON w.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
+          LEFT JOIN run_workspaces w ON w.run_id=r.id
+          LEFT JOIN run_results x ON x.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
           const settlements = yield* readRunSettlementStates(sql, rows);
           const origins = yield* readRunOrigins(sql);
           const titleGenerations = yield* readTitleGenerations(
@@ -226,6 +233,15 @@ export function openRunNavigation(database: RunnerDatabase) {
                 flowName: row.flow_name,
                 origin: origins.get(row.id) ?? null,
                 repositories: repositories.get(row.id) ?? [],
+                boundBranch: row.bound_branch,
+                result:
+                  row.result_ending_name === null
+                    ? null
+                    : {
+                        endingName: row.result_ending_name,
+                        outputMissing: row.result_output_missing === 1,
+                      },
+                flowHasEndings: !!row.flow_has_endings,
                 creationKey: row.creation_key,
                 project: {
                   id: row.project_id,

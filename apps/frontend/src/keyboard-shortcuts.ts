@@ -15,7 +15,7 @@ export const shortcutDefinitions = [
   { id: "palette", label: "Command palette", scope: "global", group: "application" },
   { id: "settings", label: "Settings", scope: "global", group: "application" },
   { id: "newRun", label: "New Run", scope: "global", group: "application" },
-  { id: "searchRuns", label: "Filter Run titles", scope: "global", group: "application" },
+  { id: "searchRuns", label: "Search Runs", scope: "global", group: "application" },
   { id: "studio", label: "Studio", scope: "global", group: "application" },
   { id: "shortcutsCheatSheet", label: "Keyboard shortcuts", scope: "global", group: "application" },
   { id: "back", label: "Back", scope: "global", group: "navigation" },

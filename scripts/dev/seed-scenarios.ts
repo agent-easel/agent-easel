@@ -17,6 +17,7 @@ export type DemoFlows = Record<
   | "conditionRounds"
   | "firstApproval"
   | "endings"
+  | "approvedEnding"
   | "subflowReview"
   | "joinReview",
   string
@@ -67,6 +68,7 @@ export type SeedScenario = {
       extraApproval: Report;
     }
   | { state: "ending reached"; result: Report }
+  | { state: "ending reached without output"; report: Report }
   | {
       state: "Join round forwarded, next round partial";
       implementation: Report;
@@ -466,6 +468,17 @@ export const seedScenarioList: readonly SeedScenario[] = [
     result: {
       exit: "Done",
       message: "https://github.com/example/atlas/pull/44",
+    },
+  },
+  {
+    key: "ending-output-missing",
+    title: "Ended · Approved without the required release notes link",
+    flow: "approvedEnding",
+    state: "ending reached without output",
+    prompt: "Prepare the Atlas search release. I approve it once the change is ready for review.",
+    report: {
+      exit: "Ready for review",
+      message: "The ranking fix is ready for your approval.",
     },
   },
   {

@@ -2,11 +2,17 @@ import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { RunActionItems, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
-import { runListView, useRunListView } from "../run-list-view.ts";
-import { mattersNeedingOwner, type RunNavigationEntry } from "@t3-factory/contracts";
+import {
+  runList,
+  runListView,
+  useRunListView,
+  type RunListProject,
+  type RunListProjectSelection,
+} from "../run-list-view.ts";
+import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { runActivity } from "../run-status.ts";
 import {
   ChevronDown,
@@ -17,6 +23,8 @@ import {
   CircleDashed,
   CirclePause,
   FilePen,
+  Flag,
+  FolderGit2,
   LoaderCircle,
   GitBranch,
   GitPullRequest,
@@ -28,7 +36,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  byCreation,
   draftTitle,
   runDraft,
   useRunDraft,
@@ -37,6 +44,9 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
+import { launchChoicesScope } from "../live/launch-choices.ts";
+import { useLiveScope } from "../live/live-connection.ts";
+import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "./ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
@@ -49,7 +59,12 @@ import { ProjectIcon } from "./project-icon.tsx";
 import { RunNumber } from "./run-number.tsx";
 import { GeneratingTitle } from "./run-title-generation.tsx";
 import { RunOriginPreview } from "./run-origin.tsx";
-import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
+import {
+  BranchName,
+  repositorySummary,
+  runBranches,
+  RunRepositories,
+} from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
 import { fullDateTime } from "../time-format.ts";
 
@@ -117,13 +132,19 @@ function NewRunButton({ current }: { current: boolean }) {
   );
 }
 
-/** The Run list as its search or Needs you filter shows it; groups hide while it is filtered. */
-function useRunListRows(runs: readonly RunNavigationEntry[]) {
+function useRunListRows(runs: readonly RunNavigationEntry[], loaded: boolean) {
   const drafts = useRunDrafts();
-  const { search, needsYou } = useRunListView();
-  const query = search.trim().toLocaleLowerCase();
-  const groups = needsYou ? needsYouGroup(runs) : navigationGroups(runs, drafts, query);
-  return { ...groups, search, needsYou, query, filtered: !!query || needsYou };
+  const view = useRunListView();
+  const choices = useLiveScope(launchChoicesScope, { gates: false }).value;
+  const catalog = choices
+    ? { projects: choices.catalog.projects, flows: choices.flows }
+    : undefined;
+  const list = runList({ runs, drafts, view, loaded, catalog });
+  const fellBack = list.project === null && view.project !== null;
+  useEffect(() => {
+    if (fellBack) runListView.chooseProject(null);
+  }, [fellBack]);
+  return { ...list, search: view.search, needsYou: view.needsYou, query: view.search.trim() };
 }
 
 function useGroupExpansion(path: string, runs: readonly RunNavigationEntry[], filtered: boolean) {
@@ -138,8 +159,10 @@ export function RunSidebar({ path }: { path: string }) {
   const composition = useRunDraft();
   const searchRef = useRef<HTMLInputElement>(null);
   const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
-  const { open, snoozed, settled, matches, total, search, needsYou, query, filtered } =
-    useRunListRows(runs);
+  const list = useRunListRows(runs, loaded);
+  const { open, snoozed, settled, matches, total, search, needsYou, query, project, projects } =
+    list;
+  const filtered = list.flat;
   const [expanded, onExpand] = useGroupExpansion(path, settled, filtered);
   const [snoozedExpanded, onExpandSnoozed] = useGroupExpansion(path, snoozed, filtered);
   const actionError = useRunActionsState((state) => state.error);
@@ -160,8 +183,14 @@ export function RunSidebar({ path }: { path: string }) {
     <section aria-label="Run navigation" className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2">
         <RunSearchField ref={searchRef} value={search} onChange={runListView.search} />
+        <ProjectFilter project={project} projects={projects} />
         <NewRunButton current={path === "/runs/new"} />
       </div>
+      {/^\d+$/.test(query) && (
+        <p className="px-3 pb-2 text-2xs text-muted-foreground">
+          {query} also finds branches · #{query} finds Run {query} only
+        </p>
+      )}
       {needsYou && <NeedsYouFilter count={open.length} />}
       {[loadError, actionError]
         .filter((message) => message !== "")
@@ -180,10 +209,10 @@ export function RunSidebar({ path }: { path: string }) {
           snoozedExpanded={snoozedExpanded}
           onExpandSnoozed={onExpandSnoozed}
           expanded={expanded}
-          query={query}
           filtered={filtered}
           needsYou={needsYou}
-          search={search.trim()}
+          search={query}
+          projectName={project?.title}
           loaded={loaded}
           total={total}
           matches={matches}
@@ -239,52 +268,6 @@ function isActive(run: RunNavigationEntry) {
   return run.lifecycle === "active";
 }
 
-/** Runs that need you lead the open list: Needs input, then Problem; each keeps its order. */
-function needRank(entry: RunNavigationEntry | SavedRunDraft) {
-  if (!("presentation" in entry)) return 2;
-  if (entry.attention.needsInput) return 0;
-  return entry.attention.problem ? 1 : 2;
-}
-
-const byNeed = (
-  left: RunNavigationEntry | SavedRunDraft,
-  right: RunNavigationEntry | SavedRunDraft,
-) => needRank(left) - needRank(right);
-
-/** Revealed drafts join the open Runs in creation order, after the Runs that need you; title
- * search covers both in creation order. */
-function navigationGroups(
-  runs: readonly RunNavigationEntry[],
-  drafts: readonly SavedRunDraft[],
-  query: string,
-) {
-  const titled = (title: string) => title.toLocaleLowerCase().includes(query);
-  const runMatches = runs.filter((run) => titled(run.title));
-  const draftMatches = drafts.filter((draft) => titled(draftTitle(draft)));
-  const active = runMatches.filter(isActive);
-  const main = active.filter((run) => !run.presentation.snoozed);
-  const snoozed = active.filter((run) => run.presentation.snoozed);
-  const settled = runMatches.filter((run) => !isActive(run));
-  return {
-    open: query
-      ? [...runMatches, ...draftMatches].toSorted(byCreation)
-      : [...main, ...draftMatches].toSorted(byCreation).toSorted(byNeed),
-    snoozed,
-    settled,
-    matches: runMatches.length + draftMatches.length,
-    total: runs.length + drafts.length,
-  };
-}
-
-/**
- * Needs you: exactly the Runs each desktop installation's Dock badge counts, in creation order.
- * A view of the Run list, not an Inbox: rows show their own Needs input and Problem chips.
- */
-function needsYouGroup(runs: readonly RunNavigationEntry[]) {
-  const waiting = runs.filter((run) => mattersNeedingOwner(run).length > 0).toSorted(byCreation);
-  return { open: waiting, snoozed: [], settled: [], matches: waiting.length, total: runs.length };
-}
-
 /** The active Needs you filter; choosing it again shows the whole Run list. */
 function NeedsYouFilter({ count }: { count: number }) {
   return (
@@ -313,7 +296,48 @@ function mutedInSearch(run: RunNavigationEntry) {
   return run.presentation.snoozed || !isActive(run);
 }
 
-/** Run title search with Escape and a clear button that keeps focus in the field. */
+function ProjectFilter({
+  project,
+  projects,
+}: {
+  project: RunListProjectSelection | null;
+  projects: readonly RunListProject[];
+}) {
+  const choices: MenuChoice[] = [
+    {
+      id: "",
+      label: "All Projects",
+      description: "Every Project in the sidebar",
+      icon: <FolderGit2 aria-hidden strokeWidth={1.5} className="size-4 text-muted-foreground" />,
+    },
+    ...projects.map((choice) => ({
+      id: choice.id,
+      label: choice.title,
+      description: choice.workspaceRoot,
+      icon: <ProjectIcon icon={choice.projectIcon} faviconUrl={choice.faviconUrl} inline />,
+    })),
+  ];
+  return (
+    <ChoiceMenu
+      id="run-list-project"
+      label="Project"
+      value={project?.id ?? ""}
+      choices={choices}
+      onChange={(id) => {
+        const choice = projects.find((candidate) => candidate.id === id);
+        runListView.chooseProject(choice ? { id: choice.id, title: choice.title } : null);
+      }}
+      disabled={false}
+      placeholder="All Projects"
+      unlistedLabel={project?.title}
+      popupClassName="w-64"
+      trigger={{
+        iconOnly: { icon: <FolderGit2 aria-hidden strokeWidth={1.5} />, chosen: project !== null },
+      }}
+    />
+  );
+}
+
 function RunSearchField({
   ref,
   value,
@@ -334,9 +358,9 @@ function RunSearchField({
       />
       <Input
         ref={ref}
-        aria-label="Search Run titles"
-        title={searchHint ? `Search Run titles · ${searchHint}` : "Search Run titles"}
-        placeholder="Search Run titles"
+        aria-label="Search Runs"
+        title={searchHint ? `Search Runs · ${searchHint}` : "Search Runs"}
+        placeholder="Search Runs"
         className={cn("bg-muted pl-8", value && "pr-8")}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -373,6 +397,7 @@ function navigationEmptyState(
   matches: number,
   open: number,
   search: string,
+  projectName: string | undefined,
   needsYou: boolean,
 ) {
   if (!loaded) return undefined;
@@ -380,8 +405,8 @@ function navigationEmptyState(
   if (!total) return { title: "No Runs yet", body: "" };
   if (!matches)
     return {
-      title: `No Run titles match “${search}”`,
-      body: "Search looks at titles only. Clear search (Esc) to see all Runs.",
+      title: `No Runs match "${search}"${projectName ? ` in ${projectName}` : ""}`,
+      body: "Search looks at the Run number, title, Project, Flow and branch. Use #12 for one Run number.",
     };
   if (!open && !search) return { title: "Nothing open", body: "You're all caught up." };
   return undefined;
@@ -453,10 +478,10 @@ function RunGroups({
   settled,
   expanded,
   snoozedExpanded,
-  query,
   filtered,
   needsYou,
   search,
+  projectName,
   loaded,
   total,
   matches,
@@ -471,10 +496,10 @@ function RunGroups({
   settled: readonly RunNavigationEntry[];
   expanded: boolean;
   snoozedExpanded: boolean;
-  query: string;
   filtered: boolean;
   needsYou: boolean;
   search: string;
+  projectName: string | undefined;
   loaded: boolean;
   total: number;
   matches: number;
@@ -487,7 +512,7 @@ function RunGroups({
   );
   const entryRow = (entry: RunNavigationEntry | SavedRunDraft) =>
     "presentation" in entry ? (
-      row(entry, !!query && mutedInSearch(entry))
+      row(entry, !!search && mutedInSearch(entry))
     ) : (
       <DraftRow
         key={entry.id}
@@ -496,7 +521,15 @@ function RunGroups({
         onRename={() => onRenameDraft(entry)}
       />
     );
-  const empty = navigationEmptyState(loaded, total, matches, open.length, search, needsYou);
+  const empty = navigationEmptyState(
+    loaded,
+    total,
+    matches,
+    open.length,
+    search,
+    projectName,
+    needsYou,
+  );
   // Open rows scroll on their own; the groups stay pinned below them with capped heights,
   // so a long Settled history never pushes open Runs out of view. On a short sidebar the
   // groups yield first: the open list keeps a floor and the groups scroll as one block.
@@ -504,7 +537,7 @@ function RunGroups({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-24 flex-1 overflow-y-auto px-2">
         <nav aria-label="Open Runs" className="flex flex-col gap-0.5">
-          {query && (
+          {search && (
             <p className="px-2 pt-1 pb-1.5 text-2xs leading-tight font-semibold tracking-section text-subtle-foreground uppercase">
               Runs · {matches}
             </p>
@@ -623,27 +656,17 @@ function RunRow({
   searchMuted?: boolean;
 }) {
   const { busy } = useRunActions({ entry: run });
-  const state = execution(run);
-  const { branches, pullRequests } = repositorySummary(run.repositories);
-  const compact = run.lifecycle === "settled";
-  const muted = !selected && (searchMuted || compact);
-  const hasMetadata =
-    run.settlement !== null ||
-    branches.length > 0 ||
-    pullRequests.length > 0 ||
-    run.presentation.woke ||
-    run.attention.needsInput ||
-    run.attention.problem ||
-    run.project.availability !== "available";
+  const ending = run.lifecycle === "settled" ? run.result : null;
+  const muted = !selected && (searchMuted || run.lifecycle === "settled");
   return (
     <SidebarRow
       id={run.id}
       title={run.title}
       kind="run"
       selected={selected}
-      compact={compact}
       disabled={busy}
       preview={<RunPreview run={run} />}
+      {...(run.result?.outputMissing ? { description: "Output missing" } : {})}
       actions={
         <RunActionItems
           subject={{ entry: run }}
@@ -652,24 +675,7 @@ function RunRow({
         />
       }
     >
-      {compact ? (
-        <span className="shrink-0 opacity-50">
-          <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
-        </span>
-      ) : (
-        <span className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
-          <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
-          <span className="min-w-0 truncate">{run.project.title}</span>
-          <RunNumber number={run.number} aria-hidden />
-          <state.Icon
-            aria-hidden
-            strokeWidth={1.5}
-            className={cn("ml-auto size-3.5 shrink-0", state.className)}
-          />
-          <ActivityAge at={run.lastActivityAt} />
-        </span>
-      )}
-      {compact && <RunNumber number={run.number} aria-hidden />}
+      <RunRowMeta run={run} ending={ending} />
       <span className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
@@ -681,34 +687,133 @@ function RunRow({
         </span>
         <GeneratingTitle generation={run.titleGeneration} />
       </span>
-      {compact && run.project.availability !== "available" && (
-        <StatusBadge kind="neutral">Not in T3</StatusBadge>
-      )}
-      {!compact && hasMetadata && (
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-          {branches.length > 0 && (
-            <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <GitBranch aria-hidden className="size-3.5 shrink-0" />
-              <span className="truncate">
-                {branches.length === 1 ? branches[0]![0] : `${branches.length} branches`}
-              </span>
-            </span>
-          )}
-          {pullRequests.length > 0 && (
-            <span
-              aria-label={`${pullRequests.length} pull requests`}
-              className="inline-flex shrink-0 items-center gap-1"
-            >
-              <GitPullRequest aria-hidden className="size-3.5" />
-              {pullRequests.length}
-            </span>
-          )}
-          <RunRowIndicators run={run} />
-        </span>
-      )}
-      <span className="sr-only">, {state.label}</span>
+      <RunRowDetails run={run} />
+      <RunRowAnnouncement run={run} ending={ending} />
     </SidebarRow>
   );
+}
+
+type RunEnding = RunNavigationEntry["result"];
+
+const notInT3Narrow = {
+  gap: "@max-[279px]/sidebar:gap-1.5 [@media(any-pointer:coarse)]:@max-[309px]/sidebar:gap-1.5",
+  hidden: "@max-[279px]/sidebar:hidden [@media(any-pointer:coarse)]:@max-[309px]/sidebar:hidden",
+  srOnly: "@max-[279px]/sidebar:sr-only [@media(any-pointer:coarse)]:@max-[309px]/sidebar:sr-only",
+  hiddenBesideTouchActions: "[@media(any-pointer:coarse)]:@max-[259px]/sidebar:hidden",
+};
+
+function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
+  const state = execution(run);
+  const notInT3 = run.lifecycle === "settled" && run.project.availability !== "available";
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 items-center gap-2 text-2xs text-muted-foreground",
+        notInT3 && notInT3Narrow.gap,
+      )}
+    >
+      <span className={cn("shrink-0", notInT3 && notInT3Narrow.hiddenBesideTouchActions)}>
+        <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
+      </span>
+      <span className={cn("min-w-0 shrink-[999] truncate", notInT3 && notInT3Narrow.srOnly)}>
+        {run.project.title}
+      </span>
+      <RunNumber number={run.number} aria-hidden />
+      {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={notInT3} />}
+      {notInT3 && (
+        <StatusBadge kind="neutral" aria-hidden>
+          Not in T3
+        </StatusBadge>
+      )}
+      <span
+        className={cn("ml-auto flex shrink-0 items-center gap-2", notInT3 && notInT3Narrow.hidden)}
+      >
+        <state.Icon
+          aria-hidden
+          strokeWidth={1.5}
+          className={cn("size-3.5 shrink-0", state.className)}
+        />
+        <ActivityAge at={run.lastActivityAt} />
+      </span>
+    </span>
+  );
+}
+
+function RunRowDetails({ run }: { run: RunNavigationEntry }) {
+  const { pullRequests } = repositorySummary(run.repositories);
+  const branches = runBranches(run);
+  const availability = run.lifecycle !== "settled";
+  const hasDetails =
+    run.settlement !== null ||
+    branches.length > 0 ||
+    pullRequests.length > 0 ||
+    run.presentation.woke ||
+    run.attention.needsInput ||
+    run.attention.problem ||
+    (availability && run.project.availability !== "available");
+  if (!hasDetails) return null;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+      {branches.length > 0 && (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <GitBranch aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">{branches.join(", ")}</span>
+        </span>
+      )}
+      {pullRequests.length > 0 && (
+        <span
+          aria-label={`${pullRequests.length} pull requests`}
+          className="inline-flex shrink-0 items-center gap-1"
+        >
+          <GitPullRequest aria-hidden className="size-3.5" />
+          {pullRequests.length}
+        </span>
+      )}
+      <RunRowIndicators run={run} availability={availability} />
+    </span>
+  );
+}
+
+function RunRowAnnouncement({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
+  return (
+    <span className="sr-only">
+      , {execution(run).label}
+      {ending && `, ended ${ending.endingName}`}
+      {run.lifecycle === "settled" && run.project.availability !== "available" && ", not in T3"}
+    </span>
+  );
+}
+
+function EndingBadge({ name, iconOnlyWhenNarrow }: { name: string; iconOnlyWhenNarrow: boolean }) {
+  return (
+    <StatusBadge
+      kind="neutral"
+      icon={Flag}
+      aria-hidden
+      className="max-w-16 min-w-0 shrink @min-[260px]/sidebar:max-w-22"
+    >
+      <span className={cn(iconOnlyWhenNarrow && notInT3Narrow.hidden)}>{name}</span>
+    </StatusBadge>
+  );
+}
+
+function RunPreviewResult({ run }: { run: RunNavigationEntry }) {
+  if (run.result)
+    return (
+      <div className="flex flex-wrap items-start gap-2">
+        <Flag aria-hidden className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+        <span className="min-w-0 break-words">{run.result.endingName}</span>
+        {run.result.outputMissing && <StatusBadge kind="attention">Output missing</StatusBadge>}
+      </div>
+    );
+  if (run.lifecycle === "settled" && run.flowHasEndings)
+    return (
+      <div className="flex items-start gap-2 text-muted-foreground">
+        <Flag aria-hidden className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+        <span>No result</span>
+      </div>
+    );
+  return null;
 }
 
 function RunPreview({ run }: { run: RunNavigationEntry }) {
@@ -730,6 +835,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
         <span>{state.label}</span>
         <RunRowIndicators run={run} />
       </div>
+      <RunPreviewResult run={run} />
       {run.blocks
         .filter((block) => block.workingMessage)
         .map((block, index) => (
@@ -737,6 +843,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
             {block.workingMessage}
           </p>
         ))}
+      <RunPreviewBoundBranch run={run} />
       <RunRepositories workers={run.repositories} />
       <p className="text-2xs text-muted-foreground">
         Last activity {fullDateTime(run.lastActivityAt)}
@@ -745,7 +852,27 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
   );
 }
 
-function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
+function RunPreviewBoundBranch({ run }: { run: RunNavigationEntry }) {
+  const bound = run.boundBranch;
+  if (!bound || run.repositories.some((worker) => worker.branch === bound)) return null;
+  return (
+    <div className="flex items-start gap-2">
+      <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <BranchName branch={bound} />
+        <p className="text-2xs text-muted-foreground">Run worktree</p>
+      </div>
+    </div>
+  );
+}
+
+function RunRowIndicators({
+  run,
+  availability = true,
+}: {
+  run: RunNavigationEntry;
+  availability?: boolean;
+}) {
   return (
     <>
       {run.settlement === "stopping" && (
@@ -758,7 +885,7 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
       )}
       {run.attention.needsInput && <StatusBadge kind="needs-input" />}
       {run.attention.problem && <StatusBadge kind="problem" />}
-      {run.project.availability !== "available" && (
+      {availability && run.project.availability !== "available" && (
         <StatusBadge kind="neutral">Not in T3</StatusBadge>
       )}
     </>

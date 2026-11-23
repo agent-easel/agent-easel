@@ -16,6 +16,9 @@ it("navigation changes replace rows, remove archived Runs and retain backend cre
     flowName: "Flow",
     origin: null,
     repositories: [],
+    boundBranch: null,
+    result: null,
+    flowHasEndings: false,
     project: {
       id: "project",
       title: "Project",

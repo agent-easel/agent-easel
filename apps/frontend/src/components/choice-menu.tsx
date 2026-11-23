@@ -13,6 +13,7 @@ import {
 import { CheckIcon, ChevronsUpDown } from "lucide-react";
 import { Select } from "radix-ui";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "./status-badge.tsx";
 import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 import { PickerMenuSearch, pickerShowsSearch } from "./picker-menu-search.tsx";
@@ -58,6 +59,12 @@ interface TriggerExtras {
    * name leaves out the value.
    */
   readonly describesValue?: boolean;
+  readonly iconOnly?: IconTrigger;
+}
+
+interface IconTrigger {
+  readonly icon: ReactNode;
+  readonly chosen: boolean;
 }
 
 /** The field's name: a label the trigger prefixes to its value, or the id of a visible label. */
@@ -130,12 +137,8 @@ export function ChoiceMenu({
   trigger?: TriggerExtras;
 }) {
   const { listValue, selected, shown } = chosen(choices, value, composer?.checked, unlistedLabel);
-  const names = choiceNames(
-    label,
-    labelledBy,
-    trigger.label,
-    triggerText(shown, placeholder, selected),
-  );
+  const text = triggerText(shown, placeholder, selected);
+  const names = choiceNames(label, labelledBy, trigger.label, text);
   const { listSearch, dialog, ...root } = useChoiceList({ choices, onChange, composer });
   const valueId = useId();
   return (
@@ -150,6 +153,8 @@ export function ChoiceMenu({
         valueIds={valueIds(valueId, trigger)}
         problemTone={problemTone}
         className={className}
+        icon={trigger.iconOnly}
+        tooltip={text}
       >
         <ChoiceValue
           id={valueId}
@@ -182,6 +187,8 @@ function ChoiceTrigger({
   valueIds,
   problemTone,
   className,
+  icon,
+  tooltip,
   children,
 }: {
   id: string;
@@ -194,38 +201,52 @@ function ChoiceTrigger({
   valueIds: readonly string[];
   problemTone: FieldState["tone"];
   className: string | undefined;
+  icon: IconTrigger | undefined;
+  tooltip: string;
   children: ReactNode;
 }) {
+  const button = (
+    <Button
+      type="button"
+      id={id}
+      variant="outline"
+      {...name}
+      // On the trigger only: Radix's own `required` would also make the hidden form select
+      // block submission with the browser's message instead of the form's.
+      aria-required={required}
+      {...triggerState(busy, dialog)}
+      {...fieldAria(describedBy)}
+      aria-describedby={[...valueIds, describedBy].filter(Boolean).join(" ") || undefined}
+      className={cn(
+        selectFieldClass,
+        "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
+        icon && iconTriggerClass,
+        icon?.chosen && "border-primary",
+        className,
+        fieldBorder(describedBy ? problemTone : undefined),
+      )}
+    >
+      {children}
+      <ChevronsUpDown
+        aria-hidden
+        className={cn("shrink-0 text-muted-foreground", icon ? "size-3" : "size-4")}
+        strokeWidth={1.5}
+      />
+    </Button>
+  );
+  if (!icon) return <Select.Trigger asChild>{button}</Select.Trigger>;
   return (
-    <Select.Trigger asChild>
-      <Button
-        type="button"
-        id={id}
-        variant="outline"
-        {...name}
-        // On the trigger only: Radix's own `required` would also make the hidden form select
-        // block submission with the browser's message instead of the form's.
-        aria-required={required}
-        {...triggerState(busy, dialog)}
-        {...fieldAria(describedBy)}
-        aria-describedby={[...valueIds, describedBy].filter(Boolean).join(" ") || undefined}
-        className={cn(
-          selectFieldClass,
-          "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
-          className,
-          fieldBorder(describedBy ? problemTone : undefined),
-        )}
-      >
-        {children}
-        <ChevronsUpDown
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground"
-          strokeWidth={1.5}
-        />
-      </Button>
-    </Select.Trigger>
+    <Tooltip>
+      <Select.Trigger asChild>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+      </Select.Trigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
+
+const iconTriggerClass =
+  "h-8 w-auto shrink-0 gap-1.5 bg-card pr-1.5 pl-2 has-[>svg]:pr-1.5 has-[>svg]:pl-2 [&>span>svg]:size-3.5";
 
 /**
  * Whether the list is open, its search, which is empty whenever the list opens or closes, and
@@ -283,7 +304,7 @@ function ChoiceValue({
   shown,
   placeholder,
   selected,
-  extras: { glyph, prefix, icon, detail },
+  extras: { glyph, prefix, icon, detail, iconOnly },
 }: {
   id: string;
   shown: string | undefined;
@@ -291,6 +312,14 @@ function ChoiceValue({
   selected: MenuChoice | undefined;
   extras: TriggerExtras;
 }) {
+  if (iconOnly)
+    return (
+      <span
+        className={cn("flex shrink-0", iconOnly.chosen ? "text-link" : "text-muted-foreground")}
+      >
+        {iconOnly.icon}
+      </span>
+    );
   return (
     <>
       {glyph}

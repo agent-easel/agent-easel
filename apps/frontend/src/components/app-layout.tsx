@@ -26,7 +26,7 @@ function AppShell() {
   useDesktopRoutes();
   return (
     <div className="flex h-dvh">
-      <aside className="relative flex w-[var(--factory-sidebar-width,17.5rem)] max-w-[50vw] shrink-0 flex-col min-h-0 border-r bg-sidebar min-[1280px]:w-[var(--factory-sidebar-width,18.75rem)] max-sm:w-[var(--factory-sidebar-width,14rem)]">
+      <aside className="@container/sidebar relative flex w-[var(--factory-sidebar-width,17.5rem)] max-w-[50vw] shrink-0 flex-col min-h-0 border-r bg-sidebar min-[1280px]:w-[var(--factory-sidebar-width,18.75rem)] max-sm:w-[var(--factory-sidebar-width,14rem)]">
         <DesktopTitlebar />
         <RunSidebar path={path} />
         <SidebarFooter />
