@@ -897,6 +897,21 @@ export const humanReviewFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+export const parallelReviewsFlow =
+  (count: number): ReadyFlowShape =>
+  (world) =>
+    workerShape(world, "Parallel reviews", (agentId) => {
+      const ids = Array.from({ length: count }, (_, index) => `worker-${index + 1}`);
+      return {
+        flowInput: flowInput(...ids),
+        blocks: [
+          ...ids.map((id, index) => agentBlock(id, `Worker ${index + 1}`, agentId)),
+          reviewStep,
+        ],
+        connections: ids.map((id) => connection(id, "done", "review")),
+      };
+    });
+
 /** Entry worker hands "Done" to Parallel work and its Flow-local "Revise" to Follow-up. */
 export const twoExitFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Two exits", (agentId) => ({
@@ -1377,6 +1392,24 @@ export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
     connections: [
       endingConnection("worker", "done", "delivered"),
       connection("second", "done", "review"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
+  }));
+
+export const endingBesideWaitFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending beside a Wait", (agentId) => ({
+    flowInput: flowInput("worker", "second", "parallel-block"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      parallelWork(agentId),
+      coolDown(),
+      followUp(agentId),
+    ],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      connection("second", "done", "cool-down"),
+      connection("cool-down", WAIT_OUTPUT, "follow-up"),
     ],
     finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
@@ -2138,6 +2171,24 @@ export function resultReleasedToHumanReview(world: ScenarioWorld, worker: Worker
       Boolean(pending(detail)),
     );
     return { ...worker, occurrence: pending(run)! };
+  });
+}
+
+export function resultsReleasedToHumanReviews(
+  world: ScenarioWorld,
+  workers: readonly WorkerHandle[],
+  message: string,
+) {
+  return reach("results released to Human reviews", async () => {
+    for (const worker of workers) await resultReported(world, worker, { message });
+    return observeFor(
+      "observe every review",
+      world,
+      workers[0]!.runId,
+      (run) =>
+        run.humanOccurrences.filter((occurrence) => occurrence.state === "pending").length ===
+        workers.length,
+    );
   });
 }
 

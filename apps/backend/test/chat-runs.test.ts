@@ -22,8 +22,13 @@ import {
   startedRuns,
 } from "./support/chat-runs.ts";
 import {
+  endingBesideWaitFlow,
+  endingReached,
   humanReviewFlow,
+  launchedWorkers,
+  repositoryFactsObserved,
   resultReleasedToHumanReview,
+  resultReleasedToWait,
   resultReported,
   workerAtWork,
   workingReported,
@@ -237,6 +242,179 @@ it("Read Run describes a Run with the definitions it captured after its Flow was
     },
     blocks: { total: 1, entries: [{ blockId: "worker", name: "Entry worker", kind: "agent" }] },
   });
+});
+
+it("Read Run gives the complete overview while an ending has been reached and a Wait is still pending", async (c) => {
+  // Arrange
+  const fixture = await runConversation(c, endingBesideWaitFlow);
+  const run = await startedRun(fixture, {
+    requestId: "overview-parity",
+    title: "Release candidate",
+    createdAt: "2026-11-07T08:00:00.000Z",
+  });
+  const {
+    workers: [first, second, parallel],
+  } = await launchedWorkers(fixture.world, run.id);
+  assert(first && second && parallel);
+  const pullRequest = {
+    host: "github.com",
+    repository: "example/search",
+    number: 42,
+    url: "https://github.com/example/search/pull/42",
+    state: "open" as const,
+  };
+  await repositoryFactsObserved(fixture.world, first, {
+    branch: "feature/search",
+    pullRequests: [pullRequest],
+  });
+  await workingReported(fixture.world, parallel, "Checking the release.");
+  await resultReported(fixture.world, second, { message: "Ready after the delay." });
+  const { arrival } = await resultReleasedToWait(fixture.world, second);
+  await resultReported(fixture.world, first, { message: pullRequest.url });
+  const reached = await endingReached(fixture.world, run.id);
+  assert(reached.result?.output === pullRequest.url);
+  assert(reached.repositories[0]?.pullRequests[0]?.url === pullRequest.url);
+  const finished = reached.reports.find((report) => report.blockId === "worker");
+  const delayed = reached.reports.find((report) => report.blockId === "second");
+  const waitingBlock = reached.blocks.find((block) => block.blockId === "cool-down");
+  assert(finished && delayed && waitingBlock?.observedAt);
+  fixture.model.script(calls(readRun({ run: String(run.number) })), { text: "Read." });
+
+  // Act
+  await answered(fixture.discord, "300000000000001022", 1);
+
+  // Assert
+  expect(toolResults(fixture.model, 1)).toStrictEqual([
+    {
+      read: expect.stringMatching(/^r-/),
+      page: 1,
+      pageCount: 1,
+      run: {
+        id: run.id,
+        number: run.number,
+        title: "Release candidate",
+        project: {
+          id: fixture.project.id,
+          name: fixture.project.title,
+          repositoryPath: fixture.project.workspaceRoot,
+        },
+        flow: {
+          name: "Ending beside a Wait",
+          capturedRevision: fixture.flow.revision,
+          latestSavedRevision: fixture.flow.revision,
+        },
+        state: "active",
+        settlement: "stopping",
+        acceptsHandoffs: false,
+        startedAt: reached.startedAt,
+        workspace: { mode: "checkout" },
+        prompt: { section: "prompt", characters: 37, pages: 1 },
+      },
+      blocks: {
+        total: 5,
+        entries: [
+          {
+            blockId: "worker",
+            name: "Entry worker",
+            kind: "agent",
+            state: "working",
+            observation: "fresh",
+            observedAt: expect.any(String),
+            problem: null,
+            pendingT3Requests: 0,
+            workingMessage: null,
+          },
+          {
+            blockId: "second",
+            name: "Second entry",
+            kind: "agent",
+            state: "finished",
+            observation: "fresh",
+            observedAt: expect.any(String),
+            problem: null,
+            pendingT3Requests: 0,
+            workingMessage: null,
+          },
+          {
+            blockId: "parallel-block",
+            name: "Parallel work",
+            kind: "agent",
+            state: "working",
+            observation: "fresh",
+            observedAt: expect.any(String),
+            problem: null,
+            pendingT3Requests: 0,
+            workingMessage: { section: "working:parallel-block", characters: 21, pages: 1 },
+          },
+          {
+            blockId: "cool-down",
+            name: "Cool down",
+            kind: "wait",
+            state: "waiting",
+            observation: "fresh",
+            observedAt: waitingBlock.observedAt,
+            problem: null,
+            pendingT3Requests: null,
+            workingMessage: null,
+          },
+          {
+            blockId: "follow-up",
+            name: "Follow-up",
+            kind: "agent",
+            state: "not-started",
+            observation: "unknown",
+            observedAt: null,
+            problem: null,
+            pendingT3Requests: null,
+            workingMessage: null,
+          },
+        ],
+      },
+      latestResults: {
+        total: 2,
+        entries: [
+          {
+            reportId: delayed.id,
+            block: "Second entry",
+            blockId: "second",
+            status: "finished",
+            exit: "Done",
+            acceptedAt: delayed.acceptedAt,
+            workerCompletion: "confirmed",
+            handoffs: [{ to: "Cool down", state: "delivered", problem: null }],
+            result: { section: `result:${delayed.id}`, characters: 22, pages: 1 },
+          },
+          {
+            reportId: finished.id,
+            block: "Entry worker",
+            blockId: "worker",
+            status: "finished",
+            exit: "Done",
+            acceptedAt: finished.acceptedAt,
+            workerCompletion: "confirmed",
+            handoffs: [{ state: "delivered", problem: null }],
+            result: { section: `result:${finished.id}`, characters: 41, pages: 1 },
+          },
+        ],
+      },
+      needsInput: { total: 0, entries: [] },
+      problems: { total: 0, entries: [] },
+      humanOccurrences: { total: 0, entries: [] },
+      pendingWaits: {
+        total: 1,
+        entries: [
+          {
+            arrivalId: arrival.id,
+            block: "Cool down",
+            startedAt: arrival.startedAt,
+            deadlineAt: arrival.deadlineAt,
+            message: { section: `wait:${arrival.id}`, characters: 22, pages: 1 },
+          },
+        ],
+      },
+      sectionPageCharacters: 4000,
+    },
+  ]);
 });
 
 it("a pending Human occurrence names its arrival and its complete context is readable page by page beyond the review limit", async (c) => {

@@ -8,10 +8,11 @@ import {
   type ChatOperation,
   type Proposed,
 } from "./actions.ts";
+import { referenceOf } from "../runner/run-overview.ts";
 import { invalid, type ChatToolOutcome, type MutationTool } from "./chat-tools.ts";
 import { refused, reviewMessages, runLine } from "./review-text.ts";
 import { runSearch, type RunIdentity } from "./run-search.ts";
-import { NOT_PERMITTED, referenceOf, runReference } from "./run-tools.ts";
+import { NOT_PERMITTED, runReference } from "./run-tools.ts";
 import { clip, inert, LIFECYCLE } from "./status-cards.ts";
 
 /** The Factory operations a chat Archive uses: the shared Archive and the Run read. */

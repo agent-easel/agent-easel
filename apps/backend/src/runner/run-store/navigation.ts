@@ -5,6 +5,7 @@ import {
   type Result,
   type RunAttention,
   type RunNavigationEntry,
+  type RunOrigin,
 } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import { currentProgress } from "./current-report.ts";
@@ -19,8 +20,79 @@ import { storedProjectIcon } from "../../projects.ts";
 import { projectFaviconUrl } from "../../project-favicon.ts";
 import { dropTitleGeneration, readTitleGenerations } from "./title-generations.ts";
 import { queueWorkerTitleSync } from "./worker-titles.ts";
+import { runWordMatches } from "./run-word-matches.ts";
+
+export interface ArchivedRunRow {
+  readonly id: string;
+  readonly number: number | null;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly creationKey: string;
+  readonly startedAt: string;
+  readonly flowName: string;
+  readonly origin: RunOrigin | null;
+  readonly project: Pick<
+    RunNavigationEntry["project"],
+    "id" | "title" | "workspaceRoot" | "availability"
+  >;
+}
+
+export interface RunListExtras {
+  readonly startedAt: ReadonlyMap<string, string>;
+  readonly archived: readonly ArchivedRunRow[];
+}
+
 export function openRunNavigation(database: RunnerDatabase) {
   return {
+    listRunListExtras(words: readonly string[]): Effect.Effect<Result<RunListExtras>, unknown> {
+      return database.transaction((sql) =>
+        Effect.gen(function* () {
+          const rows = yield* sql<{
+            id: string;
+            number: number | null;
+            title: string;
+            created_at: string;
+            creation_key: string;
+            started_at: string;
+            archived_at: string | null;
+            flow_name: string;
+            project_id: string;
+            project_title: string;
+            workspace_root: string;
+            availability: RunNavigationEntry["project"]["availability"];
+          }>`SELECT r.id,r.number,r.title,r.created_at,r.creation_key,r.started_at,r.archived_at,f.name AS flow_name,
+          p.id AS project_id,p.title AS project_title,p.workspace_root,p.availability
+          FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
+          JOIN flow_revisions f ON f.id=r.flow_revision_id
+          ${words.length ? sql`WHERE ${sql.and(runWordMatches(sql, words))}` : sql``}`;
+          const origins = yield* readRunOrigins(sql, undefined, true);
+          return {
+            ok: true as const,
+            value: {
+              startedAt: new Map(rows.map((row) => [row.id, row.started_at])),
+              archived: rows
+                .filter((row) => row.archived_at !== null)
+                .map((row) => ({
+                  id: row.id,
+                  number: row.number,
+                  title: row.title,
+                  createdAt: row.created_at,
+                  creationKey: row.creation_key,
+                  startedAt: row.started_at,
+                  flowName: row.flow_name,
+                  origin: origins.get(row.id) ?? null,
+                  project: {
+                    id: row.project_id,
+                    title: row.project_title,
+                    workspaceRoot: row.workspace_root,
+                    availability: row.availability,
+                  },
+                })),
+            },
+          };
+        }),
+      );
+    },
     listRunNavigation(): Effect.Effect<Result<readonly RunNavigationEntry[]>, unknown> {
       return database.transaction((sql) =>
         Effect.gen(function* () {

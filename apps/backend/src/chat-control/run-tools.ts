@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { attentionPresentation, type Result, type RunDetail } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import type { Result, RunDetail } from "@t3-factory/contracts";
+import { referenceOf, runOverview } from "../runner/run-overview.ts";
+import { RUN_SEARCH_MAX_WORDS, searchWords } from "../runner/run-search-words.ts";
 import type { ReadTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";
 import { conversationHandles, type ConversationHandles } from "./conversation-handles.ts";
 import { conversationGenerations } from "./conversations.ts";
@@ -25,7 +26,6 @@ const OVERVIEW_PAGE = 10;
 /** Unicode characters per section page; a section of any length stays reachable page by page. */
 const SECTION_PAGE = 4000;
 const MAX_TEXT = 200;
-const MAX_WORDS = 8;
 
 export const NOT_PERMITTED =
   "No Run with this reference is in the Projects this thread permits. It may not exist, or it belongs to a Project this thread does not permit.";
@@ -58,12 +58,6 @@ function pageOf(value: unknown): number | string {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1)
     return "page must be a whole number of at least 1.";
   return value;
-}
-
-/** An exact Run reference: a Run number (`12` or `#12`) or a Run ID. */
-export function referenceOf(value: string): { id: string } | { number: number } {
-  const number = /^#?(\d{1,15})$/.exec(value.trim())?.[1];
-  return number === undefined ? { id: value.trim() } : { number: Number(number) };
 }
 
 const handleOwner = (scope: ChatToolScope) => ({
@@ -179,8 +173,8 @@ function searchRequest(input: unknown): SearchRequest | string {
 function searchQuery({ text, projectId, includeArchived }: Arguments): SearchRequest | string {
   if (text !== undefined && !isText(text))
     return `text must be non-empty and at most ${MAX_TEXT} characters.`;
-  const words = text === undefined ? [] : text.trim().split(/\s+/);
-  if (words.length > MAX_WORDS) return `Use at most ${MAX_WORDS} words.`;
+  const words = text === undefined ? [] : searchWords(text);
+  if (words.length > RUN_SEARCH_MAX_WORDS) return `Use at most ${RUN_SEARCH_MAX_WORDS} words.`;
   if (projectId !== undefined && !isText(projectId)) return "projectId must be a Project ID.";
   if (includeArchived !== undefined && typeof includeArchived !== "boolean")
     return "includeArchived must be true or false.";
@@ -206,161 +200,36 @@ function sectionEntry(sections: Sections, key: string, text: string | null) {
     : { section: key, characters: characters(text).length, pages: pagesOf(text) };
 }
 
-const HANDOFF_STATES = { acknowledged: "delivered", cancelled: "cancelled" } as const;
-
-/**
- * A Run's overview and its readable sections, described from the definitions the Run captured.
- * Long texts (prompt, results, working messages, Human contexts, Wait messages) are sections the
- * overview only sizes; lists are cut into overview pages.
- */
-export function runOverview(identity: RunIdentity, detail: RunDetail) {
+function runReadOverview(identity: RunIdentity, detail: RunDetail) {
+  const { run, lists } = runOverview(identity, detail);
   const sections: Sections = new Map();
-  const graph = detail.definitions.flow.graph.blocks;
-  const definition = (blockId: string) => graph.find((block) => block.id === blockId);
-  const blockName = (blockId: string) =>
-    definition(blockId)?.name ?? detail.blocks.find((block) => block.blockId === blockId)?.name;
-  const exitName = (blockId: string, exitId: string | null) => {
-    const block = definition(blockId);
-    if (!block || exitId === null) return null;
-    // A Wait's or Continuation's single output has no name.
-    return (
-      effectiveExits(block, detail.definitions.agents).find((exit) => exit.id === exitId)?.name ||
-      null
-    );
-  };
-  const latest = new Map<string, RunDetail["reports"][number]>();
-  for (const report of detail.reports) latest.set(report.blockId, report);
-  const released = (intentId: string) =>
-    detail.events.some((event) => event.kind === "handoff-released" && event.causeId === intentId);
-  const pending = detail.attention.filter((matter) => matter.settledAt === null);
-  const blockProblem = (blockId: string) =>
-    detail.blocks.find((block) => block.blockId === blockId)?.problem ?? null;
-  /** The Run-level settlement Problem's detail: the workers keeping Settle from completing, and
-   * the user's recovery options. */
-  const settlementProblem = () => {
-    const blocked = (detail.settlement?.workers ?? [])
-      .filter((worker) => worker.state === "unresolved")
-      .map((worker) => `${worker.blockName}: ${worker.problem ?? "not resolved"}`);
-    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3, or Archive the Run.`;
-  };
-
-  const run = {
-    id: identity.id,
-    number: identity.number,
-    title: identity.title,
-    project: identity.project,
-    flow: {
-      name: detail.definitions.flow.name,
-      capturedRevision: detail.definitions.flow.revision,
-      latestSavedRevision: detail.currentFlowRevision,
-    },
-    state: identity.state,
-    settlement: detail.settlement?.state ?? null,
-    acceptsHandoffs: detail.gateOpen,
-    startedAt: detail.startedAt,
-    workspace:
-      detail.workspace.mode === "checkout"
-        ? { mode: "checkout" }
-        : {
-            mode: "worktree",
-            state: detail.workspace.state,
-            branch: detail.workspace.branch,
-            problem: detail.workspace.problem,
-          },
-    prompt: sectionEntry(sections, "prompt", detail.input),
-  };
-  const lists = {
-    blocks: detail.blocks.map((block) => ({
-      blockId: block.blockId,
-      name: blockName(block.blockId) ?? block.name,
-      kind: definition(block.blockId)?.kind ?? null,
-      state: block.state,
-      observation: block.freshness,
-      observedAt: block.observedAt,
-      problem: block.problem,
-      pendingT3Requests: block.pendingRequestCount,
+  const prompt = sectionEntry(sections, "prompt", run.prompt);
+  const sectionLists = {
+    ...lists,
+    blocks: lists.blocks.map((block) => ({
+      ...block,
       workingMessage:
         block.workingMessage === null
           ? null
           : sectionEntry(sections, `working:${block.blockId}`, block.workingMessage),
     })),
-    latestResults: [...latest.values()].map((report) => ({
-      reportId: report.id,
-      block: blockName(report.blockId),
-      blockId: report.blockId,
-      status: report.status,
-      exit: exitName(report.blockId, report.exitId),
-      acceptedAt: report.acceptedAt,
-      workerCompletion:
-        report.status !== "finished" ? null : report.completionEligibleAt ? "confirmed" : "held",
-      handoffs: detail.intents
-        .filter((intent) => intent.reportId === report.id)
-        .map((intent) => ({
-          to: blockName(intent.blockId),
-          state:
-            intent.state === "acknowledged" || intent.state === "cancelled"
-              ? HANDOFF_STATES[intent.state]
-              : released(intent.id)
-                ? "released-unconfirmed"
-                : "held",
-          problem: intent.problem,
-        })),
-      result: sectionEntry(sections, `result:${report.id}`, report.resultMessage ?? null),
+    latestResults: lists.latestResults.map((report) => ({
+      ...report,
+      result: sectionEntry(sections, `result:${report.reportId}`, report.result),
     })),
-    needsInput: pending
-      .filter((matter) => attentionPresentation(matter.kind) === "needs-input")
-      .map((matter) => ({
-        id: matter.id,
-        kind: matter.kind,
-        block: matter.blockName,
-        appearedAt: matter.appearedAt,
-        observation: matter.freshness,
-        occurrenceId: matter.occurrenceId,
-        ...(matter.kind === "native-request" ? { answeredIn: "T3" } : {}),
-      })),
-    problems: pending
-      .filter((matter) => attentionPresentation(matter.kind) === "problem")
-      .map((matter) => ({
-        id: matter.id,
-        kind: matter.kind,
-        block: matter.blockName,
-        appearedAt: matter.appearedAt,
-        observation: matter.freshness,
-        detail: matter.blockId === null ? settlementProblem() : blockProblem(matter.blockId),
-      })),
-    humanOccurrences: detail.humanOccurrences
-      .filter((occurrence) => occurrence.state === "pending")
-      .map((occurrence) => {
-        const arrival = detail.intents.find((intent) => intent.id === occurrence.incomingIntentId);
-        const source = arrival?.sourceBlockId ?? null;
-        return {
-          occurrenceId: occurrence.id,
-          block: blockName(occurrence.blockId),
-          blockId: occurrence.blockId,
-          appearedAt: occurrence.appearedAt,
-          arrival: {
-            id: occurrence.incomingIntentId,
-            from: source === null ? null : blockName(source),
-            exit: source === null ? null : exitName(source, arrival?.exitId ?? null),
-            reportId: arrival?.reportId ?? null,
-          },
-          context: sectionEntry(sections, `human:${occurrence.id}`, occurrence.context),
-        };
-      }),
-    pendingWaits: detail.waitArrivals
-      .filter((arrival) => arrival.state === "pending")
-      .map((arrival) => ({
-        arrivalId: arrival.id,
-        block: blockName(arrival.blockId),
-        startedAt: arrival.startedAt,
-        deadlineAt: arrival.deadlineAt,
-        message: sectionEntry(sections, `wait:${arrival.id}`, arrival.message),
-      })),
+    humanOccurrences: lists.humanOccurrences.map((occurrence) => ({
+      ...occurrence,
+      context: sectionEntry(sections, `human:${occurrence.occurrenceId}`, occurrence.context),
+    })),
+    pendingWaits: lists.pendingWaits.map((arrival) => ({
+      ...arrival,
+      message: sectionEntry(sections, `wait:${arrival.arrivalId}`, arrival.message),
+    })),
   };
-  const longest = Math.max(...Object.values(lists).map((list) => list.length));
+  const longest = Math.max(...Object.values(sectionLists).map((list) => list.length));
   return {
-    run,
-    lists,
+    run: { ...run, prompt },
+    lists: sectionLists,
     sections,
     pageCount: Math.max(1, Math.ceil(longest / OVERVIEW_PAGE)),
   };
@@ -387,7 +256,7 @@ const readRun = (
       const read = yield* permittedRun(scope, referenceOf(reference));
       if (!read) return unavailable;
       if (read.kind === "denied") return failed("not_found", NOT_PERMITTED);
-      const { run, lists, sections, pageCount } = runOverview(read.identity, read.detail);
+      const { run, lists, sections, pageCount } = runReadOverview(read.identity, read.detail);
       if (page > pageCount) return invalid(`This Run's overview has ${pageCount} page(s).`);
       const versions = Object.fromEntries(
         [...sections].map(([key, text]) => [key, versionOf(text)]),
@@ -438,7 +307,7 @@ const readRun = (
       const read = yield* permittedRun(scope, { id: stored.runId });
       if (!read) return unavailable;
       if (read.kind === "denied") return failed("not_found", NOT_PERMITTED);
-      const text = runOverview(read.identity, read.detail).sections.get(section) ?? null;
+      const text = runReadOverview(read.identity, read.detail).sections.get(section) ?? null;
       if (text === null)
         return failed("unavailable", "Factory no longer retains this text for the Run.");
       if (versionOf(text) !== recorded)

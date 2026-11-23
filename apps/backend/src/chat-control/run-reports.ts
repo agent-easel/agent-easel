@@ -8,9 +8,10 @@ import {
   type RunAttention,
   type RunDetail,
 } from "@t3-factory/contracts";
+import { runOverview } from "../runner/run-overview.ts";
 import { channelGrants, type Destination } from "./deliveries.ts";
 import { runSearch, type RunIdentity } from "./run-search.ts";
-import { runOverview, type RunReadOperations } from "./run-tools.ts";
+import type { RunReadOperations } from "./run-tools.ts";
 
 /** A chat-started Run's originating thread: where its automatic reports go. */
 export interface ReportOrigin {
