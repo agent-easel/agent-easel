@@ -608,6 +608,36 @@ it("factory_check_flow_draft answers a ready draft with the Agent revisions it u
   expect(assertOk(await factory.getFlow(saved.id))).toStrictEqual(saved);
 });
 
+it("factory_check_flow_draft names an invalid draft's top-level arguments with or without a cursor", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createFlow({ name: "Review" }));
+  const invalidDraft = {
+    flowId: saved.id,
+    expectedRevision: saved.revision,
+    expectedProjectId: saved.projectId,
+    name: "",
+    graph: { blocks: "not a list" },
+  };
+
+  // Act
+  const withoutCursor = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: invalidDraft,
+  });
+  const withCursor = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: { ...invalidDraft, cursor: "v1.x.y.0" },
+  });
+
+  // Assert
+  expect(withCursor.isError).toBe(true);
+  const { issues } = toolReply(withCursor) as { issues: { path: string }[] };
+  expect(issues.map(({ path }) => path)).toContain("name");
+  expect(issues.every(({ path }) => !path.startsWith("draft."))).toBe(true);
+  expect(toolReply(withCursor)).toStrictEqual(toolReply(withoutCursor));
+});
+
 it("factory_check_flow_draft reports a blocked draft's findings and leaves the saved Flow unchanged", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);

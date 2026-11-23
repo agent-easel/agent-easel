@@ -588,6 +588,20 @@ export const withId =
           },
         });
 
+const withDraftFieldsAtTopLevel = (result: Result<unknown>): Result<unknown> =>
+  result.ok
+    ? result
+    : {
+        ok: false,
+        error: {
+          ...result.error,
+          issues: result.error.issues.map((issue) => ({
+            ...issue,
+            path: issue.path.replace(/^draft\./, ""),
+          })),
+        },
+      };
+
 /**
  * Global definitions and those `projectId` owns, or every definition without a filter. A filter
  * that is not a string is a validation issue.
@@ -717,7 +731,7 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
       const { cursor, ...draft } = toolArguments(input);
       return cursor === undefined
         ? factory.validateFlow(id, draft)
-        : factory.listFlowFindings(id, { cursor, draft });
+        : factory.listFlowFindings(id, { cursor, draft }).then(withDraftFieldsAtTopLevel);
     }),
   ],
   factory_remove_flow: ["flowRemoval", removal("flowId", (id) => factory.removeFlow(id))],
