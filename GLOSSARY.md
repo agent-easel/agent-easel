@@ -446,7 +446,8 @@ The one maintained Discord message Factory posts in a chat-started Run's origina
 It shows the Run's identity, lifecycle and Flow, then the captured Flow's Blocks in graph order
 with their current or final state on each row. Large Flows summarize not-started Blocks first
 and then finished Blocks to fit one message. Factory edits the card as Blocks and the Run change.
-The card mentions nobody and omits results, report bodies and prompts. See
+On create, the card of a bot-started Run mentions that bot while saved Access lists it; otherwise,
+and on every edit, the card mentions nobody. It omits results, report bodies and prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
@@ -454,9 +455,11 @@ _Avoid_: Progress feed or per-event notification; treating the card's text as co
 A new Discord message in a chat-started Run's originating thread. An attention notice reports new
 Needs input or Problem matters. A catch-up reports such matters that accrued while Factory could
 not post. A completion notice says a Run became Settled and invites a reply, once per Settled cycle.
-On create, a Run notice pings the Run's requester while saved Access allows that user. Resolving
-a matter edits its attention notice or catch-up in place and removes the mention. A reply to a
-notice from the operating application identifies the Run for a fresh scoped read. See
+An Archive notice says a Run was Archived, once per Run. Each ends with a machine line for
+consumers. On create, a Run notice pings the Run's requester, person or bot, while saved Access
+allows that requester. Resolving a matter edits its attention notice or catch-up in place and
+removes the mention. A reply to a notice from the operating application identifies the Run for a
+fresh scoped read. See
 [Chat control](docs/chat-control.md#attention-notices).
-_Avoid_: Notices for ordinary Block transitions or Archive, replaying matters that opened and resolved
+_Avoid_: Notices for ordinary Block transitions, replaying matters that opened and resolved
 while Factory could not post, answer buttons on a notice.

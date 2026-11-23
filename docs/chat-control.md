@@ -284,7 +284,8 @@ last message of the bot's own pending Start review in the same thread. Bot messa
 - Each bot can have one pending Start per thread. A second proposal is refused and leaves the
   original review available for confirmation. A review holds the slot while it is being prepared,
   while its confirmation phrase is live, or while Factory is resolving its acceptance.
-- Factory admits up to three consecutive bot turns in a thread, shared across bots. The next bot
+- Factory admits up to three consecutive bot turns in a thread, shared across bots. A bot request
+  answered with the [busy reply](#bounds-and-queue) also counts as a turn. The next bot
   request gets one refusal without a mention. Further requests stay silent until a human posts in
   the thread, Factory accepts a Start there, or five minutes pass since the last admitted bot turn.
   A human message can clear the breaker without mentioning Factory.
@@ -727,8 +728,8 @@ still being reconciled. Retry of an unknown message first warns that Discord may
 each Retry is one attempt, never repeats the action, and a new unknown outcome needs a new choice.
 Review parts and last messages follow the same nonce rule, so a last message Discord already created
 is not posted twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the
-host: an uncertain review becomes usable only if the requester actually replies to its last message
-with the phrase, and otherwise expires so the requester asks again.
+host: a review becomes confirmable only once Factory has recorded its last message's exact ID, so a
+review whose last message is uncertain ends with nothing to confirm and the requester asks again.
 
 ### Originating thread
 
@@ -762,7 +763,9 @@ bodies and prompts.
 
 To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at the bottom first,
 then finished Blocks at the top if needed. It omits remaining overflow rows only when those
-summaries still leave insufficient room. The card mentions nobody. Replying to the card points
+summaries still leave insufficient room. When Factory creates the card of a bot-started Run, the
+card opens with a mention of that bot while saved Access lists it among the Bot IDs. Otherwise,
+and on every edit, the card mentions nobody. Replying to the card points
 Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
 thread's current scope.
 
@@ -904,7 +907,7 @@ the last message about the Run.
 Every attention notice (a catch-up included), completion notice and Archive notice ends with one
 machine line: its last line, one JSON object in an inline code span. The prose above it is for people
 and may change; consumers read only this line. A backtick or `@` inside a string is written as
-``` or `@`, so a name can neither end the span nor mention anyone, and a JSON parser
+`\u0060` or `\u0040`, so a name can neither end the span nor mention anyone, and a JSON parser
 restores it exactly.
 
 | Field | Meaning |
