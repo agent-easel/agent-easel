@@ -219,6 +219,23 @@ it("a Run number is matched as plain words, so #1 finds no Run by its number", a
   expect(toolReply(result)).toMatchObject({ total: 0, runs: [] });
 });
 
+it("Run list search preserves Find Runs letter matching and treats wildcard characters literally", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const createdAt = "2026-11-07T08:00:00.000Z";
+  await startedRun(fixture, { requestId: "literal", title: "ÉTÉ 100%_Ready", createdAt });
+  await startedRun(fixture, { requestId: "accented", title: "été 100%_Ready", createdAt });
+  await startedRun(fixture, { requestId: "wildcards", title: "ÉTÉ 100xyzReady", createdAt });
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await listRuns(client, { query: "ÉTÉ 100%_ready" });
+
+  // Assert
+  expect(titles(result)).toStrictEqual(["ÉTÉ 100%_Ready"]);
+  expect(toolReply(result).total).toBe(1);
+});
+
 it("a list of more Runs than the default limit returns 20 newest with the total and a hint to narrow the filters", async (c) => {
   // Arrange
   const fixture = await prepared(c);
@@ -1060,9 +1077,9 @@ it("Subflow placements beyond ten, a nested placement among them, are read on pa
   // Arrange
   const fixture = await elevenPlacementsWithNested(c);
   const client = await factoryMcpClient(c, fixture.f);
+  const first = toolReply(await readRun(client, { run: fixture.runId }));
 
   // Act
-  const first = toolReply(await readRun(client, { run: fixture.runId }));
   const second = toolReply(await readRun(client, { run: fixture.runId, page: 2 }));
 
   // Assert
@@ -1109,6 +1126,7 @@ it("a pending Problem raised inside an earlier invocation keeps its own Block an
       kind: "join-integrity",
       block: "Merge",
       invocation: [{ placement: "Inner 0", number: 1 }],
+      detail: "A queued arrival's message is missing.",
     },
   ]);
   expect(reply.subflowPlacements.entries).toMatchObject([

@@ -20,7 +20,7 @@ export type RunReadOperations = Pick<
   FactoryOperations,
   "listRunNavigation" | "getSubflowInvocation"
 > & {
-  listRunListExtras(): Promise<Result<RunListExtras>>;
+  listRunListExtras(words: readonly string[]): Promise<Result<RunListExtras>>;
   readRunByReference(
     reference: { id: string } | { number: number },
   ): Promise<Result<RunReadSource | null>>;
@@ -259,15 +259,10 @@ const newestFirst = (a: Candidate, b: Candidate) =>
   a.creationKey.localeCompare(b.creationKey) ||
   a.row.id.localeCompare(b.row.id);
 
-function matches(query: RunQuery, { row }: Candidate): boolean {
-  if (query.projectId !== undefined && row.project.id !== query.projectId) return false;
-  if (!query.lifecycles.has(row.lifecycle)) return false;
-  if (query.needsYou !== undefined && row.needsYou !== query.needsYou) return false;
-  const text = [row.title, row.project.name, row.project.repositoryPath, row.flow]
-    .join(" ")
-    .toLowerCase();
-  return query.words.every((word) => text.includes(word.toLowerCase()));
-}
+const matches = (query: RunQuery, { row }: Candidate) =>
+  (query.projectId === undefined || row.project.id === query.projectId) &&
+  query.lifecycles.has(row.lifecycle) &&
+  (query.needsYou === undefined || row.needsYou === query.needsYou);
 
 const failed = (code: string, message: string, issues: readonly ValidationIssue[], next: string) =>
   textResult(true, { code, message, issues, next });
@@ -292,13 +287,14 @@ async function listRuns(factory: RunReadOperations, args: Record<string, unknown
   const query = queryOf(args);
   const navigation = await factory.listRunNavigation();
   if (!navigation.ok) return readFailed(navigation.error);
-  const extras = await factory.listRunListExtras();
+  const extras = await factory.listRunListExtras(query.words);
   if (!extras.ok) return readFailed(extras.error);
   const listed = new Set(navigation.value.map((entry) => entry.id));
   const candidates = [
-    ...navigation.value.map((entry) =>
-      navigationCandidate(entry, extras.value.startedAt.get(entry.id)!),
-    ),
+    ...navigation.value.flatMap((entry) => {
+      const startedAt = extras.value.startedAt.get(entry.id);
+      return startedAt === undefined ? [] : [navigationCandidate(entry, startedAt)];
+    }),
     ...extras.value.archived.filter((run) => !listed.has(run.id)).map(archivedCandidate),
   ]
     .filter((candidate) => matches(query, candidate))
@@ -458,13 +454,17 @@ function subflowPlacements({ identity, detail }: RunReadSource) {
   });
 }
 
-/** The reply's fields, chosen one by one: nothing of the stored Run passes through unlisted. */
 function readReply(
   source: RunReadSource,
   invocations: ReadonlyMap<string, readonly SubflowInvocation[]>,
 ) {
   const { identity, detail, notInT3 } = source;
   const { run, lists } = runOverview(identity, detail);
+  const integrityProblems = new Map(
+    detail.attention
+      .filter((matter) => matter.kind === "condition-integrity" || matter.kind === "join-integrity")
+      .map((matter) => [matter.id, matter.message]),
+  );
   const matterInvocation = new Map(
     detail.attention
       .filter((matter) => matter.settledAt === null)
@@ -531,7 +531,7 @@ function readReply(
         invocation: matterInvocation.get(matter.id),
         appearedAt: matter.appearedAt,
         observation: matter.observation,
-        detail: matter.detail,
+        detail: integrityProblems.get(matter.id) ?? matter.detail,
       })),
       humanOccurrences: lists.humanOccurrences.map((occurrence) => ({
         block: occurrence.block,

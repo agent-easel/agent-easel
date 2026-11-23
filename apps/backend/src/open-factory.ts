@@ -18,7 +18,7 @@ export interface Factory extends FactoryOperations {
   readonly runtime: { [K in keyof RuntimeReports]: (input: unknown) => Promise<RuntimeReply> };
   /** Factory MCP's text-only Start through the same Start operation as `startRun`. */
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
-  listRunListExtras(): Promise<Result<RunListExtras>>;
+  listRunListExtras(words: readonly string[]): Promise<Result<RunListExtras>>;
   readRunByReference(
     reference: { id: string } | { number: number },
   ): Promise<Result<RunReadSource | null>>;
@@ -90,7 +90,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     ...facade,
     runtime: promiseOperations(runtime, reports),
     startTextRun: (input) => runtime.runPromise(startTextRun(input)),
-    listRunListExtras: () => runtime.runPromise(listRunListExtras()),
+    listRunListExtras: (words) => runtime.runPromise(listRunListExtras(words)),
     readRunByReference: (reference) => runtime.runPromise(readRunByReference(reference)),
     setRuntimeBackendUrl,
     live,

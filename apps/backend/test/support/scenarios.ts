@@ -897,7 +897,6 @@ export const humanReviewFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
-/** `count` entry workers whose "Done" all reach one Human Review. */
 export const parallelReviewsFlow =
   (count: number): ReadyFlowShape =>
   (world) =>
@@ -2175,8 +2174,6 @@ export function resultReleasedToHumanReview(world: ScenarioWorld, worker: Worker
   });
 }
 
-/** Each worker reported `message` and ended its turn; Factory observed every end and released
- * each result to a Human review as its own pending occurrence. */
 export function resultsReleasedToHumanReviews(
   world: ScenarioWorld,
   workers: readonly WorkerHandle[],

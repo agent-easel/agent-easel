@@ -56,7 +56,7 @@ export class FactoryService extends Context.Service<
     readonly runtime: RuntimeReports;
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
-    readonly listRunListExtras: () => Effect.Effect<Result<RunListExtras>>;
+    readonly listRunListExtras: (words: readonly string[]) => Effect.Effect<Result<RunListExtras>>;
     readonly readRunByReference: (
       reference: { id: string } | { number: number },
     ) => Effect.Effect<Result<RunReadSource | null>>;
@@ -388,7 +388,7 @@ export const makeFactoryService = (
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
-      listRunListExtras: () => guard(runner.listRunListExtras()),
+      listRunListExtras: (words) => guard(runner.listRunListExtras(words)),
       readRunByReference: (reference) =>
         guard(runReadSource(sql, (id) => runner.getRun(id))(reference)),
       setRuntimeBackendUrl: (url) => {

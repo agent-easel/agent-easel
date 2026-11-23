@@ -394,7 +394,7 @@ Any harness session with Factory MCP registered can find and follow Runs without
 - `projectId` limits the list to one Project.
 - `lifecycle` is an array of `active`, `snoozed`, `settled` and `archived`; the default is active, snoozed and settled, so Archived Runs are hidden unless requested.
 - `needsYou` is exactly the shared predicate behind the desktop [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) and the Run list's **Needs you** filter, evaluated on the backend: `true` keeps only the Runs it counts and `false` only the others. An Agent awaiting review in T3 shows `needsInput` but is not a **Needs you** Run, as in the Run list.
-- `query` is search words, as in [Chat control's Find Runs](chat-control.md): each word must appear, in any letter case, in the Run title, the Project name or repository path, or the Flow name. A Run number such as `12` or `#12` is not special here.
+- `query` is search words, as in [Chat control's Find Runs](chat-control.md): each word must appear in the Run title, the Project name or repository path, or the Flow name. Matching ignores ASCII letter case and preserves the case of other letters. A Run number such as `12` or `#12` is not special here.
 - `limit` is 1 to 50 rows, 20 by default.
 
 Every filter, `needsYou` included, applies to all saved Runs before the limit is taken and before the total is counted, so a Run that needs the owner is never hidden behind newer Runs that do not. Rows are newest created first. The reply carries the matching `total` and, when more Runs match than the rows shown, a `hint` to narrow the filters; there is no cursor. Navigation data leaves Archived Runs out, so Archived rows come from a second stored read and merge with the others under one total.
