@@ -2,11 +2,11 @@ import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { RunActionItems, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
-import { runListView, useRunListView } from "../run-list-view.ts";
-import { mattersNeedingOwner, type RunNavigationEntry } from "@t3-factory/contracts";
+import { runList, runListView, useRunListView, type RunListProject } from "../run-list-view.ts";
+import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { runActivity } from "../run-status.ts";
 import {
   ChevronDown,
@@ -18,6 +18,7 @@ import {
   CirclePause,
   FilePen,
   Flag,
+  FolderGit2,
   LoaderCircle,
   GitBranch,
   GitPullRequest,
@@ -29,7 +30,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  byCreation,
   draftTitle,
   runDraft,
   useRunDraft,
@@ -38,6 +38,8 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
+import { useLiveLaunchChoices } from "../live/launch-choices.ts";
+import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "./ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
@@ -118,13 +120,19 @@ function NewRunButton({ current }: { current: boolean }) {
   );
 }
 
-/** The Run list as its search or Needs you filter shows it; groups hide while it is filtered. */
-function useRunListRows(runs: readonly RunNavigationEntry[]) {
+function useRunListRows(runs: readonly RunNavigationEntry[], loaded: boolean) {
   const drafts = useRunDrafts();
-  const { search, needsYou } = useRunListView();
-  const query = search.trim().toLocaleLowerCase();
-  const groups = needsYou ? needsYouGroup(runs) : navigationGroups(runs, drafts, query);
-  return { ...groups, search, needsYou, query, filtered: !!query || needsYou };
+  const view = useRunListView();
+  const choices = useLiveLaunchChoices().value;
+  const catalog = choices
+    ? { projects: choices.catalog.projects, flows: choices.flows }
+    : undefined;
+  const list = runList({ runs, drafts, view, loaded, catalog });
+  const fellBack = list.project !== view.project;
+  useEffect(() => {
+    if (fellBack) runListView.chooseProject(null);
+  }, [fellBack]);
+  return { ...list, search: view.search, needsYou: view.needsYou, query: view.search.trim() };
 }
 
 function useGroupExpansion(path: string, runs: readonly RunNavigationEntry[], filtered: boolean) {
@@ -139,8 +147,11 @@ export function RunSidebar({ path }: { path: string }) {
   const composition = useRunDraft();
   const searchRef = useRef<HTMLInputElement>(null);
   const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
-  const { open, snoozed, settled, matches, total, search, needsYou, query, filtered } =
-    useRunListRows(runs);
+  const list = useRunListRows(runs, loaded);
+  const { open, snoozed, settled, matches, total, search, needsYou, query, project, projects } =
+    list;
+  const filtered = list.flat;
+  const projectName = projects.find((choice) => choice.id === project)?.title;
   const [expanded, onExpand] = useGroupExpansion(path, settled, filtered);
   const [snoozedExpanded, onExpandSnoozed] = useGroupExpansion(path, snoozed, filtered);
   const actionError = useRunActionsState((state) => state.error);
@@ -161,8 +172,14 @@ export function RunSidebar({ path }: { path: string }) {
     <section aria-label="Run navigation" className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2">
         <RunSearchField ref={searchRef} value={search} onChange={runListView.search} />
+        <ProjectFilter project={project} projects={projects} />
         <NewRunButton current={path === "/runs/new"} />
       </div>
+      {/^\d+$/.test(query) && (
+        <p className="px-3 pb-2 text-2xs text-muted-foreground">
+          {query} also finds branches · #{query} finds Run {query} only
+        </p>
+      )}
       {needsYou && <NeedsYouFilter count={open.length} />}
       {[loadError, actionError]
         .filter((message) => message !== "")
@@ -181,10 +198,10 @@ export function RunSidebar({ path }: { path: string }) {
           snoozedExpanded={snoozedExpanded}
           onExpandSnoozed={onExpandSnoozed}
           expanded={expanded}
-          query={query}
           filtered={filtered}
           needsYou={needsYou}
-          search={search.trim()}
+          search={query}
+          projectName={projectName}
           loaded={loaded}
           total={total}
           matches={matches}
@@ -240,52 +257,6 @@ function isActive(run: RunNavigationEntry) {
   return run.lifecycle === "active";
 }
 
-/** Runs that need you lead the open list: Needs input, then Problem; each keeps its order. */
-function needRank(entry: RunNavigationEntry | SavedRunDraft) {
-  if (!("presentation" in entry)) return 2;
-  if (entry.attention.needsInput) return 0;
-  return entry.attention.problem ? 1 : 2;
-}
-
-const byNeed = (
-  left: RunNavigationEntry | SavedRunDraft,
-  right: RunNavigationEntry | SavedRunDraft,
-) => needRank(left) - needRank(right);
-
-/** Revealed drafts join the open Runs in creation order, after the Runs that need you; title
- * search covers both in creation order. */
-function navigationGroups(
-  runs: readonly RunNavigationEntry[],
-  drafts: readonly SavedRunDraft[],
-  query: string,
-) {
-  const titled = (title: string) => title.toLocaleLowerCase().includes(query);
-  const runMatches = runs.filter((run) => titled(run.title));
-  const draftMatches = drafts.filter((draft) => titled(draftTitle(draft)));
-  const active = runMatches.filter(isActive);
-  const main = active.filter((run) => !run.presentation.snoozed);
-  const snoozed = active.filter((run) => run.presentation.snoozed);
-  const settled = runMatches.filter((run) => !isActive(run));
-  return {
-    open: query
-      ? [...runMatches, ...draftMatches].toSorted(byCreation)
-      : [...main, ...draftMatches].toSorted(byCreation).toSorted(byNeed),
-    snoozed,
-    settled,
-    matches: runMatches.length + draftMatches.length,
-    total: runs.length + drafts.length,
-  };
-}
-
-/**
- * Needs you: exactly the Runs each desktop installation's Dock badge counts, in creation order.
- * A view of the Run list, not an Inbox: rows show their own Needs input and Problem chips.
- */
-function needsYouGroup(runs: readonly RunNavigationEntry[]) {
-  const waiting = runs.filter((run) => mattersNeedingOwner(run).length > 0).toSorted(byCreation);
-  return { open: waiting, snoozed: [], settled: [], matches: waiting.length, total: runs.length };
-}
-
 /** The active Needs you filter; choosing it again shows the whole Run list. */
 function NeedsYouFilter({ count }: { count: number }) {
   return (
@@ -314,7 +285,44 @@ function mutedInSearch(run: RunNavigationEntry) {
   return run.presentation.snoozed || !isActive(run);
 }
 
-/** Run title search with Escape and a clear button that keeps focus in the field. */
+function ProjectFilter({
+  project,
+  projects,
+}: {
+  project: string | null;
+  projects: readonly RunListProject[];
+}) {
+  const choices: MenuChoice[] = [
+    {
+      id: "",
+      label: "All Projects",
+      description: "Every Project in the sidebar",
+      icon: <FolderGit2 aria-hidden strokeWidth={1.5} className="size-4 text-muted-foreground" />,
+    },
+    ...projects.map((choice) => ({
+      id: choice.id,
+      label: choice.title,
+      description: choice.workspaceRoot,
+      icon: <ProjectIcon icon={choice.projectIcon} faviconUrl={choice.faviconUrl} inline />,
+    })),
+  ];
+  return (
+    <ChoiceMenu
+      id="run-list-project"
+      label="Project"
+      value={project ?? ""}
+      choices={choices}
+      onChange={(id) => runListView.chooseProject(id || null)}
+      disabled={false}
+      placeholder="All Projects"
+      popupClassName="w-64"
+      trigger={{
+        iconOnly: { icon: <FolderGit2 aria-hidden strokeWidth={1.5} />, chosen: project !== null },
+      }}
+    />
+  );
+}
+
 function RunSearchField({
   ref,
   value,
@@ -335,9 +343,9 @@ function RunSearchField({
       />
       <Input
         ref={ref}
-        aria-label="Search Run titles"
-        title={searchHint ? `Search Run titles · ${searchHint}` : "Search Run titles"}
-        placeholder="Search Run titles"
+        aria-label="Search Runs"
+        title={searchHint ? `Search Runs · ${searchHint}` : "Search Runs"}
+        placeholder="Search Runs"
         className={cn("bg-muted pl-8", value && "pr-8")}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -374,6 +382,7 @@ function navigationEmptyState(
   matches: number,
   open: number,
   search: string,
+  projectName: string | undefined,
   needsYou: boolean,
 ) {
   if (!loaded) return undefined;
@@ -381,8 +390,8 @@ function navigationEmptyState(
   if (!total) return { title: "No Runs yet", body: "" };
   if (!matches)
     return {
-      title: `No Run titles match “${search}”`,
-      body: "Search looks at titles only. Clear search (Esc) to see all Runs.",
+      title: `No Runs match "${search}"${projectName ? ` in ${projectName}` : ""}`,
+      body: "Search looks at the Run number, title, Project, Flow and branch. Use #12 for one Run number.",
     };
   if (!open && !search) return { title: "Nothing open", body: "You're all caught up." };
   return undefined;
@@ -454,10 +463,10 @@ function RunGroups({
   settled,
   expanded,
   snoozedExpanded,
-  query,
   filtered,
   needsYou,
   search,
+  projectName,
   loaded,
   total,
   matches,
@@ -472,10 +481,10 @@ function RunGroups({
   settled: readonly RunNavigationEntry[];
   expanded: boolean;
   snoozedExpanded: boolean;
-  query: string;
   filtered: boolean;
   needsYou: boolean;
   search: string;
+  projectName: string | undefined;
   loaded: boolean;
   total: number;
   matches: number;
@@ -488,7 +497,7 @@ function RunGroups({
   );
   const entryRow = (entry: RunNavigationEntry | SavedRunDraft) =>
     "presentation" in entry ? (
-      row(entry, !!query && mutedInSearch(entry))
+      row(entry, !!search && mutedInSearch(entry))
     ) : (
       <DraftRow
         key={entry.id}
@@ -497,7 +506,15 @@ function RunGroups({
         onRename={() => onRenameDraft(entry)}
       />
     );
-  const empty = navigationEmptyState(loaded, total, matches, open.length, search, needsYou);
+  const empty = navigationEmptyState(
+    loaded,
+    total,
+    matches,
+    open.length,
+    search,
+    projectName,
+    needsYou,
+  );
   // Open rows scroll on their own; the groups stay pinned below them with capped heights,
   // so a long Settled history never pushes open Runs out of view. On a short sidebar the
   // groups yield first: the open list keeps a floor and the groups scroll as one block.
@@ -505,7 +522,7 @@ function RunGroups({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-24 flex-1 overflow-y-auto px-2">
         <nav aria-label="Open Runs" className="flex flex-col gap-0.5">
-          {query && (
+          {search && (
             <p className="px-2 pt-1 pb-1.5 text-2xs leading-tight font-semibold tracking-section text-subtle-foreground uppercase">
               Runs · {matches}
             </p>

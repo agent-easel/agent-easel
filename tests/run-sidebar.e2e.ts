@@ -185,7 +185,7 @@ test("snoozing a restored Run restores its group expansion and focuses the toggl
   expect((await findRun(app.baseUrl, snoozedTitle)).presentation.snoozed).toBe(true);
 });
 
-test("title search combines drafts and all Run states in creation order", async ({
+test("search combines drafts and all Run states in creation order", async ({
   app,
   screen,
   browser,
@@ -201,7 +201,7 @@ test("title search combines drafts and all Run states in creation order", async 
   const titles = await matchingSidebarTitles(app.baseUrl, "Demo ·");
 
   // Act
-  await screen.getByRole("textbox", "Search Run titles").fill("Demo ·");
+  await screen.getByRole("textbox", "Search Runs").fill("Demo ·");
 
   // Assert
   const open = screen.getByRole("navigation", "Open Runs");
@@ -214,7 +214,7 @@ test("title search combines drafts and all Run states in creation order", async 
   await app.screenshot("flat-search-muted-states");
 });
 
-test("a title search with no match explains that search looks at titles only", async ({
+test("a search with no match explains which Run fields search looks at", async ({
   app,
   screen,
   browser,
@@ -225,15 +225,44 @@ test("a title search with no match explains that search looks at titles only", a
   const query = "No Run is titled this";
 
   // Act
-  await screen.getByRole("textbox", "Search Run titles").fill(query);
+  await screen.getByRole("textbox", "Search Runs").fill(query);
 
   // Assert
   const empty = screen.getByRole("navigation", "Open Runs").getByRole("status");
-  await expect(empty).toContainText(`No Run titles match “${query}”`);
+  await expect(empty).toContainText(`No Runs match "${query}"`);
   await expect(empty).toContainText(
-    "Search looks at titles only. Clear search (Esc) to see all Runs.",
+    "Search looks at the Run number, title, Project, Flow and branch. Use #12 for one Run number.",
   );
   await app.screenshot("sidebar-search-no-match");
+});
+
+test("a chosen Project keeps the grouped list and outlasts clearing a number search", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/runs/new");
+  const search = screen.getByRole("textbox", "Search Runs");
+  await screen.getByRole("combobox", "Project: All Projects").tap();
+
+  // Act
+  await screen.getByRole("option", "Atlas demo").tap();
+
+  // Assert
+  const filter = screen.getByRole("combobox", "Project: Atlas demo");
+  await expect(filter).toBeVisible();
+  await expect(screen.getByRole("button", /^Settled \d+$/)).toBeVisible();
+  await search.fill("23");
+  await expect(screen.getByText("23 also finds branches · #23 finds Run 23 only")).toBeVisible();
+  await expect(
+    screen.getByRole("navigation", "Open Runs").getByRole("link", /Search fix on its own branch/),
+  ).toBeVisible();
+  await app.screenshot("project-filter-number-search");
+  await search.press("Escape");
+  await expect(filter).toBeVisible();
+  await expect(screen.getByRole("button", /^Settled \d+$/)).toBeVisible();
 });
 
 test("restore during search keeps focus on the matching row", async ({ app, screen, browser }) => {
@@ -606,7 +635,7 @@ test("Needs you lists exactly the Runs the Dock badge counts and clears a confli
 }) => {
   // Arrange
   await openDesktopWindow({ app, screen, browser });
-  await screen.getByRole("textbox", "Search Run titles").fill("Demo · Settled");
+  await screen.getByRole("textbox", "Search Runs").fill("Demo · Settled");
   const titles = await badgeRunTitles(app.baseUrl);
   expect(titles).toContain("Demo · Problem · Search checks failed");
   expect(titles).not.toContain(snoozedTitle);
@@ -615,7 +644,7 @@ test("Needs you lists exactly the Runs the Dock badge counts and clears a confli
   await routeWindow(browser, { kind: "needs-you" });
 
   // Assert
-  await expect(screen.getByRole("textbox", "Search Run titles")).toHaveValue("");
+  await expect(screen.getByRole("textbox", "Search Runs")).toHaveValue("");
   await expect(screen.getByRole("button", `Needs you (${titles.length})`)).toHaveAttribute(
     "aria-pressed",
     "true",

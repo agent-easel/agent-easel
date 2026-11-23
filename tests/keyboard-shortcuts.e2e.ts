@@ -257,7 +257,7 @@ test("desktop Mod+1 opens the first search-filtered visible sidebar row", async 
   expect(matches[0]).toBe(target.title);
   await app.open("/runs/new");
   await expectFactoryConnected(screen);
-  await screen.getByRole("textbox", "Search Run titles").fill(query);
+  await screen.getByRole("textbox", "Search Runs").fill(query);
 
   // Act
   await browser.keyboard.press(`${shortcutMod}+1`);

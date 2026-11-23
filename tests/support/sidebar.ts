@@ -46,8 +46,18 @@ async function prepareSidebarRun(
 
 /** Navigation's public order is the expected Run order when search merges in a newer draft. */
 export async function matchingSidebarTitles(baseUrl: string | undefined, query: string) {
+  const terms = query.toLocaleLowerCase().split(/\s+/);
   return (await navigation(baseUrl))
-    .filter((run) => run.title.includes(query))
+    .filter((run) => {
+      const fields = [
+        run.title,
+        run.project.title,
+        run.flowName,
+        run.boundBranch ?? "",
+        ...run.repositories.map((worker) => worker.branch ?? ""),
+      ].map((field) => field.toLocaleLowerCase());
+      return terms.every((term) => fields.some((field) => field.includes(term)));
+    })
     .map((run) => run.title);
 }
 
@@ -63,7 +73,7 @@ export async function openSidebarAction(
   await browser.setViewport({ width: 1440, height: 1100 });
   await app.open("/runs/new");
   const toggle = screen.getByRole("button", /^Snoozed 1$/);
-  if (searching) await screen.getByRole("textbox", "Search Run titles").fill("Navigation research");
+  if (searching) await screen.getByRole("textbox", "Search Runs").fill("Navigation research");
   else await toggle.tap();
   const actions = screen.getByRole("link").filter({ hasText: title });
   await actions.secondaryTap();
