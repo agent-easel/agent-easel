@@ -169,6 +169,7 @@ function NotificationSettings({
                 aria-labelledby={text.title}
                 checked={state.alerts.notifyRunFinished}
                 disabled={!notificationsOn}
+                className="disabled:opacity-100"
                 onCheckedChange={(checked) =>
                   void run(() => desktop.setAlertSetting("notifyRunFinished", checked))
                 }

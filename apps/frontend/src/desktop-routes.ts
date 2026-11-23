@@ -29,6 +29,7 @@ export function useDesktopRoutes() {
         state: {
           routedBlock: route.blockId,
           ...(route.attentionId && { routedAttentionId: route.attentionId }),
+          ...(route.revealOverview && { routedOverview: true }),
         },
       });
     });
@@ -40,5 +41,6 @@ declare module "@tanstack/react-router" {
     /** A desktop route's Block to select in the Run it opened; null opens the Run overview. */
     routedBlock?: string | null;
     routedAttentionId?: string;
+    routedOverview?: true;
   }
 }

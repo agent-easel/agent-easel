@@ -587,6 +587,26 @@ test("a notification route opens its Run with the Block of its one pending matte
   await app.screenshot("desktop-route-run-block");
 });
 
+test("a completion route opens the Run overview with its Result although the inspector was closed", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.addInitScript(() => localStorage.setItem("factory.runInspectorOpen", "false"));
+  await openDesktopWindow({ app, screen, browser });
+  const run = await findRun(app.baseUrl, "Demo · Ended · Shipped while an alternative was stopped");
+
+  // Act
+  await routeWindow(browser, { kind: "run", runId: run.id, blockId: null, revealOverview: true });
+
+  // Assert
+  await expect(browser).toHaveURL(`/runs/${run.id}`);
+  await expect(screen.getByRole("heading", "Overview", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("region", "Run result")).toBeVisible();
+  await app.screenshot("desktop-route-run-completion");
+});
+
 test("a notification route to a Run that no longer exists shows it is unavailable", async ({
   app,
   screen,

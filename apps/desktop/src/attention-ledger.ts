@@ -1,5 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { NotificationPermission } from "@t3-factory/contracts/desktop-bridge";
 
 /** Why a pending appearance has not been notified yet; it stays eligible for catch-up. */
 export type DeferReason =
@@ -77,15 +78,23 @@ export interface ServerLedger {
 interface LedgerFile {
   readonly version: 1;
   servers: Record<string, ServerLedger>;
+  permission?: NotificationPermission;
 }
 
 const fileName = "desktop-attention.json";
+
+const notificationPermissions: readonly NotificationPermission[] = [
+  "undetermined",
+  "requesting",
+  "granted",
+  "denied",
+];
 
 const notifiedBy = (appearance: AppearanceState | CompletionState) =>
   "notification" in appearance ? appearance.notification : null;
 
 /** Resolved history is only needed while its process can still act on it. */
-function withoutResolved(ledger: ServerLedger): ServerLedger {
+function withoutResolved(ledger: ServerLedger, delivered: ReadonlySet<string>): ServerLedger {
   const matters = Object.fromEntries(
     Object.entries(ledger.matters).filter(([, record]) =>
       Object.values(record.appearances).some((appearance) => appearance.state !== "resolved"),
@@ -101,7 +110,9 @@ function withoutResolved(ledger: ServerLedger): ServerLedger {
     Object.entries(ledger.notifications).flatMap(
       ([id, notification]): [string, NotificationRecord][] => {
         if (referenced.has(id)) return [[id, notification]];
-        if (notification.kind !== "completion" || notification.unreferencedAtLaunch) return [];
+        if (notification.kind !== "completion") return [];
+        if (delivered.has(id)) return [[id, { ...notification, unreferencedAtLaunch: false }]];
+        if (notification.unreferencedAtLaunch) return [];
         return [[id, { ...notification, unreferencedAtLaunch: true }]];
       },
     ),
@@ -111,10 +122,15 @@ function withoutResolved(ledger: ServerLedger): ServerLedger {
 
 function parseLedger(raw: unknown): LedgerFile | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const value = raw as { version?: unknown; servers?: unknown };
+  const value = raw as { version?: unknown; servers?: unknown; permission?: unknown };
   if (value.version !== 1 || typeof value.servers !== "object" || value.servers === null)
     return undefined;
-  return { version: 1, servers: value.servers as Record<string, ServerLedger> };
+  const permission = notificationPermissions.find((known) => known === value.permission);
+  return {
+    version: 1,
+    servers: value.servers as Record<string, ServerLedger>,
+    ...(permission && { permission }),
+  };
 }
 
 /**
@@ -128,7 +144,7 @@ export class AttentionLedger {
   ) {}
 
   /** An unreadable file is kept beside a fresh ledger: catch-up then notifies once per Run. */
-  static async open(directory: string): Promise<AttentionLedger> {
+  static async open(directory: string, delivered: ReadonlySet<string>): Promise<AttentionLedger> {
     const path = join(directory, fileName);
     let text: string;
     try {
@@ -147,7 +163,7 @@ export class AttentionLedger {
       return new AttentionLedger(path, { version: 1, servers: {} });
     }
     for (const [server, ledger] of Object.entries(parsed.servers))
-      parsed.servers[server] = withoutResolved(ledger);
+      parsed.servers[server] = withoutResolved(ledger, delivered);
     return new AttentionLedger(path, parsed);
   }
 
@@ -159,10 +175,23 @@ export class AttentionLedger {
   }
 
   async requireCompletionBaseline(): Promise<void> {
+    await this.write(() => this.requireBaseline());
+  }
+
+  async notePermission(permission: NotificationPermission): Promise<boolean> {
+    const previous = this.data.permission;
+    if (previous === permission) return false;
+    const granted = permission === "granted" && previous !== undefined;
     await this.write(() => {
-      for (const ledger of Object.values(this.data.servers))
-        if (ledger.completions) ledger.completions.baselinePending = true;
+      this.data.permission = permission;
+      if (granted) this.requireBaseline();
     });
+    return granted;
+  }
+
+  private requireBaseline() {
+    for (const ledger of Object.values(this.data.servers))
+      if (ledger.completions) ledger.completions.baselinePending = true;
   }
 
   /** What a notification of `server` represents, if this installation posted it for that server. */

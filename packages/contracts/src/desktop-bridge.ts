@@ -44,6 +44,7 @@ export type DesktopRoute =
       readonly runId: string;
       readonly blockId: string | null;
       readonly attentionId?: string;
+      readonly revealOverview?: true;
     }
   | { readonly kind: "needs-you" };
 

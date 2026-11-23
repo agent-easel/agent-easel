@@ -46,13 +46,19 @@ export class MacAlerts implements DesktopAlertPort {
       notification.groupId,
     );
     if (refusal !== null) return { kind: "failed" } as const;
-    await this.listenForClicks();
+    await this.listenForClicks().catch((error: unknown) =>
+      process.emitWarning(`Notification clicks could not be restored: ${String(error)}`),
+    );
     return { kind: "accepted" } as const;
   }
 
   withdraw(ids: readonly string[]) {
     this.native.remove(ids);
     for (const id of ids) this.clickable.delete(id);
+  }
+
+  delivered() {
+    return this.native.delivered();
   }
 
   /**

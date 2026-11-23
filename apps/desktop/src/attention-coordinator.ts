@@ -35,6 +35,7 @@ export interface DesktopAlertPort {
   show(notification: AlertNotification): Promise<ShowOutcome>;
   /** Removes delivered notifications best effort, also ones posted by an earlier process. */
   withdraw(ids: readonly string[]): void;
+  delivered(): Promise<readonly string[]>;
   /** The Dock badge text; an empty label removes the badge. Independent of permission. */
   setBadge(label: string): void;
   /** Read without a window; never prompts. */
@@ -240,7 +241,7 @@ function notificationRoute(
   rows: readonly RunNavigationEntry[],
 ): DesktopRoute {
   if (notification.kind === "completion")
-    return { kind: "run", runId: notification.runId, blockId: null };
+    return { kind: "run", runId: notification.runId, blockId: null, revealOverview: true };
   const announced = new Set(notification.matters.map(({ id }) => id));
   const pending = (
     rows.find((row) => row.id === notification.runId)?.attention.matters ?? []
@@ -334,11 +335,13 @@ function announcedCompletion(row: RunNavigationEntry): Completion | null {
 const unaccounted = (record: CompletionRecord | undefined, cycle: number, retry: boolean) =>
   record?.cycle !== cycle || (retry && record.state === "definitely-failed");
 
+type HeldCompletion = { readonly runId: string; readonly cycle: number };
+
 function observeCompletions(
   ledger: ServerLedger,
   rows: readonly RunNavigationEntry[],
   catchUp: boolean,
-  held: ReadonlyMap<string, number>,
+  held: HeldCompletion | null,
 ): Completion[] {
   const completions: CompletionLedger = (ledger.completions ??= {
     baselinePending: true,
@@ -353,7 +356,7 @@ function observeCompletions(
     .filter(({ row, cycle }) => unaccounted(completions.runs[row.id], cycle, catchUp));
   if (!completions.baselinePending) return due;
   completions.baselinePending = false;
-  const released = due.filter(({ row, cycle }) => held.get(row.id) === cycle);
+  const released = due.filter(({ row, cycle }) => row.id === held?.runId && cycle === held.cycle);
   const releasedRuns = new Set(released.map(({ row }) => row.id));
   for (const row of rows) {
     if (row.lifecycle !== "settled" || row.settledCycle === null || releasedRuns.has(row.id))
@@ -409,7 +412,7 @@ const announcesCompletions = (settings: DesktopAlertSettings) =>
 
 type Decision = {
   readonly retry: boolean;
-  readonly held: ReadonlyMap<string, number>;
+  readonly held: HeldCompletion | null;
   readonly withheld: AppearanceState | null;
   readonly settings: DesktopAlertSettings;
 };
@@ -436,7 +439,7 @@ function decide(
           ...intend(ledger, server, announcements, settings.showRunDetails),
           ...intendCompletions(ledger, server, completions, settings.showRunDetails),
         ],
-    waiting: waitsForPrompt ? completions : [],
+    trigger: waitsForPrompt && announcements.length === 0 ? completions[0] : undefined,
   };
 }
 
@@ -502,10 +505,7 @@ export class AttentionCoordinator {
   private requesting = false;
   private focused = false;
   private held: HeldClick | null = null;
-  private heldCompletions: {
-    readonly server: string;
-    readonly cycles: Map<string, number>;
-  } | null = null;
+  private heldCompletion: (HeldCompletion & { readonly server: string }) | null = null;
   /**
    * Changes synchronously with every selection, lost readiness and revocation, before their
    * queued work runs, so an announcement can tell that its state ended while it awaited.
@@ -535,11 +535,14 @@ export class AttentionCoordinator {
       readonly permissionChanged: (permission: NotificationPermission) => void;
     },
   ): Promise<AttentionCoordinator> {
+    const ledger = await AttentionLedger.open(directory, new Set(await port.delivered()));
+    const permission = await port.permission();
+    await ledger.notePermission(permission);
     return new AttentionCoordinator(
-      await AttentionLedger.open(directory),
+      ledger,
       port,
       options.settings,
-      await port.permission(),
+      permission,
       options.permissionChanged,
     );
   }
@@ -561,7 +564,7 @@ export class AttentionCoordinator {
     this.owedCatchUp = false;
     // A click held for another server never routes into this one.
     if (this.held && this.held.server !== server) this.drop();
-    if (this.heldCompletions?.server !== server) this.heldCompletions = null;
+    if (this.heldCompletion?.server !== server) this.heldCompletion = null;
     void this.enqueue(async () => {
       this.latest = null;
       this.showBadge();
@@ -603,7 +606,7 @@ export class AttentionCoordinator {
           this.latest = null;
           this.drop();
           this.showBadge();
-          await this.withdrawAll(selection!.server);
+          await this.withdrawAll(selection!.server, { forget: true });
         });
       },
     };
@@ -667,7 +670,7 @@ export class AttentionCoordinator {
         announcesCompletions(settings) && !announcesCompletions(this.settings);
       this.settings = settings;
       this.showBadge();
-      if (!announcesCompletions(settings)) this.heldCompletions = null;
+      if (!announcesCompletions(settings)) this.heldCompletion = null;
       if (completionsEnabled) await this.ledger.requireCompletionBaseline();
       if ((enabled || completionsEnabled) && this.ready) await this.announce(this.ready, enabled);
     });
@@ -705,8 +708,12 @@ export class AttentionCoordinator {
   }
 
   /** Best effort: Notification Center may already have dropped some of them. */
-  private async withdrawAll(server: string) {
-    const ids = await this.ledger.change(server, (ledger) => withdrawWhere(ledger, () => true));
+  private async withdrawAll(server: string, { forget = false } = {}) {
+    const ids = await this.ledger.change(server, (ledger) => {
+      const withdrawn = withdrawWhere(ledger, () => true);
+      if (forget) ledger.notifications = {};
+      return withdrawn;
+    });
     if (ids.length > 0) this.port.withdraw(ids);
   }
 
@@ -732,30 +739,31 @@ export class AttentionCoordinator {
 
   private async announce({ server, rows, epoch }: Ready, requested: boolean) {
     const catchUp = requested || this.owedCatchUp;
-    const granted = await this.observePermission();
+    const retry = (await this.observePermission()) || catchUp;
+    if (this.epoch !== epoch) return this.abandon(server, [], retry);
     const withheld = this.withheld(this.observed);
     const held = this.releasable(server);
-    const { due, shown, withdrawn, waiting } = await this.ledger.change(server, (ledger) =>
-      decide(ledger, server, rows, {
-        retry: catchUp || granted,
-        held,
-        withheld,
-        settings: this.settings,
-      }),
+    const { due, shown, withdrawn, trigger } = await this.ledger.change(server, (ledger) =>
+      decide(ledger, server, rows, { retry, held, withheld, settings: this.settings }),
     );
-    if (held.size > 0) this.heldCompletions = null;
-    if (waiting.length > 0) this.hold(server, waiting);
+    if (held) this.heldCompletion = null;
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
-    if (this.epoch !== epoch) return this.abandon(server, shown, catchUp || granted);
-    if (catchUp || granted) this.owedCatchUp = false;
+    if (this.epoch !== epoch) return this.abandon(server, shown, retry);
+    if (retry) this.owedCatchUp = false;
     // A window was focused meanwhile: the owner sees the Run list, so these count as seen.
     if (shown.length > 0 && this.focused)
       return this.unpost(server, shown, { state: "foreground-accounted" });
+    if (due) this.askForPermission(server, trigger);
+    for (const notification of shown) this.post(server, notification);
+  }
+
+  private askForPermission(server: string, trigger: Completion | undefined) {
     // Asked only when a banner would otherwise show now, never at launch.
     const bannerWaitsForPermission =
       !this.focused && this.settings.notifications && this.observed === "undetermined";
-    if (due && bannerWaitsForPermission && !this.requesting) this.request();
-    for (const notification of shown) this.post(server, notification);
+    if (!bannerWaitsForPermission || this.requesting) return;
+    this.heldCompletion = trigger ? { server, runId: trigger.row.id, cycle: trigger.cycle } : null;
+    this.request();
   }
 
   /**
@@ -768,21 +776,18 @@ export class AttentionCoordinator {
     if (this.selection?.server === server) this.owedCatchUp ||= catchUp;
   }
 
-  private releasable(server: string): ReadonlyMap<string, number> {
-    if (this.observed !== "granted" || this.heldCompletions?.server !== server) return new Map();
-    return this.heldCompletions.cycles;
-  }
-
-  private hold(server: string, completions: readonly Completion[]) {
-    if (this.heldCompletions?.server !== server)
-      this.heldCompletions = { server, cycles: new Map() };
-    for (const { row, cycle } of completions) this.heldCompletions.cycles.set(row.id, cycle);
+  private releasable(server: string): HeldCompletion | null {
+    if (this.observed !== "granted" || this.heldCompletion?.server !== server) return null;
+    return this.heldCompletion;
   }
 
   private post(server: string, notification: AlertNotification) {
     void this.port.show(notification).then(
       (outcome) => this.settle(server, notification.id, outcome),
-      () => this.settle(server, notification.id, { kind: "failed" }),
+      (error: unknown) => {
+        process.emitWarning(`A desktop notification's delivery is unknown: ${String(error)}`);
+        this.settle(server, notification.id, null);
+      },
     );
   }
 
@@ -791,11 +796,16 @@ export class AttentionCoordinator {
    * accepted after it was withdrawn (its matters resolved or its selection ended meanwhile) is
    * withdrawn again.
    */
-  private settle(server: string, id: string, outcome: ShowOutcome) {
+  private settle(server: string, id: string, outcome: ShowOutcome | null) {
     void this.enqueue(async () => {
+      const posted = this.ledger.notification(server, id);
       // Its server was forgotten meanwhile: withdraw it again and record no history for it.
-      if (!this.ledger.notification(server, id)) {
-        if (outcome.kind === "accepted") this.port.withdraw([id]);
+      if (!posted) {
+        if (outcome?.kind !== "failed") this.port.withdraw([id]);
+        return;
+      }
+      if (!outcome) {
+        if (posted.withdrawn) this.port.withdraw([id]);
         return;
       }
       const late = await this.ledger.change(server, (ledger) => {
@@ -833,10 +843,8 @@ export class AttentionCoordinator {
     const previous = this.observed;
     this.observed = await this.port.permission();
     if (this.observed !== previous) this.permissionChanged(this.observed);
-    if (this.observed === "denied") this.heldCompletions = null;
-    const granted = this.observed === "granted" && previous !== "granted";
-    if (granted) await this.ledger.requireCompletionBaseline();
-    return granted;
+    if (this.observed === "denied") this.heldCompletion = null;
+    return this.ledger.notePermission(this.observed);
   }
 
   /** Asked at the first delivery, never at launch; a grant catches up on what waited. */

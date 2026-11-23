@@ -55,6 +55,48 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
   await expect(screen.getByRole("switch", "Dock badge")).not.toBeChecked();
   await expect(screen.getByRole("switch", "Run details in notifications")).toBeChecked();
   await app.screenshot("settings-desktop-app-notifications-changed");
+});
+
+const effectiveOpacity = `(() => {
+  const opacity = (element) => {
+    let product = 1;
+    for (let node = element; node; node = node.parentElement)
+      product *= Number(getComputedStyle(node).opacity);
+    return product;
+  };
+  const label = [...document.querySelectorAll("[id]")].find(
+    (element) => element.textContent === "Notify when a Run finishes",
+  );
+  const control = document.querySelector('[aria-labelledby="' + label.id + '"]');
+  return "label " + opacity(label) + ", switch " + opacity(control);
+})()`;
+
+test("with Notifications off, Notify when a Run finishes and its switch are dimmed to half opacity", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const notifyFinished = screen.getByRole("switch", "Notify when a Run finishes");
+  await expect(notifyFinished).not.toBeDisabled();
+
+  // Act
+  await screen.getByRole("switch", "Notifications").tap();
+
+  // Assert
+  await expect(notifyFinished).toBeDisabled();
+  await expect.poll(() => browser.evaluate(effectiveOpacity)).toBe("label 0.5, switch 0.5");
+  await app.screenshot("settings-desktop-app-notify-finished-disabled");
+});
+
+test("turning Notifications back on enables Notify when a Run finishes with its choice kept", async ({
+  screen,
+}) => {
+  // Arrange
+  const notifyFinished = screen.getByRole("switch", "Notify when a Run finishes");
+  await notifyFinished.tap();
+  await screen.getByRole("switch", "Notifications").tap();
+  await expect(notifyFinished).toBeDisabled();
 
   // Act
   await screen.getByRole("switch", "Notifications").tap();
