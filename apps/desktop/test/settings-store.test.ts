@@ -56,10 +56,44 @@ it("settings saved before appearance and alerts existed open in System with Noti
     updateChannel: "beta",
     appearance: "system",
     notifications: true,
+    notifyRunFinished: false,
     dockBadge: true,
     showRunDetails: false,
     windowBounds: null,
   });
+});
+
+it("settings saved before notifyRunFinished existed open with it off", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  await writeFile(
+    join(directory, "desktop-settings.json"),
+    JSON.stringify({
+      version: 1,
+      notifications: true,
+      dockBadge: true,
+      showRunDetails: true,
+    }),
+  );
+
+  // Act
+  const store = await SettingsStore.open(directory);
+
+  // Assert
+  expect(store.get().notifyRunFinished).toBe(false);
+});
+
+it("a chosen notify-when-a-Run-finishes setting is kept when the installation opens again", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  const store = await SettingsStore.open(directory);
+  await store.update({ notifyRunFinished: true });
+
+  // Act
+  const reopened = await SettingsStore.open(directory);
+
+  // Assert
+  expect(reopened.get().notifyRunFinished).toBe(true);
 });
 
 it("turned-off Notifications and Dock badge and shown Run details are still chosen when the installation opens again", async (context) => {

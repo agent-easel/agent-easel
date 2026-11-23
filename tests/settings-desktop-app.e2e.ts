@@ -33,6 +33,8 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
 }) => {
   // Arrange
   await expect(screen.getByRole("switch", "Notifications")).toBeChecked();
+  const notifyFinished = screen.getByRole("switch", "Notify when a Run finishes");
+  await expect(notifyFinished).not.toBeChecked();
   await expect(screen.getByRole("switch", "Dock badge")).toBeChecked();
   await expect(screen.getByRole("switch", "Run details in notifications")).not.toBeChecked();
   const undetermined = screen.getByText("macOS permission", { exact: true });
@@ -41,15 +43,25 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
   await app.screenshot("settings-desktop-app-notifications-default");
 
   // Act
+  await notifyFinished.tap();
   await screen.getByRole("switch", "Notifications").tap();
   await screen.getByRole("switch", "Dock badge").tap();
   await screen.getByRole("switch", "Run details in notifications").tap();
 
   // Assert: the stand-in bridge publishes the stored choices like the desktop shell.
+  await expect(notifyFinished).toBeChecked();
+  await expect(notifyFinished).toBeDisabled();
   await expect(screen.getByRole("switch", "Notifications")).not.toBeChecked();
   await expect(screen.getByRole("switch", "Dock badge")).not.toBeChecked();
   await expect(screen.getByRole("switch", "Run details in notifications")).toBeChecked();
   await app.screenshot("settings-desktop-app-notifications-changed");
+
+  // Act
+  await screen.getByRole("switch", "Notifications").tap();
+
+  // Assert: turning Notifications back on restores the stored Run-finished choice.
+  await expect(notifyFinished).toBeChecked();
+  await expect(notifyFinished).not.toBeDisabled();
 });
 
 test("after macOS notification permission is denied, Desktop app settings say so and open System Settings", async ({

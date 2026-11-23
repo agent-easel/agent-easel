@@ -46,6 +46,7 @@ const initialSettings: DesktopSettings = {
   updateChannel: null,
   appearance: "system",
   notifications: true,
+  notifyRunFinished: false,
   dockBadge: true,
   showRunDetails: false,
   windowBounds: null,
@@ -91,6 +92,7 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
     appearance:
       value.appearance === "light" || value.appearance === "dark" ? value.appearance : "system",
     notifications: value.notifications !== false,
+    notifyRunFinished: value.notifyRunFinished === true,
     dockBadge: value.dockBadge !== false,
     showRunDetails: value.showRunDetails === true,
     windowBounds: parseWindowBounds(value.windowBounds),

@@ -13,6 +13,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useDesktopState } from "../desktop-state.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
 import { ProblemCard } from "./problem-card.tsx";
+import { cn } from "@/lib/utils";
 import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { UpdateSettings, useSettingsUpdate } from "./update-settings.tsx";
@@ -123,7 +124,6 @@ function DesktopAppControls({ local }: { local: boolean }) {
 }
 
 const alertSwitches: readonly (readonly [keyof DesktopAlertSettings, string])[] = [
-  ["notifications", "Notifications"],
   ["dockBadge", "Dock badge"],
   ["showRunDetails", "Run details in notifications"],
 ];
@@ -145,9 +145,37 @@ function NotificationSettings({
   run: (operation: () => Promise<DesktopResult>) => Promise<void>;
 }) {
   const denied = state.notificationPermission === "denied";
+  const notificationsOn = state.alerts.notifications;
   return (
     <>
       <SettingsGroup label="Notifications">
+        <SettingsRow
+          title="Notifications"
+          control={(text) => (
+            <Switch
+              aria-labelledby={text.title}
+              checked={state.alerts.notifications}
+              onCheckedChange={(checked) =>
+                void run(() => desktop.setAlertSetting("notifications", checked))
+              }
+            />
+          )}
+        />
+        <div className={cn(!notificationsOn && "opacity-50")}>
+          <SettingsRow
+            title="Notify when a Run finishes"
+            control={(text) => (
+              <Switch
+                aria-labelledby={text.title}
+                checked={state.alerts.notifyRunFinished}
+                disabled={!notificationsOn}
+                onCheckedChange={(checked) =>
+                  void run(() => desktop.setAlertSetting("notifyRunFinished", checked))
+                }
+              />
+            )}
+          />
+        </div>
         {alertSwitches.map(([name, title]) => (
           <SettingsRow
             key={name}

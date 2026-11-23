@@ -203,6 +203,7 @@ const settingsSections: readonly SettingsSection[] = [
       "Open in the background at login",
       "Show in the menu bar",
       "Notifications",
+      "Notify when a Run finishes",
       "Dock badge",
       "Run details in notifications",
       "macOS permission",

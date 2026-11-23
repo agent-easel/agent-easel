@@ -55,6 +55,7 @@ function recordingPort(permission: NotificationPermission = "granted") {
 
 const defaultSettings: DesktopAlertSettings = {
   notifications: true,
+  notifyRunFinished: false,
   dockBadge: true,
   showRunDetails: false,
 };

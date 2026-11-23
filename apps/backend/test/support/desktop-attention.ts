@@ -67,7 +67,12 @@ export async function desktopAttention(context: TestContext, selection: Attentio
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const alerts = recordingAlerts();
   const coordinator = await AttentionCoordinator.open(directory, alerts.port, {
-    settings: { notifications: true, dockBadge: true, showRunDetails: false },
+    settings: {
+      notifications: true,
+      notifyRunFinished: false,
+      dockBadge: true,
+      showRunDetails: false,
+    },
     permissionChanged: () => undefined,
   });
   const subscription = new AttentionSubscription(coordinator);

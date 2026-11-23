@@ -113,12 +113,19 @@ const updateChannel = (): UpdateChannel => store.get().updateChannel ?? buildCha
 
 const alertSettings = ({
   notifications,
+  notifyRunFinished,
   dockBadge,
   showRunDetails,
-}: DesktopSettings): DesktopAlertSettings => ({ notifications, dockBadge, showRunDetails });
+}: DesktopSettings): DesktopAlertSettings => ({
+  notifications,
+  notifyRunFinished,
+  dockBadge,
+  showRunDetails,
+});
 
 const alertSettingNames = new Set<unknown>([
   "notifications",
+  "notifyRunFinished",
   "dockBadge",
   "showRunDetails",
 ] satisfies (keyof DesktopAlertSettings)[]);
