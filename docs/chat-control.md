@@ -765,7 +765,8 @@ To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at
 then finished Blocks at the top if needed. It omits remaining overflow rows only when those
 summaries still leave insufficient room. When Factory creates the card, it opens with a mention of
 the Run's requester, person or bot, while saved Access still allows that requester among the Users
-or Bot IDs. Otherwise, and on every edit, the card mentions nobody. Replying to the card points
+or Bot IDs, and the card is fitted again so the mention counts toward the limit, including a
+stored card that already filled it. Otherwise, and on every edit, the card mentions nobody. Replying to the card points
 Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
 thread's current scope.
 

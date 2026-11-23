@@ -32,6 +32,7 @@ import { nativeRequestShown } from "./support/report-notices.ts";
 import {
   continuationFlow,
   exactLimitCardFlow,
+  nearLimitCardFlow,
   humanReviewFlow,
   largeStatusCardFlow,
   launchedWorkers,
@@ -469,6 +470,111 @@ it("a finished summary covering every Block shows no overflow line", async (c) =
   assert(reconciled.ok, JSON.stringify(reconciled));
   const shown = await messageShows(world.discord, card, /✅ 12 Blocks finished/);
   expect(shown.content.split("\n").slice(1)).toEqual(["✅ 12 Blocks finished"]);
+});
+
+async function exactLimitCardReady(world: World) {
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  const first = workers.find((worker) => worker.flowBlockId === "first")!;
+  const second = workers.find((worker) => worker.flowBlockId === "second")!;
+  await resultReported(world.world, first);
+  await observeFor(
+    "observe the settled first Block and other workers",
+    world.world,
+    runId,
+    (run) =>
+      run.blocks.find((block) => block.blockId === "first")?.state === "finished" &&
+      run.blocks.filter((block) => block.state === "working" && block.freshness === "fresh")
+        .length === 11,
+  );
+  await resultReported(world.world, second);
+  return { card };
+}
+
+const mentionedCardWithinLimit = (message: { content: string }) =>
+  isStatusCard(message) &&
+  message.content.startsWith(`<@${PARTICIPANT_ID}> `) &&
+  message.content.length <= 2_000;
+
+it("a new card that fits Discord's limit only without the mention is created as one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, nearLimitCardFlow);
+
+  // Act
+  const { card } = await chatStartedRun(world);
+
+  // Assert
+  expect(mentionedCardWithinLimit(card)).toBe(true);
+  expect(card.content.split("\n").slice(-1)).toEqual(["… and 1 more Blocks"]);
+  const posts = world.discord
+    .requested("POST", MESSAGES)
+    .filter((request) => isStatusCard(request.body as { content: string }));
+  expect(posts).toHaveLength(1);
+  expect(posts[0]!.body).toMatchObject({
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
+});
+
+it("a lost card whose stored text is at the old limit is replaced by one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, exactLimitCardFlow);
+  const { card } = await exactLimitCardReady(world);
+  world.discord.deleteMessage(card.id);
+
+  // Act
+  assert((await world.factory.reconcileRuns()).ok);
+
+  // Assert
+  await world.discord.createdWhere(isStatusCard, 2);
+  const replacements = statusCardsIn(world.discord).slice(1);
+  expect(replacements).toStrictEqual([expect.objectContaining({ channelId: THREAD })]);
+  expect(mentionedCardWithinLimit(replacements[0]!)).toBe(true);
+  expect(replacements[0]!.content).toContain("✅ 2 Blocks finished");
+  expect(replacements[0]!.content.split("\n").slice(-1)).toEqual(["… and 2 more Blocks"]);
+  const posts = world.discord
+    .requested("POST", MESSAGES)
+    .filter((request) => isStatusCard(request.body as { content: string }));
+  expect(posts.at(-1)?.body).toMatchObject({
+    allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+  });
+  const settings = await discordSettingsWhen(
+    world.factory,
+    (current) => current.delivery.problems.length === 0,
+  );
+  expect(settings.delivery.problems).toStrictEqual([]);
+});
+
+it("an application replacement of a card stored at the old limit posts one valid message with the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, exactLimitCardFlow);
+  const { card } = await exactLimitCardReady(world);
+  assert((await world.factory.reconcileRuns()).ok);
+  const stored = await messageShows(world.discord, card, /✅ 2 Blocks finished/);
+  expect(stored.content).toHaveLength(2_000);
+  const before = statusCardsIn(world.discord).length;
+  world.discord.addBot(otherBot);
+  assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
+  const replaced = await world.factory.updateDiscordConnection(
+    discordConnectionSave({ revision: 1, token: { kind: "replace", value: otherBot.token } }),
+  );
+  assert(replaced.ok, JSON.stringify(replaced));
+
+  // Act
+  await turnedOn(world.factory, world.discord, 2);
+
+  // Assert
+  const fromNewBot = (message: { applicationId: string; content: string }) =>
+    message.applicationId === otherBot.applicationId && isStatusCard(message);
+  await world.discord.createdWhere(fromNewBot, 1);
+  const [replacement] = world.discord.created.filter(fromNewBot);
+  expect(statusCardsIn(world.discord)).toHaveLength(before + 1);
+  expect(mentionedCardWithinLimit(replacement!)).toBe(true);
+  expect(replacement!.content).toContain(NOTICE);
+  const settings = await discordSettingsWhen(
+    world.factory,
+    (current) => current.delivery.problems.length === 0,
+  );
+  expect(settings.delivery.problems).toStrictEqual([]);
 });
 
 it("Snooze keeps the card reported, and a failing language model does not stop it", async (c) => {

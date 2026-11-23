@@ -1499,20 +1499,29 @@ export const longEntryNamesFlow: ReadyFlowShape = (world) =>
     return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
   });
 
+const longNamedBlocks = (agentId: string) =>
+  Array.from({ length: 8 }, (_, index) =>
+    agentBlock(`long-${index}`, "🧱".repeat(99) + String.fromCodePoint(0x1f600 + index), agentId),
+  );
+
 export const exactLimitCardFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Exact-limit Flow", (agentId) => {
     const blocks = [
       agentBlock("first", "A".repeat(100), agentId),
       agentBlock("second", "B".repeat(100), agentId),
-      ...Array.from({ length: 8 }, (_, index) =>
-        agentBlock(
-          `long-${index}`,
-          "🧱".repeat(99) + String.fromCodePoint(0x1f600 + index),
-          agentId,
-        ),
-      ),
+      ...longNamedBlocks(agentId),
       agentBlock("penultimate", "🧱".repeat(69), agentId),
       agentBlock("last", "X", agentId),
+    ];
+    return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
+  });
+
+export const nearLimitCardFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Near-limit Flow", (agentId) => {
+    const blocks = [
+      ...longNamedBlocks(agentId),
+      agentBlock("wide", "A".repeat(100), agentId),
+      agentBlock("last", "C".repeat(50), agentId),
     ];
     return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
   });

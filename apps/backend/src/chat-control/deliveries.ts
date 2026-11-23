@@ -15,7 +15,7 @@ import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 import { catchUpNotices } from "./report-notices.ts";
-import { withApplicationNotice } from "./status-cards.ts";
+import { fitCardText, MESSAGE_LIMIT, withApplicationNotice } from "./status-cards.ts";
 
 /** Where a Factory message goes: a thread and the parent channel whose Access grants it. */
 export interface Destination {
@@ -165,6 +165,8 @@ const DEDUPLICATED_REQUESTS = 3;
  */
 const DEDUPLICATION_WINDOW_MS = 60_000;
 
+const mentionLength = (requesterId: string) => requesterId.length + "<@> ".length;
+
 /** A stable nonce for one create intent, within Discord's 25 characters. */
 export const nonceOf = (...intent: readonly string[]) =>
   createHash("sha256").update(intent.join("\n")).digest("hex").slice(0, 25);
@@ -198,6 +200,7 @@ export const createDeduplicated = (
     Pick<CreateMessageOptions, "requesterId"> | false,
     unknown
   > = Effect.succeed({}),
+  fit: (text: string, limit: number) => string = (unfitted) => unfitted,
 ) =>
   Effect.gen(function* (): Effect.fn.Return<Created, unknown> {
     const firstAt = yield* Clock.currentTimeMillis;
@@ -206,7 +209,15 @@ export const createDeduplicated = (
       const access = yield* createAccess;
       if (access === false) return { withdrawn: true, unproven };
       const sent = yield* Effect.result(
-        bounded(() => sender.create(destination, text, { ...options, ...access })),
+        bounded(() =>
+          sender.create(
+            destination,
+            access.requesterId === undefined
+              ? text
+              : fit(text, MESSAGE_LIMIT - mentionLength(access.requesterId)),
+            { ...options, ...access },
+          ),
+        ),
       );
       if (sent._tag === "Success") return { messageId: sent.success };
       const refusal = createRefusal(sendFailure(sent.failure.cause), unproven);
@@ -533,6 +544,7 @@ export const makeChatDeliveries = (
           row.text,
           { nonce: nonceOf("delivery", row.id) },
           deliveryCreateAccess(sql, row.id),
+          row.purpose === "status-card" ? fitCardText : undefined,
         ).pipe(
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );
