@@ -1335,3 +1335,141 @@ it("a completion clicked at a relaunch opens its Run overview from the kept ledg
   // Assert
   expect(await route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
 });
+
+async function postedCompletion(context: TestContext) {
+  const profile = await installation(context, recordingPort(), finished);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  return { profile, port: profile.port, id: profile.port.shown[0]!.id };
+}
+
+it("a completion is withdrawn without alerting again when its Run returns to Active", async (c) => {
+  // Arrange
+  const { profile, port, id } = await postedCompletion(c);
+
+  // Act
+  await profile.feed.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
+
+  // Assert
+  expect({ withdrawn: port.withdrawn, shown: port.shown.length }).toStrictEqual({
+    withdrawn: [id],
+    shown: 1,
+  });
+});
+
+it("a completion is withdrawn once when its Run is Archived or its row disappears", async (c) => {
+  // Arrange
+  const { profile, port, id } = await postedCompletion(c);
+
+  // Act
+  await profile.feed.deliver({ fresh: false, rows: [] });
+  await profile.feed.deliver({ fresh: false, rows: [] });
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([id]);
+});
+
+it("a completion is withdrawn when the ready snapshot has another cycle, also after a cycle change while offline", async (c) => {
+  // Arrange
+  const { profile, port, id } = await postedCompletion(c);
+  await profile.feed.notReady();
+  await profile.restart();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 9, "manual")] });
+
+  // Assert
+  expect({ withdrawn: port.withdrawn, shown: port.shown.length }).toStrictEqual({
+    withdrawn: [id],
+    shown: 1,
+  });
+});
+
+it("a completion whose Run left Settled while Factory was quit is withdrawn at the first ready snapshot", async (c) => {
+  // Arrange
+  const { profile, port, id } = await postedCompletion(c);
+  await profile.restart();
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [] });
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([id]);
+});
+
+it("a completion is withdrawn when the selection moves to another server or is revoked", async (c) => {
+  // Arrange
+  const switched = await postedCompletion(c);
+  const revoked = await postedCompletion(c);
+
+  // Act
+  switched.profile.coordinator.select("other");
+  await revoked.profile.feed.revoked();
+  await switched.profile.coordinator.close();
+
+  // Assert
+  expect([switched.port.withdrawn, revoked.port.withdrawn]).toStrictEqual([
+    [switched.id],
+    [revoked.id],
+  ]);
+});
+
+it("opening a Run in Factory or renaming it leaves its completion notification in place", async (c) => {
+  // Arrange
+  const { profile, port } = await postedCompletion(c);
+
+  // Act
+  await profile.feed.deliver({
+    fresh: false,
+    rows: [settledRun("a", 7, "automatic", { title: "Renamed" })],
+  });
+
+  // Assert
+  expect({ withdrawn: port.withdrawn, shown: port.shown.length }).toStrictEqual({
+    withdrawn: [],
+    shown: 1,
+  });
+});
+
+it("a completion clicked after its Run was Archived or removed opens that Run by id", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  await profile.feed.deliver({ fresh: false, rows: [] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("a completion that was withdrawn before a restart still opens its Run when clicked after a cold launch", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  await profile.feed.deliver({ fresh: false, rows: [] });
+  await profile.restart();
+  const route = profile.coordinator.activate(id);
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [] });
+
+  // Assert
+  expect(await route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("a completion clicked after the selection moved to another server or was revoked opens only the window", async (c) => {
+  // Arrange
+  const switched = await postedCompletion(c);
+  const revoked = await postedCompletion(c);
+  switched.profile.coordinator.select("other");
+  await revoked.profile.feed.revoked();
+
+  // Act
+  const routes = await Promise.all([
+    switched.profile.coordinator.activate(switched.id),
+    revoked.profile.coordinator.activate(revoked.id),
+  ]);
+
+  // Assert
+  expect(routes).toStrictEqual([null, null]);
+});

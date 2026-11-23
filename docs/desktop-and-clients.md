@@ -168,7 +168,11 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   it announced still counts: they resolved, or the Run was Snoozed, Settled, Archived or held by
   a confirmed Settle. macOS alerts again for a notification posted again, so one whose matters
   resolve only in part is withdrawn and not replaced; the rest stay on the badge and never
-  notify again. Withdrawing never makes a matter notify again.
+  notify again. Withdrawing never makes a matter notify again. A completion notification is
+  withdrawn, best effort and without alerting again, once its Run returned to Active, was
+  Archived or no longer has a row, or its Settled cycle differs from the one in the current
+  ready snapshot, also when the cycle changed while Factory was offline or quit. Opening the Run
+  in Factory does not withdraw it, and a later Rename leaves a delivered banner unchanged.
 - **Focused window**: while any Factory window of this installation is focused, no notification
   is shown. Matters that became pending and Runs that settled meanwhile count as seen and never
   notify later, also after switching to another app.
@@ -202,12 +206,15 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   finishes** or **Notifications** was off are never replayed. The first ready snapshot of a server
   with no completion history, after an upgrade or **Forget server**, counts every Settled Run as
   seen; a switch turned on or a grant noticed while no snapshot is ready makes the next ready
-  snapshot do the same. Completion records are kept until the Run leaves Settled or is Archived.
+  snapshot do the same. A Run's completion record is kept until the Run leaves Settled or is
+  Archived; the posted notification's record stays for seven days after posting, so a banner that
+  outlived its Run still withdraws and routes after a restart.
 - **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
   now: with the Block selected while exactly one matter the notification announced is still
   pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
   Archived Run opens its read-only history and a Run that no longer exists shows that it is
-  unavailable. A completion notification opens the Run overview with no Block selected. A
+  unavailable; both also hold for a completion notification, which always opens the Run
+  overview with no Block selected, whatever state the Run is in. A
   notification clicked after Quit relaunches Factory and opens its Run once the
   connection is ready, behind the connection gate. A Dock click with no window open opens the
   single waiting Run (its Block selected when it has one matter), the Run list's

@@ -186,12 +186,18 @@ function observe(
 function withdrawable(ledger: ServerLedger, rows: readonly RunNavigationEntry[]): string[] {
   const pending = new Set(rows.flatMap((row) => row.attention.matters.map(({ id }) => id)));
   const eligible = new Set(rows.flatMap((row) => mattersNeedingOwner(row).map(({ id }) => id)));
-  return withdrawWhere(
-    ledger,
-    (notification) =>
-      notification.kind !== "completion" &&
-      (notification.matters.some(({ id }) => !pending.has(id)) ||
-        !notification.matters.some(({ id }) => eligible.has(id))),
+  const settledCycles = new Map(
+    rows.flatMap((row) =>
+      row.lifecycle === "settled" && row.settledCycle !== null
+        ? [[row.id, row.settledCycle] as const]
+        : [],
+    ),
+  );
+  return withdrawWhere(ledger, (notification) =>
+    notification.kind === "completion"
+      ? settledCycles.get(notification.runId) !== notification.cycle
+      : notification.matters.some(({ id }) => !pending.has(id)) ||
+        !notification.matters.some(({ id }) => eligible.has(id)),
   );
 }
 

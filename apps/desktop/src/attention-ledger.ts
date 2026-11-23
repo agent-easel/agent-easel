@@ -83,6 +83,12 @@ const fileName = "desktop-attention.json";
 const notifiedBy = (appearance: AppearanceState | CompletionState) =>
   "notification" in appearance ? appearance.notification : null;
 
+const unreferencedCompletionRetentionMs = 7 * 24 * 60 * 60 * 1000;
+
+const isRetainedCompletion = (notification: NotificationRecord, now: number) =>
+  notification.kind === "completion" &&
+  now - Date.parse(notification.postedAt) < unreferencedCompletionRetentionMs;
+
 /** Resolved history is only needed while its process can still act on it. */
 function withoutResolved(ledger: ServerLedger): ServerLedger {
   const matters = Object.fromEntries(
@@ -97,7 +103,9 @@ function withoutResolved(ledger: ServerLedger): ServerLedger {
     ...Object.values(ledger.completions?.runs ?? {}).map(notifiedBy),
   ]);
   const notifications = Object.fromEntries(
-    Object.entries(ledger.notifications).filter(([id]) => referenced.has(id)),
+    Object.entries(ledger.notifications).filter(
+      ([id, notification]) => referenced.has(id) || isRetainedCompletion(notification, Date.now()),
+    ),
   );
   return { ...ledger, matters, notifications };
 }
