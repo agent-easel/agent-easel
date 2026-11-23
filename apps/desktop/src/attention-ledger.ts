@@ -33,6 +33,8 @@ export interface MatterRecord {
   appearances: Record<string, AppearanceState>;
 }
 
+export type AccessIdentity = string | null;
+
 /** What a posted notification represents, for withdrawal and routing after a relaunch. */
 export interface AttentionNotificationRecord {
   readonly kind?: undefined;
@@ -40,6 +42,7 @@ export interface AttentionNotificationRecord {
   /** The Block when every represented matter is about the same Block. */
   readonly blockId: string | null;
   readonly matters: readonly { readonly id: string; readonly revision: number }[];
+  readonly access?: AccessIdentity;
   readonly postedAt: string;
   /** Asked to leave Notification Center; withdrawal never changes the matters' accounting. */
   withdrawn: boolean;
@@ -49,6 +52,7 @@ export interface CompletionNotificationRecord {
   readonly kind: "completion";
   readonly runId: string;
   readonly cycle: number;
+  readonly access?: AccessIdentity;
   readonly postedAt: string;
   withdrawn: boolean;
   unreferencedAtLaunch?: boolean;

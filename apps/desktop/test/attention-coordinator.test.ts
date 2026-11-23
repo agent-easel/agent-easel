@@ -15,6 +15,9 @@ import {
 } from "../src/attention-coordinator.ts";
 
 const server = "host";
+const selected = { server, access: "approved-credential" };
+const reapproved = { server, access: "reapproved-credential" };
+const other = { server: "other", access: "other-credential" };
 
 /** Records what the outside world sees; `show` answers as `answer` decides. */
 function recordingPort(permission: NotificationPermission = "granted") {
@@ -80,7 +83,7 @@ async function installation(
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const options = { settings: { ...defaultSettings, ...settings }, permissionChanged: () => {} };
   let coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
-  let feed = coordinator.select(server);
+  let feed = coordinator.select(selected);
   context.onTestFinished(() => coordinator.close());
   return {
     port,
@@ -96,7 +99,7 @@ async function installation(
     async restart() {
       await coordinator.close();
       coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
-      feed = coordinator.select(server);
+      feed = coordinator.select(selected);
     },
   };
 }
@@ -595,7 +598,7 @@ it("switching server clears the badge, withdraws its banners and ignores its lat
   // Arrange
   const { port, coordinator, feed } = await installation(c);
   await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
-  coordinator.select("other");
+  coordinator.select(other);
 
   // Act
   await feed.deliver({ fresh: false, rows: [run("a", [matter("a1"), matter("a2")])] });
@@ -629,8 +632,8 @@ it("switching back to a server without forgetting it does not replay its alerts"
   // Arrange
   const { port, coordinator, feed } = await installation(c);
   await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
-  coordinator.select("other");
-  const back = coordinator.select(server);
+  coordinator.select(other);
+  const back = coordinator.select(selected);
 
   // Act
   await back.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
@@ -648,7 +651,7 @@ it("a banner Notification Center accepts after its server selection ended is wit
       accept = () => resolve({ kind: "accepted" });
     });
   await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
-  await coordinator.select("other").notReady();
+  await coordinator.select(other).notReady();
 
   // Act
   accept();
@@ -671,14 +674,14 @@ it("a banner whose server selection ended while it was being recorded is never p
   });
   const delivered = feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
   await reading;
-  coordinator.select("other");
+  coordinator.select(other);
   grant();
   await delivered;
   port.implementation.permission = () => Promise.resolve("granted");
   const shownForEndedSelection = port.shown.length;
 
   // Act
-  await coordinator.select(server).deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await coordinator.select(selected).deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
   expect({ shownForEndedSelection, shown: port.shown.length }).toStrictEqual({
@@ -866,7 +869,7 @@ it("clicking a notification of a previous server selection opens nothing", async
   // Arrange
   const { port, coordinator, feed } = await installation(c);
   await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
-  await coordinator.select("other").deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await coordinator.select(other).deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
   const route = await coordinator.activate(port.shown[0]!.id);
@@ -884,7 +887,7 @@ it("a click waiting for readiness opens nothing once another server is selected"
 
   // Act
   await profile.coordinator
-    .select("other")
+    .select(other)
     .deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
@@ -1585,7 +1588,7 @@ it("a completion is withdrawn when the selection moves to another server", async
   const { profile, port, id } = await postedCompletion(c);
 
   // Act
-  profile.coordinator.select("other");
+  profile.coordinator.select(other);
 
   // Assert
   await profile.coordinator.close();
@@ -1670,7 +1673,7 @@ it("a completion whose Run left Settled is forgotten at the second launch after,
 it("a completion clicked after the selection moved to another server opens only the window", async (c) => {
   // Arrange
   const { profile, id } = await postedCompletion(c);
-  profile.coordinator.select("other");
+  profile.coordinator.select(other);
 
   // Act
   const route = await profile.coordinator.activate(id);
@@ -1696,7 +1699,7 @@ it("a completion of a revoked selection opens only the window after the same ser
   const { profile, id } = await postedCompletion(c);
   profile.port.withdrawalIgnored = true;
   await profile.feed.revoked();
-  const feed = profile.coordinator.select(server);
+  const feed = profile.coordinator.select(selected);
   await feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
 
   // Act
@@ -1728,7 +1731,7 @@ it("an attention notification of a revoked selection opens only the window after
   await feed.deliver({ fresh: true, rows: [run("a", [])] });
   await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
   await feed.revoked();
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(selected);
   await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
@@ -1786,8 +1789,8 @@ it("a revocation still queued when another server is selected keeps its completi
   const { profile, id } = await postedCompletion(c);
   profile.port.withdrawalIgnored = true;
   void profile.feed.revoked();
-  profile.coordinator.select("other");
-  const approved = profile.coordinator.select(server);
+  profile.coordinator.select(other);
+  const approved = profile.coordinator.select(selected);
   await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
 
   // Act
@@ -1802,7 +1805,7 @@ it("a revocation still queued when the credential is replaced keeps its completi
   const { profile, id } = await postedCompletion(c);
   profile.port.withdrawalIgnored = true;
   void profile.feed.revoked();
-  const replaced = profile.coordinator.select(server);
+  const replaced = profile.coordinator.select(reapproved);
   await replaced.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
 
   // Act
@@ -1816,7 +1819,7 @@ it("a completion posted after the same server is approved again opens its Run", 
   // Arrange
   const { profile } = await postedCompletion(c);
   await profile.feed.revoked();
-  const approved = profile.coordinator.select(server);
+  const approved = profile.coordinator.select(reapproved);
   await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
   await approved.deliver({ fresh: false, rows: [run("a", [], { settledCycle: 7 })] });
   await approved.deliver({ fresh: false, rows: [settledRun("a", 9, "automatic")] });
@@ -1848,7 +1851,7 @@ it("a completion clicked while an earlier operation is pending opens only the wi
   const openQueue = pendingOperation(profile.port, profile.coordinator);
   const route = profile.coordinator.activate(id);
   void profile.feed.revoked();
-  const approved = profile.coordinator.select(server);
+  const approved = profile.coordinator.select(selected);
   openQueue();
 
   // Act
@@ -1867,7 +1870,7 @@ it("an attention notification clicked while an earlier operation is pending open
   const openQueue = pendingOperation(port, coordinator);
   const route = coordinator.activate(port.shown[0]!.id);
   void feed.revoked();
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(selected);
   openQueue();
 
   // Act
@@ -1898,7 +1901,7 @@ it("a completion refused after its selection was revoked is retried once the sam
   answer.now({ kind: "failed" });
   await answerRecorded();
   port.answer = () => Promise.resolve({ kind: "accepted" });
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(reapproved);
 
   // Act
   await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
@@ -1917,7 +1920,7 @@ it("an attention notification refused after its selection was revoked is retried
   answer.now({ kind: "failed" });
   await answerRecorded();
   port.answer = () => Promise.resolve({ kind: "accepted" });
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(reapproved);
 
   // Act
   await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
@@ -1936,7 +1939,7 @@ it("a completion accepted after its selection was revoked is withdrawn again, st
   await feed.revoked();
   answer.now({ kind: "accepted" });
   await answerRecorded();
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(selected);
   await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
 
   // Act
@@ -1962,7 +1965,7 @@ it("an attention notification whose delivery became unknown after revocation sta
   await feed.revoked();
   answer.now(new Error("click listeners could not be restored"));
   await answerRecorded();
-  const approved = coordinator.select(server);
+  const approved = coordinator.select(selected);
   await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
@@ -2041,6 +2044,74 @@ it("a completion whose delivery became unknown after revocation is withdrawn aga
 
   // Assert
   expect(port.withdrawn).toStrictEqual([id, id]);
+});
+
+const outcomesRecorded = async (coordinator: AttentionCoordinator) => {
+  await answerRecorded();
+  await coordinator.dock(true);
+};
+
+it("a completion of a revocation the ledger could not record opens only the window after the same server is approved again", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  await outcomesRecorded(profile.coordinator);
+  const writable = await unwritableLedger(profile.directory);
+  await profile.feed.revoked();
+  await writable();
+  const approved = profile.coordinator.select(reapproved);
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("an attention notification of a revocation the ledger could not record opens only the window after the same server is approved again", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { port, coordinator, feed, directory } = await installation(c);
+  port.withdrawalIgnored = true;
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  await outcomesRecorded(coordinator);
+  const writable = await unwritableLedger(directory);
+  await feed.revoked();
+  await writable();
+  const approved = coordinator.select(reapproved);
+  await approved.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("a completion of a revocation the ledger could not record, clicked to launch Factory, opens only the window once the same server is approved again", async (c) => {
+  // Arrange
+  const warnings = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+  c.onTestFinished(() => warnings.mockRestore());
+  const { profile, id } = await postedCompletion(c);
+  profile.port.withdrawalIgnored = true;
+  await outcomesRecorded(profile.coordinator);
+  const writable = await unwritableLedger(profile.directory);
+  await profile.feed.revoked();
+  await writable();
+  await profile.restart();
+  const route = profile.coordinator.activate(id);
+  const approved = profile.coordinator.select(reapproved);
+
+  // Act
+  await approved.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+
+  // Assert
+  expect(await route).toBeNull();
 });
 
 it("Factory starts with a changed permission although its attention ledger cannot be written", async (c) => {

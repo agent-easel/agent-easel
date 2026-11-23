@@ -184,12 +184,13 @@ function attentionSelection(): AttentionSelection | null {
   const settings = store.get();
   if (settings.role === "server") {
     const base = attentionHostBase();
-    return { server: "server", target: base ? { kind: "host", base } : null };
+    return { server: "server", access: null, target: base ? { kind: "host", base } : null };
   }
   if (settings.role !== "client" || !settings.server) return null;
   const connection = approvedClient.capture();
   return {
     server: clientServer(settings.server),
+    access: approvedClient.access(),
     target: connection ? { kind: "remote", connection } : null,
   };
 }
