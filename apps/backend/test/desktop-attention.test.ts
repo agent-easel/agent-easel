@@ -23,7 +23,7 @@ async function nativeQuestionAsked({ server, t3, input }: Prepared) {
 }
 
 const hostSelection = (server: Prepared["server"]) =>
-  ({ server: "server", access: null, target: { kind: "host", base: server.hostBase() } }) as const;
+  ({ server: "server", target: { kind: "host", base: server.hostBase() } }) as const;
 
 /** The approved desktop client's selection, holding the laptop's issued credential. */
 async function clientSelection(
@@ -36,7 +36,6 @@ async function clientSelection(
   await currentConnection(client).rememberCredential(credential);
   return {
     server: `client ${probe.url}`,
-    access: client.access(),
     target: { kind: "remote", connection: currentConnection(client) },
   } as const;
 }
