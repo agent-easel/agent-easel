@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type FocusEvent,
+  type KeyboardEvent,
   type PointerEvent,
 } from "react";
 import type { Rect } from "./canvas-culling.ts";
@@ -21,7 +22,12 @@ export type PreviewTarget = { readonly scope: string } & (
 type Preview = { readonly target: PreviewTarget; readonly via: "pointer" | "keyboard" };
 
 function targetOf(layer: HTMLElement, hit: EventTarget | null): PreviewTarget | null {
-  if (!(hit instanceof Element) || !layer.contains(hit)) return null;
+  if (
+    !(hit instanceof Element) ||
+    !layer.contains(hit) ||
+    hit.closest("[data-passive-subflow-preview]")
+  )
+    return null;
   const scope = hit.closest<HTMLElement>("[data-canvas-scope]")?.dataset.canvasScope ?? "";
   const card = hit.closest<HTMLElement>("[data-block-id], [data-flow-input], [data-finish]");
   if (card) {
@@ -95,7 +101,7 @@ export function useConnectionPreview({
       preview.via === "keyboard"
         ? ownerDocument.activeElement
         : pointer.current && ownerDocument.elementFromPoint(pointer.current.x, pointer.current.y);
-    if (!sameTarget(targetOf(layer.current, hit), preview.target)) apply(null);
+    apply(sameTarget(targetOf(layer.current, hit), preview.target) ? preview : null);
   });
   useLayoutEffect(() => recheck(), [view, geometry, area]);
 
@@ -126,6 +132,11 @@ export function useConnectionPreview({
       const target = targetOf(event.currentTarget, event.target);
       if (event.target.matches(":focus-visible"))
         apply(target ? { target, via: "keyboard" } : null);
+    },
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = targetOf(event.currentTarget, event.target);
+      if (target?.kind === "wire") apply({ target, via: "keyboard" });
     },
     onBlur: (event: FocusEvent<HTMLElement>) => {
       if (preview?.via !== "keyboard") return;

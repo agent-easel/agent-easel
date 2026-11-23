@@ -1580,7 +1580,10 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       data-following={focusTargets ? viewport.following : undefined}
       tabIndex={0}
       onKeyDown={viewport.onKeyDown}
-      className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-ring focus-visible:ring-inset"
+      className={cn(
+        "relative h-full min-h-0 w-full min-w-0 bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-ring focus-visible:ring-inset",
+        props.wires.kind === "curved" ? "overflow-clip" : "overflow-hidden",
+      )}
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer

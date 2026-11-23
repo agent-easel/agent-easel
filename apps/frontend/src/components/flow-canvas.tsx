@@ -1,4 +1,4 @@
-import { connectionLabel, exitDisplayName } from "../connection-label.ts";
+import { exitDisplayName, studioExitLabel } from "../connection-label.ts";
 import {
   useCallback,
   useImperativeHandle,
@@ -349,7 +349,6 @@ function AuthoringExit({
   recipients: string;
   unconnected: boolean;
 }) {
-  const label = connectionLabel(exit);
   return (
     <>
       {exit.source === "condition" && (
@@ -360,10 +359,10 @@ function AuthoringExit({
         className={cn(
           "truncate text-xs text-muted-foreground",
           unconnected && "text-destructive",
-          label.struck && "text-attention line-through",
+          exit.unavailable && "text-attention line-through",
         )}
       >
-        {label.text}
+        {studioExitLabel(exit)}
       </span>
       {exit.unavailable && <span className="sr-only">{exit.unavailable}</span>}
       <span className="sr-only">→ {recipients || "finish here"}</span>

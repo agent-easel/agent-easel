@@ -12,18 +12,22 @@ export function exitDisplayName(
 
 type LabelExit = Pick<CanvasBlock["exits"][number], "id" | "name" | "source" | "unavailable">;
 
-export function connectionLabel(exit: LabelExit): { text: string; struck: boolean };
-export function connectionLabel(exit: LabelExit | null): { text: string; struck: boolean } | null;
-export function connectionLabel(exit: LabelExit | null) {
-  if (!exit) return null;
+export function studioExitLabel(exit: Pick<LabelExit, "name" | "source">) {
   const singleOutputLabel =
     exit.source === "wait"
       ? "after the wait"
       : exit.source === "continuation"
         ? "response"
         : "output";
+  return exitDisplayName(exit, singleOutputLabel);
+}
+
+export function connectionLabel(exit: LabelExit): { text: string; struck: boolean };
+export function connectionLabel(exit: LabelExit | null): { text: string; struck: boolean } | null;
+export function connectionLabel(exit: LabelExit | null) {
+  if (!exit) return null;
   return {
-    text: exit.unavailable === "removed" ? exit.id : exitDisplayName(exit, singleOutputLabel),
+    text: exit.unavailable === "removed" ? exit.id : studioExitLabel(exit),
     struck: exit.unavailable !== undefined,
   };
 }

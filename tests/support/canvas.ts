@@ -305,10 +305,40 @@ export async function studioPreview(browser: Browser) {
   })()`);
 }
 
-export const studioViewTransform = (browser: Browser) =>
-  browser.evaluate<string>(
-    `document.querySelector('[aria-label="Flow canvas"] > div[style]').style.transform`,
-  );
+export const studioCanvasPosition = (browser: Browser) =>
+  browser.evaluate(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const layer = canvas.querySelector(":scope > div[style]");
+    const { x, y } = layer.getBoundingClientRect();
+    return { x, y, left: canvas.scrollLeft, top: canvas.scrollTop };
+  })()`);
+
+export async function firstStudioWireOffscreen(screen: Screen, browser: Browser) {
+  const canvas = screen.getByRole("region", "Flow canvas");
+  const wire = canvas.getByRole("button", /^Connection /).first();
+  const surface = (await canvas.boundingBox())!;
+  const drawn = (await wire.boundingBox())!;
+  const edge = surface.x + surface.width;
+  await browser.mouse.move(surface.x + surface.width / 2, surface.y + surface.height / 2);
+  await browser.mouse.wheel(drawn.x - edge - 20, 0);
+  await expect.poll(async () => (await wire.boundingBox())!.x).toBeGreaterThan(edge);
+  await canvas.focus();
+  return wire;
+}
+
+export const pointsAlongStudioWire = (browser: Browser, label: string) =>
+  browser.evaluate<{ x: number; y: number }[]>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const wire = [...canvas.querySelectorAll('g[role="button"]')].find(
+      (button) => button.getAttribute("aria-label") === ${JSON.stringify(label)},
+    );
+    const path = wire.querySelector("path");
+    return [0.4, 0.6].map((fraction) => {
+      const { x, y } = path.getPointAtLength(path.getTotalLength() * fraction)
+        .matrixTransform(path.getScreenCTM());
+      return { x, y };
+    });
+  })()`);
 
 export async function hoverImplementChange(screen: Screen) {
   await screen

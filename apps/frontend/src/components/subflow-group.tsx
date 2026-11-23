@@ -1,4 +1,4 @@
-import { connectionLabel } from "../connection-label.ts";
+import { exitDisplayName, studioExitLabel } from "../connection-label.ts";
 import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Workflow } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowDraft } from "@t3-factory/contracts";
@@ -187,14 +187,7 @@ function PreviewBlockCard({
               </span>
             )}
             <span className="flex-1" />
-            <span
-              className={cn(
-                "truncate text-xs text-muted-foreground",
-                exit.unavailable && "line-through",
-              )}
-            >
-              {connectionLabel(exit).text}
-            </span>
+            <span className="truncate text-xs text-muted-foreground">{studioExitLabel(exit)}</span>
           </li>
         ))}
       </ul>
@@ -300,6 +293,11 @@ function SubflowPreviewBody({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
+      <div
+        data-passive-subflow-preview
+        className="pointer-events-auto absolute inset-x-4 bottom-3"
+        style={{ top: SUBFLOW_HEADER_HEIGHT }}
+      />
       <PreviewWires preview={preview} />
       <PreviewFlowInputCard preview={preview} dimensions={dimensions} />
       <PreviewFinishCard preview={preview} dimensions={dimensions} />
@@ -453,7 +451,7 @@ export function SubflowGroup({
         >
           {exit.unavailable && (
             <span className="rounded bg-card/90 px-1 text-2xs text-attention line-through">
-              {connectionLabel(exit).text}
+              {exitDisplayName(exit)}
             </span>
           )}
         </div>

@@ -4,6 +4,7 @@ import {
   executionWireFocused,
   expectFollowingReview,
   expectLabelledWirePreview,
+  firstStudioWireOffscreen,
   hoverImplementChange,
   manualRunView,
   openFollowedLargeRun,
@@ -15,10 +16,11 @@ import {
   openRunWithWirePoint,
   PAN_INTO_FILLERS,
   panFlowCanvas,
+  pointsAlongStudioWire,
   runCanvasCenterOffset,
   runCanvasHorizontalOffset,
   studioPreview,
-  studioViewTransform,
+  studioCanvasPosition,
   studioWirePoint,
   wireEnds,
 } from "./support/canvas.ts";
@@ -412,6 +414,7 @@ test("a Block that returned to view can be rewired by dragging its output port",
 }) => {
   // Arrange
   await openLargeFlowWithReturnedFiller({ app, screen, browser });
+  await browser.setViewport({ width: 2000, height: 900 });
   const newWire = screen.getByRole("button", "Connection exit from Filler 0 to Filler 4", {
     exact: true,
   });
@@ -530,7 +533,7 @@ test("keyboard focus on a Studio wire previews it without panning or selecting",
 }) => {
   // Arrange
   await openParallelReviewStudio(app, screen, browser);
-  const view = await studioViewTransform(browser);
+  const view = await studioCanvasPosition(browser);
 
   // Act
   const wire = screen.getByRole("button", /^Connection (?!from )/).first();
@@ -541,7 +544,75 @@ test("keyboard focus on a Studio wire previews it without panning or selecting",
   await expectLabelledWirePreview(browser);
   await expect(wire).toBeFocused();
   await expect(wire).toHaveAttribute("aria-pressed", "false");
-  expect(await studioViewTransform(browser)).toBe(view);
+  expect(await studioCanvasPosition(browser)).toEqual(view);
+});
+
+test("Tab focuses an offscreen Studio wire without moving the canvas", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openParallelReviewStudio(app, screen, browser);
+  const wire = await firstStudioWireOffscreen(screen, browser);
+  const before = await studioCanvasPosition(browser);
+
+  // Act
+  await browser.keyboard.press("Tab");
+
+  // Assert
+  await expect(wire).toBeFocused();
+  await expect(wire).toHaveAttribute("aria-pressed", "false");
+  expect(await studioCanvasPosition(browser)).toEqual(before);
+});
+
+test("dragging along the same Studio wire leaves it unselected", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openParallelReviewStudio(app, screen, browser);
+  const wire = screen.getByRole("button", /^Connection (?!from )/).first();
+  const [start, end] = await pointsAlongStudioWire(
+    browser,
+    (await wire.getAttribute("aria-label"))!,
+  );
+  await browser.mouse.move(start!.x, start!.y);
+  await expectLabelledWirePreview(browser);
+  const before = await studioCanvasPosition(browser);
+
+  // Act
+  await browser.mouse.down();
+  await browser.mouse.move(end!.x, end!.y);
+  await browser.mouse.up();
+
+  // Assert
+  await expect(wire).toHaveAttribute("aria-pressed", "false");
+  expect(await studioCanvasPosition(browser)).toEqual(before);
+});
+
+test("Enter reclaims the Studio wire preview from the pointer without changing focus", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openParallelReviewStudio(app, screen, browser);
+  const wire = screen.getByRole("button", /^Connection (?!from )/).first();
+  await browser.keyboard.press("Tab");
+  await wire.focus();
+  await expectLabelledWirePreview(browser);
+  await hoverImplementChange(screen);
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 1, labels: [] });
+  await expect(wire).toBeFocused();
+
+  // Act
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  await expect(wire).toHaveAttribute("aria-pressed", "true");
+  await expectLabelledWirePreview(browser);
 });
 
 test("a selected Studio wire's label hides during another preview and returns afterwards", async ({
@@ -551,11 +622,17 @@ test("a selected Studio wire's label hides during another preview and returns af
 }) => {
   // Arrange
   await openParallelReviewStudio(app, screen, browser);
-  const selected = await studioWirePoint(browser, 1);
+  const wire = screen.getByRole(
+    "button",
+    "Connection Ready for review from Implement change to Code review",
+  );
+  const [selected] = await pointsAlongStudioWire(browser, (await wire.getAttribute("aria-label"))!);
   const unlabeled = await studioWirePoint(browser, 0);
-  await browser.mouse.move(selected.x, selected.y);
+  await browser.mouse.move(selected!.x, selected!.y);
+  await expectLabelledWirePreview(browser);
   await browser.mouse.down();
   await browser.mouse.up();
+  await expect(wire).toHaveAttribute("aria-pressed", "true");
   await browser.mouse.move(50, 50);
   await expect.poll(async () => (await studioPreview(browser)).labels).toHaveLength(1);
 
@@ -564,10 +641,7 @@ test("a selected Studio wire's label hides during another preview and returns af
 
   // Assert
   await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 2, labels: [] });
-  await expect(screen.getByRole("button", /^Connection /).nth(1)).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(wire).toHaveAttribute("aria-pressed", "true");
 
   // Act
   await hoverImplementChange(screen);

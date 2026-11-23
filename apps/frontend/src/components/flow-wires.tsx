@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Trash2 } from "lucide-react";
 import type { FlowConnection } from "@t3-factory/contracts";
 import { wireRouteKey } from "@t3-factory/flow-layout";
@@ -353,13 +353,75 @@ function EmphasizedWire({
   );
 }
 
-function WireHitPath({ wire }: { wire: Wire }) {
+function useWirePress() {
+  const tracking = useRef<AbortController | null>(null);
+  useEffect(() => () => tracking.current?.abort(), []);
+
+  return (event: PointerEvent<SVGPathElement>, select: () => void) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    tracking.current?.abort();
+    const controller = new AbortController();
+    tracking.current = controller;
+    const options = { capture: true, signal: controller.signal };
+    const { pointerId, clientX, clientY, currentTarget: path } = event;
+    const { ownerDocument } = path;
+    const window = ownerDocument.defaultView!;
+    let dragged = false;
+    const move = (pointer: globalThis.PointerEvent) => {
+      if (pointer.pointerId !== pointerId) return;
+      if (Math.hypot(pointer.clientX - clientX, pointer.clientY - clientY) > 3) dragged = true;
+    };
+    const end = (pointer: globalThis.PointerEvent) => {
+      if (pointer.pointerId !== pointerId) return;
+      move(pointer);
+      controller.abort();
+      if (
+        pointer.type === "pointerup" &&
+        !dragged &&
+        ownerDocument.elementFromPoint(pointer.clientX, pointer.clientY) === path
+      )
+        select();
+    };
+    window.addEventListener("pointermove", move, options);
+    window.addEventListener("pointerup", end, options);
+    window.addEventListener("pointercancel", end, options);
+    window.addEventListener("blur", () => controller.abort(), { signal: controller.signal });
+  };
+}
+
+function WireHitPath({
+  wire,
+  selection,
+  press,
+}: {
+  wire: Wire;
+  selection: WireSelection | null;
+  press: ReturnType<typeof useWirePress>;
+}) {
   return (
     <path
       d={wire.path.d}
+      aria-hidden
       data-wire-key={wire.key}
-      data-canvas-pan-through
-      className="fill-none stroke-transparent [pointer-events:stroke] [stroke-width:calc(12px/var(--canvas-scale,1))]"
+      data-canvas-pan-through={selection ? undefined : true}
+      className={cn(
+        "fill-none stroke-transparent [pointer-events:stroke] [stroke-width:calc(12px/var(--canvas-scale,1))]",
+        selection && "cursor-pointer",
+      )}
+      onPointerDown={
+        selection ? (event) => press(event, () => selection.onSelect(wire.wire)) : undefined
+      }
+      onMouseDown={
+        selection
+          ? (event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              event.currentTarget.ownerSVGElement
+                ?.querySelector<SVGElement>(`g[data-wire-key="${CSS.escape(wire.key)}"]`)
+                ?.focus({ preventScroll: true });
+            }
+          : undefined
+      }
     />
   );
 }
@@ -379,12 +441,14 @@ function WireStrokes({
   previewedWire: string | null;
   marker: string;
 }) {
+  const press = useWirePress();
   const outgoing = new Set(
     wires.filter(
       (wire) =>
         wire.key === previewedWire || (emphasized !== null && leavesNode(wire.wire, emphasized)),
     ),
   );
+  const resting = wires.filter((wire) => !outgoing.has(wire));
   return (
     <>
       {selection
@@ -397,20 +461,20 @@ function WireStrokes({
               onSelect={() => selection.onSelect(wire.wire)}
             />
           ))
-        : wires
-            .filter((wire) => !outgoing.has(wire))
-            .map((wire) => (
-              <path
-                key={wire.key}
-                d={wire.path.d}
-                markerEnd={`url(#${marker})`}
-                className="fill-none stroke-subtle-foreground stroke-[1.4] [stroke-linecap:round] [stroke-linejoin:round]"
-              />
-            ))}
+        : resting.map((wire) => (
+            <path
+              key={wire.key}
+              d={wire.path.d}
+              markerEnd={`url(#${marker})`}
+              className="fill-none stroke-subtle-foreground stroke-[1.4] [stroke-linecap:round] [stroke-linejoin:round]"
+            />
+          ))}
       {Array.from(outgoing, (wire) => (
         <EmphasizedWire key={wire.key} wire={wire} marker={marker} selected={wire === selected} />
       ))}
-      {!selection && wires.map((wire) => <WireHitPath key={wire.key} wire={wire} />)}
+      {[...resting, ...outgoing].map((wire) => (
+        <WireHitPath key={wire.key} wire={wire} selection={selection} press={press} />
+      ))}
     </>
   );
 }
@@ -574,10 +638,6 @@ export function FlowWires({
   );
 }
 
-/**
- * One selectable wire: a focusable button whose wide transparent stroke takes the pointer,
- * drawn over the visible wire and its focus ring.
- */
 function SelectableWire({
   wire,
   marker,
@@ -619,10 +679,6 @@ function SelectableWire({
           "fill-none stroke-muted-foreground stroke-[1.5]",
           selected && "stroke-primary stroke-[2]",
         )}
-      />
-      <path
-        d={wire.path.d}
-        className="fill-none stroke-transparent [pointer-events:stroke] [stroke-width:calc(12px/var(--canvas-scale,1))]"
       />
     </g>
   );

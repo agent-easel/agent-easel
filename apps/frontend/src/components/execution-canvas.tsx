@@ -313,7 +313,7 @@ function ExecutionExit({
           label.struck && "line-through",
         )}
       >
-        {label.text}
+        {exit.source === "continuation" ? "Response" : exit.source === "wait" ? "" : label.text}
       </span>
       <span className="sr-only">
         {chosen ? "chosen" : "not chosen"} · configured → {recipients || "finish here"}
