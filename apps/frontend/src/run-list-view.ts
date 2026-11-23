@@ -7,9 +7,11 @@ import {
 import { byCreation, draftTitle, type SavedRunDraft } from "./run-draft.ts";
 import { runBranches } from "./components/run-repositories.tsx";
 
+export type RunListProjectSelection = { readonly id: string; readonly title: string };
+
 export type RunListView = {
   readonly search: string;
-  readonly project: string | null;
+  readonly project: RunListProjectSelection | null;
   readonly needsYou: boolean;
 };
 
@@ -31,7 +33,7 @@ function subscribe(listener: () => void) {
 export const runListView = {
   current: () => view,
   search: (search: string) => change({ ...view, search, needsYou: view.needsYou && !search }),
-  chooseProject: (project: string | null) =>
+  chooseProject: (project: RunListProjectSelection | null) =>
     change({ ...view, project, needsYou: view.needsYou && project === null }),
   showNeedsYou: () => change({ search: "", project: null, needsYou: true }),
   clearNeedsYou: () => change({ ...view, needsYou: false }),
@@ -71,17 +73,18 @@ export function runList({
   catalog: RunListCatalog | undefined;
 }) {
   const projects = projectsById(runs, catalog);
+  const selected = view.project?.id;
   const absent =
     loaded &&
-    !runs.some((run) => run.project.id === view.project) &&
-    !drafts.some((draft) => draft.projectId === view.project);
-  const project = view.project !== null && absent ? null : view.project;
+    !runs.some((run) => run.project.id === selected) &&
+    !drafts.some((draft) => draft.projectId === selected);
+  const project = view.project && !absent ? retainedProject(view.project, projects) : null;
   const choices = projectChoices(runs, drafts, projects);
   const query = view.search.trim();
   const shared = { projects: choices, project, flat: !!query || view.needsYou };
   if (view.needsYou) return { ...shared, ...needsYouGroup(runs) };
   const inProject = <T extends Entry>(entries: readonly T[]) =>
-    project === null ? entries : entries.filter((entry) => projectOf(entry) === project);
+    project === null ? entries : entries.filter((entry) => projectOf(entry) === project.id);
   const matches = searchMatcher(query, projects, catalog);
   const groups = navigationGroups(
     inProject(runs).filter(matches),
@@ -89,6 +92,13 @@ export function runList({
     query,
   );
   return { ...shared, ...groups, total: runs.length + drafts.length };
+}
+
+function retainedProject(
+  selection: RunListProjectSelection,
+  projects: ReadonlyMap<string, RunListProject>,
+): RunListProjectSelection {
+  return { id: selection.id, title: projects.get(selection.id)?.title ?? selection.title };
 }
 
 const projectOf = (entry: Entry) => ("presentation" in entry ? entry.project.id : entry.projectId);

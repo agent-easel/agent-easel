@@ -614,7 +614,7 @@ pause while it waits, and the neutral **Idle** ring when nothing works but somet
 glyph, since the **Problem** or **Needs input** chip shows the state. Idle is an icon state only, not a Run status. The [Run number](../GLOSSARY.md) appears as a `#N` pill after the project name in
 active and Settled rows, before the title in palette results, and first in the Run top bar meta line; Runs without a number show none.
 A third line appears for known branches, linked PRs or attention:
-a branch is the Run's bound worktree branch or a worker-reported one, each shown once. One branch shows its name, several show a count, and a PR icon shows the number of distinct linked PRs.
+a branch is the Run's bound worktree branch or a worker-reported one, each shown once. The line names every branch, separated by commas and truncated to its width, and a PR icon shows the number of distinct linked PRs.
 Branches and PRs are independent; neither requires the other and missing data has no placeholder or Flow fallback.
 The age advances from execution changes, accepted reports, Human answers, attention appearing, handoff release
 and settling or returning to Active, not unchanged observations, viewing or renaming. It does not change creation-based ordering.
@@ -622,15 +622,15 @@ Missing projects keep readable history; an unavailable open Run stays open.
 
 A Settled row that recorded a Run result shows the reached ending's name as a neutral flag badge on its meta line, after the
 Run number and before **Not in T3**. The badge is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, with an ellipsis, and the Project name truncates first.
-Where **Not in T3** also shows at the narrow width, the badge collapses to the flag. An Active row never shows the badge, including one that is stopping or
+Where **Not in T3** also shows at the narrow width, the badge collapses to the flag, and the state icon and activity age give way so the meta line stays on one line; the preview keeps both. Beside the touch ⋯ button, **Not in T3** itself truncates last. On a Settled row **Not in T3** shows only on the meta line. An Active row never shows the badge, including one that is stopping or
 whose stop is unresolved, and a row never shows **Output missing**; that appears in the row's accessible description. The accessible name announces each fact once,
 for example "Settled, ended Merged, not in T3". Rows and the preview read the same recorded result, so first load, live navigation and a reload agree.
 
 Hovering or focusing a row opens one information card to the right, aligned to the row and constrained to
 the viewport. It shows the full title, project, captured Flow, a Trigger-started Run's
 [origin](#starting-from-a-trigger), execution/attention, working messages and known repository metadata, even when the
-title fits. Below the execution line a Result line shows the flag, the full ending name and the **Output missing** tag when
-flagged, never the output text. It also shows while a Run is **Stopping** or **Stop unresolved**. A Settled Run without a result shows **No result**
+title fits. It lists the Run's bound worktree branch with worker-reported branches, so every branch the row's branch line names is readable there. Below the execution line a Result line shows the flag, the full ending name and the **Output missing** tag when
+flagged, never the output text. It also shows while a Run is **Stopping** or **Stop unresolved**. A Settled Run without a result shows the flag and **No result**
 only when its captured Flow has endings; an Active Run without a result shows no Result line. Opening a row menu dismisses and blocks the card; hovering
 menu items never opens a row preview.
 
@@ -646,12 +646,12 @@ menu items never opens a row preview.
   - `#12` finds Run 12 only. A bare number such as `12` finds Run 12 and every Run with a branch that holds 12 as a whole number (`fix/issue-12`, `run-12-…`, `12-login`, but not `run-120-…` or `1234-login`), and the field's hint says so. Branches are the ones the row's branch line shows. Titles, Projects and Flows take no part in a number search, and a Run without a number never matches one.
   - Any other search is case-insensitive and split on spaces: every term must appear in the title, Project name, Flow name or a branch, and terms may match different fields. Drafts match on their title and on the names of their Project and Flow when those still resolve.
   - With no match the list explains that search looks at the Run number, title, Project, Flow and branch.
-- The **Project** filter, an icon button between search and New Run, narrows the open list, drafts, **Snoozed**, **Settled** and search results to one Project. It lists **All Projects**, the default, then alphabetically each Project with a Run or draft in the list, including Projects that are Not in T3; a draft whose Project no longer resolves stays under All Projects. A chosen Project gives the button an indigo border and names the Project in its tooltip. Without a search the list keeps its groups and keyboard navigation. The choice lasts for the session and is kept while navigation loads and when nothing matches; once navigation has loaded and no Run or draft belongs to the chosen Project, it returns to All Projects. Clearing the search keeps the Project.
+- The **Project** filter, an icon button between search and New Run, narrows the open list, drafts, **Snoozed**, **Settled** and search results to one Project. It lists **All Projects**, the default, then alphabetically each Project with a Run or draft in the list, including Projects that are Not in T3; a draft whose Project no longer resolves stays under All Projects. A chosen Project gives the button an indigo border and names the Project in its tooltip and accessible name, keeping the name it was chosen by while the Project's details are loading or missing. Without a search the list keeps its groups and keyboard navigation. The choice lasts for the session and is kept while navigation loads and when nothing matches; once navigation has loaded and no Run or draft belongs to the chosen Project, it returns to All Projects. Clearing the search keeps the Project.
 - **Needs you (N)** filters the list to exactly the Runs the desktop
   [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input
   or Problem, leaving out Human steps and native requests during a confirmed Settle that is stopping or unresolved. A Dock click
-  with no window open and several such Runs opens the list with it; it clears the search and returns the Project filter to All Projects, and typing a search, choosing
-  a Project or choosing the filter again shows the whole list. Its count always equals the Dock badge. Rows keep their own chips, groups are hidden, drafts are left out, and with no such Run it shows
+  with no window open and several such Runs opens the list with it; it clears the search and returns the Project filter to All Projects. Choosing the filter again shows the whole list; typing a search
+  or choosing a Project leaves Needs you and narrows the list by that search or Project instead. Its count always equals the Dock badge. Rows keep their own chips, groups are hidden, drafts are left out, and with no such Run it shows
   **Nothing needs you**. It is a view of the Run list, not an Inbox.
 - When Runs exist but none are open, the open list shows **Nothing open** / **You're all caught up.**
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.

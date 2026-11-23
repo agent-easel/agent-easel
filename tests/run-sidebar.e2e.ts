@@ -327,7 +327,7 @@ test("settle during search keeps focus on the matching row", async ({ app, scree
   await app.screenshot("search-settle-row-focused");
 });
 
-test("Run rows summarize independent branches and count shared PRs once", async ({
+test("Run rows name every branch search matches and count shared PRs once", async ({
   app,
   screen,
   browser,
@@ -344,7 +344,7 @@ test("Run rows summarize independent branches and count shared PRs once", async 
   await app.open("/runs/new");
 
   // Assert
-  await expect(row).toContainText("2 branches");
+  await expect(row).toContainText("review/keyboard-accessibility, review/project-picker");
   await expect(row.getByLabel("2 pull requests", { exact: true })).toBeVisible();
   await expect(screen.getByRole("button", `Actions for ${title}`)).toBeHidden();
 });

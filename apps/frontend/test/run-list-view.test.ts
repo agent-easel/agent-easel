@@ -48,6 +48,11 @@ const view = (fields: Partial<RunListView> = {}): RunListView => ({
   ...fields,
 });
 
+const chosen = (project: { id: string; title: string }) => ({
+  id: project.id,
+  title: project.title,
+});
+
 const ids = (entries: readonly { id: string }[]) => entries.map((entry) => entry.id);
 
 const listOf = (
@@ -102,25 +107,36 @@ it("a bare number finds that Run number and branches holding it as a whole numbe
   expect(ids(list.open)).toEqual(["issue", "factory", "number", "prefix"]);
 });
 
-it("every search term must match the title, Project, Flow or a branch, in any combination", () => {
+const crossFieldRuns = [
+  run("both", "2026-11-03T00:00:00Z", { title: "Fix login", project: northwind }),
+  run("title-only", "2026-11-02T00:00:00Z", { title: "Fix login", project: atlas }),
+  run("branch", "2026-11-01T00:00:00Z", { project: northwind, boundBranch: "feat/Login-page" }),
+];
+const crossFieldDrafts = [
+  draft("draft-flow", "Northwind follow-up", { projectId: "northwind", flowId: "ship" }),
+  draft("draft-unresolved", "Login draft", { projectId: "gone" }),
+];
+
+it("every search term must match a Run's title, Project or a branch, in any combination", () => {
   // Arrange
-  const runs = [
-    run("both", "2026-11-03T00:00:00Z", { title: "Fix login", project: northwind }),
-    run("title-only", "2026-11-02T00:00:00Z", { title: "Fix login", project: atlas }),
-    run("branch", "2026-11-01T00:00:00Z", { project: northwind, boundBranch: "feat/Login-page" }),
-  ];
-  const drafts = [
-    draft("draft-flow", "Northwind follow-up", { projectId: "northwind", flowId: "ship" }),
-    draft("draft-unresolved", "Login draft", { projectId: "gone" }),
-  ];
+  const shown = view({ search: "LOGIN northwind" });
 
   // Act
-  const list = listOf(runs, view({ search: "LOGIN northwind" }), drafts);
-  const byFlow = listOf(runs, view({ search: "ship northwind" }), drafts);
+  const list = listOf(crossFieldRuns, shown, crossFieldDrafts);
 
   // Assert
   expect(ids(list.open)).toEqual(["both", "branch"]);
-  expect(ids(byFlow.open)).toEqual(["draft-flow"]);
+});
+
+it("a draft matches search terms on its resolvable Project and Flow names", () => {
+  // Arrange
+  const shown = view({ search: "ship northwind" });
+
+  // Act
+  const list = listOf(crossFieldRuns, shown, crossFieldDrafts);
+
+  // Assert
+  expect(ids(list.open)).toEqual(["draft-flow"]);
 });
 
 it("a Project selection without a search keeps the grouped view narrowed to that Project", () => {
@@ -140,14 +156,14 @@ it("a Project selection without a search keeps the grouped view narrowed to that
   ];
 
   // Act
-  const list = listOf(runs, view({ project: "northwind" }), drafts);
+  const list = listOf(runs, view({ project: chosen(northwind) }), drafts);
 
   // Assert
   expect(list.flat).toBe(false);
   expect(ids(list.open)).toEqual(["open", "draft"]);
   expect(ids(list.snoozed)).toEqual(["snoozed"]);
   expect(ids(list.settled)).toEqual(["settled"]);
-  expect(list.project).toBe("northwind");
+  expect(list.project).toEqual(chosen(northwind));
 });
 
 it("the Project choices are the Projects with a Run or resolvable draft, alphabetically", () => {
@@ -170,41 +186,95 @@ it("the Project choices are the Projects with a Run or resolvable draft, alphabe
   expect(list.projects.map((project) => project.title)).toEqual(["Atlas", "MatchJob", "Northwind"]);
 });
 
-it("Needs you clears the search and the Project, and either one turns Needs you off", () => {
+it("Needs you clears the search and the Project", () => {
   // Arrange
   runListView.search("login");
-  runListView.chooseProject("northwind");
+  runListView.chooseProject(chosen(northwind));
 
   // Act
   runListView.showNeedsYou();
-  const shown = runListView.current();
-  runListView.chooseProject("atlas");
-  const afterProject = runListView.current();
-  runListView.showNeedsYou();
-  runListView.search("12");
-  const afterSearch = runListView.current();
 
   // Assert
-  expect(shown).toEqual({ search: "", project: null, needsYou: true });
-  expect(afterProject).toEqual({ search: "", project: "atlas", needsYou: false });
-  expect(afterSearch).toEqual({ search: "12", project: null, needsYou: false });
+  expect(runListView.current()).toEqual({ search: "", project: null, needsYou: true });
 });
 
-it("the Project selection falls back to All Projects only after load and when it has no Run or draft", () => {
+it("choosing a Project turns Needs you off and narrows to that Project", () => {
   // Arrange
-  const runs = [run("atlas", "2026-11-01T00:00:00Z", { project: atlas })];
-  const drafts = [draft("unresolved", "Draft", { projectId: "gone" })];
+  runListView.showNeedsYou();
 
   // Act
-  const loading = listOf([], view({ project: "northwind" }), [], false);
-  const noMatch = listOf(runs, view({ project: "atlas", search: "nothing" }));
-  const draftOnly = listOf(runs, view({ project: "gone" }), drafts);
-  const absent = listOf(runs, view({ project: "northwind" }));
+  runListView.chooseProject(chosen(atlas));
 
   // Assert
-  expect(loading.project).toBe("northwind");
-  expect(noMatch.project).toBe("atlas");
-  expect(noMatch.matches).toBe(0);
-  expect(draftOnly.project).toBe("gone");
-  expect(absent.project).toBeNull();
+  expect(runListView.current()).toEqual({ search: "", project: chosen(atlas), needsYou: false });
+});
+
+it("typing a search turns Needs you off and searches the whole list", () => {
+  // Arrange
+  runListView.showNeedsYou();
+
+  // Act
+  runListView.search("12");
+
+  // Assert
+  expect(runListView.current()).toEqual({ search: "12", project: null, needsYou: false });
+});
+
+const atlasRuns = [run("atlas", "2026-11-01T00:00:00Z", { project: atlas })];
+
+it("the Project selection is kept while navigation loads", () => {
+  // Arrange
+  const shown = view({ project: chosen(northwind) });
+
+  // Act
+  const list = listOf([], shown, [], false);
+
+  // Assert
+  expect(list.project).toEqual(chosen(northwind));
+});
+
+it("the Project selection is kept when nothing in it matches the search", () => {
+  // Arrange
+  const shown = view({ project: chosen(atlas), search: "nothing" });
+
+  // Act
+  const list = listOf(atlasRuns, shown);
+
+  // Assert
+  expect(list.project).toEqual(chosen(atlas));
+  expect(list.matches).toBe(0);
+});
+
+it("a Project with only a draft keeps the selection under the name it was chosen by", () => {
+  // Arrange
+  const drafts = [draft("unresolved", "Draft", { projectId: "gone" })];
+  const shown = view({ project: { id: "gone", title: "Gone" } });
+
+  // Act
+  const list = listOf(atlasRuns, shown, drafts);
+
+  // Assert
+  expect(list.project).toEqual({ id: "gone", title: "Gone" });
+});
+
+it("the Project selection falls back to All Projects after load when it has no Run or draft", () => {
+  // Arrange
+  const shown = view({ project: chosen(northwind) });
+
+  // Act
+  const list = listOf(atlasRuns, shown);
+
+  // Assert
+  expect(list.project).toBeNull();
+});
+
+it("the Project selection takes the Project's current name when the catalog knows it", () => {
+  // Arrange
+  const shown = view({ project: { id: "atlas", title: "Atlas (old name)" } });
+
+  // Act
+  const list = listOf(atlasRuns, shown);
+
+  // Assert
+  expect(list.project).toEqual(chosen(atlas));
 });

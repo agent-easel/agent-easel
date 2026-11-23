@@ -5,7 +5,13 @@ import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { RunActionItems, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
-import { runList, runListView, useRunListView, type RunListProject } from "../run-list-view.ts";
+import {
+  runList,
+  runListView,
+  useRunListView,
+  type RunListProject,
+  type RunListProjectSelection,
+} from "../run-list-view.ts";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { runActivity } from "../run-status.ts";
 import {
@@ -38,7 +44,8 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
-import { useLiveLaunchChoices } from "../live/launch-choices.ts";
+import { launchChoicesScope } from "../live/launch-choices.ts";
+import { useLiveScope } from "../live/live-connection.ts";
 import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "./ui/button";
@@ -52,7 +59,12 @@ import { ProjectIcon } from "./project-icon.tsx";
 import { RunNumber } from "./run-number.tsx";
 import { GeneratingTitle } from "./run-title-generation.tsx";
 import { RunOriginPreview } from "./run-origin.tsx";
-import { repositorySummary, runBranches, RunRepositories } from "./run-repositories.tsx";
+import {
+  BranchName,
+  repositorySummary,
+  runBranches,
+  RunRepositories,
+} from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
 import { fullDateTime } from "../time-format.ts";
 
@@ -123,12 +135,12 @@ function NewRunButton({ current }: { current: boolean }) {
 function useRunListRows(runs: readonly RunNavigationEntry[], loaded: boolean) {
   const drafts = useRunDrafts();
   const view = useRunListView();
-  const choices = useLiveLaunchChoices().value;
+  const choices = useLiveScope(launchChoicesScope, { gates: false }).value;
   const catalog = choices
     ? { projects: choices.catalog.projects, flows: choices.flows }
     : undefined;
   const list = runList({ runs, drafts, view, loaded, catalog });
-  const fellBack = list.project !== view.project;
+  const fellBack = list.project === null && view.project !== null;
   useEffect(() => {
     if (fellBack) runListView.chooseProject(null);
   }, [fellBack]);
@@ -151,7 +163,6 @@ export function RunSidebar({ path }: { path: string }) {
   const { open, snoozed, settled, matches, total, search, needsYou, query, project, projects } =
     list;
   const filtered = list.flat;
-  const projectName = projects.find((choice) => choice.id === project)?.title;
   const [expanded, onExpand] = useGroupExpansion(path, settled, filtered);
   const [snoozedExpanded, onExpandSnoozed] = useGroupExpansion(path, snoozed, filtered);
   const actionError = useRunActionsState((state) => state.error);
@@ -201,7 +212,7 @@ export function RunSidebar({ path }: { path: string }) {
           filtered={filtered}
           needsYou={needsYou}
           search={query}
-          projectName={projectName}
+          projectName={project?.title}
           loaded={loaded}
           total={total}
           matches={matches}
@@ -289,7 +300,7 @@ function ProjectFilter({
   project,
   projects,
 }: {
-  project: string | null;
+  project: RunListProjectSelection | null;
   projects: readonly RunListProject[];
 }) {
   const choices: MenuChoice[] = [
@@ -310,11 +321,15 @@ function ProjectFilter({
     <ChoiceMenu
       id="run-list-project"
       label="Project"
-      value={project ?? ""}
+      value={project?.id ?? ""}
       choices={choices}
-      onChange={(id) => runListView.chooseProject(id || null)}
+      onChange={(id) => {
+        const choice = projects.find((candidate) => candidate.id === id);
+        runListView.chooseProject(choice ? { id: choice.id, title: choice.title } : null);
+      }}
       disabled={false}
       placeholder="All Projects"
+      unlistedLabel={project?.title}
       popupClassName="w-64"
       trigger={{
         iconOnly: { icon: <FolderGit2 aria-hidden strokeWidth={1.5} />, chosen: project !== null },
@@ -651,7 +666,7 @@ function RunRow({
       selected={selected}
       disabled={busy}
       preview={<RunPreview run={run} />}
-      {...(ending?.outputMissing ? { description: "Output missing" } : {})}
+      {...(run.result?.outputMissing ? { description: "Output missing" } : {})}
       actions={
         <RunActionItems
           subject={{ entry: run }}
@@ -683,25 +698,42 @@ type RunEnding = RunNavigationEntry["result"];
 function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
   const state = execution(run);
   const unavailable = run.project.availability !== "available";
+  const notInT3 = run.lifecycle === "settled" && unavailable;
   return (
-    <span className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
+    <span
+      className={cn(
+        "flex min-w-0 items-center gap-2 text-2xs text-muted-foreground",
+        notInT3 && "@max-[259px]/sidebar:gap-1.5",
+      )}
+    >
       <span className="shrink-0">
         <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
       </span>
-      <span className="min-w-0 truncate">{run.project.title}</span>
+      <span
+        className={cn("min-w-0 shrink-[999] truncate", notInT3 && "@max-[259px]/sidebar:sr-only")}
+      >
+        {run.project.title}
+      </span>
       <RunNumber number={run.number} aria-hidden />
       {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={unavailable} />}
-      {run.lifecycle === "settled" && unavailable && (
-        <StatusBadge kind="neutral" aria-hidden>
+      {notInT3 && (
+        <StatusBadge kind="neutral" aria-hidden className="min-w-0 shrink">
           Not in T3
         </StatusBadge>
       )}
-      <state.Icon
-        aria-hidden
-        strokeWidth={1.5}
-        className={cn("ml-auto size-3.5 shrink-0", state.className)}
-      />
-      <ActivityAge at={run.lastActivityAt} />
+      <span
+        className={cn(
+          "ml-auto flex shrink-0 items-center gap-2",
+          notInT3 && "@max-[259px]/sidebar:hidden",
+        )}
+      >
+        <state.Icon
+          aria-hidden
+          strokeWidth={1.5}
+          className={cn("size-3.5 shrink-0", state.className)}
+        />
+        <ActivityAge at={run.lastActivityAt} />
+      </span>
     </span>
   );
 }
@@ -709,6 +741,7 @@ function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEndin
 function RunRowDetails({ run }: { run: RunNavigationEntry }) {
   const { pullRequests } = repositorySummary(run.repositories);
   const branches = runBranches(run);
+  const availability = run.lifecycle !== "settled";
   const hasDetails =
     run.settlement !== null ||
     branches.length > 0 ||
@@ -716,16 +749,14 @@ function RunRowDetails({ run }: { run: RunNavigationEntry }) {
     run.presentation.woke ||
     run.attention.needsInput ||
     run.attention.problem ||
-    run.project.availability !== "available";
+    (availability && run.project.availability !== "available");
   if (!hasDetails) return null;
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
       {branches.length > 0 && (
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <GitBranch aria-hidden className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {branches.length === 1 ? branches[0] : `${branches.length} branches`}
-          </span>
+          <span className="truncate">{branches.join(", ")}</span>
         </span>
       )}
       {pullRequests.length > 0 && (
@@ -737,7 +768,7 @@ function RunRowDetails({ run }: { run: RunNavigationEntry }) {
           {pullRequests.length}
         </span>
       )}
-      <RunRowIndicators run={run} />
+      <RunRowIndicators run={run} availability={availability} />
     </span>
   );
 }
@@ -775,7 +806,12 @@ function RunPreviewResult({ run }: { run: RunNavigationEntry }) {
       </div>
     );
   if (run.lifecycle === "settled" && run.flowHasEndings)
-    return <p className="text-muted-foreground">No result</p>;
+    return (
+      <div className="flex items-start gap-2 text-muted-foreground">
+        <Flag aria-hidden className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+        <span>No result</span>
+      </div>
+    );
   return null;
 }
 
@@ -806,6 +842,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
             {block.workingMessage}
           </p>
         ))}
+      <RunPreviewBoundBranch run={run} />
       <RunRepositories workers={run.repositories} />
       <p className="text-2xs text-muted-foreground">
         Last activity {fullDateTime(run.lastActivityAt)}
@@ -814,7 +851,27 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
   );
 }
 
-function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
+function RunPreviewBoundBranch({ run }: { run: RunNavigationEntry }) {
+  const bound = run.boundBranch;
+  if (!bound || run.repositories.some((worker) => worker.branch === bound)) return null;
+  return (
+    <div className="flex items-start gap-2">
+      <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <BranchName branch={bound} />
+        <p className="text-2xs text-muted-foreground">Run worktree</p>
+      </div>
+    </div>
+  );
+}
+
+function RunRowIndicators({
+  run,
+  availability = true,
+}: {
+  run: RunNavigationEntry;
+  availability?: boolean;
+}) {
   return (
     <>
       {run.settlement === "stopping" && (
@@ -827,7 +884,7 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
       )}
       {run.attention.needsInput && <StatusBadge kind="needs-input" />}
       {run.attention.problem && <StatusBadge kind="problem" />}
-      {run.project.availability !== "available" && (
+      {availability && run.project.availability !== "available" && (
         <StatusBadge kind="neutral">Not in T3</StatusBadge>
       )}
     </>

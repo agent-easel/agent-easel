@@ -1,4 +1,6 @@
 import type { Browser } from "@e2e-dev/web";
+import assert from "node:assert/strict";
+import type { Result, RunNavigationEntry } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import {
@@ -97,24 +99,39 @@ test("an ending reached while the sidebar is open shows in the preview while sto
   await expect(preview).toContainText("Stopping");
   await expect(preview).toContainText("Output missing");
   await expect(open).not.toContainText("Approved");
+  await expect(browser.locator(`#run-row-${run}-description`)).toHaveText("Output missing");
   await app.screenshot("ending-preview-while-stopping");
   await browser.keyboard.press("Escape");
   await screen.getByRole("navigation", "Sidebar footer").hover();
   await applyRunState(app, run, "stopped turns ended");
-  await screen.getByRole("button", /^Settled \d+$/).tap();
   const settled = screen
     .getByRole("navigation", "Settled Runs")
     .getByRole("link", /Ending waits for your approval/);
-  await expect(settled).toContainText("Approved");
+  const badge = browser.locator(`#run-row-${run} [data-slot="status-badge"]`);
+  await expect(settled).toBeVisible();
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText("Approved");
   await expect(settled).not.toContainText("Output missing");
   await app.screenshot("ending-badge-settled");
   await app.open(`/runs/${run}`);
-  await expect(settled).toContainText("Approved");
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText("Approved");
   await settled.hover();
   await expect(preview).toContainText("Approved");
   await expect(preview).toContainText("Output missing");
   await app.screenshot("ending-output-missing-after-reload");
 });
+
+const outputMissingTitle = "Ended · Approved without the required release notes link";
+
+async function outputMissingRun(app: { baseUrl: string | undefined }) {
+  const response = await fetch(new URL("/api/run-navigation", app.baseUrl));
+  const result = (await response.json()) as Result<readonly RunNavigationEntry[]>;
+  assert(result.ok);
+  const run = result.value.find((entry) => entry.title.endsWith(outputMissingTitle));
+  assert(run);
+  return run;
+}
 
 test("a Settled Run that recorded Output missing shows its ending on the row, and Output missing only in the preview, after a reload", async ({
   app,
@@ -123,11 +140,13 @@ test("a Settled Run that recorded Output missing shows its ending on the row, an
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1000 });
+  const { id } = await outputMissingRun(app);
   await app.open("/runs/new");
   await screen.getByRole("button", /^Settled \d+$/).tap();
   const row = screen
     .getByRole("navigation", "Settled Runs")
     .getByRole("link", /Approved without the required release notes link/);
+  const badge = browser.locator(`#run-row-${id} [data-slot="status-badge"]`);
   const preview = browser.locator('[data-slot="tooltip-content"]');
 
   // Act
@@ -136,18 +155,58 @@ test("a Settled Run that recorded Output missing shows its ending on the row, an
   await row.hover();
 
   // Assert
-  await expect(row).toContainText("Approved");
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText("Approved");
   await expect(row).not.toContainText("Output missing");
   await expect(preview).toContainText("Output missing");
   await app.screenshot("ending-output-missing-preview");
   await browser.evaluate(
     "document.documentElement.style.setProperty('--factory-sidebar-width', '224px')",
   );
-  const badge = browser.locator(
-    'a[id^="run-row-"]:has-text("Approved without") [data-slot="status-badge"]',
-  );
   expect((await badge.boundingBox())!.width).toBeLessThanOrEqual(64);
   await app.screenshot("ending-badge-narrow-sidebar");
+});
+
+test("at the 224 px sidebar a Settled Run not in T3 keeps its meta line on one line, with the ending as its flag and Not in T3 in full", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 1000 });
+  const { id, project } = await outputMissingRun(app);
+  await fixture.projects.withdraw({ id: project.id });
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  const row = screen
+    .getByRole("navigation", "Settled Runs")
+    .getByRole("link", /Approved without the required release notes link/);
+  const [ending, notInT3] = [0, 1].map((index) =>
+    browser.locator(`#run-row-${id} [data-slot="status-badge"]`).nth(index),
+  );
+
+  await expect(row).toContainText("not in T3");
+
+  // Act
+  await browser.evaluate(
+    "document.documentElement.style.setProperty('--factory-sidebar-width', '224px')",
+  );
+
+  // Assert
+  await expect(browser.locator(`#run-row-${id} [data-slot="status-badge"]`)).toHaveCount(2);
+  await expect(notInT3!).toHaveText("Not in T3");
+  await expect(ending!).toBeVisible();
+  await expect(ending!.getByText("Approved")).toBeHidden();
+  const overflow = await browser.evaluate<{ line: number; label: number }>(
+    `(() => {
+      const meta = document.getElementById(${JSON.stringify(`run-row-${id}`)}).firstElementChild;
+      const label = meta.querySelectorAll('[data-slot="status-badge"]')[1].lastElementChild;
+      return { line: meta.scrollWidth - meta.clientWidth, label: label.scrollWidth - label.clientWidth };
+    })()`,
+  );
+  expect(overflow).toEqual({ line: 0, label: 0 });
+  await app.screenshot("ending-not-in-t3-narrow-sidebar");
 });
 
 test("a lost live connection keeps the last Run read-only, then resynchronizes without replaying commands", async ({
