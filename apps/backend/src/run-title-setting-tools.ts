@@ -8,7 +8,7 @@ export type RunTitleSettingOperations = Pick<
 >;
 
 const modelSchema = {
-  type: "object",
+  type: ["object", "null"],
   description:
     "The T3 provider instance, model and options for title threads, with ids from factory_get_agent_capabilities: a provider instance with reporting.supported, one of its models and the model option values (an empty list when choosing none). null keeps no model, which is allowed only when enabled is false.",
   properties: {
@@ -52,6 +52,8 @@ export const runTitleSettingTools: Tool[] = [
 const updateSteps: Partial<Record<string, string>> = {
   validation:
     "The setting is unchanged. Explain the issues to the user and choose another provider instance, model or options from factory_get_agent_capabilities; do not retry the same choice.",
+  capabilities_unavailable:
+    "The setting is unchanged because Factory could not read T3's catalog, so the choice was not judged. Tell the user, and call this tool again with the same arguments once T3 is reachable.",
 };
 
 export async function callRunTitleSettingTool(
