@@ -170,7 +170,7 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **State tag**: StatusBadge, with the Run kinds or the Setting kinds above.
 - **Run row**: RunRow (Figma Run/RunRow), with Show ending for a Settled Run's recorded ending: a neutral
   StatusBadge with the Flag icon and the ending name on the meta line, after the Run number and before **Not in T3**.
-  It is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, and collapses to the flag beside **Not in T3** when narrow.
+  It is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, and shortens to its flag so **Not in T3** beside it stays in full.
 - **Problem, notice or explanation**: ProblemCard, one card per issue with its next step. Its
   tones are the Setting kinds Error, Attention, Info and Neutral, so a field tag and its card
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings

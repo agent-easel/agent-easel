@@ -622,7 +622,7 @@ Missing projects keep readable history; an unavailable open Run stays open.
 
 A Settled row that recorded a Run result shows the reached ending's name as a neutral flag badge on its meta line, after the
 Run number and before **Not in T3**. The badge is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, with an ellipsis, and the Project name truncates first.
-Where **Not in T3** also shows at the narrow width, the badge collapses to the flag, and the state icon and activity age give way so the meta line stays on one line; the preview keeps both. Beside the touch ⋯ button, **Not in T3** itself truncates last. On a Settled row **Not in T3** shows only on the meta line. An Active row never shows the badge, including one that is stopping or
+**Not in T3** always shows in full: the ending badge shortens to its flag before it does. Below a 280 px sidebar, or 310 px beside the touch ⋯ button, a row that shows **Not in T3** collapses the ending badge to the flag and hides the Project name, state icon and activity age so the meta line stays on one line; the preview keeps them. Beside the touch ⋯ button below 260 px the Project icon also gives way. On a Settled row **Not in T3** shows only on the meta line. An Active row never shows the badge, including one that is stopping or
 whose stop is unresolved, and a row never shows **Output missing**; that appears in the row's accessible description. The accessible name announces each fact once,
 for example "Settled, ended Merged, not in T3". Rows and the preview read the same recorded result, so first load, live navigation and a reload agree.
 

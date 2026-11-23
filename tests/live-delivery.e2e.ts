@@ -1,8 +1,7 @@
 import type { Browser } from "@e2e-dev/web";
-import assert from "node:assert/strict";
-import type { Result, RunNavigationEntry } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
-import { expect, type Screen } from "e2e";
+import { expect, type App, type Screen } from "e2e";
+import type { Fixture } from "./support/fixture/handle.ts";
 import {
   browserRequests,
   delayLiveSnapshots,
@@ -122,15 +121,28 @@ test("an ending reached while the sidebar is open shows in the preview while sto
   await app.screenshot("ending-output-missing-after-reload");
 });
 
-const outputMissingTitle = "Ended · Approved without the required release notes link";
+const outputMissingTitle = "Demo · Ended · Approved without the required release notes link";
 
-async function outputMissingRun(app: { baseUrl: string | undefined }) {
-  const response = await fetch(new URL("/api/run-navigation", app.baseUrl));
-  const result = (await response.json()) as Result<readonly RunNavigationEntry[]>;
-  assert(result.ok);
-  const run = result.value.find((entry) => entry.title.endsWith(outputMissingTitle));
-  assert(run);
-  return run;
+async function withdrawnSettledRow(app: App, screen: Screen, browser: Browser, fixture: Fixture) {
+  await browser.setViewport({ width: 1440, height: 1000 });
+  const { id, project } = await findRun(app.baseUrl, outputMissingTitle);
+  await fixture.projects.withdraw({ id: project.id });
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  await expect(browser.locator(`#run-row-${id}`)).toContainText("not in T3");
+  const badges = browser.locator(`#run-row-${id} [data-slot="status-badge"]`);
+  await expect(badges).toHaveCount(2);
+  return { id, ending: badges.nth(0), notInT3: badges.nth(1) };
+}
+
+function notInT3Overflow(browser: Browser, id: string) {
+  return browser.evaluate<{ line: number; label: number }>(
+    `(() => {
+      const meta = document.getElementById(${JSON.stringify(`run-row-${id}`)}).firstElementChild;
+      const label = meta.querySelectorAll('[data-slot="status-badge"]')[1].lastElementChild;
+      return { line: meta.scrollWidth - meta.clientWidth, label: label.scrollWidth - label.clientWidth };
+    })()`,
+  );
 }
 
 test("a Settled Run that recorded Output missing shows its ending on the row, and Output missing only in the preview, after a reload", async ({
@@ -140,12 +152,10 @@ test("a Settled Run that recorded Output missing shows its ending on the row, an
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1000 });
-  const { id } = await outputMissingRun(app);
+  const { id } = await findRun(app.baseUrl, outputMissingTitle);
   await app.open("/runs/new");
   await screen.getByRole("button", /^Settled \d+$/).tap();
-  const row = screen
-    .getByRole("navigation", "Settled Runs")
-    .getByRole("link", /Approved without the required release notes link/);
+  const row = browser.locator(`#run-row-${id}`);
   const badge = browser.locator(`#run-row-${id} [data-slot="status-badge"]`);
   const preview = browser.locator('[data-slot="tooltip-content"]');
 
@@ -174,19 +184,7 @@ test("at the 224 px sidebar a Settled Run not in T3 keeps its meta line on one l
   fixture,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1440, height: 1000 });
-  const { id, project } = await outputMissingRun(app);
-  await fixture.projects.withdraw({ id: project.id });
-  await app.open("/runs/new");
-  await screen.getByRole("button", /^Settled \d+$/).tap();
-  const row = screen
-    .getByRole("navigation", "Settled Runs")
-    .getByRole("link", /Approved without the required release notes link/);
-  const [ending, notInT3] = [0, 1].map((index) =>
-    browser.locator(`#run-row-${id} [data-slot="status-badge"]`).nth(index),
-  );
-
-  await expect(row).toContainText("not in T3");
+  const { id, ending, notInT3 } = await withdrawnSettledRow(app, screen, browser, fixture);
 
   // Act
   await browser.evaluate(
@@ -194,19 +192,33 @@ test("at the 224 px sidebar a Settled Run not in T3 keeps its meta line on one l
   );
 
   // Assert
-  await expect(browser.locator(`#run-row-${id} [data-slot="status-badge"]`)).toHaveCount(2);
-  await expect(notInT3!).toHaveText("Not in T3");
-  await expect(ending!).toBeVisible();
-  await expect(ending!.getByText("Approved")).toBeHidden();
-  const overflow = await browser.evaluate<{ line: number; label: number }>(
-    `(() => {
-      const meta = document.getElementById(${JSON.stringify(`run-row-${id}`)}).firstElementChild;
-      const label = meta.querySelectorAll('[data-slot="status-badge"]')[1].lastElementChild;
-      return { line: meta.scrollWidth - meta.clientWidth, label: label.scrollWidth - label.clientWidth };
-    })()`,
-  );
-  expect(overflow).toEqual({ line: 0, label: 0 });
+  await expect(notInT3).toHaveText("Not in T3");
+  await expect(ending).toBeVisible();
+  await expect(ending.getByText("Approved")).toBeHidden();
+  expect(await notInT3Overflow(browser, id)).toEqual({ line: 0, label: 0 });
   await app.screenshot("ending-not-in-t3-narrow-sidebar");
+});
+
+test("at the default 300 px sidebar a Settled Run not in T3 shortens its ending so Not in T3 shows in full", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const { id, ending, notInT3 } = await withdrawnSettledRow(app, screen, browser, fixture);
+
+  // Act
+  await browser.evaluate(
+    "document.documentElement.style.setProperty('--factory-sidebar-width', '300px')",
+  );
+
+  // Assert
+  await expect(notInT3).toHaveText("Not in T3");
+  await expect(ending.getByText("Approved")).toBeVisible();
+  await expect(browser.locator(`#run-row-${id} time`)).toBeVisible();
+  expect(await notInT3Overflow(browser, id)).toEqual({ line: 0, label: 0 });
+  await app.screenshot("ending-not-in-t3-default-sidebar");
 });
 
 test("a lost live connection keeps the last Run read-only, then resynchronizes without replaying commands", async ({

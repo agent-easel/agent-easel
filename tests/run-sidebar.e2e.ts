@@ -243,6 +243,7 @@ test("a chosen Project keeps the grouped list and outlasts clearing a number sea
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 900 });
+  const { number } = await findRun(app.baseUrl, "Demo · Worktree · Search fix on its own branch");
   await app.open("/runs/new");
   const search = screen.getByRole("textbox", "Search Runs");
   await screen.getByRole("combobox", "Project: All Projects").tap();
@@ -254,8 +255,10 @@ test("a chosen Project keeps the grouped list and outlasts clearing a number sea
   const filter = screen.getByRole("combobox", "Project: Atlas demo");
   await expect(filter).toBeVisible();
   await expect(screen.getByRole("button", /^Settled \d+$/)).toBeVisible();
-  await search.fill("23");
-  await expect(screen.getByText("23 also finds branches · #23 finds Run 23 only")).toBeVisible();
+  await search.fill(`${number}`);
+  await expect(
+    screen.getByText(`${number} also finds branches · #${number} finds Run ${number} only`),
+  ).toBeVisible();
   await expect(
     screen.getByRole("navigation", "Open Runs").getByRole("link", /Search fix on its own branch/),
   ).toBeVisible();

@@ -695,37 +695,38 @@ function RunRow({
 
 type RunEnding = RunNavigationEntry["result"];
 
+const notInT3Narrow = {
+  gap: "@max-[279px]/sidebar:gap-1.5 [@media(any-pointer:coarse)]:@max-[309px]/sidebar:gap-1.5",
+  hidden: "@max-[279px]/sidebar:hidden [@media(any-pointer:coarse)]:@max-[309px]/sidebar:hidden",
+  srOnly: "@max-[279px]/sidebar:sr-only [@media(any-pointer:coarse)]:@max-[309px]/sidebar:sr-only",
+  hiddenBesideTouchActions: "[@media(any-pointer:coarse)]:@max-[259px]/sidebar:hidden",
+};
+
 function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEnding }) {
   const state = execution(run);
-  const unavailable = run.project.availability !== "available";
-  const notInT3 = run.lifecycle === "settled" && unavailable;
+  const notInT3 = run.lifecycle === "settled" && run.project.availability !== "available";
   return (
     <span
       className={cn(
         "flex min-w-0 items-center gap-2 text-2xs text-muted-foreground",
-        notInT3 && "@max-[259px]/sidebar:gap-1.5",
+        notInT3 && notInT3Narrow.gap,
       )}
     >
-      <span className="shrink-0">
+      <span className={cn("shrink-0", notInT3 && notInT3Narrow.hiddenBesideTouchActions)}>
         <ProjectIcon icon={run.project.projectIcon} faviconUrl={run.project.faviconUrl} inline />
       </span>
-      <span
-        className={cn("min-w-0 shrink-[999] truncate", notInT3 && "@max-[259px]/sidebar:sr-only")}
-      >
+      <span className={cn("min-w-0 shrink-[999] truncate", notInT3 && notInT3Narrow.srOnly)}>
         {run.project.title}
       </span>
       <RunNumber number={run.number} aria-hidden />
-      {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={unavailable} />}
+      {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={notInT3} />}
       {notInT3 && (
-        <StatusBadge kind="neutral" aria-hidden className="min-w-0 shrink">
+        <StatusBadge kind="neutral" aria-hidden>
           Not in T3
         </StatusBadge>
       )}
       <span
-        className={cn(
-          "ml-auto flex shrink-0 items-center gap-2",
-          notInT3 && "@max-[259px]/sidebar:hidden",
-        )}
+        className={cn("ml-auto flex shrink-0 items-center gap-2", notInT3 && notInT3Narrow.hidden)}
       >
         <state.Icon
           aria-hidden
@@ -789,9 +790,9 @@ function EndingBadge({ name, iconOnlyWhenNarrow }: { name: string; iconOnlyWhenN
       kind="neutral"
       icon={Flag}
       aria-hidden
-      className="max-w-16 @min-[260px]/sidebar:max-w-22"
+      className="max-w-16 min-w-0 shrink @min-[260px]/sidebar:max-w-22"
     >
-      <span className={cn(iconOnlyWhenNarrow && "@max-[259px]/sidebar:hidden")}>{name}</span>
+      <span className={cn(iconOnlyWhenNarrow && notInT3Narrow.hidden)}>{name}</span>
     </StatusBadge>
   );
 }
