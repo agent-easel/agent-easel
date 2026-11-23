@@ -71,7 +71,7 @@ export function SettingsGroup({
         </h3>
         {badge}
       </div>
-      {description && <p className="pl-0.5 text-sm text-muted-foreground/70">{description}</p>}
+      {description && <p className="pl-0.5 text-sm text-muted-foreground">{description}</p>}
       <Surface tone="group">{children}</Surface>
     </section>
   );

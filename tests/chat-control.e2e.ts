@@ -571,6 +571,30 @@ test("the host can save a bot in Bots after correcting a wrong-list warning", as
   await app.screenshot("chat-discord-bots-saved");
 });
 
+test("with Chat control On, Access that allows only a bot in a channel granting a Project shows no empty-access notice", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const HERMES = "200000000000000050";
+  await discord(app.baseUrl).botAccount({ userId: HERMES, username: "Hermes" });
+  await operatingChatControl(app.baseUrl, {
+    users: [],
+    bots: [HERMES],
+    channels: ["400000000000000002"],
+  });
+
+  // Act
+  await app.open("/settings/chat-control/discord");
+
+  // Assert
+  const bots = screen.getByRole("region", "Bots");
+  await expect(bots.getByLabel("Bot IDs")).toHaveValue(HERMES);
+  await expect(screen.getByRole("switch", "Chat control")).toBeChecked();
+  await expect(screen.getByText("Nobody can use Chat control yet")).toHaveCount(0);
+  await app.screenshot("chat-discord-bot-only-access");
+});
+
 test("the host turns Chat control On with the switch and sees the connection badge", async ({
   app,
   screen,
@@ -760,7 +784,10 @@ async function settingsWhen<Settings>(
 /** Chat control On and serving, with the participant allowed in the fixture's channel. */
 async function operatingChatControl(
   baseUrl: string | undefined,
-  allowed = { users: ["200000000000000001"], channels: ["400000000000000002"] },
+  allowed: { users: string[]; bots?: string[]; channels: string[] } = {
+    users: ["200000000000000001"],
+    channels: ["400000000000000002"],
+  },
 ) {
   const project = await firstProject(baseUrl);
   await completeChatControl(baseUrl);
@@ -769,7 +796,7 @@ async function operatingChatControl(
   const access = await hostCall(baseUrl, "PUT", "/api/chat-control/discord/access", {
     revision: discord.value.access.revision,
     users: allowed.users,
-    bots: [],
+    bots: allowed.bots ?? [],
     channels: allowed.channels.map((channelId) => ({ channelId, projectIds: [project.id] })),
   });
   assert(access.ok, JSON.stringify(access));

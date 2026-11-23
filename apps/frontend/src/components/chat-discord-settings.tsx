@@ -767,7 +767,8 @@ function AccessProblems({ page, settings }: { page: DiscordPage; settings: Disco
   const { access } = page;
   const saved = access.settings?.access ?? settings.access;
   const nobody =
-    saved.users.length === 0 || !saved.channels.some((channel) => channel.projectIds.length > 0);
+    (saved.users.length === 0 && saved.bots.length === 0) ||
+    !saved.channels.some((channel) => channel.projectIds.length > 0);
   const channelNames = page.granted.map((id) => {
     const name = saved.channelNames[id];
     return name ? `#${name}` : id;
