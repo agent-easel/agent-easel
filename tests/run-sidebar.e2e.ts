@@ -564,28 +564,75 @@ test("an Archived Run opened by link shows its lifecycle time and has no actions
 // The native question stays pending through the suite (see the Needs input header journey).
 const nativeQuestionTitle = "Demo · Woke · A question about keyboard shortcuts";
 
+type DesktopWindow = Parameters<typeof openDesktopWindow>[0];
+
+async function nativeQuestionRoute(window: DesktopWindow) {
+  await openDesktopWindow(window);
+  const run = await findRun(window.app.baseUrl, nativeQuestionTitle);
+  const [matter] = run.attention.matters;
+  assert(matter?.kind === "native-request" && matter.blockName);
+  const route = { kind: "run", runId: run.id, blockId: matter.blockId } as const;
+  return { run, blockName: matter.blockName, route };
+}
+
+const selectedBlock = '[aria-label="Execution canvas"] button[aria-pressed="true"]';
+
 test("a notification route opens its Run with the Block of its one pending matter selected", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await openDesktopWindow({ app, screen, browser });
-  const run = await findRun(app.baseUrl, nativeQuestionTitle);
-  const [matter] = run.attention.matters;
-  assert(matter?.kind === "native-request" && matter.blockName);
+  const { run, blockName, route } = await nativeQuestionRoute({ app, screen, browser });
 
   // Act
-  await routeWindow(browser, { kind: "run", runId: run.id, blockId: matter.blockId });
+  await routeWindow(browser, route);
 
   // Assert
   await expect(browser).toHaveURL(`/runs/${run.id}`);
-  await expect(
-    browser.locator('[aria-label="Execution canvas"] button[aria-pressed="true"]'),
-  ).toContainText(matter.blockName);
+  await expect(browser.locator(selectedBlock)).toContainText(blockName);
   await expect(screen.getByRole("link", "Open in T3").nth(0)).toBeVisible();
   await app.screenshot("desktop-route-run-block");
 });
+
+test("a repeated notification route for the open Run selects its Block again after it was cleared", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { blockName, route } = await nativeQuestionRoute({ app, screen, browser });
+  await routeWindow(browser, route);
+  await expect(browser.locator(selectedBlock)).toContainText(blockName);
+  await browser.keyboard.press("Escape");
+  await expect(browser.locator(selectedBlock)).toHaveCount(0);
+
+  // Act
+  await routeWindow(browser, route);
+
+  // Assert
+  await expect(browser.locator(selectedBlock)).toContainText(blockName);
+});
+
+const completedTitle = "Demo · Ended · Shipped while an alternative was stopped";
+
+async function completionRoute({ app }: DesktopWindow) {
+  const run = await findRun(app.baseUrl, completedTitle);
+  return { kind: "run", runId: run.id, blockId: null, revealOverview: true } as const;
+}
+
+async function expectOverviewWithResult(screen: DesktopWindow["screen"]) {
+  await expect(screen.getByRole("heading", "Overview", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("region", "Run result")).toBeVisible();
+}
+
+async function routedCompletion(window: DesktopWindow) {
+  await openDesktopWindow(window);
+  const route = await completionRoute(window);
+  await routeWindow(window.browser, route);
+  await expect(window.screen.getByRole("region", "Run result")).toBeVisible();
+  return route;
+}
 
 test("a completion route opens the Run overview with its Result although the inspector was closed", async ({
   app,
@@ -595,16 +642,56 @@ test("a completion route opens the Run overview with its Result although the ins
   // Arrange
   await browser.addInitScript(() => localStorage.setItem("factory.runInspectorOpen", "false"));
   await openDesktopWindow({ app, screen, browser });
-  const run = await findRun(app.baseUrl, "Demo · Ended · Shipped while an alternative was stopped");
+  const route = await completionRoute({ app, screen, browser });
 
   // Act
-  await routeWindow(browser, { kind: "run", runId: run.id, blockId: null, revealOverview: true });
+  await routeWindow(browser, route);
 
   // Assert
-  await expect(browser).toHaveURL(`/runs/${run.id}`);
-  await expect(screen.getByRole("heading", "Overview", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("region", "Run result")).toBeVisible();
+  await expect(browser).toHaveURL(`/runs/${route.runId}`);
+  await expectOverviewWithResult(screen);
   await app.screenshot("desktop-route-run-completion");
+});
+
+test("a repeated completion route for the open Run reopens the overview after the inspector was closed", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const route = await routedCompletion({ app, screen, browser });
+  await screen.getByRole("button", "Toggle inspector", { exact: true }).tap();
+  await expect(screen.getByRole("complementary", "Run inspector")).toHaveCount(0);
+
+  // Act
+  await routeWindow(browser, route);
+
+  // Assert
+  await expectOverviewWithResult(screen);
+  await app.screenshot("desktop-route-run-completion-repeated-after-close");
+});
+
+test("a repeated completion route for the open Run shows the overview instead of a selected Block", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const route = await routedCompletion({ app, screen, browser });
+  await screen
+    .getByRole("region", "Execution canvas")
+    .getByRole("button", "Agent ", { exact: false })
+    .first()
+    .tap();
+  await expect(browser.locator(selectedBlock)).toHaveCount(1);
+
+  // Act
+  await routeWindow(browser, route);
+
+  // Assert
+  await expect(browser.locator(selectedBlock)).toHaveCount(0);
+  await expectOverviewWithResult(screen);
+  await app.screenshot("desktop-route-run-completion-repeated-after-block");
 });
 
 test("a notification route to a Run that no longer exists shows it is unavailable", async ({
