@@ -154,7 +154,8 @@ do not need them and none runs on its own.
   through T3's own Project registration, never Factory), reads compact lists and then only
   the definitions you chose, and shows a plan before any write: whether each definition is
   global or Project-owned, the prompt, model or graph changes, a Project override rather
-  than a shared edit for a Project-specific model, and a preview of each Trigger change.
+  than a shared edit for a Project-specific model where the Agent supports one, and a
+  preview of each Trigger change with the exact settings it would save.
   It writes only after you confirm, saves against the revisions it read, checks each saved
   Flow's readiness, creates a new Trigger switched off and enables it only after its
   previewed settings are confirmed, and starts a Trigger check only when you ask. That

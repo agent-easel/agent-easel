@@ -622,7 +622,9 @@ const compactFlow = (flow: FlowDraft) => ({
   revision: flow.revision,
   workspace: flow.workspace,
   ready: flow.readiness.ready,
-  issueCount: flow.readiness.issues.length,
+  issueCount:
+    flow.readiness.issues.length +
+    (flow.readiness.omitted ?? []).reduce((sum, entry) => sum + entry.count, 0),
   updatedAt: flow.updatedAt,
   blocks: flow.graph.blocks.map((block) => ({
     id: block.id,
