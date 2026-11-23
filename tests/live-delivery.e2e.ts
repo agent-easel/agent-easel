@@ -67,51 +67,53 @@ test("an Agent's MCP report updates the open Run and the sidebar without polling
   expect(await browserRequests(app)).toEqual([]);
 });
 
-test("an ending reached while the sidebar is open shows in the preview while stopping, as a badge once Settled, and after a reload", async ({
-  fixture,
+test("an ending reached while the sidebar is open shows in the preview while stopping, as a badge once Settled, and with Output missing after a reload", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1000 });
-  const { id: run } = await prepareScenario(app, "ending-open");
+  const { id: run } = await prepareScenario(app, "ending-approval-open");
   await app.open(`/runs/${run}`);
-  const open = screen.getByRole("navigation", "Open Runs").getByRole("link", /Ending still open/);
+  const open = screen
+    .getByRole("navigation", "Open Runs")
+    .getByRole("link", /Ending waits for your approval/);
   const preview = browser.locator('[data-slot="tooltip-content"]');
   await open.hover();
   await expect(preview).toBeVisible();
-  await expect(preview).not.toContainText("Shipped");
+  await expect(preview).not.toContainText("Approved");
   await browser.keyboard.press("Escape");
   await screen.getByRole("navigation", "Sidebar footer").hover();
 
   // Act
   await applyRunState(app, run, "Stop taken while the turn continues");
-  await fixture.scenarios.reportFrom({
-    id: run,
-    blockId: "worker",
-    exit: "Done",
-    message: "https://github.com/example/atlas/pull/44",
-  });
+  await applyRunState(app, run, "approved without a message");
 
   // Assert
   await screen.getByRole("navigation", "Sidebar footer").hover();
   await open.hover();
-  await expect(preview).toContainText("Shipped");
+  await expect(preview).toContainText("Approved");
   await expect(preview).toContainText("Stopping");
-  await expect(preview).not.toContainText("Output missing");
-  await expect(open).not.toContainText("Shipped");
+  await expect(preview).toContainText("Output missing");
+  await expect(open).not.toContainText("Approved");
   await app.screenshot("ending-preview-while-stopping");
   await browser.keyboard.press("Escape");
+  await screen.getByRole("navigation", "Sidebar footer").hover();
   await applyRunState(app, run, "stopped turns ended");
   await screen.getByRole("button", /^Settled \d+$/).tap();
   const settled = screen
     .getByRole("navigation", "Settled Runs")
-    .getByRole("link", /Ending still open/);
-  await expect(settled).toContainText("Shipped");
+    .getByRole("link", /Ending waits for your approval/);
+  await expect(settled).toContainText("Approved");
+  await expect(settled).not.toContainText("Output missing");
   await app.screenshot("ending-badge-settled");
   await app.open(`/runs/${run}`);
-  await expect(settled).toContainText("Shipped");
+  await expect(settled).toContainText("Approved");
+  await settled.hover();
+  await expect(preview).toContainText("Approved");
+  await expect(preview).toContainText("Output missing");
+  await app.screenshot("ending-output-missing-after-reload");
 });
 
 test("a Settled Run that recorded Output missing shows its ending on the row, and Output missing only in the preview, after a reload", async ({

@@ -145,6 +145,13 @@ function runTransitions(context: Context) {
       assert(title, "The generated title is required");
       return generatedTitleApplied(context, run.id, title);
     },
+    "approved without a message": async (run: RunDetail) => {
+      const pending = run.humanOccurrences.filter((item) => item.state === "pending");
+      assert.equal(pending.length, 1, "The journey Run must have one pending Human occurrence");
+      requireSuccess(
+        await context.factory.answerHumanOccurrence(pending[0]!.id, { exitId: "approve" }),
+      );
+    },
     "Stop taken while the turn continues": (run: RunDetail) =>
       t3.threads.holdStops(run.threadBindings.map((binding) => binding.threadId)),
     "stopped turns ended": (run: RunDetail) =>
@@ -345,6 +352,25 @@ async function createFixtureScenarioSet(host: Host) {
     ],
   });
 
+  const approvalEnding = await saveFlow(factory, "UI ending · Approve while exploring", {
+    flowInput: flowInput(["worker", "reviewer"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 40 }),
+      agentBlock("reviewer", "Explore an alternative", world.agents.reviewer, { x: 320, y: 320 }),
+      humanStep("approval", "Approve release", { x: 700, y: 40 }),
+      conditionBlock("gate", "Release gate", [], { x: 1080, y: 40 }),
+    ],
+    connections: [
+      connection("worker", "review", "approval"),
+      connection("approval", "approve", "gate"),
+      toEnding("gate", OTHERWISE, "approved"),
+    ],
+    finish: {
+      position: { x: 1460, y: 180 },
+      endings: [ending("approved", "Approved", "required")],
+    },
+  });
+
   // Both reviews reach one Human step through one Condition, so each occurrence's message is a
   // Condition selection whose author only its worker provenance tells apart.
   const conditionReviews = await saveFlow(factory, "UI condition · Two reviews routed", {
@@ -483,6 +509,7 @@ async function createFixtureScenarioSet(host: Host) {
   requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
   await createOwnershipSet(host, unselectedModelOptions);
   return {
+    approvalEnding,
     pause,
     answerRelay,
     answerCondition,
@@ -868,19 +895,26 @@ export async function scenariosFixture(host: Host) {
       },
     ],
     [
-      "ending-open",
+      "ending-approval-open",
       async (keyNamespace) => {
         const [first] = await twoWorkersStarted(
           context,
           await demoStart(
             context,
-            flows.endings,
-            "ending-open",
-            "UI worker · Ending still open",
-            "Ship the Atlas search ranking fix while another worker explores an alternative.",
+            flows.approvalEnding,
+            "ending-approval-open",
+            "UI worker · Ending waits for your approval",
+            "Prepare the Atlas search release while another worker explores an alternative.",
             undefined,
             { titlePrefix: "", keyNamespace },
           ),
+        );
+        await resultReported(context, first, {
+          exit: "Ready for review",
+          message: "The ranking fix is ready for your approval.",
+        });
+        await observeFor("observe the approval", context, first.runId, (run) =>
+          run.humanOccurrences.some((item) => item.state === "pending"),
         );
         return first.runId;
       },
