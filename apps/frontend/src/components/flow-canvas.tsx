@@ -247,6 +247,7 @@ function connectionHandle(
       problem && "border-destructive",
       active && "border-primary bg-primary",
     ),
+    problem,
     handle: (frame: CSSProperties, circle) => (
       <DragButton
         aria-label={label}
@@ -276,6 +277,7 @@ const incomingPort =
       pending && "border-2 border-primary ring-4 ring-primary/25",
     ),
     highlighted: pending,
+    problem,
   });
 
 /**

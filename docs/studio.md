@@ -438,7 +438,10 @@ the hovered wire thickens. A chip shows the source output only on wire hover, ke
 wires have no chip. Hidden exits show their name struck through, and removed exits show their stored ID struck through.
 A wire beats a block preview, and cards take the pointer over wires beneath them; where wires overlap, the topmost one responds. Each wire takes the pointer
 about 12 screen pixels wide at any zoom. Hovering never selects: clicking still selects the wire, press-drag on it stays
-inert, and a selected wire keeps its indigo stroke. The read-only preview inside an expanded Subflow does not respond.
+inert, and a selected wire keeps its indigo stroke. A selected wire's chip hides while a block or another wire is
+previewed and returns when that preview ends. Keyboard focus never pans the canvas, and a focused wire stays drawn after
+it leaves the view. A port that marks a readiness problem keeps its error border under the accent, so the fill shows the
+preview and the border still shows the problem. The read-only preview inside an expanded Subflow does not respond.
 
 **Exits.** An Agent block offers its Agent's exits, minus those hidden in this Flow, followed by its Flow-local exits; inherited exits cannot be edited in a Flow. Hiding exits and adding
 Flow-local exits are stored with the Flow revision. **Exits** shows the inherited exits' names, each with its targets and **Hide** / **Show**.

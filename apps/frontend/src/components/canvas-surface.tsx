@@ -79,6 +79,7 @@ export type CanvasPort = {
   readonly className: string;
   /** Drawn at the highlight size, as the input a connection being drawn will use. */
   readonly highlighted?: boolean;
+  readonly problem?: boolean;
   readonly handle?: (frame: CSSProperties, circle: ReactNode) => ReactNode;
 };
 
@@ -230,6 +231,7 @@ const accentedInput = (preview: ScopePreview | null, blockId: string) =>
   preview?.input?.blockId === blockId ? preview.input.index : null;
 
 const PORT_ACCENT = "border-foreground bg-foreground";
+const PROBLEM_PORT_ACCENT = "bg-foreground";
 
 /**
  * A port centred on its wire anchor: `center` below its container's inner top edge, on the
@@ -255,7 +257,13 @@ function SurfacePort({
   accented?: boolean;
 }) {
   const look = accented
-    ? { ...adapterLook, className: cn(adapterLook.className, PORT_ACCENT) }
+    ? {
+        ...adapterLook,
+        className: cn(
+          adapterLook.className,
+          adapterLook.problem ? PROBLEM_PORT_ACCENT : PORT_ACCENT,
+        ),
+      }
     : adapterLook;
   const frame = (size: number): CSSProperties => ({
     position: "absolute",

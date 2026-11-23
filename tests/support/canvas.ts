@@ -268,3 +268,56 @@ export async function executionWireFocused(browser: Browser) {
     `document.activeElement?.closest('[aria-label="Execution canvas"] [data-wire-key]') != null`,
   );
 }
+
+export async function openParallelReviewStudio(app: App, screen: Screen, browser: Browser) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await browser.emulateMedia({ reducedMotion: "reduce" });
+  await app.open("/studio/flows");
+  await screen.getByRole("link", /^Demo · Parallel review 3 blocks/).tap();
+  await expect(
+    screen.getByRole("region", "Flow canvas").getByRole("article", "Block Implement change"),
+  ).toBeVisible();
+}
+
+export async function studioWirePoint(browser: Browser, index: number) {
+  const point = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    const hits = [...canvas.querySelectorAll('g[role="button"][data-wire-key]')].map((g) => g.lastElementChild);
+    const points = hits
+      .map((path) => path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()))
+      .filter((at) => document.elementFromPoint(at.x, at.y)?.closest("[data-wire-key]"));
+    return points[${index}] ? { x: points[${index}].x, y: points[${index}].y } : null;
+  })()`);
+  expect(point).not.toBeNull();
+  return { x: point!.x, y: point!.y };
+}
+
+export async function studioPreview(browser: Browser) {
+  return await browser.evaluate<{ frames: number; emphasized: number; labels: string[] }>(`(() => {
+    const canvas = document.querySelector('[aria-label="Flow canvas"]');
+    return {
+      frames: canvas.querySelectorAll("[data-connection-preview]").length,
+      emphasized: canvas.querySelectorAll("[data-connection-emphasis]").length,
+      labels: [...canvas.querySelectorAll("[data-wire-label]")]
+        .filter((chip) => getComputedStyle(chip).visibility === "visible")
+        .map((chip) => chip.textContent),
+    };
+  })()`);
+}
+
+export const studioViewTransform = (browser: Browser) =>
+  browser.evaluate<string>(
+    `document.querySelector('[aria-label="Flow canvas"] > div[style]').style.transform`,
+  );
+
+export async function hoverImplementChange(screen: Screen) {
+  await screen
+    .getByRole("article", "Block Implement change", { exact: true })
+    .getByText("Implement change", { exact: true })
+    .hover();
+}
+
+export async function expectLabelledWirePreview(browser: Browser) {
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 2, emphasized: 1 });
+  expect((await studioPreview(browser)).labels).toHaveLength(1);
+}

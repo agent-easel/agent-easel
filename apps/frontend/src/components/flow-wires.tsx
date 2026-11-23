@@ -460,6 +460,7 @@ function renderWireLabel(
 function WireOverlays({
   selected,
   previewedWire,
+  emphasized,
   wires,
   geometry,
   visible,
@@ -468,6 +469,7 @@ function WireOverlays({
 }: {
   selected: Wire | null | undefined;
   previewedWire: string | null;
+  emphasized: CanvasNode | null;
   wires: readonly Wire[];
   geometry: Geometry;
   visible: Rect;
@@ -475,11 +477,12 @@ function WireOverlays({
   selection: WireSelection | null;
 }) {
   const previewed = wires.find((wire) => wire.key === previewedWire);
+  const previewing = emphasized !== null || previewedWire !== null;
   const deleteAt = selected?.path.label;
   return (
     <>
       {renderWireLabel(previewed, geometry, visible, scale, deleteAt)}
-      {selected !== previewed && renderWireLabel(selected, geometry, visible, scale, deleteAt)}
+      {!previewing && renderWireLabel(selected, geometry, visible, scale, deleteAt)}
       {selected && deleteAt && (
         <DeleteConnection at={deleteAt} onDelete={() => selection?.onDelete(selected.wire)} />
       )}
@@ -560,6 +563,7 @@ export function FlowWires({
       <WireOverlays
         selected={selected}
         previewedWire={previewedWire}
+        emphasized={emphasized}
         wires={wires}
         geometry={geometry}
         visible={visible}
