@@ -259,6 +259,15 @@ export class ControlledT3Threads implements T3Threads {
       link: reference.link,
     };
   }
+  private readonly startCalls = new Map<string, Set<string>>();
+  recordStartCall(threadId: string, requestId: string) {
+    this.startCalls.set(threadId, new Set([...(this.startCalls.get(threadId) ?? []), requestId]));
+  }
+  async findStartCall(_target: T3Endpoint, threadId: string, requestId: string) {
+    this.connection.requireConnection();
+    return this.startCalls.get(threadId)?.has(requestId) === true;
+  }
+  readonly refusedSendThreads = new Set<string>();
   loseSendReply = false;
   beforeSend?: (payload: SendPayload) => Promise<void>;
   readonly sends = new Map<
@@ -276,6 +285,8 @@ export class ControlledT3Threads implements T3Threads {
   async sendMessage(_target: T3Endpoint, payload: SendPayload) {
     this.connection.requireConnection();
     await this.beforeSend?.(payload);
+    if (this.refusedSendThreads.has(payload.threadId))
+      throw new T3Failure("refused", "runtime_mode_escalation_denied");
     let accepted = this.sends.get(payload.clientRequestId);
     if (accepted && JSON.stringify(accepted.payload) !== JSON.stringify(payload))
       throw new T3Failure("refused", "Key conflict");

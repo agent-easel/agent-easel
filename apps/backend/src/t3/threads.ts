@@ -26,6 +26,7 @@ export interface T3Threads {
   discoverLaunchCandidates(target: T3Target, title: string): Promise<LaunchDiscovery>;
   /** Independent thread identity. Callers still prove it is the saved worker. */
   readThreadIdentity(target: T3Target, threadId: string): Promise<ThreadIdentityRead>;
+  findStartCall(target: T3Endpoint, threadId: string, requestId: string): Promise<boolean>;
   /** One thread read: active/latest run, recent runs and the pending native request count. */
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
   renameThread(

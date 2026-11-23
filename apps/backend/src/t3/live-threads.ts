@@ -8,6 +8,7 @@ import {
 } from "./connection.ts";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
 import { discoverLaunches, threadIdentityRead } from "./launch-discovery.ts";
+import { findStartCall } from "./start-call.ts";
 import { workerTitleRenameDisposition } from "./rename-disposition.ts";
 import type {
   AttachmentUpload,
@@ -273,6 +274,15 @@ export class LiveT3Threads implements T3Threads {
       const result = await session.call("t3_thread_interrupt", { ...payload, stop: true }, 30_000);
       if (result.isError) throw new T3Failure("refused", "Thread Stop outcome unresolved");
     });
+  }
+  async findStartCall(target: T3Endpoint, threadId: string, requestId: string) {
+    return this.connection.authorized(target, (session) =>
+      findStartCall(
+        async (args) => structured(await session.call("t3_thread_read", args, 30_000)),
+        threadId,
+        requestId,
+      ),
+    );
   }
   async readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation> {
     return this.connection.authorized(target, async (session) => {

@@ -844,3 +844,64 @@ it("an interrupted HTTP reply keeps the rename dispatch uncertain without reconn
     external.sessionRequests.filter((request) => request.tool === "t3_thread_update"),
   ).toHaveLength(1);
 });
+
+const activityPage = (items: readonly Record<string, unknown>[]) => ({
+  thread: { threadId: "conversation" },
+  recentRuns: [],
+  items: items.map((item, position) => ({
+    position,
+    visibility: "local",
+    sourceThreadId: "conversation",
+    itemId: `item-${position}`,
+    runId: "run-1",
+    type: "dynamic_tool",
+    status: "completed",
+    title: null,
+    textTruncated: false,
+    nextTextOffset: null,
+    updatedAt: "2026-11-23T10:00:00.000Z",
+    ...item,
+  })),
+  nextPosition: null,
+  hasMore: false,
+  earlierPosition: null,
+});
+
+const startCallText = (toolName: string, requestId: string) =>
+  JSON.stringify({ toolName, input: { requestId, projectId: "p", flowId: "f", input: "x" } });
+
+it("a conversation's own recorded factory_start_run call with the Run's request key proves it started the Run", async (c) => {
+  // Arrange
+  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+    runtimeActivity: () =>
+      activityPage([
+        { text: startCallText("mcp__factory-runtime__factory_start_run", "request-1") },
+      ]),
+  });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(true);
+});
+
+it("a Start call T3 shows only as inherited from another thread does not prove the conversation started the Run", async (c) => {
+  // Arrange
+  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+    runtimeActivity: () =>
+      activityPage([
+        {
+          visibility: "inherited",
+          sourceThreadId: "parent",
+          text: startCallText("factory-runtime.factory_start_run", "request-1"),
+        },
+      ]),
+  });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(false);
+});

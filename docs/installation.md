@@ -138,7 +138,11 @@ do not need them and none runs on its own.
   confirmation before it calls [`factory_start_run`](t3-integration.md#run-start-tools);
   that confirmation is the skill's instruction, not a server check. While
   **Generate Run titles** is on, its review adds one line saying the title may be
-  replaced by a generated title.
+  replaced by a generated title. In a T3 thread that reports its `currentThreadId`,
+  the review also offers [T3 Run updates](t3-integration.md#t3-run-updates) to this
+  conversation, names that destination and says each update can start a model turn;
+  after an explicit opt-in the skill binds them once the Run is accepted, and
+  otherwise the user asks for the Run's status with `factory_read_run`.
 - `setup-factory` configures a repository's tracker claim, once per repository. It
   explores the repository and its tracker, proposes an "in progress" label (default
   `factory:in-progress`), shows a draft of every change and writes only after you
