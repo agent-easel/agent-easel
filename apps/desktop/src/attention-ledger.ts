@@ -50,6 +50,7 @@ export interface CompletionNotificationRecord {
   readonly cycle: number;
   readonly postedAt: string;
   withdrawn: boolean;
+  unreferencedAtLaunch?: boolean;
 }
 
 export type NotificationRecord = AttentionNotificationRecord | CompletionNotificationRecord;
@@ -83,12 +84,6 @@ const fileName = "desktop-attention.json";
 const notifiedBy = (appearance: AppearanceState | CompletionState) =>
   "notification" in appearance ? appearance.notification : null;
 
-const unreferencedCompletionRetentionMs = 7 * 24 * 60 * 60 * 1000;
-
-const isRetainedCompletion = (notification: NotificationRecord, now: number) =>
-  notification.kind === "completion" &&
-  now - Date.parse(notification.postedAt) < unreferencedCompletionRetentionMs;
-
 /** Resolved history is only needed while its process can still act on it. */
 function withoutResolved(ledger: ServerLedger): ServerLedger {
   const matters = Object.fromEntries(
@@ -103,8 +98,12 @@ function withoutResolved(ledger: ServerLedger): ServerLedger {
     ...Object.values(ledger.completions?.runs ?? {}).map(notifiedBy),
   ]);
   const notifications = Object.fromEntries(
-    Object.entries(ledger.notifications).filter(
-      ([id, notification]) => referenced.has(id) || isRetainedCompletion(notification, Date.now()),
+    Object.entries(ledger.notifications).flatMap(
+      ([id, notification]): [string, NotificationRecord][] => {
+        if (referenced.has(id)) return [[id, notification]];
+        if (notification.kind !== "completion" || notification.unreferencedAtLaunch) return [];
+        return [[id, { ...notification, unreferencedAtLaunch: true }]];
+      },
     ),
   );
   return { ...ledger, matters, notifications };

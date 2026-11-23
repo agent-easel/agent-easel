@@ -6,7 +6,7 @@ import type {
   DesktopAlertSettings,
   NotificationPermission,
 } from "@t3-factory/contracts/desktop-bridge";
-import { expect, it, type TestContext } from "vite-plus/test";
+import { expect, it, vi, type TestContext } from "vite-plus/test";
 import {
   AttentionCoordinator,
   type AlertNotification,
@@ -1321,11 +1321,21 @@ it("clicking a completion notification opens the Run overview with no Block sele
   expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
 });
 
-it("a completion clicked at a relaunch opens its Run overview from the kept ledger record", async (c) => {
+it("a completion clicked at a relaunch opens its Run overview from the kept ledger record, however old and after any number of launches", async (c) => {
   // Arrange
+  vi.useFakeTimers({ toFake: ["Date"] });
+  c.onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
   const profile = await installation(c, recordingPort(), finished);
   await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
   await profile.feed.deliver({ fresh: false, rows: [settledRun("a", 7, "automatic")] });
+  vi.setSystemTime(new Date("2026-11-01T00:00:00.000Z"));
+  await profile.restart();
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
+  await profile.restart();
+  await profile.feed.deliver({ fresh: true, rows: [settledRun("a", 7, "automatic")] });
   await profile.restart();
   const route = profile.coordinator.activate(profile.port.shown[0]!.id);
 
@@ -1455,6 +1465,22 @@ it("a completion that was withdrawn before a restart still opens its Run when cl
 
   // Assert
   expect(await route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("a completion whose Run left Settled is forgotten at the second launch after, so its click opens only the window", async (c) => {
+  // Arrange
+  const { profile, id } = await postedCompletion(c);
+  await profile.feed.deliver({ fresh: false, rows: [] });
+  await profile.restart();
+  await profile.feed.deliver({ fresh: true, rows: [] });
+  await profile.restart();
+  await profile.feed.deliver({ fresh: true, rows: [] });
+
+  // Act
+  const route = await profile.coordinator.activate(id);
+
+  // Assert
+  expect(route).toBeNull();
 });
 
 it("a completion clicked after the selection moved to another server or was revoked opens only the window", async (c) => {

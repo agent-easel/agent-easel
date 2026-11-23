@@ -207,8 +207,9 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   with no completion history, after an upgrade or **Forget server**, counts every Settled Run as
   seen; a switch turned on or a grant noticed while no snapshot is ready makes the next ready
   snapshot do the same. A Run's completion record is kept until the Run leaves Settled or is
-  Archived; the posted notification's record stays for seven days after posting, so a banner that
-  outlived its Run still withdraws and routes after a restart.
+  Archived, with no age limit, so a click after a cold launch opens it. After that the posted
+  notification's record is kept through the next launch, so a banner that outlived its Run still
+  routes when it launches Factory.
 - **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
   now: with the Block selected while exactly one matter the notification announced is still
   pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
