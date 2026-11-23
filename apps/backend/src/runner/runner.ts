@@ -277,6 +277,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     ...openRunNavigation(store),
     listRunNavigation: store.listRunNavigation,
     searchArchivedRuns: store.searchArchivedRuns,
+    listRunListExtras: store.listRunListExtras,
     snoozeRun: store.snoozeRun,
     restoreRun: store.restoreRun,
     markRunWokeSeen: store.markRunWokeSeen,
