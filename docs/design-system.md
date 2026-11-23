@@ -40,8 +40,8 @@ mode's baseline. A mode must keep its own polarity (a dark canvas in Dark, a lig
 
 Contrast policy: text, secondary text, action labels, links and status colors need 4.5:1 on
 every surface they appear on, focus rings and section labels need 3:1, and borders and inputs
-need 1.3:1. A color that misses is moved
-in lightness only, toward black or white, until it passes; if a required pair cannot pass, that
+need 1.3:1. A color that misses is moved toward black or white in lightness until it passes,
+clamping chroma only as needed to fit the sRGB gamut; if a required pair cannot pass, that
 whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
 shows **Technical details** when Factory cannot use the config at all.
 The primary action darkens on hover as in the baselines; an accent of middle lightness, on which
