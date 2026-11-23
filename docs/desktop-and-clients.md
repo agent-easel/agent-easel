@@ -191,10 +191,13 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
   A newly noticed grant announces no Run that is already Settled, except the one completion that
   prompted the request: it is posted after **Allow** if its Run is still in the same Settled
-  cycle. A prompt that a pending matter prompted exempts no completion, and Runs that settle
-  while the prompt is open count as seen at **Allow**. The ledger keeps the last permission it
+  cycle, also when a pending matter prompted the request together with it. A prompt that only a
+  pending matter prompted exempts no completion, and Runs or cycles that settle while the prompt
+  is open count as seen at **Allow**. The ledger keeps the last permission it
   observed, so a grant made in System Settings while Factory was quit is noticed at the next
-  launch and also announces no Run that is already Settled. A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  launch and also announces no Run that is already Settled. A ledger that cannot be written
+  does not stop Factory from starting; a grant it could not record is noticed again, with the
+  same baseline, at the next permission read once the ledger can be written. A denial leaves the badge working and Factory never asks again. Settings shows the permission
   status and, after a denial, **Open System Settings**, which opens this app's page in System
   Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
@@ -222,7 +225,9 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   Archived Run opens its read-only history and a Run that no longer exists shows that it is
   unavailable; both also hold for a completion notification, which always opens the Run
   overview with no Block selected, whatever state the Run is in, and opens the inspector where
-  the overview and the Run result show, also when it was closed. A
+  the overview and the Run result show, also when it was closed. Every click applies its route
+  again, also when the window already shows that Run after the owner closed the inspector or
+  changed the selected Block. A
   notification clicked after Quit relaunches Factory and opens its Run once the
   connection is ready, behind the connection gate. A Dock click with no window open opens the
   single waiting Run (its Block selected when it has one matter), the Run list's
@@ -230,8 +235,11 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   a window open it only brings the window forward. Routing only navigates, never acts on a Run:
   Settings and Studio still ask before discarding unsaved edits, and leaving the New Run view
   keeps its draft. Clicks on another server's or a revoked selection's notifications open only
-  the window. A revocation deletes that selection's notification records, so its clicks still
-  open only the window after the same server approves this client again, also after a restart.
+  the window. A revocation deletes the notification records the revoked selection had, also
+  when another server is selected or the credential is replaced before the deletion runs, so
+  their clicks still open only the window after the same server approves this client again,
+  also after a restart. Their accounting stays: one macOS refuses only after the revocation is
+  retried at the next catch-up, and one it accepted or whose outcome is unknown is not.
 - **Selection boundaries**: switching server or role, or the server refusing this client's
   credential after a revocation, clears the badge, withdraws the previous selection's
   notifications and ignores whatever the previous selection's subscription still delivers. The
