@@ -1,6 +1,7 @@
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import {
+  centerStudioSubflow,
   executionWireFocused,
   expectFollowingReview,
   expectLabelledWirePreview,
@@ -21,6 +22,7 @@ import {
   runCanvasHorizontalOffset,
   studioPreview,
   studioCanvasPosition,
+  studioSubflowBridgePoints,
   studioWirePoint,
   wireEnds,
 } from "./support/canvas.ts";
@@ -524,6 +526,38 @@ test("hovering a Studio wire frames its blocks and shows its label, and hovering
   // Assert
   await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 1, labels: [] });
   expect((await studioPreview(browser)).emphasized).toBeGreaterThan(0);
+});
+
+test("Studio Subflow bridges stay passive next to the outer ports", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 2100, height: 1000 });
+  await app.open("/studio/flows");
+  await screen.getByRole("link", /^Demo · Release with review/).tap();
+  const group = await centerStudioSubflow(screen, browser);
+  await group.getByRole("button", /^Subflow Review panel/).hover();
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 1, emphasized: 2 });
+  const { entry, ending } = await studioSubflowBridgePoints(browser);
+
+  // Act
+  await browser.mouse.move(entry.x, entry.y);
+
+  // Assert
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 0, emphasized: 0 });
+
+  // Arrange
+  const port = group.getByRole("button", /^Connect exit /).last();
+  await port.hover();
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 1, emphasized: 2 });
+
+  // Act
+  await browser.mouse.move(ending.x, ending.y);
+
+  // Assert
+  await expect.poll(() => studioPreview(browser)).toMatchObject({ frames: 0, emphasized: 0 });
 });
 
 test("keyboard focus on a Studio wire previews it without panning or selecting", async ({

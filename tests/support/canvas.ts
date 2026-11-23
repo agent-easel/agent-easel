@@ -305,6 +305,37 @@ export async function studioPreview(browser: Browser) {
   })()`);
 }
 
+export function studioSubflowBridgePoints(browser: Browser) {
+  return browser.evaluate<{ entry: { x: number; y: number }; ending: { x: number; y: number } }>(
+    `(() => {
+      const group = document.querySelector('article[aria-label="Subflow Review panel"]');
+      const paths = group.querySelectorAll(":scope > div > svg > path");
+      const at = (path, distance) => {
+        const { x, y } = path.getPointAtLength(distance).matrixTransform(path.getScreenCTM());
+        return { x, y };
+      };
+      const ending = paths[paths.length - 1];
+      return { entry: at(paths[0], 12), ending: at(ending, ending.getTotalLength() - 12) };
+    })()`,
+  );
+}
+
+export async function centerStudioSubflow(screen: Screen, browser: Browser) {
+  const canvas = screen.getByRole("region", "Flow canvas");
+  await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  const group = canvas.getByRole("article", "Subflow Review panel", { exact: true });
+  const surface = (await canvas.boundingBox())!;
+  const drawn = (await group.boundingBox())!;
+  const x = surface.x + surface.width / 2;
+  const y = surface.y + surface.height / 2;
+  await browser.mouse.move(x, y);
+  await browser.mouse.wheel(drawn.x + drawn.width / 2 - x, drawn.y + drawn.height / 2 - y);
+  await expect
+    .poll(async () => Math.abs((await group.boundingBox())!.x + drawn.width / 2 - x))
+    .toBeLessThan(3);
+  return group;
+}
+
 export const studioCanvasPosition = (browser: Browser) =>
   browser.evaluate(`(() => {
     const canvas = document.querySelector('[aria-label="Flow canvas"]');

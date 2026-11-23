@@ -295,7 +295,7 @@ function SubflowPreviewBody({
     <div className="pointer-events-none absolute inset-0 select-none">
       <div
         data-passive-subflow-preview
-        className="pointer-events-auto absolute inset-x-4 bottom-3"
+        className="pointer-events-auto absolute inset-x-0 bottom-0"
         style={{ top: SUBFLOW_HEADER_HEIGHT }}
       />
       <PreviewWires preview={preview} />
