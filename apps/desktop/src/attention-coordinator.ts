@@ -503,14 +503,8 @@ export class AttentionCoordinator {
    */
   private owedCatchUp = false;
   private observedRevocations = 0;
-  /** The server each notification of this launch was posted for. */
   private readonly postedFor = new Map<string, string>();
-  /**
-   * Notifications posted before their selection was revoked. They open only the window even
-   * when the ledger could not record the revocation, so approving the server again never
-   * revives them; a later launch cannot know them.
-   */
-  private readonly revoked = new Set<string>();
+  private readonly revokedNotifications = new Set<string>();
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -603,7 +597,7 @@ export class AttentionCoordinator {
           this.epoch++;
           this.observedRevocations++;
           for (const [id, server] of this.postedFor)
-            if (server === selection!.server) this.revoked.add(id);
+            if (server === selection!.server) this.revokedNotifications.add(id);
           this.owedCatchUp = false;
           this.drop();
         }
@@ -633,7 +627,7 @@ export class AttentionCoordinator {
         if (!selection) return answer(null);
         const { server } = selection;
         const notification = this.ledger.notification(server, id);
-        if (!notification || this.revoked.has(id)) return answer(null);
+        if (!notification || this.revokedNotifications.has(id)) return answer(null);
         if (this.ready) return answer(notificationRoute(notification, this.ready.rows));
         this.held = { server, notification, answer };
       });
