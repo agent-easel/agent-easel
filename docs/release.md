@@ -71,7 +71,7 @@ GitHub Actions owns the production deployment at `https://t3factory.app/`. The `
 
 The same deployment proxies `/ingest/static/*` to PostHog Cloud EU's asset host and `/ingest/*` to its ingestion host. The website is static and the ingestion rules need no Vercel Functions.
 
-The page's layout and copy follow the Figma frame "Landing · Feature tour — Nov 2026". That frame uses only instances of the Marketing screen components M07–M12, so the product screenshots are exports of those components, at twice their rendered width on the page. The social card is an export of the Landing page's "Social card · 1200×630" frame. When those components or that frame change, export them again and replace the files in `apps/landing/public`.
+The product screenshots in `apps/landing/public/screens/` are dark-mode captures of the running application (1472×920, 16:10) taken against the isolated demo fixture, and `apps/landing/public/og-image.png` (1200×630) pairs the current hero Run detail screenshot with the brand header. Refresh those assets in `apps/landing/public` when major product or UI changes land.
 
 #### Vercel setup
 

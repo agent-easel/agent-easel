@@ -9,6 +9,7 @@ import {
   type ChatOperation,
   type Proposed,
 } from "./actions.ts";
+import { referenceOf } from "../runner/run-overview.ts";
 import { invalid, type ChatToolOutcome, type MutationTool } from "./chat-tools.ts";
 import {
   exactTextProblem,
@@ -22,7 +23,7 @@ import {
 } from "./review-text.ts";
 import { at, clip, inert } from "./status-cards.ts";
 import { runSearch, type RunIdentity } from "./run-search.ts";
-import { NOT_PERMITTED, referenceOf, runReference } from "./run-tools.ts";
+import { NOT_PERMITTED, runReference } from "./run-tools.ts";
 
 /** The Factory operations a chat Human answer uses: the shared Human answer and the Run read. */
 export interface HumanAnswerOperations {

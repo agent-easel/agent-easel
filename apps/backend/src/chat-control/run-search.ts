@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type * as Statement from "effect/sql/Statement";
 import { runLifecycle } from "../runner/run-store/lifecycle.ts";
+import { runWordMatches } from "../runner/run-store/run-word-matches.ts";
 
 /** A Run's state as Chat control names it: Snoozed is an Active Run's presentation. */
 export type ChatRunState = "active" | "snoozed" | "settled" | "archived";
@@ -61,9 +62,6 @@ const identity = (row: Row): RunIdentity => {
   };
 };
 
-/** Escapes LIKE wildcards so a word matches literally. */
-const literal = (word: string) => `%${word.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
-
 /**
  * Scoped Run reads for Chat control. Every read is limited to `projectIds`, the Projects the
  * thread's parent channel grants the requester now, so a known Run ID or number reaches nothing
@@ -79,10 +77,7 @@ export function runSearch(sql: SqlClient.SqlClient) {
     sql.and([sql`p.id IN ${sql.in(projectIds)}`, ...conditions]);
 
   const matching = (query: RunQuery) => [
-    ...query.words.map(
-      (word) =>
-        sql`(r.title || ' ' || p.title || ' ' || p.workspace_root || ' ' || f.name) LIKE ${literal(word)} ESCAPE '\\'`,
-    ),
+    ...runWordMatches(sql, query.words),
     ...(query.projectId === null ? [] : [sql`p.id=${query.projectId}`]),
     ...(query.includeArchived ? [] : [sql`r.archived_at IS NULL`]),
   ];

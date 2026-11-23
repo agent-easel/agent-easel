@@ -13,6 +13,7 @@ import type { Host } from "./host.ts";
  */
 export function projectsFixture({ factory, t3, home }: Host) {
   const added: { id: string; projectId: string }[] = [];
+  const withdrawn: (typeof t3.projects.catalog)[number][] = [];
   let selection: string | null = null;
 
   return {
@@ -52,8 +53,24 @@ export function projectsFixture({ factory, t3, home }: Host) {
         const { selectedProjectId } = requireSuccess(await factory.listProjects());
         requireSuccess(await factory.selectProject({ id: selectedProjectId }));
       },
+      async withdraw({ id }: { id: string }) {
+        const { projects } = requireSuccess(await factory.listProjects());
+        const project = projects.find((entry) => entry.id === id);
+        if (!project) throw new Error(`Project ${id} is not in Factory's catalog.`);
+        withdrawn.push(
+          ...t3.projects.catalog.filter((entry) => entry.projectId === project.projectId),
+        );
+        t3.projects.catalog = t3.projects.catalog.filter(
+          (entry) => entry.projectId !== project.projectId,
+        );
+        requireSuccess(await factory.recheckProjects());
+      },
     },
     async reset() {
+      if (withdrawn.length > 0) {
+        t3.projects.catalog = [...t3.projects.catalog, ...withdrawn.splice(0)];
+        requireSuccess(await factory.recheckProjects());
+      }
       if (added.length === 0) return;
       const ids = new Set(added.map((project) => project.id));
       for (const flow of requireSuccess(await factory.listFlows()))

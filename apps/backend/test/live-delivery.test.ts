@@ -22,7 +22,10 @@ import {
 } from "./support/live.ts";
 import {
   allTurnsEnd,
+  endingFlow,
+  endingReached,
   handoffFlow,
+  resultReported,
   report,
   turnBegins,
   workerAtWork,
@@ -63,6 +66,38 @@ it("an accepted Block report reaches open Run and navigation subscribers without
     ),
   );
   expect(rows.filter((message) => message._tag === "snapshot")).toHaveLength(1);
+});
+
+it("a recorded Run result reaches navigation subscribers as a whole-row replacement", async (c) => {
+  // Arrange
+  const setup = await prepared(c, endingFlow("optional"));
+  const worker = await workerAtWork(setup.world, setup.input);
+  const navigation = subscribe(c, watchNavigation(setup.f.live));
+  await navigation.until((messages) => messages.length > 0);
+
+  // Act
+  await resultReported(setup.world, worker, { message: "https://example.test/pull/42" });
+  await endingReached(setup.world, worker.runId);
+
+  // Assert
+  const messages = await navigation.until((all) =>
+    all.some(
+      (message: NavigationLiveMessage) =>
+        message._tag === "changed" &&
+        message.upserts.some((row) => row.result?.endingName === "Shipped"),
+    ),
+  );
+  expect(messages).toContainEqual({
+    _tag: "changed",
+    upserts: expect.arrayContaining([
+      expect.objectContaining({
+        id: worker.runId,
+        result: { endingName: "Shipped", outputMissing: false },
+        flowHasEndings: true,
+      }),
+    ]),
+    removals: expect.anything(),
+  });
 });
 
 it("a later turn preserves both executions of the same worker binding", async (c) => {

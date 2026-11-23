@@ -5,14 +5,21 @@ import { prepared, preparedService } from "./support/prepared-runner.ts";
 import { unnumberedRun } from "./support/navigation.ts";
 import {
   allTurnsEnd,
+  endingFlow,
+  endingReached,
   observeFor,
   repositoryFactsObserved,
+  resultReleasedToHumanReview,
+  resultReported,
+  reviewedEndingFlow,
   twoRunsOfOneFlow,
   workerAtWork,
   workerLaunched,
   workingReported,
   workingReportedIdle,
+  worktreeBound,
   worktreeFanOutFlow,
+  worktreeReviewFlow,
 } from "./support/scenarios.ts";
 
 const repository = {
@@ -420,3 +427,93 @@ it.effect("an unreported visit first needs review after three hours without prog
     });
   }),
 );
+
+it("navigation carries the recorded ending of a Run that reached it with its output", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c, endingFlow("optional"));
+  const worker = await workerAtWork(world, input);
+  await resultReported(world, worker, { message: "https://example.test/pull/42" });
+  await endingReached(world, worker.runId);
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({
+    ok: true,
+    value: [{ result: { endingName: "Shipped", outputMissing: false }, flowHasEndings: true }],
+  });
+});
+
+it("navigation flags Output missing when an ending that required output was reached without it", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c, reviewedEndingFlow);
+  const worker = await workerAtWork(world, input);
+  await resultReported(world, worker, { message: "Ready to review." });
+  const review = await resultReleasedToHumanReview(world, worker);
+  assert((await f.answerHumanOccurrence(review.occurrence.id, { exitId: "approve" })).ok);
+  await endingReached(world, worker.runId);
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({
+    ok: true,
+    value: [{ result: { endingName: "Delivered", outputMissing: true }, flowHasEndings: true }],
+  });
+});
+
+it("navigation has no result before an ending is reached and says the Flow has endings", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c, endingFlow("optional"));
+  await workerAtWork(world, input);
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({ ok: true, value: [{ result: null, flowHasEndings: true }] });
+});
+
+it("navigation says a Flow without endings has none", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c);
+  await workerAtWork(world, input);
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({ ok: true, value: [{ result: null, flowHasEndings: false }] });
+});
+
+it("navigation carries a worktree Run's bound branch", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c, worktreeReviewFlow);
+  const worker = await worktreeBound(world, input);
+  const detail = await f.getRun(worker.runId);
+  assert(detail.ok && detail.value.workspace.mode === "worktree");
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(detail.value.workspace.branch).toStrictEqual(expect.any(String));
+  expect(navigation).toMatchObject({
+    ok: true,
+    value: [{ boundBranch: detail.value.workspace.branch }],
+  });
+});
+
+it("navigation has no bound branch for a checkout Run", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c);
+  await workerAtWork(world, input);
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({ ok: true, value: [{ boundBranch: null }] });
+});

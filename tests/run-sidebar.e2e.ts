@@ -185,7 +185,7 @@ test("snoozing a restored Run restores its group expansion and focuses the toggl
   expect((await findRun(app.baseUrl, snoozedTitle)).presentation.snoozed).toBe(true);
 });
 
-test("title search combines drafts and all Run states in creation order", async ({
+test("search combines drafts and all Run states in creation order", async ({
   app,
   screen,
   browser,
@@ -201,7 +201,7 @@ test("title search combines drafts and all Run states in creation order", async 
   const titles = await matchingSidebarTitles(app.baseUrl, "Demo ·");
 
   // Act
-  await screen.getByRole("textbox", "Search Run titles").fill("Demo ·");
+  await screen.getByRole("textbox", "Search Runs").fill("Demo ·");
 
   // Assert
   const open = screen.getByRole("navigation", "Open Runs");
@@ -214,7 +214,7 @@ test("title search combines drafts and all Run states in creation order", async 
   await app.screenshot("flat-search-muted-states");
 });
 
-test("a title search with no match explains that search looks at titles only", async ({
+test("a search with no match explains which Run fields search looks at", async ({
   app,
   screen,
   browser,
@@ -225,15 +225,47 @@ test("a title search with no match explains that search looks at titles only", a
   const query = "No Run is titled this";
 
   // Act
-  await screen.getByRole("textbox", "Search Run titles").fill(query);
+  await screen.getByRole("textbox", "Search Runs").fill(query);
 
   // Assert
   const empty = screen.getByRole("navigation", "Open Runs").getByRole("status");
-  await expect(empty).toContainText(`No Run titles match “${query}”`);
+  await expect(empty).toContainText(`No Runs match "${query}"`);
   await expect(empty).toContainText(
-    "Search looks at titles only. Clear search (Esc) to see all Runs.",
+    "Search looks at the Run number, title, Project, Flow and branch. Use #12 for one Run number.",
   );
   await app.screenshot("sidebar-search-no-match");
+});
+
+test("a chosen Project keeps the grouped list and outlasts clearing a number search", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  const { number } = await findRun(app.baseUrl, "Demo · Worktree · Search fix on its own branch");
+  await app.open("/runs/new");
+  const search = screen.getByRole("textbox", "Search Runs");
+  await screen.getByRole("combobox", "Project: All Projects").tap();
+
+  // Act
+  await screen.getByRole("option", "Atlas demo").tap();
+
+  // Assert
+  const filter = screen.getByRole("combobox", "Project: Atlas demo");
+  await expect(filter).toBeVisible();
+  await expect(screen.getByRole("button", /^Settled \d+$/)).toBeVisible();
+  await search.fill(`${number}`);
+  await expect(
+    screen.getByText(`${number} also finds branches · #${number} finds Run ${number} only`),
+  ).toBeVisible();
+  await expect(
+    screen.getByRole("navigation", "Open Runs").getByRole("link", /Search fix on its own branch/),
+  ).toBeVisible();
+  await app.screenshot("project-filter-number-search");
+  await search.press("Escape");
+  await expect(filter).toBeVisible();
+  await expect(screen.getByRole("button", /^Settled \d+$/)).toBeVisible();
 });
 
 test("restore during search keeps focus on the matching row", async ({ app, screen, browser }) => {
@@ -298,7 +330,7 @@ test("settle during search keeps focus on the matching row", async ({ app, scree
   await app.screenshot("search-settle-row-focused");
 });
 
-test("Run rows summarize independent branches and count shared PRs once", async ({
+test("Run rows name every branch search matches and count shared PRs once", async ({
   app,
   screen,
   browser,
@@ -315,7 +347,7 @@ test("Run rows summarize independent branches and count shared PRs once", async 
   await app.open("/runs/new");
 
   // Assert
-  await expect(row).toContainText("2 branches");
+  await expect(row).toContainText("review/keyboard-accessibility, review/project-picker");
   await expect(row.getByLabel("2 pull requests", { exact: true })).toBeVisible();
   await expect(screen.getByRole("button", `Actions for ${title}`)).toBeHidden();
 });
@@ -350,7 +382,7 @@ test("Run repository details retain branch ownership and PR links after reload",
   await app.screenshot("run-branches-and-pull-requests");
 });
 
-test("expanding Settled shows compact single-line rows without repository metadata", async ({
+test("expanding Settled shows muted rows with the Run meta line", async ({
   app,
   screen,
   browser,
@@ -367,10 +399,8 @@ test("expanding Settled shows compact single-line rows without repository metada
 
   // Assert
   await expect(row).toBeVisible();
-  const bounds = await row.boundingBox();
-  expect(bounds!.height).toBeLessThanOrEqual(36);
-  await expect(row).not.toContainText("copy/welcome");
-  await app.screenshot("sidebar-compact-settled");
+  await expect(row).toContainText("copy/welcome");
+  await app.screenshot("sidebar-settled-rows");
 });
 
 test("expanded Settled stays pinned below the open Runs instead of scrolling them away", async ({
@@ -382,9 +412,7 @@ test("expanded Settled stays pinned below the open Runs instead of scrolling the
   await browser.setViewport({ width: 1440, height: 700 });
   await app.open("/runs/new");
   const firstOpen = screen.getByRole("navigation", "Open Runs").getByRole("link").first();
-  const settledRow = screen
-    .getByRole("navigation", "Settled Runs")
-    .getByRole("link", /Demo · Settled · Clearer onboarding copy/);
+  const settledRow = screen.getByRole("navigation", "Settled Runs").getByRole("link").first();
 
   // Act
   await screen.getByRole("button", /^Settled \d+$/).tap();
@@ -421,7 +449,7 @@ test("on a short sidebar the pinned groups yield so an open Run stays fully visi
   await app.screenshot("sidebar-short-pinned-groups");
 });
 
-test("the Settled preview exposes repository details omitted from its compact row", async ({
+test("the Settled preview exposes the pull request details its row omits", async ({
   app,
   screen,
   browser,
@@ -717,7 +745,7 @@ test("Needs you lists exactly the Runs the Dock badge counts and clears a confli
 }) => {
   // Arrange
   await openDesktopWindow({ app, screen, browser });
-  await screen.getByRole("textbox", "Search Run titles").fill("Demo · Settled");
+  await screen.getByRole("textbox", "Search Runs").fill("Demo · Settled");
   const titles = await badgeRunTitles(app.baseUrl);
   expect(titles).toContain("Demo · Problem · Search checks failed");
   expect(titles).not.toContain(snoozedTitle);
@@ -726,7 +754,7 @@ test("Needs you lists exactly the Runs the Dock badge counts and clears a confli
   await routeWindow(browser, { kind: "needs-you" });
 
   // Assert
-  await expect(screen.getByRole("textbox", "Search Run titles")).toHaveValue("");
+  await expect(screen.getByRole("textbox", "Search Runs")).toHaveValue("");
   await expect(screen.getByRole("button", `Needs you (${titles.length})`)).toHaveAttribute(
     "aria-pressed",
     "true",

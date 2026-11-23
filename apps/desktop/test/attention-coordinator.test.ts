@@ -143,6 +143,9 @@ function run(
     flowName: "Flow",
     origin: null,
     repositories: [],
+    boundBranch: null,
+    result: null,
+    flowHasEndings: false,
     creationKey: id,
     project: {
       id: "project",

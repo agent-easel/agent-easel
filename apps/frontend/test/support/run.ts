@@ -141,6 +141,9 @@ export function runEntry(): RunNavigationEntry {
     flowName: "Flow",
     origin: null,
     repositories: [],
+    boundBranch: null,
+    result: null,
+    flowHasEndings: false,
     project: {
       id: "project",
       title: "Project",

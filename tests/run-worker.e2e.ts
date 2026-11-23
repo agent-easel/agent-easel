@@ -251,7 +251,7 @@ test("a Draft opened by keyboard from a focused prompt with the same text contin
   await screen.getByRole("button", "New Run (+)").tap();
   await prompt.fill(text);
   // Runs that need you lead the open list, so the search leaves only the two Drafts as rows.
-  await screen.getByRole("textbox", "Search Run titles").fill(text);
+  await screen.getByRole("textbox", "Search Runs").fill(text);
   await prompt.tap();
   await browser.keyboard.press("Home");
   await browser.keyboard.press(`${shortcutMod}+1`);
@@ -983,7 +983,7 @@ test("a Settle that finishes stopping later leaves focus where the user moved it
   // Arrange
   const { id } = await prepareScenario(app, "wait-continued");
   await confirmSettleStillStopping({ app, screen, browser }, id);
-  const search = screen.getByRole("textbox", "Search Run titles", { exact: true });
+  const search = screen.getByRole("textbox", "Search Runs", { exact: true });
   await search.focus();
 
   // Act
@@ -1002,7 +1002,7 @@ test("a Settle that finishes stopping later leaves focus on the page after the u
   // Arrange
   const id = await liveRun(app, "settle-left-row");
   const row = await confirmSettleStillStopping({ app, screen, browser }, id);
-  const search = screen.getByRole("textbox", "Search Run titles", { exact: true });
+  const search = screen.getByRole("textbox", "Search Runs", { exact: true });
   await search.focus();
   await expect(search).toBeFocused();
   // Focus falls to the page, as when the user clicks content outside any focusable container.
