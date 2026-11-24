@@ -65,7 +65,7 @@ can set `FACTORY_TELEMETRY_ENABLED=false` before starting the host to force shar
 preserving the saved preference.
 
 The AgentEasel backend sends allowlisted product metrics to PostHog Cloud EU through
-`t3factory.app/ingest`. The metadata includes AgentEasel version, release channel, operating system,
+`agenteasel.app/ingest`. The metadata includes AgentEasel version, release channel, operating system,
 architecture, runtime mode and bucketed feature counts. The event catalog limits what can be
 recorded about setup and connections, Runs and definitions, automation and Chat control, client
 access, updates and specific feature actions. Prompts, code, file paths, user-defined names,

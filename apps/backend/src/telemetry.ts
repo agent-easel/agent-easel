@@ -207,7 +207,7 @@ export function telemetryBuiltInDriver(value: unknown): typeof builtInDriver.Typ
   return Option.getOrUndefined(Schema.decodeUnknownOption(builtInDriver)(value));
 }
 
-const defaultHost = "https://t3factory.app/ingest";
+const defaultHost = "https://agenteasel.app/ingest";
 const flushInterval = 10_000;
 const sendTimeout = 10_000;
 const retryWindow = 30 * 60_000;

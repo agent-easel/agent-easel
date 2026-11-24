@@ -11,6 +11,14 @@
       "**": false
     }
   },
+  "redirects": [
+    {
+      "source": "/:path((?!ingest(?:/|$)).*)",
+      "has": [{ "type": "host", "value": "t3factory.app" }],
+      "destination": "https://agenteasel.app/:path",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/ingest/static/:path*",
