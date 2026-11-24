@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing draft release tag to rebuild and publish (vX.Y.Z)
+        description: Existing draft release tag to rebuild (vX.Y.Z)
         required: true
         type: string
 
@@ -78,13 +78,17 @@ jobs:
             echo "::error::$tag is already published; published releases are never rebuilt or replaced."
             exit 1
           fi
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
-          if [[ "$(jq -r '.[0].target' <<<"$releases")" != "$sha" ]]; then
-            echo "::error::The $tag draft does not target the tagged commit $sha."
+          sha=$(jq -r '.[0].target' <<<"$releases")
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The $tag draft must target a commit SHA, not '$sha'."
             exit 1
           fi
           if [[ -n "$CUT_SHA" && "$CUT_SHA" != "$sha" ]]; then
-            echo "::error::$tag points to $sha, not the release commit $CUT_SHA."
+            echo "::error::The $tag draft targets $sha, not the release commit $CUT_SHA."
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --silent 2>/dev/null; then
+            echo "::error::Tag $tag already exists; a draft release stays untagged until it is published."
             exit 1
           fi
           {
@@ -193,7 +197,7 @@ jobs:
             exit 1
           fi
           test "$(jq -r '.[0].target' <<<"$release")" = "$RELEASE_SHA"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)" = "$RELEASE_SHA"
+          ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent 2>/dev/null
           echo "RELEASE_ID=$(jq -r '.[0].id' <<<"$release")" >> "$GITHUB_ENV"
       - name: Upload the complete asset set
         run: |
@@ -234,15 +238,14 @@ jobs:
           fi
           printf '%s\n\n---\n\n%s\n' "$body" "$statement" > release-body.md
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-body.md
-      - name: Publish
+      - name: Leave the verified draft for manual publication
         run: |
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
-          test "$(jq -r .draft <<<"$release")" = false
+          test "$(jq -r .draft <<<"$release")" = true
           test "$(jq -r .tag_name <<<"$release")" = "$RELEASE_TAG"
-          jq -r '.assets[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' <<<"$release" | sort -k2 > published.txt
-          diff -u local.txt published.txt
-          jq -r '"Published release: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.assets[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' <<<"$release" | sort -k2 > drafted.txt
+          diff -u local.txt drafted.txt
+          jq -r '"Verified draft release, to be published by the maintainer: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
 
   landing:
     name: Deploy landing page to Vercel

@@ -70,7 +70,6 @@ try {
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   ) as {
     readonly factoryBuild?: { readonly channel: "release" | "beta" | "development" };
-    readonly factoryPosthogPublicKey?: string;
   };
   const channel =
     process.env.FACTORY_DESKTOP_PACKAGED === "true" ? manifest.factoryBuild?.channel : undefined;
@@ -80,17 +79,7 @@ try {
     uiDirectory: process.env.FACTORY_UI_DIRECTORY ?? null,
     applicationVersion: process.env.FACTORY_APPLICATION_VERSION ?? "desktop",
     applicationUpdates: hostUpdates(),
-    telemetry: {
-      serverMode: "desktop",
-      ...(channel === "release"
-        ? { packagedChannel: "stable" }
-        : channel === "beta"
-          ? { packagedChannel: "beta" }
-          : {}),
-      ...(channel && manifest.factoryPosthogPublicKey
-        ? { packagedKey: manifest.factoryPosthogPublicKey }
-        : {}),
-    },
+    telemetry: { serverMode: "desktop" },
   });
   parent.postMessage({ type: "ready", port: server.address.port, home: config.home });
   parent.on("message", (event: { data: Message }) => {
