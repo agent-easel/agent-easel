@@ -21,7 +21,6 @@ import { KeyboardSettings } from "./keyboard-settings.tsx";
 import { AccessSettings, DeviceAccessProvider, usePendingDeviceCount } from "./access-settings.tsx";
 import { AppearanceSettings } from "./appearance-settings.tsx";
 import { DesktopAppSettings } from "./desktop-app-settings.tsx";
-import { PrivacySettings } from "./privacy-settings.tsx";
 import { RunImageSettings } from "./run-image-settings.tsx";
 import { RunTitleSettings } from "./run-title-settings.tsx";
 import { ChatModelSettings } from "./chat-model-settings.tsx";
@@ -110,15 +109,6 @@ const settingsSections: readonly SettingsSection[] = [
     group: "factory",
     visibility: "host",
     content: () => <AccessSettings />,
-  },
-  {
-    tab: "privacy",
-    rowLabels: ["Product analytics", "Share anonymous usage data", "What’s sent"],
-    label: "Privacy",
-    icon: Lock,
-    group: "factory",
-    managedOnHost: true,
-    content: () => <PrivacySettings />,
   },
   {
     tab: "chat-model",

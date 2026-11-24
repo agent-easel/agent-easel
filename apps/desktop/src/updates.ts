@@ -1,36 +1,11 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { app } from "electron";
-import electronUpdater, { type VerifyUpdateSupport } from "electron-updater";
+import electronUpdater from "electron-updater";
 import type { ApplicationUpdate, UpdateChannel } from "@t3-factory/contracts";
-
-const checkEveryMs = 3600_000;
 
 /** The track an installation follows until its user chooses one: the track of its own build. */
 export const buildChannel = (): UpdateChannel =>
   app.getVersion().includes("-beta.") ? "beta" : "stable";
 
-/**
- * Notes of every version between the installed one and the update, newest first. Stable skips
- * beta builds: the Release notes already cover their changes.
- */
-function changelog(
-  notes: Parameters<VerifyUpdateSupport>[0]["releaseNotes"],
-  channel: UpdateChannel,
-): string | null {
-  if (!Array.isArray(notes)) return typeof notes === "string" ? notes : null;
-  const entries = notes
-    .filter((entry) => channel === "beta" || !entry.version.includes("-"))
-    .map(
-      (entry) => `<h3>${entry.version}</h3><div>${entry.note?.trim() || "No release notes."}</div>`,
-    );
-  return entries.length ? entries.join("") : null;
-}
-
-/**
- * GitHub Releases (or the configured feed) through electron-updater: automatic checks,
- * explicit downloads, installation only through `install()`. A Quit never installs an update.
- */
 export class Updates {
   private status: ApplicationUpdate = {
     state: "idle",
@@ -56,65 +31,11 @@ export class Updates {
     this.changed(this.status);
   }
 
-  /** Development runs and builds without a configured feed report updates as unsupported. */
-  start(channel: UpdateChannel) {
-    if (app.getVersion().includes("+dev.")) {
-      this.set({
-        state: "unsupported",
-        message: "Local development build. Install another local package to update it.",
-      });
-      return;
-    }
-    if (!app.isPackaged || !existsSync(join(process.resourcesPath, "app-update.yml"))) {
-      this.set({
-        state: "unsupported",
-        message: "This build has no release feed; install a released package to receive updates.",
-      });
-      return;
-    }
-    this.updater.autoDownload = false;
-    this.updater.autoInstallOnAppQuit = false;
-    this.updater.fullChangelog = true;
-    this.apply(channel);
-    this.updater.on("checking-for-update", () => this.set({ state: "checking", message: null }));
-    this.updater.on("update-not-available", () =>
-      this.set({
-        state: "idle",
-        version: null,
-        progress: null,
-        releaseNotes: null,
-        checkedAt: new Date().toISOString(),
-      }),
-    );
-    this.updater.on("update-available", (info) =>
-      this.set({
-        state: "available",
-        checkedAt: new Date().toISOString(),
-        version: info.version,
-        progress: 0,
-        releaseNotes: changelog(info.releaseNotes, this.channel ?? "stable"),
-      }),
-    );
-    this.updater.on("download-progress", (progress) =>
-      this.set({
-        state: "downloading",
-        progress: progress.percent,
-        downloadedBytes: progress.transferred,
-        totalBytes: progress.total,
-      }),
-    );
-    this.updater.on("update-downloaded", (info) =>
-      this.set({ state: "downloaded", version: info.version, progress: 100 }),
-    );
-    this.updater.on("error", (error) =>
-      this.set({
-        state: "error",
-        progress: null,
-        message: `${error.message.split("\n")[0]} Your data and role are unchanged.`,
-      }),
-    );
-    void this.check();
-    setInterval(() => void this.check(), checkEveryMs).unref();
+  start() {
+    this.set({
+      state: "unsupported",
+      message: "T3 Factory receives no more updates. Download AgentEasel to keep updating.",
+    });
   }
 
   /**

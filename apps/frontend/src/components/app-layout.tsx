@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "@tanstack/react-router";
 import { RunSidebar } from "./run-sidebar.tsx";
 import { RunActionsHost } from "./run-actions.tsx";
 import { SidebarFooter } from "./sidebar-footer.tsx";
+import { AgentEaselNotice } from "./agenteasel-notice.tsx";
 import { SettingsModal } from "./settings-modal.tsx";
 import { Page, PageHeader } from "./page.tsx";
 import { StudioModal } from "./studio-modal.tsx";
@@ -29,6 +30,7 @@ function AppShell() {
       <aside className="@container/sidebar relative flex w-[var(--factory-sidebar-width,17.5rem)] max-w-[50vw] shrink-0 flex-col min-h-0 border-r bg-sidebar min-[1280px]:w-[var(--factory-sidebar-width,18.75rem)] max-sm:w-[var(--factory-sidebar-width,14rem)]">
         <DesktopTitlebar />
         <RunSidebar path={path} />
+        <AgentEaselNotice />
         <SidebarFooter />
         <PanelResizeHandle label="Resize sidebar" side="right" bounds={sidebarBounds} />
       </aside>

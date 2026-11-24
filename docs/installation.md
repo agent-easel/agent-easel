@@ -42,7 +42,7 @@ and the non-secret [Chat control](chat-control.md) configuration, live in `facto
 | `FACTORY_PORT` | `config.json` port | 0–65535; 0 picks a free port, printed at startup |
 | `FACTORY_REMOTE_ACCESS` | `remoteAccess.enabled` (off) | `1` starts the approved-client HTTPS listener for this process |
 | `FACTORY_REMOTE_HOST` / `FACTORY_REMOTE_PORT` | `0.0.0.0` / 4312 | Approved-client listener binding; port 0 picks one |
-| `FACTORY_TELEMETRY_ENABLED` | Release and Beta builds on, development, demo and tests off | `false` forces analytics off. `true` makes analytics available in source runs with an ingest token. A saved opt-out still applies. |
+| `FACTORY_TELEMETRY_ENABLED` | Off | `false` forces analytics off. `true` makes analytics available in source runs with an ingest token (`FACTORY_POSTHOG_KEY`). A saved opt-out still applies. |
 | `FACTORY_T3_STATE_DIRECTORY` | `~/.t3/userdata` | T3's state directory; steers both [agent reporting discovery](t3-integration.md#reporting-installation) and [T3 address detection](t3-integration.md#first-run-setup) |
 
 Every request, including UI assets, must use the bound port and an allowed Host: loopback bindings accept `localhost`, `127.0.0.1` and `[::1]`; other bindings accept IP literals and listed DNS names
@@ -57,14 +57,14 @@ This listener is the **host-local** surface: it answers only requests whose sock
 
 ## Product analytics and privacy
 
-In **Settings → Privacy**, use **Share anonymous usage data** to change the Factory host’s
-`telemetryEnabled` preference in `config.json`. Turning it off discards queued events, cancels
-delivery in progress and stops future collection immediately. Turning it back on resumes
-collection for new events. Approved remote clients can read the effective setting. Operators
-can set `FACTORY_TELEMETRY_ENABLED=false` before starting the host to force sharing off while
-preserving the saved preference.
+The final T3 Factory release sends no product analytics: the desktop app embeds no ingest token and
+starts its backend without a packaged channel, and Settings has no Privacy section. Earlier Release
+and Beta builds shared anonymous usage data unless their user turned off **Settings → Privacy →
+Share anonymous usage data**. A source run can still enable delivery for development with
+`FACTORY_TELEMETRY_ENABLED=true` and `FACTORY_POSTHOG_KEY`; the `telemetryEnabled` preference in
+`config.json` and `FACTORY_TELEMETRY_ENABLED=false` still turn it off.
 
-The Factory backend sends allowlisted product metrics to PostHog Cloud EU through
+When enabled, the Factory backend sends allowlisted product metrics to PostHog Cloud EU through
 `t3factory.app/ingest`. The metadata includes Factory version, release channel, operating system,
 architecture, runtime mode and bucketed feature counts. The event catalog limits what can be
 recorded about setup and connections, Runs and definitions, automation and Chat control, client
