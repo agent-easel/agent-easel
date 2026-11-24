@@ -5,7 +5,8 @@ import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const migrated = {
   migratedAt: "2026-11-24T10:00:00.000Z",
-  home: "absent" as const,
+  home: "copied" as const,
+  profile: "copied" as const,
   launchAtLogin: true,
   remoteServer: true,
   summaryPending: true,

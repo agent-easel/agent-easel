@@ -64,7 +64,9 @@ import {
   postponeRemovalReminder,
   previousInstallation,
   removalReminderDue,
+  removalDetail,
   removePreviousInstallation,
+  skipPreviousInstallation,
 } from "./previous-installation.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
@@ -923,22 +925,38 @@ async function migrateAtFirstLaunch(): Promise<boolean> {
   const paths = previousInstallationPaths();
   if (!paths) return true;
   for (;;) {
-    const problem = await migratePreviousInstallation(paths, () =>
+    const attempt = await migratePreviousInstallation(paths, () =>
       app.setLoginItemSettings({ openAtLogin: true }),
     ).then(
-      (outcome) => (outcome.kind === "refused" ? outcome.reason : null),
-      (error: unknown) => `${migrationText.failed}\n\n${String(error)}`,
+      (outcome) => outcome,
+      (error: unknown) => ({ kind: "failed" as const, error }),
     );
-    if (problem === null) return true;
+    if (attempt.kind === "none" || attempt.kind === "migrated") return true;
+    if (attempt.kind === "refused") {
+      const { response } = await dialog.showMessageBox({
+        type: "warning",
+        buttons: ["Retry", "Quit"],
+        defaultId: 0,
+        cancelId: 1,
+        message: migrationText.migrating,
+        detail: attempt.reason,
+      });
+      if (response === 1) return false;
+      continue;
+    }
     const { response } = await dialog.showMessageBox({
-      type: "warning",
-      buttons: ["Retry", "Quit"],
+      type: "error",
+      buttons: ["Retry", "Start Without Migrating", "Quit"],
       defaultId: 0,
-      cancelId: 1,
+      cancelId: 2,
       message: migrationText.migrating,
-      detail: problem,
+      detail: `${migrationText.failed}\n\n${String(attempt.error)}`,
     });
-    if (response === 1) return false;
+    if (response === 2) return false;
+    if (response === 1) {
+      await skipPreviousInstallation(paths, new Date());
+      return true;
+    }
   }
 }
 
@@ -951,7 +969,7 @@ async function confirmPreviousInstallationRemoval(): Promise<DesktopResult> {
     defaultId: 1,
     cancelId: 1,
     message: migrationText.removeQuestion,
-    detail: migrationText.removeDetail,
+    detail: removalDetail(previous),
   };
   const { response } = window
     ? await dialog.showMessageBox(window, options)

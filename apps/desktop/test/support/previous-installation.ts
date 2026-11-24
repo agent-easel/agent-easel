@@ -133,3 +133,8 @@ export async function runUnrelatedElectronApp(
   await new Promise((resolve) => child.once("spawn", resolve));
   return child.pid!;
 }
+
+export async function writeMigrationRecord(newUserData: string, record: Record<string, unknown>) {
+  await mkdir(newUserData, { recursive: true });
+  await writeFile(join(newUserData, "previous-installation.json"), JSON.stringify(record));
+}

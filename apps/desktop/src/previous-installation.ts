@@ -43,11 +43,15 @@ export function defaultPreviousInstallationPaths(
 export const migrationText = {
   migrating: "AgentEasel is bringing over your T3 Factory data",
   failed:
-    "AgentEasel could not bring over your T3 Factory data. Your T3 Factory data was not changed, and Retry starts the copy again.",
+    "AgentEasel could not copy your T3 Factory data. Your T3 Factory data was not changed. Retry copies it again; Start Without Migrating opens AgentEasel with its own empty data and leaves T3 Factory as it is.",
   nothingToRemove: "There is no previous T3 Factory data.",
   removeQuestion: "Move your previous T3 Factory data to the Trash?",
-  removeDetail:
-    "AgentEasel already has a copy of everything. This moves the T3 Factory data home and desktop settings to the Trash; T3 Factory keeps refusing to start its server.",
+  removeDetail: {
+    both: "AgentEasel has its own copy of both. This moves the T3 Factory data home (~/.t3-factory) and desktop settings to the Trash; T3 Factory keeps refusing to start its server.",
+    profile:
+      "This moves only T3 Factory's desktop settings, which AgentEasel copied, to the Trash. The T3 Factory data home (~/.t3-factory) was not copied into AgentEasel and stays where it is.",
+    home: "This moves only the T3 Factory data home (~/.t3-factory), which AgentEasel copied, to the Trash. T3 Factory's desktop settings were not copied and stay where they are.",
+  },
   reminder: "Your previous T3 Factory data is still on this Mac",
   removalFailed: "Your previous T3 Factory data was not moved to the Trash",
   reminderDetail:
@@ -55,11 +59,12 @@ export const migrationText = {
 };
 
 type HomeOutcome = PreviousInstallation["home"];
+type ProfileOutcome = PreviousInstallation["profile"];
 
 interface MigrationRecord {
   readonly version: 1;
-  readonly home?: HomeOutcome;
-  readonly userData?: "copied" | "kept-existing" | "absent";
+  readonly home?: HomeOutcome | "copying";
+  readonly userData?: ProfileOutcome;
   readonly launchAtLogin?: boolean;
   readonly remoteServer?: boolean;
   readonly completedAt?: string;
@@ -161,9 +166,33 @@ const homeSkipped = new Set([
   tombstoneName,
 ]);
 
-async function migrateHome(oldHome: string, newHome: string): Promise<HomeOutcome> {
-  if (existsSync(newHome)) return "kept-existing";
-  const staging = `${newHome}.migrating`;
+const stagingHome = (newHome: string) => `${newHome}.migrating`;
+
+async function verifiedDatabaseCopy(oldHome: string, staging: string) {
+  const scratch = join(staging, ".source");
+  await mkdir(scratch);
+  for (const suffix of ["", "-wal"])
+    if (existsSync(join(oldHome, databaseName + suffix)))
+      await cp(join(oldHome, databaseName + suffix), join(scratch, databaseName + suffix));
+  const source = new DatabaseSync(join(scratch, databaseName));
+  try {
+    await backup(source, join(staging, databaseName));
+  } finally {
+    source.close();
+  }
+  await rm(scratch, { recursive: true });
+  const copy = new DatabaseSync(join(staging, databaseName), { readOnly: true });
+  try {
+    const rows = copy.prepare("PRAGMA integrity_check").all();
+    if (rows.length !== 1 || rows[0]?.integrity_check !== "ok")
+      throw new Error(`The copied database failed its integrity check: ${JSON.stringify(rows)}`);
+  } finally {
+    copy.close();
+  }
+}
+
+async function copyHome(oldHome: string, newHome: string): Promise<"copied"> {
+  const staging = stagingHome(newHome);
   await rm(staging, { recursive: true, force: true });
   await cp(oldHome, staging, {
     recursive: true,
@@ -171,25 +200,25 @@ async function migrateHome(oldHome: string, newHome: string): Promise<HomeOutcom
     preserveTimestamps: true,
     filter: (source) => !homeSkipped.has(relative(oldHome, source)),
   });
-  const database = join(oldHome, databaseName);
-  if (existsSync(database)) {
-    const source = new DatabaseSync(database, { readOnly: true });
-    try {
-      await backup(source, join(staging, databaseName));
-    } finally {
-      source.close();
-    }
-    const copy = new DatabaseSync(join(staging, databaseName), { readOnly: true });
-    try {
-      const rows = copy.prepare("PRAGMA integrity_check").all();
-      if (rows.length !== 1 || rows[0]?.integrity_check !== "ok")
-        throw new Error(`The copied database failed its integrity check: ${JSON.stringify(rows)}`);
-    } finally {
-      copy.close();
-    }
-  }
+  if (existsSync(join(oldHome, databaseName))) await verifiedDatabaseCopy(oldHome, staging);
   await rename(staging, newHome);
   return "copied";
+}
+
+async function migrateHome(
+  paths: PreviousInstallationPaths,
+  recorded: MigrationRecord["home"],
+): Promise<HomeOutcome> {
+  if (!paths.oldHome || !existsSync(paths.oldHome)) return "absent";
+  const interrupted = recorded === "copying";
+  const stagingLeft = existsSync(stagingHome(paths.newHome));
+  if (existsSync(paths.newHome)) {
+    if (interrupted && !stagingLeft) return "copied";
+    await rm(stagingHome(paths.newHome), { recursive: true, force: true });
+    return "kept-existing";
+  }
+  await updateRecord(paths, { home: "copying" });
+  return copyHome(paths.oldHome, paths.newHome);
 }
 
 interface OldSettings {
@@ -199,7 +228,7 @@ interface OldSettings {
 
 async function migrateUserData(
   paths: PreviousInstallationPaths,
-): Promise<{ outcome: "copied" | "kept-existing" | "absent"; settings: OldSettings }> {
+): Promise<{ outcome: ProfileOutcome; settings: OldSettings }> {
   const none = { launchAtLogin: false, remoteServer: false };
   if (!existsSync(paths.oldUserData)) return { outcome: "absent", settings: none };
   const newSettings = join(paths.newUserData, settingsName);
@@ -270,12 +299,8 @@ export async function migratePreviousInstallation(
   if (!existing && !hasPreviousInstallation(paths)) return { kind: "none" };
   const refused = await whileOldInstallationStopped(paths, async () => {
     let record = existing ?? { version: 1 as const };
-    if (!record.home) {
-      const home =
-        paths.oldHome && existsSync(paths.oldHome)
-          ? await migrateHome(paths.oldHome, paths.newHome)
-          : "absent";
-      record = await updateRecord(paths, { home });
+    if (!record.home || record.home === "copying") {
+      record = await updateRecord(paths, { home: await migrateHome(paths, record.home) });
     }
     if (!record.userData) {
       const { outcome, settings } = await migrateUserData(paths);
@@ -294,6 +319,14 @@ export async function migratePreviousInstallation(
   return refused ? { kind: "refused", reason: refused.refused } : { kind: "migrated" };
 }
 
+const removableData = (paths: PreviousInstallationPaths, record: MigrationRecord) =>
+  record.oldDataRemovedAt !== undefined
+    ? []
+    : [
+        record.home === "copied" ? paths.oldHome : null,
+        record.userData === "copied" ? paths.oldUserData : null,
+      ].filter((directory): directory is string => directory !== null && existsSync(directory));
+
 export async function previousInstallation(
   paths: PreviousInstallationPaths,
 ): Promise<PreviousInstallation | null> {
@@ -301,12 +334,29 @@ export async function previousInstallation(
   if (!record?.completedAt) return null;
   return {
     migratedAt: record.completedAt,
-    home: record.home ?? "absent",
+    home: record.home === "copying" || record.home === undefined ? "absent" : record.home,
+    profile: record.userData ?? "absent",
     launchAtLogin: record.launchAtLogin === true,
     remoteServer: record.remoteServer === true,
     summaryPending: record.summarySeen !== true,
-    oldDataPresent: record.oldDataRemovedAt === undefined && hasPreviousInstallation(paths),
+    oldDataPresent: removableData(paths, record).length > 0,
   };
+}
+
+export function removalDetail(previous: PreviousInstallation): string {
+  if (previous.home !== "copied") return migrationText.removeDetail.profile;
+  return previous.profile === "copied"
+    ? migrationText.removeDetail.both
+    : migrationText.removeDetail.home;
+}
+
+export async function skipPreviousInstallation(paths: PreviousInstallationPaths, now: Date) {
+  const record = await readRecord(paths);
+  await rm(stagingHome(paths.newHome), { recursive: true, force: true });
+  const home = record?.home === "copied" ? "copied" : "skipped";
+  const userData = record?.userData === "copied" ? "copied" : "skipped";
+  if (home === "copied" || userData === "copied") await writeTombstones(paths, now.toISOString());
+  await updateRecord(paths, { home, userData, completedAt: now.toISOString(), summarySeen: true });
 }
 
 export async function dismissMigrationSummary(paths: PreviousInstallationPaths): Promise<void> {
@@ -320,8 +370,7 @@ export async function removalReminderDue(
   const record = await readRecord(paths);
   return (
     record?.remindAfter !== undefined &&
-    record.oldDataRemovedAt === undefined &&
-    hasPreviousInstallation(paths) &&
+    removableData(paths, record).length > 0 &&
     now.getTime() >= Date.parse(record.remindAfter)
   );
 }
@@ -339,10 +388,10 @@ export async function removePreviousInstallation(
 ): Promise<{ readonly refused: string } | null> {
   const record = await readRecord(paths);
   const completedAt = record?.completedAt;
-  if (!completedAt) return { refused: "AgentEasel has not migrated a T3 Factory installation." };
+  if (!record || !completedAt)
+    return { refused: "AgentEasel has not migrated a T3 Factory installation." };
   return whileOldInstallationStopped(paths, async () => {
-    for (const directory of [paths.oldHome, paths.oldUserData])
-      if (directory && existsSync(directory)) await trash(directory);
+    for (const directory of removableData(paths, record)) await trash(directory);
     await mkdir(paths.oldUserData, { recursive: true, mode: 0o700 });
     await writeTombstones(paths, completedAt);
     await updateRecord(paths, { oldDataRemovedAt: now.toISOString() });

@@ -7,6 +7,7 @@ import {
   previousInstallation,
   removalReminderDue,
   removePreviousInstallation,
+  skipPreviousInstallation,
   tombstoneName,
 } from "../src/previous-installation.ts";
 import {
@@ -23,6 +24,7 @@ import {
   seedServerHome,
   serverSettings,
   snapshot,
+  writeMigrationRecord,
 } from "./support/previous-installation.ts";
 
 const migratedAt = new Date("2026-11-24T10:00:00.000Z");
@@ -83,6 +85,7 @@ it("a server installation arrives in AgentEasel with its data, settings and draf
   expect(await previousInstallation(paths)).toEqual({
     migratedAt: migratedAt.toISOString(),
     home: "copied",
+    profile: "copied",
     launchAtLogin: true,
     remoteServer: false,
     summaryPending: true,
@@ -210,4 +213,77 @@ it("removing the previous data after the 30-day reminder keeps T3 Factory tombst
   expect(rows(join(paths.newHome, "factory.sqlite"), "SELECT count(*) AS runs FROM runs")).toEqual([
     { runs: 1 },
   ]);
+});
+
+it("an existing AgentEasel data home is kept and removal never trashes the T3 Factory home it did not copy", async (context) => {
+  // Arrange
+  const { paths } = await disposableInstallation(context.onTestFinished);
+  const database = await seedServerHome(paths.oldHome!);
+  database.close();
+  await seedDesktopProfile(paths.oldUserData, serverSettings);
+  await mkdir(paths.newHome, { recursive: true });
+  await migratePreviousInstallation(paths, vi.fn(), () => migratedAt);
+  const moveToTrash = vi.fn(async (_path: string) => undefined);
+
+  // Act
+  const refused = await removePreviousInstallation(paths, moveToTrash, new Date());
+
+  // Assert
+  expect(refused).toBeNull();
+  expect(moveToTrash.mock.calls).toEqual([[paths.oldUserData]]);
+  expect(
+    rows(join(paths.oldHome!, "factory.sqlite"), "SELECT count(*) AS flows FROM flows"),
+  ).toEqual([{ flows: 2 }]);
+  expect(await readdir(paths.newHome)).toEqual([]);
+  expect(await previousInstallation(paths)).toMatchObject({
+    home: "kept-existing",
+    oldDataPresent: false,
+  });
+});
+
+it("a migration interrupted right after its data home was renamed into place reports the home as copied", async (context) => {
+  // Arrange
+  const { paths } = await disposableInstallation(context.onTestFinished);
+  const database = await seedServerHome(paths.oldHome!);
+  database.close();
+  await seedDesktopProfile(paths.oldUserData, serverSettings);
+  await mkdir(paths.newHome, { recursive: true });
+  await writeMigrationRecord(paths.newUserData, { version: 1, home: "copying" });
+
+  // Act
+  const outcome = await migratePreviousInstallation(paths, vi.fn(), () => migratedAt);
+
+  // Assert
+  expect(outcome).toEqual({ kind: "migrated" });
+  expect(await previousInstallation(paths)).toMatchObject({ home: "copied", oldDataPresent: true });
+});
+
+it("after a copy failure the user can start without migrating, leaving T3 Factory working and untouched", async (context) => {
+  // Arrange
+  const { paths } = await disposableInstallation(context.onTestFinished);
+  const database = await seedServerHome(paths.oldHome!);
+  database.close();
+  await seedDesktopProfile(paths.oldUserData, serverSettings);
+  const unreadable = join(paths.oldHome!, "images", "run-1", "screen.png");
+  await chmod(unreadable, 0o000);
+  context.onTestFinished(() => chmod(unreadable, 0o644));
+  await expect(migratePreviousInstallation(paths, vi.fn(), () => migratedAt)).rejects.toThrow();
+
+  // Act
+  await skipPreviousInstallation(paths, migratedAt);
+
+  // Assert
+  expect(await exists(`${paths.newHome}.migrating`)).toBe(false);
+  expect(await exists(paths.newHome)).toBe(false);
+  expect(await exists(join(paths.oldHome!, tombstoneName))).toBe(false);
+  expect(await exists(join(paths.oldUserData, tombstoneName))).toBe(false);
+  expect(await migratePreviousInstallation(paths, vi.fn(), () => migratedAt)).toEqual({
+    kind: "migrated",
+  });
+  expect(await previousInstallation(paths)).toMatchObject({
+    home: "skipped",
+    profile: "skipped",
+    summaryPending: false,
+    oldDataPresent: false,
+  });
 });

@@ -50,7 +50,8 @@ export type DesktopRoute =
 
 export interface PreviousInstallation {
   readonly migratedAt: string;
-  readonly home: "copied" | "kept-existing" | "absent";
+  readonly home: "copied" | "kept-existing" | "absent" | "skipped";
+  readonly profile: "copied" | "kept-existing" | "absent" | "skipped";
   readonly launchAtLogin: boolean;
   readonly remoteServer: boolean;
   readonly summaryPending: boolean;
