@@ -134,7 +134,7 @@ home. You invoke the optional skills yourself, by name, in a harness session; wo
 do not need them and neither runs on its own.
 
 - `factory-start-run` starts a Run with Factory. It resolves the conversation's
-  Project, offers the global Flows and that Project's Flows, reviews the exact prompt and asks for explicit
+  Project, offers the global Flows and that Project's Flows, reviews the exact prompt (labelled agent-composed when it was written from the conversation), title and ordered images and asks for explicit
   confirmation before it calls [`factory_start_run`](t3-integration.md#run-start-tools);
   that confirmation is the skill's instruction, not a server check. While
   **Generate Run titles** is on, its review adds one line saying the title may be
