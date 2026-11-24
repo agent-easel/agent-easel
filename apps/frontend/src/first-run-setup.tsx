@@ -223,7 +223,7 @@ function InstallStepHeader({
         detail={
           // Reporting is installed without the optional skills when their copies are missing or old.
           listed.every((target) => target.launchSkill === "current")
-            ? "factory-runtime MCP · $factory-block · factory-start-run · setup-factory"
+            ? "factory-runtime MCP · $factory-block · factory-start-run · setup-factory · factory-configure"
             : "factory-runtime MCP · $factory-block"
         }
       />
@@ -471,6 +471,10 @@ function HarnessInstall({
               <li>
                 <code className="font-mono text-label">setup-factory</code> skill · optional: set up
                 a repository’s tracker labels for Factory.
+              </li>
+              <li>
+                <code className="font-mono text-label">factory-configure</code> skill · optional:
+                change Agents, Flows and Triggers from an agent conversation.
               </li>
             </ul>
           </Disclosure>

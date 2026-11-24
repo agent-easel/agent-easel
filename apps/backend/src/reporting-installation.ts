@@ -11,6 +11,7 @@ import { isDeepStrictEqual } from "node:util";
 import { parse } from "smol-toml";
 import type { ReportingInstallation, Result, T3Connection } from "@t3-factory/contracts";
 import { FACTORY_BLOCK_SKILL } from "./factory-block-skill.ts";
+import { FACTORY_CONFIGURE_SKILL } from "./factory-configure-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "./factory-start-run-skill.ts";
 import { SETUP_FACTORY_SKILL } from "./setup-factory-skill.ts";
 import { discoverReporting, record } from "./reporting-discovery.ts";
@@ -128,6 +129,7 @@ async function skillMatches(path: string) {
 const OPTIONAL_SKILLS: readonly { name: string; text: string }[] = [
   { name: "factory-start-run", text: FACTORY_START_RUN_SKILL },
   { name: "setup-factory", text: SETUP_FACTORY_SKILL },
+  { name: "factory-configure", text: FACTORY_CONFIGURE_SKILL },
 ];
 type OptionalSkillCopy = { name: string; text: string; path: string };
 type OptionalSkillInspection = {

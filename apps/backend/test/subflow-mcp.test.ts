@@ -93,3 +93,20 @@ it("a Flow created over MCP for one clone that places the other clone's Flow is 
     next: "A Flow places only global Flows and Flows of its own owning Project. Choose Flows from factory_list_flows with the Flow's projectId, then call the tool again.",
   });
 });
+
+it("a compact Flow list counts the readiness findings its full reply omits", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  assertOk(
+    await factory.createFlow({ name: "Wide", graph: placingGraph(...Array<null>(22).fill(null)) }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_list_flows",
+    arguments: { compact: true },
+  });
+
+  // Assert
+  expect(toolReply(result)[0].issueCount).toBe(22);
+});
