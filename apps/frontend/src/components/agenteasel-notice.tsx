@@ -8,7 +8,6 @@ export function AgentEaselNotice() {
       <ProblemCard
         tone="info"
         density="compact"
-        label="T3 Factory is now AgentEasel"
         title="T3 Factory is now AgentEasel"
         action={
           <TextLink href="https://agenteasel.app/" trailingIcon={ExternalLink}>
