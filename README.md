@@ -4,18 +4,20 @@
 
 # T3 Factory
 
-**Compose AI development workflows. Run them on T3. Keep human decisions in the loop.**
+**Compose AI development workflows. Keep human decisions in the loop.**
+
+> T3 Factory requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and T3 Factory does not work without a T3 Code installation. T3 Factory is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
 
 [![Quality](https://github.com/alimek/t3-factory/actions/workflows/quality.yml/badge.svg)](https://github.com/alimek/t3-factory/actions/workflows/quality.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 T3 Factory is a local application for turning reusable AI Agents into visual software
 development workflows. Connect implementation, review and Human steps, add correction
-loops or parallel branches, then follow each Run from one place. T3 provides the agent
-conversations and execution through [T3 Code](https://t3.codes/); Factory stores your
+loops or parallel branches, then follow each Run from one place. The agent work runs in
+[T3 Code](https://t3.codes/), so T3 Factory requires T3 Code; Factory stores your
 workflow, routes work and records its history.
 
-[Try the demo](#try-the-demo) · [Run with T3](#run-with-t3) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Try the demo](#try-the-demo) · [Run with T3 Code](#run-with-t3-code) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 ## What you can do
 
@@ -89,7 +91,7 @@ pnpm dev
 Reset discards demo database edits and Run history. See the [scenario catalog](docs/dev-scenarios.md)
 and [storage/reset behavior](docs/installation.md#reset-and-seed).
 
-## Run with T3
+## Run with T3 Code
 
 From the installed checkout:
 
