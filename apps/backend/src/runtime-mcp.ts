@@ -20,7 +20,7 @@ import {
   definitionTransferTools,
   type DefinitionTransferOperations,
 } from "./definition-transfer-tools.ts";
-import { definitionBody } from "./http-support.ts";
+import { MCP_ARGUMENTS_LIMIT_BYTES, mcpArgumentBytes } from "./http-support.ts";
 import {
   callLaunchTool,
   launchTools,
@@ -250,9 +250,6 @@ async function callTool(
   }
 }
 
-const fitsDefinitionBody = (args: unknown) =>
-  Buffer.byteLength(JSON.stringify(args ?? null)) <= definitionBody.bytes;
-
 /**
  * Stateless Streamable HTTP MCP server for harness reporting, Run titles, definition authoring and
  * Run Start. Reporting calls name their Block by Block id and title calls their title generation;
@@ -323,7 +320,7 @@ export function runtimeMcpHandler(
       return server;
     },
     // A Flow save carries a whole graph, as Studio's Flow document body does.
-    { maxRequestBodySize: Math.max(definitionBody.bytes, STAGE_REQUEST_LIMIT_BYTES) },
+    { maxRequestBodySize: Math.max(MCP_ARGUMENTS_LIMIT_BYTES, STAGE_REQUEST_LIMIT_BYTES) },
   );
   return (request) => handler.fetch(request);
 }

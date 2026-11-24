@@ -239,6 +239,7 @@ export {
   mayPlaceAgent,
   mayPlaceFlow,
   mayStartFlow,
+  OWNING_PROJECT_ID_LIMIT,
   type OwningProject,
   validateChangeOwner,
 } from "./placement.ts";

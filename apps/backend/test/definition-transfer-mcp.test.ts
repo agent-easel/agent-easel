@@ -1,7 +1,14 @@
 import { expect, it } from "@effect/vitest";
+import { largestImportCallBytes } from "../src/definition-transfer-tools.ts";
+import { MCP_ARGUMENTS_LIMIT_BYTES, mcpArgumentBytes } from "../src/http-support.ts";
 import { assertOk } from "./support/domain-setup.ts";
 import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
-import { continuationStep, controlledExecution, flowInput } from "./support/scenarios.ts";
+import {
+  agentBlock,
+  continuationStep,
+  controlledExecution,
+  flowInput,
+} from "./support/scenarios.ts";
 import { composition } from "./support/subflow.ts";
 
 type Client = Awaited<ReturnType<typeof factoryMcpClient>>;
@@ -84,26 +91,99 @@ it("an import of a document that is not a Factory export fails with the shared r
   expect(toolReply(reviewed)).toMatchObject({ code: "validation" });
 });
 
-it("an export that the MCP import could not accept is refused with a pointer to Studio", async (context) => {
-  // Arrange
-  const { factory, client } = await exportedRelease(context);
-  const quotes = '"'.repeat(120_000);
-  const large = assertOk(
+async function flowWithLastPrompt(
+  setup: Awaited<ReturnType<typeof exportedRelease>>,
+  name: string,
+  last: number,
+) {
+  const { factory, coder, reviewer } = setup;
+  return assertOk(
     await factory.createFlow({
-      name: "Large",
+      name,
       graph: {
-        blocks: Array.from({ length: 8 }, (_, index) =>
-          continuationStep(`step-${index}`, `Step ${index}`, quotes),
-        ),
+        blocks: [
+          agentBlock("coder", "Coder", coder.id),
+          agentBlock("reviewer", "Reviewer", reviewer.id),
+          ...Array.from({ length: 16 }, (_, index) =>
+            continuationStep(`step-${index}`, `Step ${index}`, "x".repeat(120_000)),
+          ),
+          continuationStep("last", "Last", "x".repeat(last)),
+        ],
         connections: [],
         flowInput: flowInput(),
       },
       workspace: { mode: "checkout" },
     }),
   );
+}
+
+async function lastPromptAtLimit(setup: Awaited<ReturnType<typeof exportedRelease>>, over: number) {
+  const probe = await flowWithLastPrompt(setup, "Sized", 1);
+  const { document } = assertOk(await setup.factory.exportFlow(probe.id));
+  return 1 + MCP_ARGUMENTS_LIMIT_BYTES - largestImportCallBytes(document) + over;
+}
+
+it("an exported Flow whose import call fills the limit reviews and imports with a selection for every Agent", async (context) => {
+  // Arrange
+  const setup = await exportedRelease(context);
+  const { client, first } = setup;
+  const last = await lastPromptAtLimit(setup, 0);
+  const flow = await flowWithLastPrompt(setup, "Sized", last);
+  const { document } = toolReply(
+    await callTool(client, "factory_export_definition", { flowId: flow.id }),
+  );
+  const content = JSON.stringify(document);
+  const review = toolReply(
+    await callTool(client, "factory_review_import", { document: content, projectId: first.id }),
+  );
+  const override = controlledExecution("controlled-environment");
+  const selections = Object.fromEntries(
+    review.agents.map((agent: { key: string }) => [agent.key, override]),
+  );
+  const commit = {
+    requestId: "r".repeat(256),
+    document: content,
+    selections,
+    projectId: first.id,
+  };
 
   // Act
-  const exported = await callTool(client, "factory_export_definition", { flowId: large.id });
+  const imported = toolReply(await callTool(client, "factory_import_definitions", commit));
+
+  // Assert
+  const widestSettings = {
+    environmentId: "e".repeat(512),
+    providerInstanceId: "p".repeat(512),
+    modelId: "m".repeat(512),
+    modelOptions: [],
+  };
+  const widestCall = {
+    requestId: "r".repeat(256),
+    document: content,
+    selections: Object.fromEntries(
+      review.agents.map((_: unknown, index: number) => [
+        `${"k".repeat(63)}${index}`,
+        widestSettings,
+      ]),
+    ),
+    projectId: "p".repeat(256),
+  };
+  expect(largestImportCallBytes(document)).toBe(MCP_ARGUMENTS_LIMIT_BYTES);
+  expect(mcpArgumentBytes(commit)).toBeLessThanOrEqual(MCP_ARGUMENTS_LIMIT_BYTES);
+  expect(mcpArgumentBytes(widestCall)).toBeLessThanOrEqual(MCP_ARGUMENTS_LIMIT_BYTES);
+  expect(review.agents).toHaveLength(2);
+  expect(imported.agents).toHaveLength(2);
+  expect(imported.flows).toHaveLength(1);
+});
+
+it("a Flow whose import call would pass the limit by one byte is refused at export with a pointer to Studio", async (context) => {
+  // Arrange
+  const setup = await exportedRelease(context);
+  const last = await lastPromptAtLimit(setup, 1);
+  const flow = await flowWithLastPrompt(setup, "Sized", last);
+
+  // Act
+  const exported = await callTool(setup.client, "factory_export_definition", { flowId: flow.id });
 
   // Assert
   expect(exported.isError).toBe(true);

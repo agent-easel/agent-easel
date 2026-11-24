@@ -65,6 +65,8 @@ export const definitionBody: JsonBodyLimit = {
   bytes: DEFINITION_REQUEST_LIMIT_BYTES,
   message: "Send valid JSON up to 2 MB with application/json.",
 };
+export const MCP_ARGUMENTS_LIMIT_BYTES = definitionBody.bytes;
+export const mcpArgumentBytes = (args: unknown) => Buffer.byteLength(JSON.stringify(args ?? null));
 /** Import review and commit: a portable document up to the import limit. */
 export const importBody: JsonBodyLimit = {
   bytes: PORTABLE_DOCUMENT_LIMIT_BYTES,
