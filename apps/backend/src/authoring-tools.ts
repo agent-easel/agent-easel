@@ -22,6 +22,7 @@ export type AuthoringOperations = Pick<
   | "listFlows"
   | "getFlow"
   | "listFlowFindings"
+  | "validateFlow"
   | "createFlow"
   | "updateFlow"
   | "removeFlow"
@@ -431,7 +432,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_check_flow",
     description:
-      "Check readiness of a Flow's latest saved revision, the same live graph, saved-Agent and placed-Flow check Studio shows. It does not check an unsaved draft or live execution readiness. For a Flow that places a Subflow, a finding inside a placed Flow carries nested {placements, flowId, revision, path}, budget findings carry exact totals and contributors, closure names the definitions judged, and at most 20 findings per code are listed: pass the reply's cursor to read the rest. Fix the listed issue paths before a Run is started.",
+      "Check readiness of a Flow's latest saved revision, the same live graph, saved-Agent and placed-Flow check Studio shows. It does not check an unsaved draft (use factory_check_flow_draft) and does not establish live execution readiness. For a Flow that places a Subflow, a finding inside a placed Flow carries nested {placements, flowId, revision, path}, budget findings carry exact totals and contributors, closure names the definitions judged, and at most 20 findings per code are listed: pass the reply's cursor to read the rest. Fix the listed issue paths before a Run is started.",
     inputSchema: {
       type: "object",
       properties: {
@@ -443,6 +444,36 @@ export const authoringTools: Tool[] = [
         },
       },
       required: ["flowId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_check_flow_draft",
+    description:
+      "Check readiness of an unsaved edit to an existing Flow before saving it, the same draft readiness Studio shows while the Flow is edited. It takes factory_save_flow's arguments, judges the candidate under the saved Flow's owning Project against the current saved Agents and placed Flows, and writes nothing: the saved Flow and its revisions stay unchanged. The reply has ready, issues with codes and paths, and agentRevisions: the saved revision and projectId of each Agent the graph places, null for a missing Agent. Nested findings, closure and the limit of 20 findings per code work as in factory_check_flow: pass the reply's cursor with the same draft to read the rest. It does not establish live execution readiness. Save a ready draft with factory_save_flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        flowId,
+        expectedRevision: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "The revision the draft edits. The check does not refuse an older one; factory_save_flow does.",
+        },
+        expectedProjectId: {
+          type: ["string", "null"],
+          description:
+            "The projectId you last read: the owning Project's id, or null for a global Flow. A check after the owner changed is refused with a conflict, because readiness depends on the owner.",
+        },
+        ...flowFields,
+        cursor: {
+          type: "string",
+          description:
+            "The cursor a previous factory_check_flow_draft reply gave for this same draft, to read the findings it omitted.",
+        },
+      },
+      required: ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
       additionalProperties: false,
     },
   },
@@ -461,6 +492,7 @@ export const authoringTools: Tool[] = [
 type Subject =
   | "agent"
   | "flow"
+  | "flowDraft"
   | "agentRemoval"
   | "flowRemoval"
   | "agentOwner"
@@ -498,6 +530,13 @@ const nextSteps: Record<Subject, Partial<Record<string, string>>> = {
     validation: fixIssuesNext,
     conflict:
       "Read the Flow with factory_get_flow, reapply your change and save with its revision.",
+    not_found: flowNotFoundNext,
+  },
+  flowDraft: {
+    stale_owner: staleOwnerNext,
+    stale_findings_cursor:
+      "Call factory_check_flow_draft without a cursor to read the draft's current readiness and its new cursor.",
+    validation: fixIssuesNext,
     not_found: flowNotFoundNext,
   },
   agentRemoval: {
@@ -548,6 +587,20 @@ export const withId =
             issues: [{ code: "invalid_id", path: key, message: `Include ${key}.` }],
           },
         });
+
+const withDraftFieldsAtTopLevel = (result: Result<unknown>): Result<unknown> =>
+  result.ok
+    ? result
+    : {
+        ok: false,
+        error: {
+          ...result.error,
+          issues: result.error.issues.map((issue) => ({
+            ...issue,
+            path: issue.path.replace(/^draft\./, ""),
+          })),
+        },
+      };
 
 /**
  * Global definitions and those `projectId` owns, or every definition without a filter. A filter
@@ -670,6 +723,15 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
       if (cursor !== undefined) return factory.listFlowFindings(id, { cursor: cursor as string });
       const flow = await factory.getFlow(id);
       return flow.ok ? { ok: true, value: flow.value.readiness } : flow;
+    }),
+  ],
+  factory_check_flow_draft: [
+    "flowDraft",
+    withId("flowId", (id, input) => {
+      const { cursor, ...draft } = toolArguments(input);
+      return cursor === undefined
+        ? factory.validateFlow(id, draft)
+        : factory.listFlowFindings(id, { cursor, draft }).then(withDraftFieldsAtTopLevel);
     }),
   ],
   factory_remove_flow: ["flowRemoval", removal("flowId", (id) => factory.removeFlow(id))],
