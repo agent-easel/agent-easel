@@ -45,6 +45,11 @@ import type {
   FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
+import {
+  factoryDataHome,
+  handOffToAgentEasel,
+  migratedToAgentEasel,
+} from "./agenteasel-handoff.ts";
 import { productStatement } from "./about.ts";
 import { AttentionCoordinator } from "./attention-coordinator.ts";
 import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
@@ -776,6 +781,10 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start() {
   app.setAboutPanelOptions({ applicationName: "T3 Factory", credits: productStatement });
+  if (migratedToAgentEasel(app.getPath("userData"), factoryDataHome())) {
+    quitting = true;
+    return handOffToAgentEasel();
+  }
   store = await SettingsStore.open(app.getPath("userData"));
   windowBounds = new WindowBoundsTracker(store.get().windowBounds);
   applyNativeAppearance(store.get().appearance);
@@ -857,7 +866,7 @@ async function start() {
   registerBridge();
   applyMenuState(null);
   if (store.get().role === "server") backend.start();
-  updates.start(updateChannel());
+  updates.start();
   applyMenuBarIcon();
   refreshTray();
   started = true;
