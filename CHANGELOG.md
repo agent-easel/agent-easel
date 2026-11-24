@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.11.0](https://github.com/alimek/t3-factory/compare/v0.10.0...v0.11.0) (2026-11-24)
+
+
+### Features
+
+* **canvas:** preview wire endpoints and output labels ([#711](https://github.com/alimek/t3-factory/issues/711)) ([0918f76](https://github.com/alimek/t3-factory/commit/0918f76cbbb8306fcbf5b027018ebe52ec33dadb))
+* **chat-control:** support Discord bots and typed reply confirmation ([#705](https://github.com/alimek/t3-factory/issues/705)) ([76cde25](https://github.com/alimek/t3-factory/commit/76cde25710ccabccb3fabea130dea5d7bb9071bd))
+* **desktop:** notify when a Run finishes ([#735](https://github.com/alimek/t3-factory/issues/735)) ([d1394fe](https://github.com/alimek/t3-factory/commit/d1394febe7f45cc04529c83296723b5fcf10f2ed))
+* **landing:** refresh landing page copy and screenshots for current system and UI ([#739](https://github.com/alimek/t3-factory/issues/739)) ([33bcd37](https://github.com/alimek/t3-factory/commit/33bcd371a3c858d74ecb6c885c766d15ab79cad9))
+* **mcp:** add host-local tools to find and read Runs ([#736](https://github.com/alimek/t3-factory/issues/736)) ([5bc0b7c](https://github.com/alimek/t3-factory/commit/5bc0b7cc1e752a1ccc3f7e670ffc9b647d9201ec))
+* **mcp:** check readiness of an unsaved Flow draft with factory_check_flow_draft ([#725](https://github.com/alimek/t3-factory/issues/725)) ([#747](https://github.com/alimek/t3-factory/issues/747)) ([969cc9c](https://github.com/alimek/t3-factory/commit/969cc9cae15535b0f8f03889a90c5b98ce470a34))
+* **mcp:** configure Agents, Flows and Triggers from a T3 conversation ([#745](https://github.com/alimek/t3-factory/issues/745)) ([8c19f12](https://github.com/alimek/t3-factory/commit/8c19f129f5e4d0504211156b5dab0adb50b7dda9))
+* **mcp:** diagnose Start blockers and repair Agent reporting from Factory MCP ([#743](https://github.com/alimek/t3-factory/issues/743)) ([a22fd17](https://github.com/alimek/t3-factory/commit/a22fd17765f77169ff7c5ca9d6f242b2ed79034e))
+* **mcp:** import and export portable Factory definitions ([#748](https://github.com/alimek/t3-factory/issues/748)) ([de6d592](https://github.com/alimek/t3-factory/commit/de6d592559c29c008c9df99557f494c59119bbe5))
+* **mcp:** manage Run lifecycle from host-local tools ([#749](https://github.com/alimek/t3-factory/issues/749)) ([c1cef77](https://github.com/alimek/t3-factory/commit/c1cef7741db55257ae2f8e948c15bfb065ab1c53))
+* **mcp:** read and change the Run title setting from a T3 conversation ([#740](https://github.com/alimek/t3-factory/issues/740)) ([d4fe24d](https://github.com/alimek/t3-factory/commit/d4fe24dd3df2af67cee3d41835f99a7ffb8ff149))
+* **mcp:** resolve pending Run work through host-local Factory MCP tools ([#741](https://github.com/alimek/t3-factory/issues/741)) ([cdf0e84](https://github.com/alimek/t3-factory/commit/cdf0e840a368c1e8866cc0249aa5ab0417e9fad4))
+* **mcp:** send opt-in Run updates back to the originating T3 conversation ([#750](https://github.com/alimek/t3-factory/issues/750)) ([75d7922](https://github.com/alimek/t3-factory/commit/75d792249e829ff6067255bf5c2c920a7220c48b))
+* **mcp:** start Runs with an own title and staged images from T3 ([#744](https://github.com/alimek/t3-factory/issues/744)) ([6df430a](https://github.com/alimek/t3-factory/commit/6df430ac8b507288851f2661e701cdd47d4f723e))
+* **run-list:** show Run endings and search Runs by number, title, Project, Flow and branch ([#737](https://github.com/alimek/t3-factory/issues/737)) ([1b2b6ea](https://github.com/alimek/t3-factory/commit/1b2b6ea41d442b4dc453eeb05278f5b80773ca4c))
+
+
+### Bug Fixes
+
+* **appearance:** enforce minimum border and input contrast in custom themes ([#712](https://github.com/alimek/t3-factory/issues/712)) ([3152d8c](https://github.com/alimek/t3-factory/commit/3152d8c58ce2ad51ef58a07d5697d81bafac5132))
+* **run-canvas:** raise contrast of not-visited and Finish Block frames ([#703](https://github.com/alimek/t3-factory/issues/703)) ([4eab3ab](https://github.com/alimek/t3-factory/commit/4eab3ab538c61e0ec1a245dbf973fd17b564ed82))
+
 ## [0.10.0](https://github.com/alimek/t3-factory/compare/v0.9.0...v0.10.0) (2026-11-22)
 
 
