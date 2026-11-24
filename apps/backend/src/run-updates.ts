@@ -183,6 +183,21 @@ export const makeRunUpdates = (
         return id;
       });
 
+    const captureSettlement = (subscription: SubscriptionRow, entry: RunNavigationEntry) =>
+      Effect.gen(function* () {
+        const runId = subscription.run_id;
+        const settledCycle = entry.lifecycle === "settled" ? entry.settledCycle : null;
+        const reason = entry.settledReason;
+        const newCycle =
+          settledCycle !== null && reason !== null && settledCycle !== subscription.settled_cycle;
+        if (settledCycle === null || newCycle)
+          yield* sql`UPDATE run_update_deliveries SET state='retired'
+            WHERE run_id=${runId} AND event='settlement' AND state='owed'`;
+        if (!newCycle) return;
+        yield* insertDelivery(runId, reason);
+        yield* sql`UPDATE run_update_subscriptions SET settled_cycle=${settledCycle} WHERE run_id=${runId}`;
+      });
+
     const captureRun = (subscription: SubscriptionRow, entry: RunNavigationEntry | undefined) =>
       sql.withTransaction(
         Effect.gen(function* () {
@@ -211,15 +226,7 @@ export const makeRunUpdates = (
               ORDER BY created_at DESC,rowid DESC LIMIT 1`;
             yield* insertMatters(runId, open?.id ?? (yield* insertDelivery(runId, null)), fresh);
           }
-          const settledCycle = entry.lifecycle === "settled" ? entry.settledCycle : null;
-          if (
-            settledCycle !== null &&
-            entry.settledReason !== null &&
-            settledCycle !== subscription.settled_cycle
-          ) {
-            yield* insertDelivery(runId, entry.settledReason);
-            yield* sql`UPDATE run_update_subscriptions SET settled_cycle=${settledCycle} WHERE run_id=${runId}`;
-          }
+          yield* captureSettlement(subscription, entry);
         }),
       );
 
@@ -260,24 +267,47 @@ export const makeRunUpdates = (
           Effect.match({
             onSuccess: () => ({ state: "delivered", problem: null }) as const,
             onFailure: (error) =>
-              error instanceof T3Failure && error.kind === "refused"
-                ? ({ state: "refused", problem: REFUSED } as const)
-                : ({ state: "unknown", problem: UNCERTAIN } as const),
+              !(error instanceof T3Failure)
+                ? ({ state: "unknown", problem: UNCERTAIN } as const)
+                : error.kind === "refused"
+                  ? ({ state: "refused", problem: REFUSED } as const)
+                  : error.kind === "authorization-required"
+                    ? ({ state: "owed", problem: null } as const)
+                    : ({ state: "unknown", problem: UNCERTAIN } as const),
           }),
         );
         yield* sql`UPDATE run_update_deliveries SET state=${outcome.state},problem=${outcome.problem}
           WHERE id=${delivery.id}`;
       });
 
+    const deliverable = (id: string) =>
+      Effect.map(
+        sql<OwedRow>`SELECT d.id,d.event,d.settlement,d.run_id,s.thread_id,s.endpoint,s.environment_id,r.number
+          FROM run_update_deliveries d JOIN run_update_subscriptions s ON s.run_id=d.run_id
+          JOIN runs r ON r.id=d.run_id
+          WHERE d.id=${id} AND d.state='owed' AND s.final=0 AND r.archived_at IS NULL`,
+        ([row]) => row,
+      );
+
+    const connectedTo = (delivery: OwedRow) =>
+      Effect.gen(function* () {
+        const snapshot = yield* snapshots.latest();
+        const environment = yield* currentEnvironment(snapshot);
+        return (
+          environment !== undefined &&
+          snapshot.support.send.supported &&
+          environment.endpoint === delivery.endpoint &&
+          environment.environment_id === delivery.environment_id
+        );
+      });
+
     const deliver = Effect.gen(function* () {
-      const owed =
-        yield* sql<OwedRow>`SELECT d.id,d.event,d.settlement,d.run_id,s.thread_id,s.endpoint,s.environment_id,r.number
-        FROM run_update_deliveries d JOIN run_update_subscriptions s ON s.run_id=d.run_id
-        JOIN runs r ON r.id=d.run_id WHERE d.state='owed' ORDER BY d.created_at,d.rowid`;
-      if (owed.length === 0) return;
-      const snapshot = yield* snapshots.latest();
-      const environment = yield* currentEnvironment(snapshot);
-      for (const delivery of owed) {
+      const owed = yield* sql<{
+        id: string;
+      }>`SELECT id FROM run_update_deliveries WHERE state='owed' ORDER BY created_at,rowid`;
+      for (const { id } of owed) {
+        const delivery = yield* deliverable(id);
+        if (!delivery) continue;
         const [matters] = yield* sql<{ needsInput: number; problems: number }>`SELECT
             COALESCE(SUM(presentation='needs-input'),0) AS needsInput,
             COALESCE(SUM(presentation='problem'),0) AS problems
@@ -286,13 +316,7 @@ export const makeRunUpdates = (
           yield* sql`UPDATE run_update_deliveries SET state='retired' WHERE id=${delivery.id}`;
           continue;
         }
-        if (
-          !environment ||
-          !snapshot.support.send.supported ||
-          environment.endpoint !== delivery.endpoint ||
-          environment.environment_id !== delivery.environment_id
-        )
-          continue;
+        if (!(yield* connectedTo(delivery))) continue;
         yield* send(delivery, updateText(delivery, matters!));
       }
     });
@@ -330,11 +354,20 @@ export const makeRunUpdates = (
             "This Run was started in another T3 environment.",
             "Updates go only to a conversation in the T3 environment the Run started in.",
           );
-        const verified = yield* Effect.tryPromise(() =>
-          threads.findStartCall({ endpoint: target.endpoint }, thread, target.request_id),
-        ).pipe(Effect.option);
-        if (verified._tag === "None") return T3_UNAVAILABLE;
-        return verified.value ? undefined : UNVERIFIED;
+        return yield* Effect.tryPromise({
+          try: () =>
+            threads.findStartCall({ endpoint: target.endpoint }, thread, target.request_id),
+          catch: (error) => error,
+        }).pipe(
+          Effect.match({
+            onSuccess: (found) => (found ? undefined : UNVERIFIED),
+            onFailure: (error) =>
+              error instanceof T3Failure &&
+              (error.kind === "refused" || error.kind === "invalid-response")
+                ? UNVERIFIED
+                : T3_UNAVAILABLE,
+          }),
+        );
       });
 
     const bind = (target: Target, thread: string) =>
@@ -347,6 +380,10 @@ export const makeRunUpdates = (
           Effect.gen(function* () {
             const raced = yield* bound(target.id);
             if (raced !== undefined) return raced;
+            const [run] = yield* sql<{
+              archived_at: string | null;
+            }>`SELECT archived_at FROM runs WHERE id=${target.id}`;
+            if (run?.archived_at !== null) return ARCHIVED;
             yield* sql`INSERT INTO run_update_subscriptions (run_id,thread_id,endpoint,environment_id,subscribed_at,settled_cycle)
               VALUES (${target.id},${thread},${target.endpoint},${target.environment_id},${yield* now},
                 ${entry?.lifecycle === "settled" ? entry.settledCycle : null})`;
@@ -373,7 +410,9 @@ export const makeRunUpdates = (
         if (target.archived_at !== null) return ARCHIVED;
         const refusal = yield* originRefusal(target, args.threadId);
         if (refusal) return refusal;
-        if ((yield* bind(target, args.threadId)) !== args.threadId) return BOUND_ELSEWHERE;
+        const binding = yield* bind(target, args.threadId);
+        if (binding === ARCHIVED) return ARCHIVED;
+        if (binding !== args.threadId) return BOUND_ELSEWHERE;
         changed.add(target.id);
         notify();
         return subscribed;

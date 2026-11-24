@@ -263,9 +263,13 @@ export class ControlledT3Threads implements T3Threads {
   recordStartCall(threadId: string, requestId: string) {
     this.startCalls.set(threadId, new Set([...(this.startCalls.get(threadId) ?? []), requestId]));
   }
+  beforeFindStartCall?: () => Promise<void>;
   async findStartCall(_target: T3Endpoint, threadId: string, requestId: string) {
     this.connection.requireConnection();
-    return this.startCalls.get(threadId)?.has(requestId) === true;
+    await this.beforeFindStartCall?.();
+    const calls = this.startCalls.get(threadId);
+    if (!calls) throw new T3Failure("refused", `Thread ${threadId} was not found.`);
+    return calls.has(requestId);
   }
   readonly refusedSendThreads = new Set<string>();
   loseSendReply = false;

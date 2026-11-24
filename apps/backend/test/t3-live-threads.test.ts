@@ -905,3 +905,40 @@ it("a Start call T3 shows only as inherited from another thread does not prove t
   // Assert
   expect(found).toBe(false);
 });
+
+const truncatedStartCall = (nextOffset: (offset: number) => number) => {
+  const text = startCallText("mcp__factory-runtime__factory_start_run", "request-1");
+  const reads: Record<string, unknown>[] = [];
+  const runtimeActivity = (args: Record<string, unknown>) => {
+    reads.push(args);
+    const offset = typeof args.textOffset === "number" ? args.textOffset : 0;
+    return activityPage([
+      {
+        text: text.slice(0, 10),
+        textTruncated: true,
+        nextTextOffset: offset === 0 ? 10 : nextOffset(offset),
+      },
+    ]);
+  };
+  return { reads, runtimeActivity };
+};
+
+it.for([
+  { offset: "does not advance", next: (offset: number) => offset },
+  { offset: "moves backwards", next: () => 1 },
+  { offset: "is not an integer", next: (offset: number) => offset + 0.5 },
+])(
+  "a truncated Start call whose next text offset $offset proves nothing and stops reading",
+  async ({ next }, c) => {
+    // Arrange
+    const { reads, runtimeActivity } = truncatedStartCall(next);
+    const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
+
+    // Act
+    const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+    // Assert
+    expect(found).toBe(false);
+    expect(reads.length).toBeLessThanOrEqual(3);
+  },
+);

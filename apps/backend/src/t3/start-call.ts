@@ -54,11 +54,19 @@ function activityPage(body: unknown, threadId: string) {
   };
 }
 
+const advances = (offset: unknown, previous: number): offset is number =>
+  typeof offset === "number" &&
+  Number.isSafeInteger(offset) &&
+  offset > previous &&
+  offset <= MAX_ITEM_TEXT;
+
 async function wholeText(read: ThreadRead, threadId: string, item: ActivityItem) {
   let text = item.text ?? "";
+  let previous = 0;
   let offset = item.textTruncated ? item.nextTextOffset : null;
-  while (typeof offset === "number") {
-    if (offset > MAX_ITEM_TEXT) return null;
+  while (offset !== null && offset !== undefined) {
+    if (!advances(offset, previous) || text.length > MAX_ITEM_TEXT) return null;
+    previous = offset;
     const { items } = activityPage(
       await read({
         threadId,
@@ -74,7 +82,7 @@ async function wholeText(read: ThreadRead, threadId: string, item: ActivityItem)
     text += next.text ?? "";
     offset = next.textTruncated ? next.nextTextOffset : null;
   }
-  return text;
+  return text.length > MAX_ITEM_TEXT ? null : text;
 }
 
 function startCallKey(text: string): unknown {
@@ -87,6 +95,17 @@ function startCallKey(text: string): unknown {
     return undefined;
   }
 }
+
+const ownCompletedCall = (item: ActivityItem, threadId: string) =>
+  item.type === "dynamic_tool" &&
+  item.status === "completed" &&
+  item.visibility === "local" &&
+  item.sourceThreadId === threadId;
+
+const earlierPage = (earlier: number | null, before: number | null) =>
+  earlier !== null && Number.isSafeInteger(earlier) && (before === null || earlier < before)
+    ? earlier
+    : null;
 
 export async function findStartCall(read: ThreadRead, threadId: string, requestId: string) {
   let before: number | null = null;
@@ -102,19 +121,12 @@ export async function findStartCall(read: ThreadRead, threadId: string, requestI
       }),
       threadId,
     );
-    for (const item of items) {
-      if (
-        item.type !== "dynamic_tool" ||
-        item.status !== "completed" ||
-        item.visibility !== "local" ||
-        item.sourceThreadId !== threadId
-      )
-        continue;
+    for (const item of items.filter((candidate) => ownCompletedCall(candidate, threadId))) {
       const text = await wholeText(read, threadId, item);
       if (text !== null && startCallKey(text) === requestId) return true;
     }
-    if (earlier === null) return false;
-    before = earlier;
+    before = earlierPage(earlier, before);
+    if (before === null) return false;
   }
   return false;
 }

@@ -1,12 +1,16 @@
 import { expect, it } from "@effect/vitest";
+import { T3Failure } from "../src/t3/connection.ts";
 import { toolReply } from "./support/factory-mcp.ts";
 import {
   CONVERSATION,
   conversationRun,
   nativeQuestionAsked,
+  returnedToActive,
   runSettled,
+  sentMessages,
   subscribedRun,
 } from "./support/run-updates.ts";
+import { archived, workerWorking } from "./support/scenarios.ts";
 
 it("a conversation whose own T3 activity records the Start call binds the Run's updates to itself", async (c) => {
   // Arrange
@@ -140,4 +144,79 @@ it("an update T3 refuses is not sent again or to another conversation", async (c
   expect([...run.t3.threads.sends.values()].map(({ payload }) => payload.message)).toStrictEqual([
     expect.stringContaining("settled automatically"),
   ]);
+});
+
+it("a T3 activity read that does not complete binds nothing and may be retried", async (c) => {
+  // Arrange
+  const run = await conversationRun(c);
+  run.t3.threads.beforeFindStartCall = async () => {
+    throw new T3Failure("unavailable", "No reply");
+  };
+
+  // Act
+  const result = await run.subscribe();
+
+  // Assert
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "t3_unavailable" }],
+  });
+});
+
+it("a Run Archived while its origin is being verified is refused instead of bound", async (c) => {
+  // Arrange
+  const run = await conversationRun(c);
+  run.t3.threads.beforeFindStartCall = async () => {
+    await archived(run.world, run.worker);
+  };
+
+  // Act
+  const result = await run.subscribe();
+
+  // Assert
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "run_archived" }],
+  });
+});
+
+it("a settlement still waiting to be sent is not sent once the Run is Active again", async (c) => {
+  // Arrange
+  const run = await subscribedRun(c);
+  run.t3.threads.beforeSend = async () => {
+    throw new T3Failure("authorization-required", "Grant rejected");
+  };
+  await runSettled(run);
+  await returnedToActive(run);
+  const sent = sentMessages(run);
+  const attention = run.t3.threads.nextSend();
+
+  // Act
+  await nativeQuestionAsked(run);
+
+  // Assert
+  await attention;
+  expect(sent).toStrictEqual([expect.stringContaining("needs input")]);
+});
+
+it("an update T3 rejected for its grant waits and is sent once after reauthorization", async (c) => {
+  // Arrange
+  const run = await subscribedRun(c);
+  const rejected = new Promise<void>((resolve) => {
+    run.t3.threads.beforeSend = async () => {
+      resolve();
+      throw new T3Failure("authorization-required", "Grant rejected");
+    };
+  });
+  await nativeQuestionAsked(run);
+  await rejected;
+  const sent = sentMessages(run);
+  const retried = run.t3.threads.nextSend();
+
+  // Act
+  await run.world.factory.runtime.submit(workerWorking(run.worker.blockId, "Still here"));
+
+  // Assert
+  await retried;
+  expect(sent).toStrictEqual([expect.stringContaining("needs input")]);
 });

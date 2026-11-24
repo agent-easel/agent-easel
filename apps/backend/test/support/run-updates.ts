@@ -6,6 +6,7 @@ import {
   resultReported,
   settled,
   workerAtWork,
+  workerWorking,
   type ScenarioWorld,
   type WorkerHandle,
 } from "./scenarios.ts";
@@ -56,4 +57,22 @@ export async function runSettled(run: {
 }) {
   run.t3.threads.recordThreadFacts(run.worker.threadId, { pendingRequestCount: 0 });
   await settled(run.world, await resultReported(run.world, run.worker));
+}
+
+export async function returnedToActive(run: { world: ScenarioWorld; worker: WorkerHandle }) {
+  await run.world.factory.runtime.submit(workerWorking(run.worker.blockId));
+  await observeFor(
+    "return to Active",
+    run.world,
+    run.worker.runId,
+    (detail) => detail.lifecycle === "active",
+  );
+}
+
+export function sentMessages(run: { t3: ControlledT3 }) {
+  const sent: string[] = [];
+  run.t3.threads.beforeSend = async (payload) => {
+    sent.push(payload.message);
+  };
+  return sent;
 }
