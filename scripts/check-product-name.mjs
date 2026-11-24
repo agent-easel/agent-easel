@@ -24,14 +24,12 @@ export const allowlist = [
   { path: /^GLOSSARY\.md$/, why: "lists the names to avoid" },
   { path: /^\.gitignore$/, why: "old data home" },
   { path: /^apps\/desktop\/scripts\/probe-package\.mjs$/, why: "comment about the old data home" },
-  { path: /^docs\/installation\.md$/, why: "telemetry host" },
   { path: /^(apps\/frontend\/src\/styles\.css|docs\/design-system\.md)$/, why: "Figma file title" },
   { path: /^docs\/quality-gates\.md$/, why: "describes this gate" },
   {
-    path: /^apps\/backend\/src\/telemetry\.ts$/,
-    why: "telemetry host until the release",
+    path: /^apps\/landing\/(vercel\.json|test\/deployment\.test\.mjs)$/,
+    why: "redirect from the old domain",
   },
-  { path: /^docs\/foundation\.md$/, why: "telemetry host" },
   {
     path: /^(packages\/contracts\/src\/portable-document\.ts|docs\/studio\.md|tests\/subflow-import\.e2e\.ts|apps\/(backend|frontend)\/test\/(definition-(import|export)\.test\.ts|support\/definition-import\.ts))$/,
     why: "export format id that import still accepts",
