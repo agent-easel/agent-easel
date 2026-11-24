@@ -10,7 +10,7 @@ const productionData = process.argv.includes("--production-data");
 const env = {
   ...process.env,
   ...(productionData
-    ? { FACTORY_HOME: process.env.FACTORY_HOME ?? join(homedir(), ".t3-factory") }
+    ? { FACTORY_HOME: process.env.FACTORY_HOME ?? join(homedir(), ".agenteasel") }
     : { FACTORY_DEV_HOME: await developmentHome() }),
   ...(productionData ? {} : { FACTORY_PORT: process.env.FACTORY_PORT ?? "4311" }),
 };

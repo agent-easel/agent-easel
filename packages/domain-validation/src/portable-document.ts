@@ -1,4 +1,5 @@
 import {
+  LEGACY_PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_VERSION,
   type AgentExecutionSettings,
@@ -9,6 +10,7 @@ import {
   type FlowInputBlock,
   type FlowWorkspace,
   type ImportedDocument,
+  type PortableDocumentFormat,
   type OperationError,
   type PortableAgent,
   type PortableDocument,
@@ -252,7 +254,10 @@ function countIssue(fields: Record<string, unknown>): ValidationIssue | undefine
 function checkEnvelope(
   value: unknown,
 ): Result<{ fields: Record<string, unknown>; reader: FormatReader }> {
-  if (!isRecord(value) || value.format !== PORTABLE_DOCUMENT_FORMAT)
+  if (
+    !isRecord(value) ||
+    (value.format !== PORTABLE_DOCUMENT_FORMAT && value.format !== LEGACY_PORTABLE_DOCUMENT_FORMAT)
+  )
     return rejected("validation", [
       issue(
         "not_factory_export",
@@ -775,7 +780,7 @@ const envelopeOf = <Kind extends PortableDocument["kind"]>(
   reader: FormatReader,
   kind: Kind,
 ) => ({
-  format: PORTABLE_DOCUMENT_FORMAT as typeof PORTABLE_DOCUMENT_FORMAT,
+  format: fields.format as PortableDocumentFormat,
   formatVersion: reader.version,
   kind,
   factoryVersion: fields.factoryVersion as string,

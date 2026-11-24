@@ -195,7 +195,7 @@ function RemoteAccessGroup({
               <Button variant="outline" asChild>
                 <a
                   href={operationPath(clientAccessServerOperations.getRemoteAccessCertificate)}
-                  download="t3-factory-host.pem"
+                  download="agenteasel-host.pem"
                   aria-label="Download certificate"
                 >
                   Download

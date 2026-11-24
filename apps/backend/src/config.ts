@@ -61,7 +61,7 @@ const invalidHome = () =>
 
 /** Factory data must never live inside the checkout it runs from, even through a symlink. */
 async function factoryHome(env: NodeJS.ProcessEnv): Promise<string> {
-  const requestedHome = env.FACTORY_HOME ?? join(homedir(), ".t3-factory");
+  const requestedHome = env.FACTORY_HOME ?? join(homedir(), ".agenteasel");
   if (!isAbsolute(requestedHome)) throw invalidHome();
   const checkout = sourceCheckout();
   const home = await resolvedDestination(requestedHome);

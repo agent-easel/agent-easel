@@ -244,7 +244,7 @@ function connectedT3Client(): Client {
     }
   })();
   return new Client(
-    { name: "t3-factory", version: "0.0.0" },
+    { name: "agenteasel", version: "0.0.0" },
     {
       responseCacheStore,
       jsonSchemaValidator: {
@@ -344,7 +344,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     return {
       redirectUrl,
       clientMetadata: {
-        client_name: "T3 Factory",
+        client_name: "AgentEasel",
         redirect_uris: [redirectUrl],
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
@@ -640,7 +640,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       return;
     }
     const transport = this.transport(endpoint, this.provider(endpoint, true));
-    const client = new Client({ name: "t3-factory", version: "0.0.0" });
+    const client = new Client({ name: "agenteasel", version: "0.0.0" });
     try {
       await client.connect(transport, { timeout: 10_000 });
       // No OAuth challenge is not evidence of an approved identity.
@@ -737,7 +737,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     previousReason: T3ConnectionReason | undefined,
     record: CallRecord,
   ): Promise<T3Probe<A>> {
-    const client = new Client({ name: "t3-factory", version: "0.0.0" });
+    const client = new Client({ name: "agenteasel", version: "0.0.0" });
     try {
       await client.connect(this.transport(endpoint), { timeout: 10_000 });
       return await this.answer(endpoint, client, read);
