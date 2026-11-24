@@ -104,11 +104,14 @@ function startCallKey(text: string): unknown {
   }
 }
 
-const ownCompletedCall = (item: ActivityItem, threadId: string) =>
+const namedTool = (text: string | null) => /^\{"toolName":"([^"]*)"/.exec(text ?? "")?.[1];
+
+const ownStartCall = (item: ActivityItem, threadId: string) =>
   item.type === "dynamic_tool" &&
   item.status === "completed" &&
   item.visibility === "local" &&
-  item.sourceThreadId === threadId;
+  item.sourceThreadId === threadId &&
+  START_TOOL_NAMES.has(namedTool(item.text) ?? "");
 
 const earlierPage = (earlier: number | null, before: number | null) =>
   earlier !== null && Number.isSafeInteger(earlier) && (before === null || earlier < before)
@@ -130,7 +133,8 @@ export async function findStartCall(read: ThreadRead, threadId: string, requestI
       }),
       threadId,
     );
-    for (const item of items.filter((candidate) => ownCompletedCall(candidate, threadId))) {
+    const candidates = items.filter((candidate) => ownStartCall(candidate, threadId)).reverse();
+    for (const item of candidates) {
       const text = await wholeText(read, threadId, item, budget);
       if (text !== null && startCallKey(text) === requestId) return true;
     }

@@ -985,3 +985,79 @@ it("many truncated Start-like calls in one conversation are followed only up to 
   expect(found).toBe(false);
   expect(reads.length).toBeLessThanOrEqual(25);
 });
+
+const servedActivity = (items: readonly { itemId: string; text: string }[]) => {
+  const chunk = 20_000;
+  const view = (item: { itemId: string; text: string }, offset: number) => ({
+    itemId: item.itemId,
+    text: item.text.slice(offset, offset + chunk),
+    textTruncated: offset + chunk < item.text.length,
+    nextTextOffset: offset + chunk < item.text.length ? offset + chunk : null,
+  });
+  return (args: Record<string, unknown>) =>
+    typeof args.itemId === "string"
+      ? activityPage([
+          view(
+            items.find((item) => item.itemId === args.itemId)!,
+            Number(args.textOffset),
+          ),
+        ])
+      : activityPage(items.map((item) => view(item, 0)));
+};
+
+const largeStagedImage = {
+  itemId: "stage-image",
+  text: JSON.stringify({
+    toolName: "mcp__factory-runtime__factory_stage_run_image",
+    input: { mimeType: "image/png", dataBase64: "A".repeat(400_000) },
+    output: {},
+  }),
+};
+const longStart = {
+  itemId: "start-run",
+  text: JSON.stringify({
+    toolName: "mcp__factory-runtime__factory_start_run",
+    input: { requestId: "request-1", projectId: "p", flowId: "f", input: "x".repeat(25_000) },
+    output: {},
+  }),
+};
+
+it.for([
+  { order: "before", items: [largeStagedImage, longStart] },
+  { order: "after", items: [longStart, largeStagedImage] },
+])(
+  "a long Start call proves the origin although a large truncated non-Start call comes $order it",
+  async ({ items }, c) => {
+    // Arrange
+    const { threads, endpoint } = await authorizedLiveOAuth(c, {
+      runtimeActivity: servedActivity(items),
+    });
+
+    // Act
+    const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+    // Assert
+    expect(found).toBe(true);
+  },
+);
+
+it("the newest Start call proves the origin although an older huge Start call of another Run comes first", async (c) => {
+  // Arrange
+  const olderStart = {
+    itemId: "older-start",
+    text: JSON.stringify({
+      toolName: "mcp__factory-runtime__factory_start_run",
+      input: { requestId: "request-0", projectId: "p", flowId: "f", input: "y".repeat(400_000) },
+      output: {},
+    }),
+  };
+  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+    runtimeActivity: servedActivity([olderStart, longStart]),
+  });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(true);
+});
