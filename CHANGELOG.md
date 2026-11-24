@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/alimek/t3-factory/compare/v0.11.0...v0.12.0) (2026-11-24)
+
+
+### Features
+
+* **desktop:** bridge release that hands T3 Factory users to AgentEasel ([#766](https://github.com/alimek/t3-factory/issues/766)) ([3eae09b](https://github.com/alimek/t3-factory/commit/3eae09bf54fd78f84c5951b5fa8665bb813b791a))
+
 ## [0.11.0](https://github.com/alimek/t3-factory/compare/v0.10.0...v0.11.0) (2026-11-24)
 
 
