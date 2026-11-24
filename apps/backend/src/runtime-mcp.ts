@@ -15,7 +15,12 @@ import {
   textResult,
   type AuthoringOperations,
 } from "./authoring-tools.ts";
-import { definitionBody } from "./http-support.ts";
+import {
+  callDefinitionTransferTool,
+  definitionTransferTools,
+  type DefinitionTransferOperations,
+} from "./definition-transfer-tools.ts";
+import { MCP_ARGUMENTS_LIMIT_BYTES, mcpArgumentBytes } from "./http-support.ts";
 import {
   callLaunchTool,
   launchTools,
@@ -255,9 +260,6 @@ async function callTool(
   }
 }
 
-const fitsDefinitionBody = (args: unknown) =>
-  Buffer.byteLength(JSON.stringify(args ?? null)) <= definitionBody.bytes;
-
 /**
  * Stateless Streamable HTTP MCP server for harness reporting, Run titles, definition authoring and
  * Run Start. Reporting calls name their Block by Block id and title calls their title generation;
@@ -273,7 +275,8 @@ export function runtimeMcpHandler(
     StartDiagnosisOperations &
     RunActionOperations &
     RunTitleSettingOperations &
-    TriggerToolOperations,
+    TriggerToolOperations &
+    DefinitionTransferOperations,
 ): (request: Request) => Promise<Response> {
   const handler = createMcpHandler(
     () => {
@@ -285,6 +288,7 @@ export function runtimeMcpHandler(
         tools: [
           ...tools,
           ...authoringTools,
+          ...definitionTransferTools,
           ...launchTools,
           ...startDiagnosisTools,
           ...runReadTools,
@@ -296,7 +300,10 @@ export function runtimeMcpHandler(
       }));
       server.setRequestHandler("tools/call", async (request) => {
         const { name, arguments: args } = request.params;
-        if (name !== "factory_stage_run_image" && !fitsDefinitionBody(args))
+        if (
+          name !== "factory_stage_run_image" &&
+          mcpArgumentBytes(args) > MCP_ARGUMENTS_LIMIT_BYTES
+        )
           return textResult(true, {
             code: "validation",
             message: "Send arguments up to 2 MB.",
@@ -313,6 +320,7 @@ export function runtimeMcpHandler(
           return callTool(runtime, name as keyof typeof operations, args);
         return (
           (await callAuthoringTool(definitions, name, args)) ??
+          (await callDefinitionTransferTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
           (await callStartDiagnosisTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
@@ -328,7 +336,7 @@ export function runtimeMcpHandler(
       return server;
     },
     // A Flow save carries a whole graph, as Studio's Flow document body does.
-    { maxRequestBodySize: Math.max(definitionBody.bytes, STAGE_REQUEST_LIMIT_BYTES) },
+    { maxRequestBodySize: Math.max(MCP_ARGUMENTS_LIMIT_BYTES, STAGE_REQUEST_LIMIT_BYTES) },
   );
   return (request) => handler.fetch(request);
 }
