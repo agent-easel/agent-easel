@@ -45,6 +45,7 @@ import type {
   FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
+import { productStatement } from "./about.ts";
 import { AttentionCoordinator } from "./attention-coordinator.ts";
 import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
 import { BackendSupervisor } from "./backend.ts";
@@ -774,6 +775,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function start() {
+  app.setAboutPanelOptions({ applicationName: "T3 Factory", credits: productStatement });
   store = await SettingsStore.open(app.getPath("userData"));
   windowBounds = new WindowBoundsTracker(store.get().windowBounds);
   applyNativeAppearance(store.get().appearance);
