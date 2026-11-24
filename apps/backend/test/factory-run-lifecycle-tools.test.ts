@@ -2,7 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
 import { startedRun } from "./support/chat-runs.ts";
-import { workerAtWork } from "./support/scenarios.ts";
+import { woke, workerAtWork } from "./support/scenarios.ts";
 
 type McpClient = Awaited<ReturnType<typeof factoryMcpClient>>;
 
@@ -66,6 +66,36 @@ it("a session snoozes a Run and restores it, and each reply states the resulting
     run: { lifecycle: "active" },
     result: "restored",
   });
+});
+
+it("restoring a Woke Run that is not Snoozed reports unchanged and leaves its Woke mark", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const worker = await woke(fixture.world, await workerAtWork(fixture.world, fixture.input));
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await call(client, "factory_restore_run", { run: worker.runId });
+
+  // Assert
+  expect(toolReply(result)).toMatchObject({ run: { lifecycle: "active" }, result: "unchanged" });
+  const navigation = await fixture.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value[0]?.presentation).toStrictEqual({ snoozed: false, woke: true });
+});
+
+it("snoozing a Run that is already Snoozed reports unchanged", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  const run = await started(fixture, "twice");
+  const client = await factoryMcpClient(c, fixture.f);
+  await call(client, "factory_snooze_run", { run: run.id });
+
+  // Act
+  const result = await call(client, "factory_snooze_run", { run: run.id });
+
+  // Assert
+  expect(toolReply(result)).toMatchObject({ run: { lifecycle: "snoozed" }, result: "unchanged" });
 });
 
 it("restoring a Run that is not Snoozed is reported as unchanged", async (c) => {
