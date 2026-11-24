@@ -126,7 +126,7 @@ it("a title chosen while a launch is still in flight is applied when the worker 
   );
 });
 
-it("archiving a Run drops a pending worker rename and a later title change does not call T3", async (c) => {
+it("archiving a Run drops a pending worker rename and a later rename is refused without calling T3", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
   const started = await f.startRun(input);
@@ -143,7 +143,7 @@ it("archiving a Run drops a pending worker rename and a later title change does 
 
   // Assert
   await f.awaitWorkerTitles();
-  assert(renamed.ok);
+  expect(renamed).toMatchObject({ ok: false, error: { code: "conflict" } });
   expect(t3.threads.renames).toStrictEqual([]);
   expect(t3.threads.threadTitle([...t3.threads.launches.values()][0]!.reference.threadId)).toBe(
     "F#1 Entry worker · Improve search",

@@ -248,6 +248,26 @@ it("renaming a Run trims its title and makes it manual without changing its sibl
   expect(navigation.value.find((entry) => entry.id === first.id)?.titleProvenance).toBe("manual");
 });
 
+it("an Archived Run cannot be renamed and keeps its title", async (c) => {
+  // Arrange
+  const { f, world, input } = await prepared(c);
+  const { first } = await twoRunsOfOneFlow(world, input, { ...input, ...secondStart });
+  assert((await f.archiveRun(first.id)).ok);
+
+  // Act
+  const result = await f.renameRun(first.id, { title: "Too late" });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error).toMatchObject({
+    code: "conflict",
+    message: "An Archived Run cannot be renamed.",
+  });
+  const run = await f.getRun(first.id);
+  assert(run.ok);
+  expect(run.value.title).toBe(first.title);
+});
+
 it("a whitespace-only Run title is rejected", async (c) => {
   // Arrange
   const { f, world, input } = await prepared(c);

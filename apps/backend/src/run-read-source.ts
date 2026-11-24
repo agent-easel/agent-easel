@@ -27,6 +27,7 @@ export const runListSource = (
 
 export interface RunReadSource {
   readonly identity: RunIdentity;
+  readonly woke: boolean;
   readonly detail: RunDetail;
   readonly notInT3: boolean;
   readonly otherInvocationPaths: ReadonlyMap<string, SubflowInvocationPath>;
@@ -52,6 +53,9 @@ export const runReadSource =
         reference,
       );
       if (!identity) return { ok: true, value: null };
+      const [presentation] = yield* sql<{
+        woke: number;
+      }>`SELECT woke FROM run_presentation WHERE run_id=${identity.id}`;
       const detail = yield* getRun(identity.id);
       if (!detail.ok) return detail;
       const defaults = new Set(
@@ -71,6 +75,7 @@ export const runReadSource =
         ok: true,
         value: {
           identity,
+          woke: !!presentation?.woke,
           detail: detail.value,
           notInT3: project.availability !== "available",
           otherInvocationPaths,

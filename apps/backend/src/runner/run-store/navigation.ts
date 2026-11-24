@@ -305,17 +305,23 @@ export function openRunNavigation(database: RunnerDatabase) {
     },
     renameRun(id: string, title: string): Effect.Effect<Result<void>, unknown> {
       return Effect.gen(function* () {
-        const found = yield* database.transaction((sql) =>
+        const outcome = yield* database.transaction((sql) =>
           Effect.gen(function* () {
-            const [current] = yield* sql<{ title: string }>`SELECT title FROM runs WHERE id=${id}`;
-            if (!current) return false;
+            const [current] = yield* sql<{
+              title: string;
+              archived_at: string | null;
+            }>`SELECT title,archived_at FROM runs WHERE id=${id}`;
+            if (!current) return "missing" as const;
+            if (current.archived_at) return "archived" as const;
             yield* sql`UPDATE runs SET title=${title},title_provenance='manual' WHERE id=${id}`;
             yield* dropTitleGeneration(sql, id);
             if (current.title !== title) yield* queueWorkerTitleSync(sql, id);
-            return true;
+            return "renamed" as const;
           }),
         );
-        if (!found) return failure("not_found", "This Run does not exist.");
+        if (outcome === "missing") return failure("not_found", "This Run does not exist.");
+        if (outcome === "archived")
+          return failure("conflict", "An Archived Run cannot be renamed.");
         database.changes.runChanged(id);
         return { ok: true as const, value: undefined };
       });
