@@ -2,10 +2,15 @@ import { expect, it } from "@effect/vitest";
 import {
   authoringMcpClient,
   clonesMcpClient,
+  factoryMcpClient,
   mcpFlowToDuplicate,
   toolReply,
 } from "./support/factory-mcp.ts";
-import { assertOk, sampleAgentInput } from "./support/domain-setup.ts";
+import {
+  assertOk,
+  sampleAgentInput,
+  savedAgentWhileCapabilitiesFail,
+} from "./support/domain-setup.ts";
 
 /** A listed definition's name and owning Project. */
 type Owned = { readonly name: string; readonly projectId: string | null };
@@ -580,6 +585,105 @@ it("factory_check_flow reports a block whose Agent Needs a model as not ready", 
   });
 });
 
+it("factory_check_flow_draft answers a ready draft with the Agent revisions it used and saves nothing", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Reviewer")));
+  const saved = assertOk(await factory.createFlow({ name: "Review" }));
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: {
+      flowId: saved.id,
+      expectedRevision: saved.revision,
+      expectedProjectId: saved.projectId,
+      name: "Review",
+      graph: revisitGraph(agent.id, ""),
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual({
+    ready: true,
+    issues: [],
+    agentRevisions: { [agent.id]: { revision: 1, projectId: null } },
+  });
+  expect(assertOk(await factory.getFlow(saved.id))).toStrictEqual(saved);
+});
+
+it("factory_check_flow_draft names an invalid draft's top-level arguments with or without a cursor", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createFlow({ name: "Review" }));
+  const invalidDraft = {
+    flowId: saved.id,
+    expectedRevision: saved.revision,
+    expectedProjectId: saved.projectId,
+    name: "",
+    graph: { blocks: "not a list" },
+  };
+
+  // Act
+  const withoutCursor = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: invalidDraft,
+  });
+  const withCursor = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: { ...invalidDraft, cursor: "v1.x.y.0" },
+  });
+
+  // Assert
+  expect(withCursor.isError).toBe(true);
+  const { issues } = toolReply(withCursor) as { issues: { path: string }[] };
+  expect(issues.map(({ path }) => path)).toContain("name");
+  expect(issues.every(({ path }) => !path.startsWith("draft."))).toBe(true);
+  expect(toolReply(withCursor)).toStrictEqual(toolReply(withoutCursor));
+});
+
+it("factory_check_flow_draft reports a blocked draft's findings and leaves the saved Flow unchanged", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Reviewer")));
+  const saved = assertOk(
+    await factory.createFlow({ name: "Review", graph: revisitGraph(agent.id, "") }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_check_flow_draft",
+    arguments: {
+      flowId: saved.id,
+      expectedRevision: saved.revision,
+      expectedProjectId: saved.projectId,
+      name: "Review",
+      graph: revisitGraph("missing-agent", ""),
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual({
+    ready: false,
+    issues: [
+      {
+        code: "agent_required",
+        path: "graph.blocks.0.agentId",
+        message: "Choose a saved Agent for Review.",
+      },
+      {
+        code: "exit_required",
+        path: "graph.blocks.0",
+        message: "Add an exit to Review or its Agent.",
+      },
+    ],
+    agentRevisions: { "missing-agent": null },
+  });
+  expect(assertOk(await factory.getFlow(saved.id))).toStrictEqual(saved);
+});
+
 it("removing an unused Agent replies with its id and the Agent then reads as not found", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);
@@ -1057,3 +1161,118 @@ it("factory_save_flow renames a Join and keeps its sources and output wires", as
 
 const renamedJoin = (name: string) => (block: { readonly kind: string }) =>
   block.kind === "join" ? { ...block, name } : block;
+
+it("a compact Agent list gives each Agent's model and override Projects without reading the T3 catalog", async (c) => {
+  // Arrange
+  const { factory, agent } = await savedAgentWhileCapabilitiesFail(c);
+  const client = await factoryMcpClient(c, factory);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_list_agents",
+    arguments: { compact: true },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual([
+    {
+      id: agent.id,
+      name: agent.name,
+      projectId: null,
+      revision: 1,
+      model: {
+        environmentId: agent.execution!.environmentId,
+        providerInstanceId: agent.execution!.providerInstanceId,
+        modelId: agent.execution!.modelId,
+      },
+      overrideProjectIds: [],
+      updatedAt: agent.updatedAt,
+    },
+  ]);
+});
+
+it("a compact Flow list names each block's Agent or Flow and drops the graph and readiness bodies", async (c) => {
+  // Arrange
+  const { client } = await authoringMcpClient(c);
+  const agent = toolReply(
+    await client.callTool({ name: "factory_create_agent", arguments: sampleAgentInput("Coder") }),
+  );
+  const flow = toolReply(
+    await client.callTool({
+      name: "factory_create_flow",
+      arguments: {
+        name: "Change",
+        graph: {
+          flowInput: { targetBlockIds: ["code"] },
+          blocks: [
+            {
+              id: "code",
+              kind: "agent",
+              name: "Code",
+              agentId: agent.id,
+              hiddenExitIds: [],
+              localExits: [],
+            },
+          ],
+          connections: [],
+        },
+      },
+    }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_list_flows",
+    arguments: { compact: true },
+  });
+
+  // Assert
+  expect(toolReply(result)).toStrictEqual([
+    {
+      id: flow.id,
+      name: "Change",
+      projectId: null,
+      revision: 1,
+      workspace: flow.workspace,
+      ready: flow.readiness.ready,
+      issueCount: flow.readiness.issues.length,
+      updatedAt: flow.updatedAt,
+      blocks: [{ id: "code", kind: "agent", name: "Code", agentId: agent.id }],
+    },
+  ]);
+});
+
+it("the default Agent list still returns full definitions with their settings status", async (c) => {
+  // Arrange
+  const { client } = await authoringMcpClient(c);
+  await client.callTool({ name: "factory_create_agent", arguments: sampleAgentInput("Coder") });
+
+  // Act
+  const result = await client.callTool({ name: "factory_list_agents", arguments: {} });
+
+  // Assert
+  expect(toolReply(result)[0]).toMatchObject({
+    prompt: expect.any(String),
+    exits: expect.any(Array),
+    settingsStatus: expect.any(Object),
+  });
+});
+
+it("a compact flag that is not a boolean is refused at its path", async (c) => {
+  // Arrange
+  const { client } = await authoringMcpClient(c);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_list_flows",
+    arguments: { compact: "yes" },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ path: "compact" }],
+  });
+});

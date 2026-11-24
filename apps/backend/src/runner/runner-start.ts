@@ -516,6 +516,12 @@ export function openRunnerStart(
       return checked.ok ? { ok: true as const, value: undefined } : checked;
     });
   }
+  function startPreflight(projectId: string, flowId: string) {
+    return Effect.gen(function* () {
+      const checked = yield* startPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
+      return checked.ok ? { ok: true as const, value: undefined } : checked;
+    });
+  }
   /** Connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
   function launchPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
@@ -693,7 +699,7 @@ export function openRunnerStart(
         : { ok: true, value: agents };
     });
   }
-  return { start, startText, startBlockers };
+  return { start, startText, startBlockers, startPreflight };
 }
 
 /** A graph issue on an Agent block this Start could not read. Those blocks already report

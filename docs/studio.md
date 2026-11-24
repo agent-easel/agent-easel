@@ -902,7 +902,7 @@ they are present, never their live availability, so one Agent never reports both
 Agent or Human step exit, a Wait output and a Continuation output need no edge: unconnected, they stop the branch without warning; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
 Readiness depends only on the graph, the Flow's owning Project and the saved revision and owning Project of each Agent it places, because an Agent's exits and former exit names
-are fixed per revision while its owner is not part of a revision. Validating unsaved content (`POST /api/flows/:id/validate`, Studio's live readiness check) resolves it under the saved
+are fixed per revision while its owner is not part of a revision. Validating unsaved content (`POST /api/flows/:id/validate`, Studio's live readiness check and the [`factory_check_flow_draft`](t3-integration.md#authoring-tools) tool) resolves it under the saved
 Flow's owner and therefore also answers `agentRevisions`: `{revision, projectId}` of each placed Agent by id, `null` for a missing one, against which that readiness was resolved, so a
 client can compare it with the Agents it shows and discard an answer after an owner change that appended no revision.
 

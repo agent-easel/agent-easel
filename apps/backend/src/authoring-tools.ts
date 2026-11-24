@@ -3,6 +3,7 @@ import type {
   AgentDefinition,
   AgentExecutionSettingsStatus,
   FactoryOperations,
+  FlowDraft,
   Result,
 } from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
@@ -22,6 +23,7 @@ export type AuthoringOperations = Pick<
   | "listFlows"
   | "getFlow"
   | "listFlowFindings"
+  | "validateFlow"
   | "createFlow"
   | "updateFlow"
   | "removeFlow"
@@ -83,6 +85,10 @@ const listFilter = (kind: "Agents" | "Flows"): Tool["inputSchema"] => ({
     projectId: {
       type: "string",
       description: `A Project id from factory_list_projects: list only global ${kind} and the ${kind} that Project owns. Omit it to list every ${kind.slice(0, -1)}.`,
+    },
+    compact: {
+      type: "boolean",
+      description: `true returns one summary row per ${kind.slice(0, -1)} instead of the full definition. Default false.`,
     },
   },
   additionalProperties: false,
@@ -241,7 +247,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_list_agents",
     description:
-      "List the current Agents with their owning Project (projectId, null for a global Agent), revision and settings status.",
+      "List the current Agents with their owning Project (projectId, null for a global Agent), revision and settings status. With compact true it returns summaries only (id, name, projectId, revision, model or null, overrideProjectIds, updatedAt) and does not read the T3 catalog; read full definitions with factory_get_agent.",
     inputSchema: listFilter("Agents"),
   },
   {
@@ -323,7 +329,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_list_flows",
     description:
-      "List the current Flows with their owning Project (projectId, null for a global Flow), revision, graph, workspace and readiness. A Project Flow starts only in its owning Project; a global Flow in any Project.",
+      "List the current Flows with their owning Project (projectId, null for a global Flow), revision, graph, workspace and readiness. A Project Flow starts only in its owning Project; a global Flow in any Project. With compact true it returns summaries only (id, name, projectId, revision, workspace, ready, issueCount, updatedAt and each block's id, kind, name and agentId or flowId); read full definitions with factory_get_flow.",
     inputSchema: listFilter("Flows"),
   },
   {
@@ -431,7 +437,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_check_flow",
     description:
-      "Check readiness of a Flow's latest saved revision, the same live graph, saved-Agent and placed-Flow check Studio shows. It does not check an unsaved draft or live execution readiness. For a Flow that places a Subflow, a finding inside a placed Flow carries nested {placements, flowId, revision, path}, budget findings carry exact totals and contributors, closure names the definitions judged, and at most 20 findings per code are listed: pass the reply's cursor to read the rest. Fix the listed issue paths before a Run is started.",
+      "Check readiness of a Flow's latest saved revision, the same live graph, saved-Agent and placed-Flow check Studio shows. It does not check an unsaved draft (use factory_check_flow_draft) and does not establish live execution readiness. For a Flow that places a Subflow, a finding inside a placed Flow carries nested {placements, flowId, revision, path}, budget findings carry exact totals and contributors, closure names the definitions judged, and at most 20 findings per code are listed: pass the reply's cursor to read the rest. Fix the listed issue paths before a Run is started.",
     inputSchema: {
       type: "object",
       properties: {
@@ -443,6 +449,36 @@ export const authoringTools: Tool[] = [
         },
       },
       required: ["flowId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_check_flow_draft",
+    description:
+      "Check readiness of an unsaved edit to an existing Flow before saving it, the same draft readiness Studio shows while the Flow is edited. It takes factory_save_flow's arguments, judges the candidate under the saved Flow's owning Project against the current saved Agents and placed Flows, and writes nothing: the saved Flow and its revisions stay unchanged. The reply has ready, issues with codes and paths, and agentRevisions: the saved revision and projectId of each Agent the graph places, null for a missing Agent. Nested findings, closure and the limit of 20 findings per code work as in factory_check_flow: pass the reply's cursor with the same draft to read the rest. It does not establish live execution readiness. Save a ready draft with factory_save_flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        flowId,
+        expectedRevision: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "The revision the draft edits. The check does not refuse an older one; factory_save_flow does.",
+        },
+        expectedProjectId: {
+          type: ["string", "null"],
+          description:
+            "The projectId you last read: the owning Project's id, or null for a global Flow. A check after the owner changed is refused with a conflict, because readiness depends on the owner.",
+        },
+        ...flowFields,
+        cursor: {
+          type: "string",
+          description:
+            "The cursor a previous factory_check_flow_draft reply gave for this same draft, to read the findings it omitted.",
+        },
+      },
+      required: ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
       additionalProperties: false,
     },
   },
@@ -461,6 +497,7 @@ export const authoringTools: Tool[] = [
 type Subject =
   | "agent"
   | "flow"
+  | "flowDraft"
   | "agentRemoval"
   | "flowRemoval"
   | "agentOwner"
@@ -498,6 +535,13 @@ const nextSteps: Record<Subject, Partial<Record<string, string>>> = {
     validation: fixIssuesNext,
     conflict:
       "Read the Flow with factory_get_flow, reapply your change and save with its revision.",
+    not_found: flowNotFoundNext,
+  },
+  flowDraft: {
+    stale_owner: staleOwnerNext,
+    stale_findings_cursor:
+      "Call factory_check_flow_draft without a cursor to read the draft's current readiness and its new cursor.",
+    validation: fixIssuesNext,
     not_found: flowNotFoundNext,
   },
   agentRemoval: {
@@ -549,6 +593,20 @@ export const withId =
           },
         });
 
+const withDraftFieldsAtTopLevel = (result: Result<unknown>): Result<unknown> =>
+  result.ok
+    ? result
+    : {
+        ok: false,
+        error: {
+          ...result.error,
+          issues: result.error.issues.map((issue) => ({
+            ...issue,
+            path: issue.path.replace(/^draft\./, ""),
+          })),
+        },
+      };
+
 /**
  * Global definitions and those `projectId` owns, or every definition without a filter. A filter
  * that is not a string is a validation issue.
@@ -574,6 +632,61 @@ const ownedBy =
       ),
     };
   };
+
+const compacted =
+  <A, S>(
+    list: (input: Record<string, unknown>) => Promise<Result<readonly A[]>>,
+    summarize: (definition: A) => S,
+    full: (listed: Result<readonly A[]>) => Promise<Result<unknown>>,
+  ) =>
+  async (input: Record<string, unknown>): Promise<Result<unknown>> => {
+    if (input.compact !== undefined && typeof input.compact !== "boolean")
+      return {
+        ok: false,
+        error: {
+          code: "validation",
+          message: "compact must be true or false.",
+          issues: [{ code: "invalid_flag", path: "compact", message: "Send true or false." }],
+        },
+      };
+    const listed = await list(input);
+    if (input.compact !== true) return full(listed);
+    return listed.ok ? { ok: true, value: listed.value.map(summarize) } : listed;
+  };
+
+const compactAgent = (agent: AgentDefinition) => ({
+  id: agent.id,
+  name: agent.name,
+  projectId: agent.projectId,
+  revision: agent.revision,
+  model: agent.execution && {
+    environmentId: agent.execution.environmentId,
+    providerInstanceId: agent.execution.providerInstanceId,
+    modelId: agent.execution.modelId,
+  },
+  overrideProjectIds: agent.projectOverrides.map((override) => override.projectId),
+  updatedAt: agent.updatedAt,
+});
+
+const compactFlow = (flow: FlowDraft) => ({
+  id: flow.id,
+  name: flow.name,
+  projectId: flow.projectId,
+  revision: flow.revision,
+  workspace: flow.workspace,
+  ready: flow.readiness.ready,
+  issueCount:
+    flow.readiness.issues.length +
+    (flow.readiness.omitted ?? []).reduce((sum, entry) => sum + entry.count, 0),
+  updatedAt: flow.updatedAt,
+  blocks: flow.graph.blocks.map((block) => ({
+    id: block.id,
+    kind: block.kind,
+    name: block.name,
+    ...(block.kind === "agent" && block.agentId !== null ? { agentId: block.agentId } : {}),
+    ...(block.kind === "subflow" && block.flowId !== null ? { flowId: block.flowId } : {}),
+  })),
+});
 
 /** A removal reply names only the removed id; removing an absent or removed id succeeds too. */
 export const removal = (
@@ -614,12 +727,11 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
   factory_get_agent_capabilities: ["agent", () => factory.getAgentCapabilities()],
   factory_list_agents: [
     "agent",
-    async (input) =>
-      withSettingsStatus(
-        factory,
-        await ownedBy(() => factory.listAgents())(input),
-        (agents, report) => agents.map(report),
-      ),
+    compacted(
+      ownedBy(() => factory.listAgents()),
+      compactAgent,
+      (listed) => withSettingsStatus(factory, listed, (agents, report) => agents.map(report)),
+    ),
   ],
   factory_get_agent: [
     "agent",
@@ -659,7 +771,14 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
       ),
     ),
   ],
-  factory_list_flows: ["flow", ownedBy(() => factory.listFlows())],
+  factory_list_flows: [
+    "flow",
+    compacted(
+      ownedBy(() => factory.listFlows()),
+      compactFlow,
+      async (listed) => listed,
+    ),
+  ],
   factory_get_flow: ["flow", withId("flowId", (id) => factory.getFlow(id))],
   factory_create_flow: ["flow", (input) => factory.createFlow(input)],
   factory_save_flow: ["flow", withId("flowId", (id, input) => factory.updateFlow(id, input))],
@@ -670,6 +789,15 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
       if (cursor !== undefined) return factory.listFlowFindings(id, { cursor: cursor as string });
       const flow = await factory.getFlow(id);
       return flow.ok ? { ok: true, value: flow.value.readiness } : flow;
+    }),
+  ],
+  factory_check_flow_draft: [
+    "flowDraft",
+    withId("flowId", (id, input) => {
+      const { cursor, ...draft } = toolArguments(input);
+      return cursor === undefined
+        ? factory.validateFlow(id, draft)
+        : factory.listFlowFindings(id, { cursor, draft }).then(withDraftFieldsAtTopLevel);
     }),
   ],
   factory_remove_flow: ["flowRemoval", removal("flowId", (id) => factory.removeFlow(id))],

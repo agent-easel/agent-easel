@@ -14,6 +14,7 @@ import {
 import { prepared } from "./support/prepared-runner.ts";
 import { FACTORY_BLOCK_SKILL } from "../src/factory-block-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "../src/factory-start-run-skill.ts";
+import { FACTORY_CONFIGURE_SKILL } from "../src/factory-configure-skill.ts";
 import { SETUP_FACTORY_SKILL } from "../src/setup-factory-skill.ts";
 import { isolatedUserHome } from "./support/reporting-home.ts";
 
@@ -101,6 +102,9 @@ it.for([
     expect(await readFile(join(home, skills, "setup-factory", "SKILL.md"), "utf8")).toBe(
       SETUP_FACTORY_SKILL,
     );
+    expect(await readFile(join(home, skills, "factory-configure", "SKILL.md"), "utf8")).toBe(
+      FACTORY_CONFIGURE_SKILL,
+    );
     expect(await readFile(join(canonicalSkills, "factory-block", "SKILL.md"), "utf8")).toBe(
       FACTORY_BLOCK_SKILL,
     );
@@ -109,6 +113,9 @@ it.for([
     );
     expect(await readFile(join(canonicalSkills, "setup-factory", "SKILL.md"), "utf8")).toBe(
       SETUP_FACTORY_SKILL,
+    );
+    expect(await readFile(join(canonicalSkills, "factory-configure", "SKILL.md"), "utf8")).toBe(
+      FACTORY_CONFIGURE_SKILL,
     );
   },
 );
@@ -140,6 +147,9 @@ it("a configured Claude config directory keeps its config and skills directly in
   expect(await readFile(join(configDirectory, "skills", "setup-factory", "SKILL.md"), "utf8")).toBe(
     SETUP_FACTORY_SKILL,
   );
+  expect(
+    await readFile(join(configDirectory, "skills", "factory-configure", "SKILL.md"), "utf8"),
+  ).toBe(FACTORY_CONFIGURE_SKILL);
   expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
 });
 
@@ -785,10 +795,15 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
     "factory_preview_flow_duplicate",
     "factory_duplicate_flow",
     "factory_check_flow",
+    "factory_check_flow_draft",
     "factory_remove_flow",
     "factory_list_projects",
     "factory_stage_run_image",
     "factory_start_run",
+    "factory_check_start",
+    "factory_get_t3_connection",
+    "factory_list_reporting_installations",
+    "factory_install_reporting",
     "factory_list_runs",
     "factory_read_run",
     "factory_rename_run",
@@ -845,10 +860,15 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
     ["flowId"],
     ["flowId", "projectId", "expectedRevision", "agents"],
     ["flowId"],
+    ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
     ["flowId"],
     undefined,
     ["mimeType", "dataBase64"],
     ["requestId", "projectId", "flowId", "input"],
+    ["projectId", "flowId"],
+    undefined,
+    undefined,
+    ["targetId"],
     undefined,
     ["run"],
     ["run", "title"],
