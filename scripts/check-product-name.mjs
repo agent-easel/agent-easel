@@ -15,7 +15,6 @@ export const allowlist = [
     why: "frozen bridge update metadata",
   },
   { path: /^docs\/release\.md$/, why: "update path of old installations" },
-  { path: /^apps\/frontend\/src\/components\/agenteasel-notice\.tsx$/, why: "bridge release" },
   { path: /^docs\/desktop-and-clients\.md$/, why: "bridge release and old data home" },
   { path: /^scripts\/check-product-name\.mjs$/, why: "this gate" },
   { path: /^scripts\/check-product-name\.test\.mjs$/, why: "this gate" },

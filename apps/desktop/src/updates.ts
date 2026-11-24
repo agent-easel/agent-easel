@@ -35,7 +35,6 @@ export class Updates {
     this.changed(this.status);
   }
 
-  /** Development runs and builds without a configured feed report updates as unsupported. */
   start(channel: UpdateChannel) {
     if (app.getVersion().includes("+dev.")) {
       this.set({

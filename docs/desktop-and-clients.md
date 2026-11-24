@@ -355,8 +355,6 @@ menu bar is hidden until Alt is pressed.
 
 ## Handoff to AgentEasel
 
-T3 Code AgentEasel is renamed AgentEasel. The current release is the last T3 Code AgentEasel build. A macOS update cannot change an app's bundle id, so users download AgentEasel once. Until they do, the Run sidebar shows a persistent, non-blocking **T3 Code AgentEasel is now AgentEasel** notice with a **Download AgentEasel** link above its footer, in the desktop app and in the browser alike. Everything else keeps working.
-
 When AgentEasel migrates an installation on its first launch, it writes `migrated-to-agenteasel.json` both into the old data home (`FACTORY_HOME`, by default `~/.t3-factory`) and into the old desktop profile. A client installation has no data home and gets only the profile tombstone. If either file exists, T3 Code AgentEasel starts no backend, window, attention or update check. It turns off its login item and shows one blocking dialog with **Open AgentEasel**, **Move T3 Code AgentEasel to Trash** and **Quit**. Each choice ends the process. **Open AgentEasel** opens the download page when AgentEasel is not installed. The old data stays untouched as AgentEasel's backup.
 
 ## Updates
