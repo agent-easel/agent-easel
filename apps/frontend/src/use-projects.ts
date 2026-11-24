@@ -7,7 +7,7 @@ export const projectAvailabilityLabels: Record<FactoryProject["availability"], s
   available: "Available",
   "directory-unavailable": "Repository unavailable",
   "project-unavailable": "Project unavailable",
-  "connection-unavailable": "T3 connection unavailable",
+  "connection-unavailable": "T3 Code connection unavailable",
   "different-environment": "Different environment",
 };
 

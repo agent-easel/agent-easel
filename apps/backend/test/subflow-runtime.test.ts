@@ -765,7 +765,7 @@ it("a threadless inner launch error holds the next invocation at the same placem
     expect.objectContaining({
       kind: "launch",
       state: "cancelled",
-      problem: "T3 rejected the worker launch.",
+      problem: "T3 Code rejected the worker launch.",
     }),
   );
   expect(run.events.map((event) => event.kind)).not.toContain("subflow-nothing-returned");
@@ -799,12 +799,12 @@ it("a worktree creator failure holds its invocation and records the waiting work
     state: "active",
     ending: null,
     blocks: [
-      { state: "error", threadId: null, problem: "T3 rejected the worker launch." },
+      { state: "error", threadId: null, problem: "T3 Code rejected the worker launch." },
       {
         state: "error",
         threadId: null,
         problem:
-          "T3 rejected the worker that creates the Run worktree. This worker was not launched.",
+          "T3 Code rejected the worker that creates the Run worktree. This worker was not launched.",
       },
     ],
   });
@@ -1172,7 +1172,7 @@ it("reads an exact inner invocation with its ancestor placement through HTTP", a
   });
 });
 
-it("a finished Block inside a Subflow settles its worker thread in T3 while the Run stays Active", async (c) => {
+it("a finished Block inside a Subflow settles its worker thread in T3 Code while the Run stays Active", async (c) => {
   // Arrange
   const { f, t3, world, input, agent } = await prepared(c);
   const child = await savedFlow(f, {

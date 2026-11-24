@@ -129,7 +129,7 @@ async function withdrawnSettledRow(app: App, screen: Screen, browser: Browser, f
   await fixture.projects.withdraw({ id: project.id });
   await app.open("/runs/new");
   await screen.getByRole("button", /^Settled \d+$/).tap();
-  await expect(browser.locator(`#run-row-${id}`)).toContainText("not in T3");
+  await expect(browser.locator(`#run-row-${id}`)).toContainText("not in T3 Code");
   const badges = browser.locator(`#run-row-${id} [data-slot="status-badge"]`);
   await expect(badges).toHaveCount(2);
   return { id, ending: badges.nth(0), notInT3: badges.nth(1) };
@@ -177,7 +177,7 @@ test("a Settled Run that recorded Output missing shows its ending on the row, an
   await app.screenshot("ending-badge-narrow-sidebar");
 });
 
-test("at the 224 px sidebar a Settled Run not in T3 keeps its meta line on one line, with the ending as its flag and Not in T3 in full", async ({
+test("at the 224 px sidebar a Settled Run not in T3 Code keeps its meta line on one line, with the ending as its flag and Not in T3 Code in full", async ({
   app,
   screen,
   browser,
@@ -192,14 +192,14 @@ test("at the 224 px sidebar a Settled Run not in T3 keeps its meta line on one l
   );
 
   // Assert
-  await expect(notInT3).toHaveText("Not in T3");
+  await expect(notInT3).toHaveText("Not in T3 Code");
   await expect(ending).toBeVisible();
   await expect(ending.getByText("Approved")).toBeHidden();
   expect(await notInT3Overflow(browser, id)).toEqual({ line: 0, label: 0 });
   await app.screenshot("ending-not-in-t3-narrow-sidebar");
 });
 
-test("at the default 300 px sidebar a Settled Run not in T3 shortens its ending so Not in T3 shows in full", async ({
+test("at the default 300 px sidebar a Settled Run not in T3 Code shortens its ending so Not in T3 Code shows in full", async ({
   app,
   screen,
   browser,
@@ -214,7 +214,7 @@ test("at the default 300 px sidebar a Settled Run not in T3 shortens its ending 
   );
 
   // Assert
-  await expect(notInT3).toHaveText("Not in T3");
+  await expect(notInT3).toHaveText("Not in T3 Code");
   await expect(ending.getByText("Approved")).toBeVisible();
   await expect(browser.locator(`#run-row-${id} time`)).toBeVisible();
   expect(await notInT3Overflow(browser, id)).toEqual({ line: 0, label: 0 });

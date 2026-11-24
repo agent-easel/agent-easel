@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
 import { LiveGitAdapter } from "../../src/adapters/live-git.ts";
-import { makeLiveT3, type Factory, type FactoryOptions } from "../../src/index.ts";
+import { makeLiveT3, type AgentEasel, type FactoryOptions } from "../../src/index.ts";
 import type { LiveT3ContractOptions } from "../../src/t3/live-contract.ts";
 import type { T3Connection } from "@agent-easel/contracts";
 import { factoryHarness } from "./factory.ts";
@@ -24,14 +24,14 @@ export function hostStatus(url: string, host: string): Promise<number> {
   });
 }
 
-export async function readConnection(factory: Factory): Promise<T3Connection> {
+export async function readConnection(factory: AgentEasel): Promise<T3Connection> {
   const result = await factory.getConnection();
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error("Connection read failed");
   return result.value;
 }
 
-export async function recheckConnection(factory: Factory): Promise<T3Connection> {
+export async function recheckConnection(factory: AgentEasel): Promise<T3Connection> {
   const result = await factory.recheckConnection();
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error("Connection recheck failed");

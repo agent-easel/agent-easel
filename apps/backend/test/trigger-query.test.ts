@@ -100,7 +100,7 @@ it("a repository qualifier is refused because the Project chooses the repository
   });
 });
 
-it("a state qualifier is refused because Factory reads open issues only", () => {
+it("a state qualifier is refused because AgentEasel reads open issues only", () => {
   // Act
   const parsed = parseTriggerQuery("label:factory:ready is:closed");
 

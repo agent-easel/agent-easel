@@ -188,7 +188,7 @@ const emptyStateQuestion = `I drafted three options for the empty state and need
 - Should the button say **Reset filters** or **Clear all**?
 - Keep the filter chips visible when nothing matches?
 
-Reply in T3 with the option number and any wording changes.`;
+Reply in T3 Code with the option number and any wording changes.`;
 
 /** Stable keys, titles and creation order are shared with journeys and the scenario catalog.
  * Reading this list needs no Factory; callers supply the saved Flow ids when instantiating it. */

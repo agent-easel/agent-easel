@@ -73,7 +73,7 @@ const inputSchema: JSONSchema7 = {
       type: "string",
       enum: [...TEXT_SOURCES],
       description:
-        "requester-message or selected-reply when prompt is copied exactly from that text; composed when you wrote it, which Factory labels in the review.",
+        "requester-message or selected-reply when prompt is copied exactly from that text; composed when you wrote it, which AgentEasel labels in the review.",
     },
     supersedes: {
       type: "string",
@@ -207,9 +207,9 @@ export function startAction(operations: StartOperations) {
     summary: (outcome) => {
       if (outcome.kind === "accepted") {
         const facts = outcome.facts as AcceptedFacts;
-        return `Factory accepted Run ${facts.runNumber === null ? "" : `#${facts.runNumber} `}“${clip(facts.title, 200)}”.`;
+        return `AgentEasel accepted Run ${facts.runNumber === null ? "" : `#${facts.runNumber} `}“${clip(facts.title, 200)}”.`;
       }
-      return `Factory did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
+      return `AgentEasel did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
     },
     target: (parameters) => (parameters as unknown as StartParameters).projectId,
   };
@@ -235,11 +235,14 @@ export function startAction(operations: StartOperations) {
       if (project?.availability !== "available")
         return refused(
           "project_unavailable",
-          "Factory cannot start work in that Project now: its repository is unavailable. Say so; do not choose another Project.",
+          "AgentEasel cannot start work in that Project now: its repository is unavailable. Say so; do not choose another Project.",
         );
       const flow = yield* operations.getFlow(parameters.flowId);
       if (!flow.ok)
-        return refused("flow_not_found", "Factory has no saved Flow with that ID. Use list_flows.");
+        return refused(
+          "flow_not_found",
+          "AgentEasel has no saved Flow with that ID. Use list_flows.",
+        );
       if (flow.value.projectId !== null && flow.value.projectId !== project.id)
         return refused(
           "flow_project_mismatch",
@@ -259,7 +262,7 @@ export function startAction(operations: StartOperations) {
   const tool: MutationTool = {
     name: "start_run",
     description:
-      "Propose starting a Factory Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
+      "Propose starting an AgentEasel Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: AgentEasel posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -284,7 +287,7 @@ export function startAction(operations: StartOperations) {
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
-            "Factory's complete review of this Start would exceed 32,000 characters, so it cannot be confirmed in chat. Suggest using Factory.",
+            "AgentEasel's complete review of this Start would exceed 32,000 characters, so it cannot be confirmed in chat. Suggest using AgentEasel.",
           );
         return {
           operation: "start",

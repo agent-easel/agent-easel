@@ -25,7 +25,7 @@ const checkoutWorkspace = (workspaceRoot: string | null, checkout: string) =>
 type WorkspaceRun = { readonly workspace: RunWorkspace; readonly workspace_root: string };
 type WorkspaceStrategy = LaunchPayload["workspaceStrategy"];
 
-export const WORKTREE_REJECTED = "T3 rejected the worker that creates the Run worktree.";
+export const WORKTREE_REJECTED = "T3 Code rejected the worker that creates the Run worktree.";
 
 /** Factory names the branch so T3 does not rename it later: unique per Run number and Run id. */
 export const worktreeBranch = (number: number, runId: string) =>

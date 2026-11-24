@@ -25,7 +25,7 @@ function pendingStopProblem(
   problem: string,
 ) {
   return Effect.gen(function* () {
-    if (stop.outcome !== "acknowledged") return "T3 did not confirm the Stop request.";
+    if (stop.outcome !== "acknowledged") return "T3 Code did not confirm the Stop request.";
     const elapsed = Date.parse(yield* now) - Date.parse(stop.requested_at);
     return elapsed >= STOP_CONFIRMATION_MS ? problem : undefined;
   });
@@ -49,8 +49,9 @@ function verifyWorkerStop(
     if (needsRetry) return observed.problem;
     if (!observed.stoppable) return observed.problem;
     const current = yield* freshSnapshot();
-    if (current.contextId !== run.context_id) return "The T3 authorization for this Run changed.";
-    if (!current.answered) return "T3 could not confirm current Stop support.";
+    if (current.contextId !== run.context_id)
+      return "The T3 Code authorization for this Run changed.";
+    if (!current.answered) return "T3 Code could not confirm current Stop support.";
     if (!current.support.stop.supported)
       return current.support.stop.explanation ?? observed.problem;
     const key = yield* store.claimInvocationStop(
@@ -63,7 +64,7 @@ function verifyWorkerStop(
     const acknowledged = yield* requestThreadStop(t3, runTarget(run), worker.thread_id, key);
     yield* store.recordInvocationStop(run.id, key, acknowledged ? "acknowledged" : "failed");
     if ((yield* readWorker(run, worker.thread_id)).finished) return null;
-    return acknowledged ? undefined : "T3 did not accept the Stop request.";
+    return acknowledged ? undefined : "T3 Code did not accept the Stop request.";
   });
 }
 
@@ -76,7 +77,7 @@ function verifyScope(context: StopContext) {
       yield* store.invocationUnresolved(
         run,
         invocation,
-        "The T3 authorization for this Run is unavailable.",
+        "The T3 Code authorization for this Run is unavailable.",
       );
       return;
     }

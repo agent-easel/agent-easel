@@ -35,6 +35,7 @@
     "fallow:complexity": "fallow health --complexity --fail-on-issues --quiet --no-cache",
     "fallow": "vp run --concurrency-limit 8 gate:fallow",
     "check:e2e-configs": "node scripts/check-e2e-configs.mjs",
+    "check:product-name": "node scripts/check-product-name.mjs",
     "check:git-attribution": "node scripts/check-git-attribution.mjs",
     "check:ui-evidence": "node scripts/check-ui-evidence.mjs",
     "prepare": "vp config --no-agent",

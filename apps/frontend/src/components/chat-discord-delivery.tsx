@@ -75,7 +75,7 @@ export function DeliveryCard({
       })
       .then(onSettings)
       .catch((cause: unknown) => {
-        setError(chatControlError(cause, "Factory could not retry the message."));
+        setError(chatControlError(cause, "AgentEasel could not retry the message."));
       })
       .finally(() => {
         setBusy(null);

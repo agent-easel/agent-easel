@@ -126,7 +126,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     for (const label of checkUiEvidence(readBody(process.argv.slice(2)))) {
       console.error(
-        `::error::UI changes require a row of the "| Before | After |" table in "## UI screenshots" with an embedded HTTPS image in its ${label} column; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
+        `::error::UI changes require a row of the "| Before | After |" table in "## UI screenshots" with an embedded HTTPS image in its ${label} column; a change without visible UI impact states why under "### No UI evidence" instead. See verify-agenteasel Evidence.`,
       );
       process.exitCode = 1;
     }

@@ -73,7 +73,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
     const built = super.buildMessagePayload(...args);
     const raw = typeof message === "object" && "raw" in message ? message.raw : undefined;
     if (raw !== undefined && raw.length > 2000)
-      throw new Error("A Factory message exceeded Discord's length.");
+      throw new Error("An AgentEasel message exceeded Discord's length.");
     return {
       ...built,
       payload: {
@@ -86,7 +86,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
 
   /** Factory splits its own messages; anything longer is a defect, never silently cut. */
   protected override truncateContent(content: string): string {
-    if (content.length > 2000) throw new Error("A Factory message exceeded Discord's length.");
+    if (content.length > 2000) throw new Error("An AgentEasel message exceeded Discord's length.");
     return content;
   }
 
@@ -241,7 +241,7 @@ const UNEXPECTED_STOP =
 
 const RECONNECTING: Omit<DiscordConnectionProblem, "occurredAt"> = {
   outcome: "unreachable",
-  message: "Discord closed the Gateway connection. Factory is reconnecting.",
+  message: "Discord closed the Gateway connection. AgentEasel is reconnecting.",
 };
 
 /**

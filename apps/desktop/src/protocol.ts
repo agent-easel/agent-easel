@@ -43,7 +43,7 @@ const unreachable = () =>
   new Response(
     JSON.stringify({
       ok: false,
-      error: { code: "internal", message: "The Factory server is unreachable.", issues: [] },
+      error: { code: "internal", message: "The AgentEasel server is unreachable.", issues: [] },
     }),
     {
       status: 503,

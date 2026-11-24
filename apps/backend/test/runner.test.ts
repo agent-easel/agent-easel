@@ -410,7 +410,7 @@ it("Start refuses a Project Flow in another Project and creates no Run", async (
   expect(t3.threads.launches.size).toBe(0);
 });
 
-it("Start refuses a Project Flow whose Project T3 no longer lists, with that reason, and creates no Run", async (c) => {
+it("Start refuses a Project Flow whose Project T3 Code no longer lists, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
   t3.projects.catalog = [];
@@ -442,7 +442,7 @@ it("Start refuses a Project Flow whose repository directory is missing, with tha
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Start refuses a Project Flow while T3 is unreachable, with that reason, and creates no Run", async (c) => {
+it("Start refuses a Project Flow while T3 Code is unreachable, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
   t3.connection.available = false;
@@ -458,7 +458,7 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Start refuses an Agent whose report support its T3 snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
+it("Start refuses an Agent whose report support its T3 Code snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
   t3.contract.support.reportReads = false;
@@ -473,7 +473,7 @@ it("Start refuses an Agent whose report support its T3 snapshot lacked, though a
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Start refuses with a recheck-and-retry explanation when T3's launch replay proof cannot be established, and creates no Run", async (c) => {
+it("Start refuses with a recheck-and-retry explanation when T3 Code's launch replay proof cannot be established, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
   t3.contract.support.launchProofFails = true;
@@ -488,13 +488,13 @@ it("Start refuses with a recheck-and-retry explanation when T3's launch replay p
       code: "launch_unsupported",
       path: "connection.contract",
       message:
-        "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
+        "T3 Code launch capabilities are unavailable. Recheck the connection and retry this Start.",
     },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
+it("Start refuses a Project Flow after T3 Code switched environment, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
   t3.connection.environmentId = "other-environment";

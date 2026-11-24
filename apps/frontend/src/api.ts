@@ -74,7 +74,7 @@ async function request<A>(path: string, init?: RequestInit, admitted = false): P
     if (result.error.code === "incompatible") transport.incompatible(result.error.message);
     throw new ApiError(result.error);
   }
-  if (!response.ok) throw new Error("Factory could not complete the request.");
+  if (!response.ok) throw new Error("AgentEasel could not complete the request.");
   return result.value;
 }
 
@@ -159,7 +159,7 @@ export const api = {
     });
     if (response.status === 404) return false;
     if (response.ok) return true;
-    throw new Error("Factory could not check the image.");
+    throw new Error("AgentEasel could not check the image.");
   },
 };
 

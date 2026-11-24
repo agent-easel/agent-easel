@@ -30,7 +30,7 @@ export function overrideEnvironment(context: TestContext, name: string, value: s
 }
 
 export async function isolatedUserHome(context: TestContext) {
-  const home = await mkdtemp(join(tmpdir(), "t3-factory-user-home-"));
+  const home = await mkdtemp(join(tmpdir(), "agenteasel-user-home-"));
   context.onTestFinished(() => rm(home, { recursive: true, force: true }));
   overrideEnvironment(context, "HOME", home);
   return home;

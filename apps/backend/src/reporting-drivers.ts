@@ -8,11 +8,11 @@ export function providerReporting(driverKind: unknown): AgentProviderReporting {
   return isReportingDriver(driverKind)
     ? {
         supported: true,
-        explanation: "Reports Block results through Factory MCP once it is installed.",
+        explanation: "Reports Block results through AgentEasel MCP once it is installed.",
       }
     : {
         supported: false,
         explanation:
-          "Factory reporting is not available for this provider yet. Settings → Agent reporting shows the MCP entry to add once support exists.",
+          "AgentEasel reporting is not available for this provider yet. Settings → Agent reporting shows the MCP entry to add once support exists.",
       };
 }

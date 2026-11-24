@@ -282,7 +282,7 @@ export async function startControlledDiscord() {
   const mintId = () => String(++nextId);
 
   const botUser = (bot: ControlledDiscordBot) =>
-    user(bot.userId ?? bot.applicationId, bot.username ?? "Factory bot", true);
+    user(bot.userId ?? bot.applicationId, bot.username ?? "AgentEasel bot", true);
   const parentOf = (channelId: string) =>
     guilds.find((guild) => guild.channels.some((channel) => channel.id === channelId));
   const channelType = (channelId: string) =>
@@ -669,7 +669,7 @@ export async function startControlledDiscord() {
       });
     return {
       status: 200,
-      body: sentMessage("0", user(applicationId, "Factory bot", true), fields, {
+      body: sentMessage("0", user(applicationId, "AgentEasel bot", true), fields, {
         ...message,
         embeds: [],
       }),
@@ -1126,7 +1126,7 @@ export function messageEvent(options: {
 }): GatewayEvent {
   const botUser = user(
     options.bot.userId ?? options.bot.applicationId,
-    options.bot.username ?? "Factory bot",
+    options.bot.username ?? "AgentEasel bot",
     true,
   );
   const mention = options.mention ?? !options.replyToBot;

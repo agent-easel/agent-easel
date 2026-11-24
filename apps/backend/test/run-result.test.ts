@@ -412,7 +412,7 @@ it("after restart a held ending reaches Finish once its worker's completed turn 
   expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
 });
 
-it("restarting under a replaced T3 authorization leaves an in-progress Finish settlement unresolved without another Stop", async (c) => {
+it("restarting under a replaced T3 Code authorization leaves an in-progress Finish settlement unresolved without another Stop", async (c) => {
   // Arrange
   const f = await prepared(c, racingEndingsFlow);
   const [first, second] = await twoWorkersStarted(f.world, f.input);
@@ -438,7 +438,7 @@ it("restarting under a replaced T3 authorization leaves an in-progress Finish se
       workers: expect.arrayContaining([
         expect.objectContaining({
           threadId: second.threadId,
-          problem: "The T3 connection is unavailable or its authorization changed.",
+          problem: "The T3 Code connection is unavailable or its authorization changed.",
           stopOutcome: "acknowledged",
         }),
       ]),

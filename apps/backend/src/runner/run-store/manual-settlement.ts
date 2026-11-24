@@ -33,11 +33,11 @@ const NOT_WORKING: readonly BlockState[] = [
 
 /** A send whose T3 reply was lost when its Run settled manually: it is never replayed again. */
 const UNRESOLVED_SEND_ON_SETTLE =
-  "The Run was settled before Factory confirmed whether T3 received this message; Factory will not resend it.";
+  "The Run was settled before AgentEasel confirmed whether T3 Code received this message; AgentEasel will not resend it.";
 
 /** Settle's refusal for a Run whose authorization context Factory knows was replaced. */
 const REPLACED_AUTHORIZATION =
-  "This Run started under an earlier T3 authorization, so Factory cannot read or stop its workers to settle it. Archive it instead.";
+  "This Run started under an earlier T3 Code authorization, so AgentEasel cannot read or stop its workers to settle it. Archive it instead.";
 
 /** Whether Factory knows an authorization context other than the Run's while the Run has work
  * only T3 can confirm under the Run's context: a bound worker or a launch whose outcome is
@@ -116,7 +116,7 @@ function unresolvedLaunchWorker(launch: UnresolvedLaunch): RunSettlementWorker {
     stopRequestedAt: null,
     stopOutcome: null,
     problem:
-      "Factory has not confirmed whether T3 launched this worker. It keeps searching and stops the worker it finds.",
+      "AgentEasel has not confirmed whether T3 Code launched this worker. It keeps searching and stops the worker it finds.",
   };
 }
 
@@ -404,7 +404,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
             ? yield* priorInvocationStop(sql, run.id, worker.thread_id, request.executionId)
             : undefined;
         const rows =
-          yield* sql`UPDATE run_settlement_workers SET stop_key=${inherited?.request_key ?? request.key},stop_requested_at=${inherited?.requested_at ?? time},stop_outcome=${inherited?.outcome ?? null},stop_problem=${inherited?.outcome === "failed" ? "T3 did not accept the Stop request." : null} WHERE run_id=${run.id} AND attempt=${attempt} AND thread_id=${worker.thread_id} AND stop_key IS NULL AND stop_outcome IS NULL AND EXISTS(SELECT 1 FROM run_settlements WHERE run_id=${run.id} AND attempt=${attempt} AND attempt_owner=${ownerToken}) RETURNING thread_id`;
+          yield* sql`UPDATE run_settlement_workers SET stop_key=${inherited?.request_key ?? request.key},stop_requested_at=${inherited?.requested_at ?? time},stop_outcome=${inherited?.outcome ?? null},stop_problem=${inherited?.outcome === "failed" ? "T3 Code did not accept the Stop request." : null} WHERE run_id=${run.id} AND attempt=${attempt} AND thread_id=${worker.thread_id} AND stop_key IS NULL AND stop_outcome IS NULL AND EXISTS(SELECT 1 FROM run_settlements WHERE run_id=${run.id} AND attempt=${attempt} AND attempt_owner=${ownerToken}) RETURNING thread_id`;
         if (!rows.length || inherited) return false;
         yield* appendTimelineEvent(sql, {
           kind: "worker-stop-requested",

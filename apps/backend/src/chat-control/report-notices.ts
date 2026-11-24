@@ -32,13 +32,13 @@ const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversatio
 type ActPlace = "thread" | "t3" | "factory";
 const ACT_TEXT: Record<ActPlace, string> = {
   thread: "ask here to answer it",
-  t3: "answer it in T3",
-  factory: "check it in Factory",
+  t3: "answer it in T3 Code",
+  factory: "check it in AgentEasel",
 };
 
 const MATTERS: Record<MatterKind, { what: (block: string) => string; act: ActPlace }> = {
   human: { what: (block) => `Human step ${block} waits for an answer`, act: "thread" },
-  "native-request": { what: (block) => `${block} has a T3 request`, act: "t3" },
+  "native-request": { what: (block) => `${block} has a T3 Code request`, act: "t3" },
   "conversation-waiting": { what: (block) => `${block} asked a question`, act: "t3" },
   "missing-report": { what: (block) => `${block}: report missing`, act: "factory" },
   "execution-failed": { what: (block) => `${block}: execution failed`, act: "factory" },
@@ -146,7 +146,7 @@ function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
     const first =
       notice.purpose === "attention"
         ? attentionHeading(heading, matters)
-        : `📬 ${heading} · while Factory could not post in this thread:`;
+        : `📬 ${heading} · while AgentEasel could not post in this thread:`;
     return [first, ...lines];
   };
   for (const limit of NOTICE_LIMITS) {
@@ -330,7 +330,7 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       yield* insertNotice(origin, report, "archive", (id) =>
         [
           `🗄️ ${runHeading(runReference(report.run), report.run.title)} was archived.`,
-          "Archive is final; its history stays readable in Factory.",
+          "Archive is final; its history stays readable in AgentEasel.",
           machineLine({
             event: "archive",
             id,

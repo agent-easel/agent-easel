@@ -49,7 +49,7 @@ export function ExecutionSettingsFields({
     label: entry.displayName ?? "Unknown provider",
     ...(entry.reporting.supported
       ? {}
-      : { badge: "No Factory reporting", badgeKind: "neutral", disabled: true }),
+      : { badge: "No AgentEasel reporting", badgeKind: "neutral", disabled: true }),
   }));
   return (
     <Surface tone="group">

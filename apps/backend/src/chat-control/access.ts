@@ -147,12 +147,14 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
                 {
                   code: "discord_access_project",
                   path: `channels[${index}].projectIds[${position}]`,
-                  message: "Factory has no Project with this ID. Choose one of Factory's Projects.",
+                  message:
+                    "AgentEasel has no Project with this ID. Choose one of AgentEasel's Projects.",
                 },
               ],
         ),
       );
-      if (issues.length > 0) return failure("validation", "Choose Projects Factory knows.", issues);
+      if (issues.length > 0)
+        return failure("validation", "Choose Projects AgentEasel knows.", issues);
       const wrongList = [
         ...wrongListIssues(input.users, "users", "bot", before),
         ...wrongListIssues(input.bots, "bots", "human", before),

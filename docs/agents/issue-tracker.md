@@ -12,8 +12,8 @@ Write issue titles, bodies, comments, and resolutions in English. Conversations 
 - **Make an issue a sub-issue of a parent**: `gh issue create --parent <parent> ...`, or `gh issue edit <parent> --add-sub-issue <child>` afterwards (`gh` 2.94+). Older `gh`: `gh api --method POST repos/<owner>/<repo>/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>` (database id, as in **Blocking** below). Without sub-issues, put `Part of #<parent>` at the top of the child body.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Ready label**: `factory:ready` marks an issue as ready for a Factory Trigger to start. A Run a Trigger started names its ready label in the Run's start data. The claim removes it, so the issue does not start again; adding it again restarts the issue.
-- **Claim an issue**: `gh issue edit <number> --add-assignee @me --remove-label "<ready label>" --add-label "factory:in-progress"`, where `<ready label>` is the ready label named in the Run's start data, `factory:ready` when it names none, once the ownership checks under **Tool discovery and work state** show the issue is available. The `factory:in-progress` label marks the issue as taken in Factory. It is information, not a lock: those ownership checks still decide who may take an issue. That label is never removed; closing the issue is the completion signal.
+- **Ready label**: `factory:ready` marks an issue as ready for an AgentEasel Trigger to start. A Run a Trigger started names its ready label in the Run's start data. The claim removes it, so the issue does not start again; adding it again restarts the issue.
+- **Claim an issue**: `gh issue edit <number> --add-assignee @me --remove-label "<ready label>" --add-label "factory:in-progress"`, where `<ready label>` is the ready label named in the Run's start data, `factory:ready` when it names none, once the ownership checks under **Tool discovery and work state** show the issue is available. The `factory:in-progress` label marks the issue as taken in AgentEasel. It is information, not a lock: those ownership checks still decide who may take an issue. That label is never removed; closing the issue is the completion signal.
 - **Close**: `gh issue close <number> --comment "..."`
 - **Close through the PR**: a PR closes the issues its work started from with one `Closes #<n>` line per issue: the spec and every ticket it delivers. GitHub recognizes only a closing keyword directly before each number, so prose such as "Implements #648 (#651, #652)" or "Closes #1, #2" leaves issues open. Use `Refs #<n>` only for deliberately partial work, with the reason. Before marking the PR ready, `gh pr view <number> --json closingIssuesReferences` lists every intended issue.
 
@@ -32,7 +32,7 @@ Before claiming work, read the issue's comments and linked PRs, then use
 active threads. No assignee or PR means ownership is unknown, not that nobody is
 working. Search is not exhaustive and skips subagent threads. Use the thread's
 current state to detect overlapping work; coordinate only with the relevant
-owner. If discovery is inconclusive or T3 tools are unavailable, report that limit
+owner. If discovery is inconclusive or T3 Code tools are unavailable, report that limit
 and obtain ownership confirmation from the user or known owner before claiming
 an unassigned issue. An explicit task assignment supplies that confirmation for
 its scope. Claim an available issue before implementation, as in **Claim an
@@ -50,7 +50,7 @@ or change of direction, and before a handoff or context reset. Record:
 - the next concrete action.
 
 On resume, read the checkpoint, then refresh Git status/diff, the issue, PR checks
-and relevant T3 thread state from their tools. Without T3 tools, obtain current
+and relevant T3 Code thread state from their tools. Without T3 Code tools, obtain current
 thread state from the user or known owner and report that it was not independently
 verified. Those tools own current branch, ownership and review status; the
 checkpoint stores reasoning and evidence needed to continue, rather than a second

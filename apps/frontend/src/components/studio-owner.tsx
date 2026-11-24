@@ -78,7 +78,7 @@ export function OwnerGroupHeader({
       />
       {title}
       {owner.gone ? (
-        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+        <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>
       ) : (
         owner.detail && (
           <OwnerPath

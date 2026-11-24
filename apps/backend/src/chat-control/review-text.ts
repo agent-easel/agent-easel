@@ -22,7 +22,7 @@ const FENCE = "```";
  */
 export const sourceLine = (source: TextSource, what: string) =>
   source === "composed"
-    ? `⚠️ ${what} **composed by Factory's assistant, not written by you** — read all of it:`
+    ? `⚠️ ${what} **composed by AgentEasel's assistant, not written by you** — read all of it:`
     : source === "selected-reply"
       ? `💬 ${what} from the message you replied to:`
       : undefined;
@@ -88,13 +88,13 @@ export function exactTextProblem(
   if (characters(text) > TEXT_CHARACTERS || Buffer.byteLength(text) > TEXT_BYTES)
     return refused(
       `${kind}_too_long`,
-      `The ${names.long} is longer than Chat control accepts (8,000 characters and 16 KiB). Ask the requester for shorter text or to use Factory; never shorten it yourself.`,
+      `The ${names.long} is longer than Chat control accepts (8,000 characters and 16 KiB). Ask the requester for shorter text or to use AgentEasel; never shorten it yourself.`,
     );
   if (source === "composed") return undefined;
   const origin = source === "selected-reply" ? scope.source.selectedReply : scope.source.message;
   if (origin?.includes(text)) return undefined;
   return refused(
     `${kind}_not_exact`,
-    `The ${names.inexact} is not exact text from the ${source === "selected-reply" ? "selected reply" : "requester's message"}. Copy it character for character, or mark it composed so Factory labels it.`,
+    `The ${names.inexact} is not exact text from the ${source === "selected-reply" ? "selected reply" : "requester's message"}. Copy it character for character, or mark it composed so AgentEasel labels it.`,
   );
 }

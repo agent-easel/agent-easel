@@ -32,29 +32,31 @@ it("a client cannot set the write window for its own Agent Create request", asyn
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
 });
 
-it.effect("a delayed Create cannot write after Factory confirms it captured no Agent", (context) =>
-  Effect.gen(function* () {
-    // Arrange
-    const harness = yield* Effect.promise(() => factoryHarness(context));
-    const factory = yield* harness.service();
-    const reservation = yield* factory.reserveAgentCreate();
-    assert(reservation.ok);
-    yield* TestClock.adjust(15_000);
-    const outcome = yield* factory.getAgentCreateOutcome(reservation.value);
-    expect(outcome).toStrictEqual({ ok: true, value: { status: "absent" } });
+it.effect(
+  "a delayed Create cannot write after AgentEasel confirms it captured no Agent",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const harness = yield* Effect.promise(() => factoryHarness(context));
+      const factory = yield* harness.service();
+      const reservation = yield* factory.reserveAgentCreate();
+      assert(reservation.ok);
+      yield* TestClock.adjust(15_000);
+      const outcome = yield* factory.getAgentCreateOutcome(reservation.value);
+      expect(outcome).toStrictEqual({ ok: true, value: { status: "absent" } });
 
-    // Act
-    const result = yield* factory.createAgent({
-      ...sampleAgentInput(),
-      execution: null,
-      requestId: reservation.value,
-    });
+      // Act
+      const result = yield* factory.createAgent({
+        ...sampleAgentInput(),
+        execution: null,
+        requestId: reservation.value,
+      });
 
-    // Assert
-    assert(!result.ok);
-    expect(result.error.code).toBe("conflict");
-    expect(yield* factory.listAgents()).toStrictEqual({ ok: true, value: [] });
-  }),
+      // Assert
+      assert(!result.ok);
+      expect(result.error.code).toBe("conflict");
+      expect(yield* factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+    }),
 );
 
 it("a Create outcome follows the request identity even after another client revises its Agent", async (context) => {
@@ -312,7 +314,7 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
   });
 });
 
-it("listing Agents answers from saved definitions without calling T3", async (context) => {
+it("listing Agents answers from saved definitions without calling T3 Code", async (context) => {
   // Arrange
   const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
 
@@ -324,7 +326,7 @@ it("listing Agents answers from saved definitions without calling T3", async (co
   expect(t3.projects.capabilityReads).toBe(capabilityReads);
 });
 
-it("reading an Agent answers from its saved definition without calling T3", async (context) => {
+it("reading an Agent answers from its saved definition without calling T3 Code", async (context) => {
   // Arrange
   const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
 
@@ -336,7 +338,7 @@ it("reading an Agent answers from its saved definition without calling T3", asyn
   expect(t3.projects.capabilityReads).toBe(capabilityReads);
 });
 
-it("the Studio snapshot answers from saved definitions without calling T3", async (context) => {
+it("the Studio snapshot answers from saved definitions without calling T3 Code", async (context) => {
   // Arrange
   const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
 
@@ -457,7 +459,7 @@ it("moving a global Agent with Project overrides to a Project is refused and kee
   expect(assertOk(await factory.getAgent(global.id)).projectId).toBeNull();
 });
 
-it("an Agent whose owner is not a Factory Project id or null is rejected without creating a definition", async (context) => {
+it("an Agent whose owner is not an AgentEasel Project id or null is rejected without creating a definition", async (context) => {
   // Arrange
   const { factory } = await discoveredClones(context);
 

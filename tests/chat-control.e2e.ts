@@ -335,7 +335,7 @@ test("the host saves the bot, checks it over the Gateway and never sees the toke
 
   // Assert
   await expect(botCard.getByText("Gateway verified")).toBeVisible();
-  await expect(botCard.getByText("Factory bot", { exact: true })).toBeVisible();
+  await expect(botCard.getByText("AgentEasel bot", { exact: true })).toBeVisible();
   await expect(screen.getByRole("link", /^Setup guide/)).toHaveCount(0);
   const discord = await controlledDiscord(app.baseUrl);
   assert.deepStrictEqual(discord.sessions, [{ token: bot.token, ready: true, closed: true }]);
@@ -352,7 +352,7 @@ test("the host saves the bot, checks it over the Gateway and never sees the toke
       latestCheck: {
         outcome: "verified",
         applicationId: bot.applicationId,
-        botName: "Factory bot",
+        botName: "AgentEasel bot",
       },
     },
   });
@@ -530,7 +530,7 @@ test("the host can save a bot in Bots after correcting a wrong-list warning", as
   const access = screen.getByRole("region", "Access");
   const bots = screen.getByRole("region", "Bots");
   const save = screen.getByRole("button", "Save", { exact: true });
-  await expect(bots.getByText(/^Bots may talk to Factory and start Runs/)).toBeVisible();
+  await expect(bots.getByText(/^Bots may talk to AgentEasel and start Runs/)).toBeVisible();
   await access.getByLabel("Users").fill(`200000000000000001, ${ATLAS}`);
   await bots.getByLabel("Bot IDs").fill(HERMES);
   await save.tap();
@@ -660,7 +660,7 @@ test("sending the access test asks each allowed user to reply and names the chan
   await expect(accessCard.getByText("Can’t post", { exact: true })).toBeVisible();
   await expect(accessCard.getByRole("button", "Send again")).toBeEnabled();
   await app.screenshot("chat-discord-access-test-2-sent");
-  const card = screen.getByText(/^Factory bot can’t post in /);
+  const card = screen.getByText(/^AgentEasel bot can’t post in /);
   await expect(card).toBeVisible();
   // A gone channel gets the card to remove it, also once Discord's name lookup marked it unknown.
   await expect(screen.getByText(`${GONE_CHANNEL} no longer exists`, { exact: true })).toBeVisible();
@@ -750,7 +750,7 @@ test("an approved client's Settings has no Chat control section or search entry"
   await openApproved(app, "/settings/run-titles");
   const sections = screen.getByRole("navigation", "Settings sections");
   await expect(
-    sections.getByRole("link", "Run titles, Managed on the Factory host", { exact: true }),
+    sections.getByRole("link", "Run titles, Managed on the AgentEasel host", { exact: true }),
   ).toBeVisible();
   await expect(sections.getByRole("link", /^Language model/)).toHaveCount(0);
   await expect(sections.getByRole("link", /^Discord/)).toHaveCount(0);
@@ -817,14 +817,14 @@ test("replacing the bot token after Chat control operated warns that another bot
   await operatingChatControl(app.baseUrl);
   await app.open("/settings/chat-control/discord");
   const botCard = screen.getByRole("region", "Bot");
-  await expect(botCard.getByText("Factory bot", { exact: true })).toBeVisible();
+  await expect(botCard.getByText("AgentEasel bot", { exact: true })).toBeVisible();
 
   // Act
   await botCard.getByRole("button", "Replace the bot token").tap();
   await botCard.getByLabel("Bot token").fill("another-bot-token");
 
   // Assert
-  await expect(screen.getByText("A token from another bot replaces Factory bot")).toBeVisible();
+  await expect(screen.getByText("A token from another bot replaces AgentEasel bot")).toBeVisible();
   await expect(botCard.getByRole("button", "Cancel")).toBeVisible();
   await app.screenshot("chat-discord-token-replacement");
 });

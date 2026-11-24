@@ -1,8 +1,8 @@
 # Durable Runner
 
 The Runner turns accepted Starts, reports, Human answers, manual settlements and Archive
-requests into durable operations against T3, and decides when a Run settles. Inside it, the Run
-store owns Run state and its SQL transactions; orchestration owns T3 calls and
+requests into durable operations against T3 Code, and decides when a Run settles. Inside it, the Run
+store owns Run state and its SQL transactions; orchestration owns T3 Code calls and
 scheduling. Persistence principles are in [Application foundation](foundation.md#persistence-model); user
 behavior is in [Runs](runs.md); live-support limits are in
 [Compatibility](installation.md).
@@ -24,11 +24,11 @@ generation transitions run in the caller's transaction and take no lane, gate,
 generation, settlement, attention or Block guard. Start, Rename, Archive and manual
 settlement use the same transitions inside their own transactions.
 
-Orchestration calls T3, verifies payloads, searches uncertain launches and schedules
+Orchestration calls T3 Code, verifies payloads, searches uncertain launches and schedules
 observations, dispatch and retries. Its separate drive lane serializes
-observe and dispatch passes for a Run across T3 calls. That scheduling lane is not
-a persistence guarantee: a report can enter the store's mutation lane while a T3
-read is pending. No Run store transaction spans a T3 call.
+observe and dispatch passes for a Run across T3 Code calls. That scheduling lane is not
+a persistence guarantee: a report can enter the store's mutation lane while a T3 Code
+read is pending. No Run store transaction spans a T3 Code call.
 
 The store also owns the local part of the [handoff release rule](#routing-and-independent-queues):
 the Final result must still be its activation's newest version, no execution
@@ -36,13 +36,13 @@ failure may be pending, and the required guards and generation must hold.
 Orchestration reads whether the source worker thread is finished and passes the
 observed generation to the release transition. It asks the same rule before a held
 Handoff becomes a delivery, so a held arrival cannot create an activation, and
-again at reservation. T3 calls or a restart can intervene, and a delivery prepared
+again at reservation. T3 Code calls or a restart can intervene, and a delivery prepared
 before restart reaches reservation without repeating preparation. A revisit also
 checks that the recipient worker thread is finished at send time.
 
 ## Current execution contract
 
-Each Agent Block gets its own top-level T3 worker. Factory launches it with the Block's first
+Each Agent Block gets its own top-level T3 Code worker. AgentEasel launches it with the Block's first
 visit, never before ([Run workspace](#run-workspace)). There is
 no Run conversation and no native-delegation turn that copies the Agent. Runs closed under
 earlier contracts stay readable history ([upgrade notes](installation.md#current-execution-contract)).
@@ -50,32 +50,32 @@ Captured definitions carry no execution contract, coordination instruction versi
 reporting protocol.
 
 - Each Flow-input Agent starts independently. The worker uses that Agent's captured
-  provider, model and options (its Project override for the Run's Project, when it has one), the [Run workspace](#run-workspace), and the runtime mode from T3
+  provider, model and options (its Project override for the Run's Project, when it has one), the [Run workspace](#run-workspace), and the runtime mode from T3 Code
   and project defaults. Nothing is inherited from another thread. Two Blocks that share
   one Agent still get separate workers. Captured execution settings are always complete: Start
   rejects a Flow that places an Agent without them through readiness, and decoding a Run's captured definitions fails rather than
   launch or recover a worker from a model-less revision.
 - A worker launches with `F#<number> <Block label> · <Run title>`, using the Run's title when
   its launch is recorded and the Agent Block from its captured Flow. A blank label is omitted,
-  and a numberless historical Run uses `F` as the prefix. Factory collapses whitespace to
+  and a numberless historical Run uses `F` as the prefix. AgentEasel collapses whitespace to
   one line and clips on grapheme boundaries with an ellipsis, within 24 code points for
   the Block label and 200 for the entire title. Agent Blocks whose labels would be identical
-  receive ordinals in captured Flow order. Factory makes room for the ordinals within the label
+  receive ordinals in captured Flow order. AgentEasel makes room for the ordinals within the label
   budget and skips reserved literal or already assigned labels. Distinct rendered labels retain their names.
 - The formatted title is saved in the launch payload. Launch recovery searches for that exact
   title, even if a Run title or the live Flow definition has since changed. Recovery excludes
-  threads Factory already bound in the environment. An uncertain launch holds a later launch
-  of the same Run with the same saved title until Factory resolves ownership.
+  threads AgentEasel already bound in the environment. An uncertain launch holds a later launch
+  of the same Run with the same saved title until AgentEasel resolves ownership.
 - Start mints a **Block id** for each Agent Block and Continuation. The first message starts with
   `$factory-block`, then a `Factory Block id: <id>.` line; every later visit and Request
   report message repeats the same id. The worker passes it to `factory_get_block`, then
   `factory_update_block`. `factory_get_run` is read-only and grants no routing authority.
-  Subagents do not call Factory tools.
-- Factory alone owns routing, handoff release, Human occurrences, settling and Archive. A
+  Subagents do not call AgentEasel tools.
+- AgentEasel alone owns routing, handoff release, Human occurrences, settling and Archive. A
   completed model turn is not a business result. A definitive launch rejection is an
   error. An uncertain launch is recovered by search, never by another launch.
 - A later handoff or Human correction creates a new activation on the same bound worker.
-  Conversation with the user stays in that worker thread; Factory does not track it.
+  Conversation with the user stays in that worker thread; AgentEasel does not track it.
 - A [Continuation](#continuations) has no worker of its own: its prompt is a later task in the worker
   thread its first message belongs to, with the Continuation's own Block id.
 - A [Condition](studio.md#canvas-and-block-configuration) is captured with its ordered rules as part of
@@ -88,38 +88,38 @@ The captured Flow revision's [workspace setting](studio.md#workspace-setting) de
 every worker of a Run works. A checkout Run works in the project root. A worktree Run's
 workers share one worktree; its project root stays the Run's project identity.
 
-- **Creator and branch.** Start of a worktree Flow also requires T3's worktree launch
+- **Creator and branch.** Start of a worktree Flow also requires T3 Code's worktree launch
   support (`launch_unsupported` otherwise) and records the Run workspace: the resolved base
   ref, the planned branch, the creator Block (the first Flow-input target) and its state,
   `preparing`, `bound` or `failed`. The creator launches with its first message on
-  `{type: "worktree", baseRef, branch, startFromOrigin}`. Factory derives `startFromOrigin`
-  from the captured Flow: `true` for **Default branch**, so T3 fetches from `origin` before
+  `{type: "worktree", baseRef, branch, startFromOrigin}`. AgentEasel derives `startFromOrigin`
+  from the captured Flow: `true` for **Default branch**, so T3 Code fetches from `origin` before
   creating the worktree, and `false` for **Custom ref**, preserving its local resolution.
-  Fetch and checkout failures belong to T3's workspace preparation after Start is accepted. Factory names the branch
-  `factory/run-<Run number>-<first 8 characters of the Run id>`, so T3 does not rename it
-  after the first turn and Runs of different Factory homes on one repository do not share
-  it; T3 rejects the launch if that branch already exists. The name is not configurable;
+  Fetch and checkout failures belong to T3 Code's workspace preparation after Start is accepted. AgentEasel names the branch
+  `factory/run-<Run number>-<first 8 characters of the Run id>`, so T3 Code does not rename it
+  after the first turn and Runs of different AgentEasel homes on one repository do not share
+  it; T3 Code rejects the launch if that branch already exists. The name is not configurable;
   [Run workspace lifecycle](runs.md#run-workspace-lifecycle) covers cleanup.
-- **Binding.** Factory binds the path and branch once the creator's thread shows both. The
-  path is not readiness: T3 queues each worker's turn behind that worker's own workspace
-  preparation. Before binding only the creator has a thread, and T3 may show its path before
+- **Binding.** AgentEasel binds the path and branch once the creator's thread shows both. The
+  path is not readiness: T3 Code queues each worker's turn behind that worker's own workspace
+  preparation. Before binding only the creator has a thread, and T3 Code may show its path before
   its branch, so a thread with no branch or the planned branch is accepted; after binding a
   thread must show the bound path. Any other workspace is a scope change. Checkout Runs keep
   the project-root rule.
 - **Joining workers.** After binding, every other Flow-input target launches once with its
   first message on `{type: "existing_worktree", worktreePath, branch}`. Every other Agent
   Block launches its worker the same way on its first arrival, so a Block that is never
-  reached never gets a thread. Each launch with a message keeps T3's preparation fence for that
+  reached never gets a thread. Each launch with a message keeps T3 Code's preparation fence for that
   worker's own setup, including blocking worktree setup scripts.
 - **Recovery.** An uncertain launch is recovered by search and never repeated. For the
   creator this means no second worktree, and the other workers keep waiting. A definitive creator rejection fails
   the workspace and errors every Flow-input Block; none launches into the project root.
   Automatic settlement waits while the worktree is unbound.
 - **Later activations.** After a Human step or a return to an earlier Block, the activation
-  is a queued send to an existing thread on the bound path and branch, so T3's recreation of
-  a missing managed worktree at turn start applies. Factory adds no restoration step; a
+  is a queued send to an existing thread on the bound path and branch, so T3 Code's recreation of
+  a missing managed worktree at turn start applies. AgentEasel adds no restoration step; a
   failed send stays unresolved under the usual delivery rules.
-- Factory never removes the worktree; T3's cleanup rules apply to it.
+- AgentEasel never removes the worktree; T3 Code's cleanup rules apply to it.
 
 ## Start and delivery guarantees
 
@@ -127,7 +127,7 @@ Start checks the connection, project, graph, saved Agent settings, the `$factory
 skill, reporting installation and launch support.
 Accepted Start atomically creates the Run's Task, assigns the Run number, references the
 Flow revision and freezes the current revision of each referenced Agent, and records each
-launch intent before contacting T3. An accepted request key is
+launch intent before contacting T3 Code. An accepted request key is
 unique across the database: the same content returns the same Run; changed content
 conflicts. Content is the project, Flow, prompt text, title and creation time, plus for an image Start the ordered
 prompt segments and every manifest field (image id, digest, name, type and size). A text-only request keeps the
@@ -135,7 +135,7 @@ earlier content form, so a request accepted before images recovers its Run, also
 Rejected requests record nothing, and the accepted key is also the Run's navigation creation key. A replay of an
 accepted key is recognized before image staging and capability checks.
 
-An image Start also requires T3's attachment support (`attachments_unsupported` otherwise), at most 8 images with unique
+An image Start also requires T3 Code's attachment support (`attachments_unsupported` otherwise), at most 8 images with unique
 ids and digests, every image reference in the manifest, names of 1–255 characters, and type and size matching the
 staged image. Inside the acceptance transaction every digest must be staged with its file present; otherwise Start fails
 with `missing_images` (HTTP 409, listing the digests), which is not a confirmed rejection, and creates no Run or Task. The
@@ -168,19 +168,19 @@ staging row ([retention](foundation.md#persistence-model)). A failed write is an
 quota or eviction.
 
 Every Flow-input launch intent saves the ordered image list (ordinal, digest, name, type, size), covered by its payload
-fingerprint, also for workers that join a bound worktree later. T3 attachment ids are never saved. Each dispatch of a
-pending launch checks attachment support, reads and verifies each image, uploads it to T3 and only then reserves and
-launches with the attachments. An upload failure leaves the launch pending with "Image upload to T3 failed: …" and
+fingerprint, also for workers that join a bound worktree later. T3 Code attachment ids are never saved. Each dispatch of a
+pending launch checks attachment support, reads and verifies each image, uploads it to T3 Code and only then reserves and
+launches with the attachments. An upload failure leaves the launch pending with "Image upload to T3 Code failed: …" and
 retries after a delay of 1 second doubling to 60; it is neither a Block error nor a Problem. Lost attachment support uses
-the pending launch-unsupported path. Bytes missing from Factory storage or failing their digest cancel the launch and
-mark the Block error "Run image missing from Factory storage" (for a worktree creator, every other Flow-input Block too).
+the pending launch-unsupported path. Bytes missing from AgentEasel storage or failing their digest cancel the launch and
+mark the Block error "Run image missing from AgentEasel storage" (for a worktree creator, every other Flow-input Block too).
 A rejected launch is an error; an uncertain one is searched for and never uploaded or launched again. Downstream
 launches, including a worktree Block's launch on its first arrival, revisits and Request report remain text-only.
-Factory does not use `t3_thread_send_attachments`: it has no retry key, and launch attachments cannot reach a worker
+AgentEasel does not use `t3_thread_send_attachments`: it has no retry key, and launch attachments cannot reach a worker
 that is already running.
 
 Every worker can instead discover and retrieve relevant original images through
-[read-only Factory MCP access](t3-integration.md#run-image-reads), including during later user conversations.
+[read-only AgentEasel MCP access](t3-integration.md#run-image-reads), including during later user conversations.
 A read creates no intent, turn, activation, handoff, attention or execution/lifecycle change. It can be repeated after a
 lost response without changing launch recovery or send uncertainty rules or authorizing a resend. Unlike missing bytes
 at Flow-input launch, an image-read failure does not fail the Block or raise attention; the worker handles any blocker
@@ -194,13 +194,13 @@ ownership without a takeover timer. Storage requires local-filesystem locking on
 or Linux; network filesystems and remote backend ownership are unsupported.
 
 Startup reconciles every Run it [drives](#settled-runs) before dispatching. Local changes serialize per Run,
-and no SQL transaction spans T3 I/O. Shutdown releases ownership without archiving or
+and no SQL transaction spans T3 Code I/O. Shutdown releases ownership without archiving or
 interrupting anything.
 
-An uncertain worker launch is never replayed, including with the same key. While Factory
-is running, recovery searches the same T3 environment and project for the saved title,
+An uncertain worker launch is never replayed, including with the same key. While AgentEasel
+is running, recovery searches the same T3 Code environment and project for the saved title,
 then binds only a uniquely verified thread and its exact execution. A missing parent, a
-non-string parent, or a missing workspace withholds the search. T3 reports a project-checkout
+non-string parent, or a missing workspace withholds the search. T3 Code reports a project-checkout
 thread with a null workspace, and that null matches a root-strategy launch. Any other
 workspace must equal the Run's project root. A worktree-creating launch matches a thread
 with a worktree path on its planned branch; a launch joining a bound worktree matches its
@@ -208,19 +208,19 @@ exact path and branch. A null branch never matches a worktree launch. The first 
 immediate; each completed search that does not bind waits longer, from 1 second doubling
 up to 60 seconds. Empty, delayed, ambiguous or incomplete evidence stays unresolved.
 Model options must be readable; otherwise live recovery can remain pending. A matching
-version or OAuth grant is not ownership. A definitive T3 rejection is an error and is
-not searched back into service. A thread T3 created before that rejection is an accepted
+version or OAuth grant is not ownership. A definitive T3 Code rejection is an error and is
+not searched back into service. A thread T3 Code created before that rejection is an accepted
 limit. Uncertain queue sends still need the identical saved body, key, target and
-authorization context plus independent retention proof. Live T3 contract inspection supplies no such
+authorization context plus independent retention proof. Live T3 Code contract inspection supplies no such
 proof by default. Acknowledged threads are observed, never relaunched. There is no Resume
 or fresh-attempt escape hatch.
 
 ## Report acceptance
 
-A Block's worker reports by naming its Block id. Factory resolves the id to its Run and
+A Block's worker reports by naming its Block id. AgentEasel resolves the id to its Run and
 Block and applies the report to the Block's current activation, whichever turn of the
 worker thread sent it: the launch turn, a user reply, a notification after delegated or
-background work, a delegated completion or a Request report turn. Factory does not
+background work, a delegated completion or a Request report turn. AgentEasel does not
 correlate native tool calls, search in-flight calls or bind authority to an exact
 execution. Before acceptance it observes the Run so the report belongs to the thread's
 current turn. Identity and recipients come from the Block id and the Run's captured Flow
@@ -228,7 +228,7 @@ revision. Acceptance and creation of outgoing handoffs are durable before the
 acknowledgement is returned.
 
 Anything that knows a Block id can report for that Block, including a subagent the worker
-passes it to. Factory MCP is host-local for one user, so the realistic failure is Agent
+passes it to. AgentEasel MCP is host-local for one user, so the realistic failure is Agent
 confusion rather than attack; the skill and tool descriptions say only the Block's own
 worker reports.
 
@@ -251,13 +251,13 @@ worker reports.
   result version. Reports cannot erase engine failure, prove semantic correctness
   or settle a Run.
 - Every report for an [Archived](#archive) Run, `working` or `finished`, is
-  answered with `RUN_ARCHIVED` before any validation. Factory MCP returns it as a successful
+  answered with `RUN_ARCHIVED` before any validation. AgentEasel MCP returns it as a successful
   tool result whose text says the Run is archived and the worker should stop work on the
   Block; nothing is recorded and no diagnostic attention is created.
 - Every report for a Run whose [manual settlement](#manual-settlement) closed its gate,
   while stopping or once Settled, is answered before any validation with a successful tool
   result telling the worker to stop work on the Block: `RUN_SETTLING` (state `settling`) while
-  the settlement is in progress, saying Factory accepts no new work and is stopping the
+  the settlement is in progress, saying AgentEasel accepts no new work and is stopping the
   workers, and `RUN_SETTLED` (state `settled`) once the Run is Settled. Nothing is recorded, so
   a delayed report from stopped work never revives the Run.
 - Any accepted report on an automatically [Settled](#settled-runs) Run, including a repeat of
@@ -272,9 +272,9 @@ worker reports.
   [handoff release](#routing-and-independent-queues) rule passes.
 - Workers report only `working` and `finished`. The worker reports `working` when it starts a
   visit's work and `finished` when the task is complete. Each activation needs its own report;
-  Factory never reports for the worker and never infers state by parsing chat.
+  AgentEasel never reports for the worker and never infers state by parsing chat.
 - `working` requires a non-empty message and no exit. It is non-final: it selects no exit,
-  releases nothing and creates no attention. It is scoped to the activation, not to one T3
+  releases nothing and creates no attention. It is scoped to the activation, not to one T3 Code
   turn: it stays the current report across later turns of the worker thread, including
   questions to the user, their replies, idle periods and waits for CI or review, so a finished
   worker thread raises no missing report. A newer `working` replaces the message, an identical
@@ -285,8 +285,8 @@ worker reports.
   execution-failed attention on the Block.
 - A question in chat is ordinary conversation: it creates no attention matter and wakes no
   Snoozed Run. While the worker thread is idle and the report is still `working`, the Run shows
-  the Block as Needs input to review in T3 ([Runs](runs.md#reports-and-attention)). Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
-  unanswered questions. Native T3 questions and permissions and Human steps keep their own
+  the Block as Needs input to review in T3 Code ([Runs](runs.md#reports-and-attention)). Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
+  unanswered questions. Native T3 Code questions and permissions and Human steps keep their own
   attention.
 - `waiting` is retired: `factory_update_block` answers it with `WAITING_RETIRED` and guidance to
   keep the question as the turn's final message, and records nothing. A `working` report with an
@@ -301,7 +301,7 @@ Report metadata retains fingerprints and references, not a second message archiv
 
 ## Worker thread completion
 
-Factory trusts T3 to say when a Block's worker thread is finished. One shared rule decides it,
+AgentEasel trusts T3 Code to say when a Block's worker thread is finished. One shared rule decides it,
 and handoff release, missing report, automatic settlement and Request report all use it. A worker
 thread is finished when all of these hold:
 
@@ -310,15 +310,15 @@ thread is finished when all of these hold:
   `untilDelegatedWorkSettled: true`, answers that thread and run with a terminal status
   (`completed`, `failed`, `cancelled`, `interrupted` or `rolled_back`) and `timedOut: false`.
 
-T3's `resultRun` is informational only: it names the run T3 answered from, which can be an
-earlier run when a notification resumed the thread, so Factory never compares it with the
+T3 Code's `resultRun` is informational only: it names the run T3 Code answered from, which can be an
+earlier run when a notification resumed the thread, so AgentEasel never compares it with the
 waited run. A timed-out wait, an active run, a pending native request, a `waiting` thread status,
 an awaited background task (such as a pull-request watch), a wait answered for
 another thread or run, or a read without a valid pending-request count keeps the thread
-unfinished. Factory keeps no model of descendants, subagents, queues, peers or individual
+unfinished. AgentEasel keeps no model of descendants, subagents, queues, peers or individual
 executions and verifies no provider or model at final; delegated and background work count
-only through T3's thread read and wait answer. Reads across threads are not an atomic cutoff: direct chat
-can start a new run between Factory's read and its local decision.
+only through T3 Code's thread read and wait answer. Reads across threads are not an atomic cutoff: direct chat
+can start a new run between AgentEasel's read and its local decision.
 
 ## Observation and attention
 
@@ -336,12 +336,12 @@ observes their workers.
 - **Execution failure.** When the latest run of the thread failed, was cancelled, interrupted or
   rolled back, the Block shows an execution-failed Problem for that run, holding any prior result. It settles when a
   later run of the same thread completes or when the Block reports, and is not raised again for
-  that run; a later failed run raises a new one. Factory never retries failed work automatically.
-  After a `finished` result, a run of the Block's own that T3 cancelled with an explicit null
+  that run; a later failed run raises a new one. AgentEasel never retries failed work automatically.
+  After a `finished` result, a run of the Block's own that T3 Code cancelled with an explicit null
   `startedAt` after the report did no work: it stays in work history without a Problem and the
   newest other run is judged instead, so a failure of the reporting turn still holds the result.
-  Factory takes a cancellation as after the report when the run is newer than the turn the result
-  was reported from (known when Factory's observation for that report succeeded), newer than every
+  AgentEasel takes a cancellation as after the report when the run is newer than the turn the result
+  was reported from (known when AgentEasel's observation for that report succeeded), newer than every
   run an observation after acceptance showed, or that observation showed it not yet cancelled.
   Any other cancellation, including one first seen before the report, a cancelled run without
   start evidence and a Continuation's prompt, is still a failure.
@@ -374,9 +374,9 @@ A first visit launches that Block's own top-level worker. The message is `$facto
 followed by the captured Agent prompt. A revisit queues a turn on the same worker after
 the previous activation's current result is released and, at send time, the worker thread is
 finished. When `revisitContext` is `"keep"` (the default), only the launch invokes the installed skill, and the revisit carries the incoming message preceded by the Block's
-[Revisit instruction](#revisit-instructions) when one is set, without resending the Agent prompt. When `revisitContext` is `"fresh"`, the revisit sends `freshContext: true` so T3 starts a fresh provider session on that worker thread without earlier context, and resends `$factory-block`, the `Factory Block id` header, the captured Agent prompt, any Revisit instruction and the incoming message. Continuation prompts and Request report always keep the current session. Two Blocks using the same
+[Revisit instruction](#revisit-instructions) when one is set, without resending the Agent prompt. When `revisitContext` is `"fresh"`, the revisit sends `freshContext: true` so T3 Code starts a fresh provider session on that worker thread without earlier context, and resends `$factory-block`, the `Factory Block id` header, the captured Agent prompt, any Revisit instruction and the incoming message. Continuation prompts and Request report always keep the current session. Two Blocks using the same
 Agent still have separate workers. Each direct arrival starts its own visit. Wire branches into a Join to deliver their feedback together.
-Threads share the Run's workspace, the project-root checkout or the Run's worktree; Factory guarantees neither edit-conflict handling
+Threads share the Run's workspace, the project-root checkout or the Run's worktree; AgentEasel guarantees neither edit-conflict handling
 nor agreement on one repository revision.
 
 Partial fan-out survives restart. Each pending delivery retains its own body until
@@ -400,7 +400,7 @@ Human step, Wait or Condition. Run detail shows the provenance as the delivery's
 ### Continuations
 
 The first released handoff to a Continuation becomes its prompt visit: an activation, attributed to the
-worker's captured Agent revision, delivered by a send queued on the handoff's thread by its T3 id. A Factory
+worker's captured Agent revision, delivered by a send queued on the handoff's thread by its T3 Code id. An AgentEasel
 send into an existing thread (revisit, Continuation prompt or Request report) waits until the thread is
 finished and no other Block's delivered activation on that thread still lacks its `finished` result, so work
 sharing a thread is serialized. Unknown send acceptance follows the ordinary recovery rules and is never
@@ -408,11 +408,11 @@ resent blindly.
 
 Reports naming the Continuation's Block id apply to its prompt activation; `finished` takes no exit (or its
 `output`) and requires a message. The result is held until the thread its prompt ran on is finished and no
-execution failure is pending on the Continuation; Factory also attempts that release on every drive, so a
+execution failure is pending on the Continuation; AgentEasel also attempts that release on every drive, so a
 Continuation without recipients forwards too. Release records the response's handoffs and makes the
 Continuation pass-through. Later handoffs to it are acknowledged and forwarded with their own binding as
 released handoffs (cause `pass:`), each recorded as a pass-through visit; handoffs arriving while the prompt
-is pending are recorded as queued and wait. A run of the thread that Factory queued for the prompt belongs to
+is pending are recorded as queued and wait. A run of the thread that AgentEasel queued for the prompt belongs to
 the Continuation: its failure and a missing report after it are the Continuation's attention, while the
 worker's Agent block shows the thread's activity. A Run neither settles automatically nor has that thread
 settled natively while a Continuation is sent or a message waits.
@@ -440,9 +440,9 @@ is no extra retry, no combined length check and no truncation; an oversize send 
 path. The worker can re-read the instruction from its [Block read](t3-integration.md#block-and-run-reads) on later visits.
 
 **Conflict rule.** The instruction narrows what a visit covers; it never waives the Agent's criteria. When the two cannot
-be reconciled, the worker reports the conflict in its normal result; Factory adds no other mechanism.
+be reconciled, the worker reports the conflict in its normal result; AgentEasel adds no other mechanism.
 
-**Recording and recovering earlier evidence.** Factory stays out of review logic: it does not read commits, cap visits,
+**Recording and recovering earlier evidence.** AgentEasel stays out of review logic: it does not read commits, cap visits,
 pass a Block automatically, skip a visit because the commit is unchanged or keep a checkpoint store. An Agent whose
 prompt supports a narrower later visit, such as a delta review, records on its first visit what a later visit needs:
 the baseline it assessed, what it covered, and its findings with their dispositions, in its result message and in files
@@ -456,7 +456,7 @@ that redid a full review or dropped a finding because its earlier evidence was l
 
 ### Human occurrences
 
-Every arrival creates a distinct pending Human occurrence with no T3 thread. Parallel and
+Every arrival creates a distinct pending Human occurrence with no T3 Code thread. Parallel and
 repeated arrivals stay independent. An answer names one of the fixed Human exits, `approve` or
 `request-changes`; Request changes requires a non-empty message (up to 100,000 characters) and
 Approve accepts an optional one. An exact retry of an answer accepted before the Agent-exit upgrade
@@ -484,7 +484,7 @@ operation that forwards one arrival early. Under this owner and the open gate it
 outgoing Handoff to the Wait output's recipients in the same transaction. Those Handoffs are released from creation and carry
 the arrival's message and worker provenance; dispatch then uses the ordinary delivery and replay rules. A competing forward finds the
 arrival settled and changes nothing, so a race or a crash after commit never produces a second set of Handoffs, and a crash
-before commit leaves the arrival pending with its message. Forwarding needs no T3 request or live authorization context.
+before commit leaves the arrival pending with its message. Forwarding needs no T3 Code request or live authorization context.
 Continue now skips only the deadline check: it answers the Run detail after forwarding, a conflict without change for an
 arrival already forwarded (by the timer or an earlier Continue now) or cancelled, or for a closed gate (Archive or a confirmed
 [manual settlement](#manual-settlement)) or lost ownership, and works on an automatically Settled Run without reactivating it. Its
@@ -517,7 +517,7 @@ Finish, [manual settlement](#manual-settlement) and [Archive](#archive) cancel e
 
 #### Join integrity Problems
 
-Before an arrival is recorded, Factory checks that the captured block is still a Join, every wire into it leaves a captured source by an exit that source has, no Flow input feeds it, it has at least two sources, every wire leaving it uses its output and reaches a captured recipient or Finish ending, and the delivery is an unconsumed Handoff from a wired source and exit with an intact message. It also checks that every waiting arrival still matches its acknowledged Handoff with a retained message, also while the round is incomplete, and that the next round number is within 9,007,199,254,740,991 before accepting even its first arrival. A failed check commits no arrival or round and, in the same transaction, latches one pending `join-integrity` Problem for that Join, recording the reason. Like a [Condition integrity Problem](#condition-integrity-problems), it has no worker, execution or T3 thread, no report or Request report settles it, dispatch no longer offers Handoffs to the Join and every later delivery waits unaccepted. Storage failures are not inconsistencies and are retried. Only manual settlement or Archive settles the Problem, cancelling the waiting arrivals under [Join cutoffs](#join-cutoffs).
+Before an arrival is recorded, AgentEasel checks that the captured block is still a Join, every wire into it leaves a captured source by an exit that source has, no Flow input feeds it, it has at least two sources, every wire leaving it uses its output and reaches a captured recipient or Finish ending, and the delivery is an unconsumed Handoff from a wired source and exit with an intact message. It also checks that every waiting arrival still matches its acknowledged Handoff with a retained message, also while the round is incomplete, and that the next round number is within 9,007,199,254,740,991 before accepting even its first arrival. A failed check commits no arrival or round and, in the same transaction, latches one pending `join-integrity` Problem for that Join, recording the reason. Like a [Condition integrity Problem](#condition-integrity-problems), it has no worker, execution or T3 Code thread, no report or Request report settles it, dispatch no longer offers Handoffs to the Join and every later delivery waits unaccepted. Storage failures are not inconsistencies and are retried. Only manual settlement or Archive settles the Problem, cancelling the waiting arrivals under [Join cutoffs](#join-cutoffs).
 
 ### Condition arrivals
 
@@ -544,7 +544,7 @@ delivery is pending there and finished once every delivery has been numbered.
 
 Any failure before commit, such as unavailable storage, rolls everything back: no number is consumed, nothing is selected
 and no Problem is recorded. The Handoff stays pending and the next dispatch pass, or reconciliation after restart, retries it;
-it is never noted as uncertain T3 work. After commit, a decision never changes: restart, partial fan-out and downstream
+it is never noted as uncertain T3 Code work. After commit, a decision never changes: restart, partial fan-out and downstream
 failures retry only its outstanding outgoing Handoffs under the ordinary delivery rules, and never renumber or reselect.
 A downstream Agent visit a Condition started has reason `Condition` and reads the routed text as its
 [input](t3-integration.md#block-and-run-reads); a Continuation after a Condition continues the thread of the worker whose
@@ -558,8 +558,8 @@ leaves by, a threshold of 1 or thresholds out of order, or a waiting delivery wh
 commits no number or route, and in the same transaction latches one
 pending `condition-integrity` Problem for that Condition in the Run, recording the refusal's reason. A refusal whose
 transaction fails records nothing and is retried like any failure before commit. The Problem has no execution, worker or
-T3 thread. While it is pending the Condition's acceptance stops: dispatch no longer offers Handoffs to it, so the refused
-delivery and every later one wait unnumbered and are not retried. Factory never selects Otherwise for them, skips them,
+T3 Code thread. While it is pending the Condition's acceptance stops: dispatch no longer offers Handoffs to it, so the refused
+delivery and every later one wait unnumbered and are not retried. AgentEasel never selects Otherwise for them, skips them,
 resets the count, fabricates a report or repairs the captured rules. Other Blocks continue, and arrivals already numbered
 keep their decisions and outstanding recipients; a redelivery of a numbered delivery still finds its decision, also at the
 largest number.
@@ -575,7 +575,7 @@ only later Runs.
 A Handoff into an [ending](../GLOSSARY.md#ending) is created, held and released like any Handoff: a Final result's waits
 for its source worker thread to finish, and a Human answer's, Wait forwarding's, Condition selection's or pass-through's is
 released when created. Its recipient is the Finish block, which has no worker and is not a Block of the Run's reads; Run
-detail lists the delivery among its intents. Accepting a released one sends nothing to T3 and is one guarded transaction
+detail lists the delivery among its intents. Accepting a released one sends nothing to T3 Code and is one guarded transaction
 under the owner, open gate, live authorization context and, unless the release is durable, the release generation. It
 records the [Run result](../GLOSSARY.md#run-result), closes the handoff gate for good, cancels every other delivery into an
 ending that is still pending and a pending [Run title generation](#run-title-generations), appends one `ending-reached`
@@ -599,7 +599,7 @@ with no settlement yet, in the drive pass after acceptance and in every reconcil
 still starts it. Unfinished workers get one Stop each; the Run settles only once fresh reads confirm every bound worker
 finished, never on a Stop acknowledgement. Until then the Run is Active with its result visible and its settlement
 stopping, or unresolved with the existing Problem and retry; Archive stays available, and the Run never returns to Active.
-Under an authorization Factory knows was replaced, the attempt is still recorded and ends unresolved with that Problem, so
+Under an authorization AgentEasel knows was replaced, the attempt is still recorded and ends unresolved with that Problem, so
 the Run is never left Active without one.
 Settling cancels owed work as manual settlement does, with `cancelled-on-Finish` on pending deliveries and `finish` on
 pending attention, shows unfinished Blocks stopped and records `run-settled` (`finish`). A user's confirmed Settle on a Run
@@ -609,13 +609,13 @@ report can still reach an ending.
 
 ## Worker title synchronization
 
-Direct launch acknowledgement and exact-title recovery both bind the physical worker using the saved launch title as its baseline. Before releasing the launch payload, Factory compares that baseline with the current Run title rendered for the launching Agent Block. A Revisit or Continuation reuses that binding. On upgrade, already-bound workers keep their legacy titles until the Run title changes. An unbound legacy launch still recovers by its saved title and reconciles on first bind.
+Direct launch acknowledgement and exact-title recovery both bind the physical worker using the saved launch title as its baseline. Before releasing the launch payload, AgentEasel compares that baseline with the current Run title rendered for the launching Agent Block. A Revisit or Continuation reuses that binding. On upgrade, already-bound workers keep their legacy titles until the Run title changes. An unbound legacy launch still recovers by its saved title and reconciles on first bind.
 
-Each committed title change advances the Run title revision. Factory keeps the latest desired revision per worker and skips a rendered title identical to its acknowledged baseline while that baseline is certain. A worker's manual T3 title therefore survives edits confined to the clipped tail. Once a write may have reached T3, returning to an earlier title requires a new command.
+Each committed title change advances the Run title revision. AgentEasel keeps the latest desired revision per worker and skips a rendered title identical to its acknowledged baseline while that baseline is certain. A worker's manual T3 Code title therefore survives edits confined to the clipped tail. Once a write may have reached T3 Code, returning to an earlier title requires a new command.
 
 A background worker serializes attempts per binding, coalesces unsent revisions and resumes pending or interrupted claims on startup. Startup and execution sweeps schedule eligible bindings and proceed independently of remote renames. Each pass takes a finite list of due bindings. Up to four workers per Run and eight workers globally may synchronize at once. A newly bound worker can use an available slot while another worker from the same Run is still synchronizing. A revision keeps its request key across retries. An acknowledgement satisfies the latest revision when it renders the same title. A refusal before delivery preserves the previous baseline certainty. A rejected MCP session clears only that HTTP attempt’s delivery marker before reconnection, including on disk for restart recovery. A different returned title is retryable on first dispatch and closes a revision only on replay of a previously dispatched key. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
 
-Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
+Archive cancels unsent work and discards late results. T3 Code supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after AgentEasel times out and sends a newer title.
 
 ## Subflow invocations
 
@@ -636,11 +636,11 @@ In a worktree Run, the first Agent in depth-first saved Flow-input order creates
 worktree. The remaining starters join after it binds.
 
 The first released delivery accepted at an invocation's Finish records its ending and closes
-dispatch into that invocation and its descendants in the same transaction. Factory searches for
+dispatch into that invocation and its descendants in the same transaction. AgentEasel searches for
 unconfirmed launches and sends Stop to workers that a fresh read shows unfinished. An
 acknowledgement holds the result and the queue until fresh reads verify completion. Unresolved
 Stop raises one Problem at that invocation. Retry starts a fresh authorized repair attempt.
-Closure leaves the threads Run-owned and requests no T3 thread settlement on behalf of
+Closure leaves the threads Run-owned and requests no T3 Code thread settlement on behalf of
 the invocation; finished Blocks inside the invocation still follow [per-Block thread settlement](#native-thread-organization).
 
 Verified closure releases one result through the matching ending ID, retaining the producing
@@ -673,13 +673,13 @@ outcome stays final.
   searched for by uniquely verified provenance as an [uncertain worker launch](#ownership-and-restart) is, only until
   the deadline, and a bound thread is read to see whether it finished without a valid title. The search for a sent
   launch goes on until that deadline also after the generation's outcome, whichever outcome it was, so a thread found
-  then is bound, linked and cleaned up. Factory never launches a replacement; a launch still unbound at the deadline is
+  then is bound, linked and cleaned up. AgentEasel never launches a replacement; a launch still unbound at the deadline is
   abandoned.
 - **Cleanup.** After any outcome with a bound thread, including one bound after the outcome, while five minutes have
-  not passed since the outcome and only under the Run's authorization context, Factory reads the title thread under
+  not passed since the outcome and only under the Run's authorization context, AgentEasel reads the title thread under
   the [completion rule](#worker-thread-completion): an unfinished or unreadable thread gets one Stop with a key derived from the
-  generation, and a finished one gets one T3 thread settlement. Each request is recorded before it is sent and never
-  repeated; Factory neither confirms nor waits for either, also for Archived Runs.
+  generation, and a finished one gets one T3 Code thread settlement. Each request is recorded before it is sent and never
+  repeated; AgentEasel neither confirms nor waits for either, also for Archived Runs.
 
 ## Settled Runs
 
@@ -698,13 +698,13 @@ settle an Active Run with an open gate automatically. That requires all of the f
 Engine termination or a final report alone is insufficient. The local decision must still
 match the Run generation observed before the reads, its gate, authorization and owner;
 concurrent local reports, answers or observations invalidate it. Unavailable or mismatched
-reads keep the Run Active. Settling certifies that T3 reported every worker thread finished,
+reads keep the Run Active. Settling certifies that T3 Code reported every worker thread finished,
 not result quality or a common repository revision. Automatic settlement records
 `run-settled` (`automatic`), marks every result version completion-eligible and settles the
 Blocks' report-rejection diagnostics.
 
 An automatically Settled Run is reconciled only while it owes an operation in pending, reserved
-or uncertain state or a pending Wait arrival, so owed handoffs are still released and delivered. Otherwise Factory does
+or uncertain state or a pending Wait arrival, so owed handoffs are still released and delivered. Otherwise AgentEasel does
 not read its worker threads: later turns without a report record no work periods or attention
 and leave the Run Settled. Reports, Human answers and Request report are accepted as for an
 Active Run; only an accepted report returns it to Active ([report acceptance](#report-acceptance)).
@@ -714,24 +714,24 @@ gate open and behave the same way.
 ### Manual settlement
 
 The user settles an Active or Snoozed Run through one operation. Without authorization to
-stop, it runs in the Run's drive lane: Factory reads every bound worker thread fresh under the
+stop, it runs in the Run's drive lane: AgentEasel reads every bound worker thread fresh under the
 Run's authorization context and settles only when each is [finished](#worker-thread-completion)
 and shows no queued run; otherwise it answers that confirmation is needed and changes nothing.
 That answer lists each worker read unfinished in scope as executing, which confirming stops,
 except one only queued work keeps unfinished, which is unresolved with its queued reason;
-each worker T3 could not show, or not under the Run's live authorization context, as unresolved
-with that problem, because Factory never stops a thread it cannot read; and each reserved or
+each worker T3 Code could not show, or not under the Run's live authorization context, as unresolved
+with that problem, because AgentEasel never stops a thread it cannot read; and each reserved or
 uncertain launch as unresolved, without a thread. A Run with a bound worker or an unresolved
-launch, accepted under an authorization context that Factory knows was replaced, for example by
+launch, accepted under an authorization context that AgentEasel knows was replaced, for example by
 reauthorizing or another endpoint, cannot be settled: Settle answers a conflict with or without
 `stopWorkers` and changes nothing, because that work could never be read, stopped or resolved
 under the Run's context; Archive stays available. A Run that reached an ending is the exception for
 its first confirmed attempt, which is accepted so its workers end unresolved with the Settle could not
 stop workers Problem; a retry answers the conflict. A Run without such work settles as before. The
-known context is the connection's recorded one, which Factory keeps while T3 is unavailable;
+known context is the connection's recorded one, which AgentEasel keeps while T3 Code is unavailable;
 the plain request checks it after its reads and the confirmed request in the transaction that
 accepts it. While no context is known, such as during reauthorization, a confirmed request is
-accepted and completion waits for T3 under the Run's context. If the context then recorded is
+accepted and completion waits for T3 Code under the Run's context. If the context then recorded is
 not the Run's, that settlement can never complete: its workers end unresolved, a retry answers
 the conflict, and only Archive ends it. A malformed body (not
 an object, or any field other than a boolean `stopWorkers`) is a validation error, never a
@@ -745,7 +745,7 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   (by its timer or **Continue now**), Condition arrival, Human answer or Request report crosses it, and observation,
   recovery settlement and automatic settlement stop. A Wait deadline that passes while stopping
   forwards nothing. Pending Human occurrences remain pending until settlement succeeds; answer conflicts explain that
-  Factory is settling the Run and stopping its workers. Navigation suppresses Needs input while settlement is in progress.
+  AgentEasel is settling the Run and stopping its workers. Navigation suppresses Needs input while settlement is in progress.
   A reserved or uncertain launch is still searched for and blocks settlement: the settlement
   shows it unresolved, without a thread, until the search binds its worker, which then joins
   the attempt.
@@ -755,18 +755,18 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   It reads every bound worker fresh. The backend that accepted the attempt sends Stop once
   for each worker read unfinished in scope, except one that only queued work keeps unfinished:
   a thread with no active run or native request whose latest run is queued is judged by its
-  latest run that is not queued ([T3 queue and Stop](t3-integration.md#execution-operations)).
+  latest run that is not queued ([T3 Code queue and Stop](t3-integration.md#execution-operations)).
   It is stopped only while that run's delegated or background work is unfinished; otherwise it
   is unresolved with its queued reason, gets no Stop, and keeps that reason after a restart.
-  Factory never cancels queued work in T3. For each worker it stops, it records the request
+  AgentEasel never cancels queued work in T3 Code. For each worker it stops, it records the request
   (`worker-stop-requested`, key derived from the Run, attempt and thread) before one
-  `t3_thread_interrupt` with `stop: true`, records whether T3 acknowledged it, then reads the
+  `t3_thread_interrupt` with `stop: true`, records whether T3 Code acknowledged it, then reads the
   worker again. Each Stop is sent only after a recheck finds the Run's authorization context
   live, and recording it requires that context in the same transaction; a mismatch sends nothing
   and leaves the worker unresolved. Unsupported Stop, a refused request, an unreadable or
   out-of-scope thread, or a worker still unfinished 30 seconds after its acknowledged Stop is
   unresolved, with the blocker it read. Later passes can stop a worker whose earlier reads were
-  unavailable, also because T3 could not answer the pass's connection check or the recheck before
+  unavailable, also because T3 Code could not answer the pass's connection check or the recheck before
   its Stop, or which joined the attempt later, such as one a launch search bound. A recorded
   Stop request or outcome prevents another request for that worker in the same attempt. A
   restarted backend never sends Stop for an earlier owner's attempt: its workers settle if they
@@ -785,22 +785,22 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   again, records `worker-stopped` for each worker whose Stop was acknowledged and `run-settled` (`manual`), marks every result version
   completion-eligible as automatic settlement does, and clears Snooze and Woke.
   Handoffs remain local and pending until they become a launch or send; only that delivery
-  is reserved before calling T3. Human and Wait handoffs are acknowledged locally in the
+  is reserved before calling T3 Code. Human and Wait handoffs are acknowledged locally in the
   transaction creating their occurrence or arrival. A failed preparation does not reserve
   the handoff, so manual settlement cancels it with the other pending work.
   Each reserved or uncertain send stays uncertain, records `operation-unresolved` with a
-  problem saying Factory never confirmed whether T3 received it, and loses its payload. T3 offers
+  problem saying AgentEasel never confirmed whether T3 Code received it, and loses its payload. T3 Code offers
   no read of a send's outcome; only a same-key replay can resolve it, and a replay into a
   stopped thread can start new work if the original never arrived, which the closed gate
   forbids. Driving the Run on to resolve it therefore cannot succeed, while cancelling it would
-  claim it never reached T3; the payload served only that replay. Native thread settlement
+  claim it never reached T3 Code; the payload served only that replay. Native thread settlement
   follows in the background.
 
 A manually settled Run is never reconciled again: its closed gate ends its work, also after
 restart, and reports for it are `RUN_SETTLED`. A Wait timer that wakes after settlement finds
-its arrival cancelled and forwards nothing. T3 Stop is thread-scoped with no exact-run fence,
-and reads across threads are not an atomic cutoff, so direct T3 activity can start just before
-or after the Run settles; Factory settles only on fresh reads and never deletes T3-held queued
+its arrival cancelled and forwards nothing. T3 Code Stop is thread-scoped with no exact-run fence,
+and reads across threads are not an atomic cutoff, so direct T3 Code activity can start just before
+or after the Run settles; AgentEasel settles only on fresh reads and never deletes T3 Code-held queued
 work to succeed. Archive stays available during a settlement and its semantics are unchanged.
 
 ## Archive
@@ -816,11 +816,11 @@ transaction records that request, only its own retry is acknowledged, and a Run 
 else conflicts for it. Only the call that archived the Run requests interruption.
 
 After the transaction, in the background and only under the Run's authorization context,
-Factory sends one `t3_thread_interrupt` with `stop: true` to every bound worker thread, with a
-request key derived from the Run and thread. T3 stops the thread and its delegated work.
-Factory neither records nor confirms the outcome, so a backend crash before the request leaves
+AgentEasel sends one `t3_thread_interrupt` with `stop: true` to every bound worker thread, with a
+request key derived from the Run and thread. T3 Code stops the thread and its delegated work.
+AgentEasel neither records nor confirms the outcome, so a backend crash before the request leaves
 the threads running. Archive neither rolls back repository edits nor prevents later direct
-T3 chat. Closing Factory is not Archive.
+T3 Code chat. Closing AgentEasel is not Archive.
 
 Archived Runs are excluded from navigation; every stored row stays and Run detail still
 reads them. Runs stopped under an earlier contract keep their Stop events, interrupt
@@ -829,12 +829,12 @@ requests and closure evidence as history.
 ## Owned workers
 
 New Runs have no Run conversation. A historical closed Run may still display a stored
-conversation; Factory no longer observes, commands or changes it, also at restart.
+conversation; AgentEasel no longer observes, commands or changes it, also at restart.
 
-- Subagents and background work a worker starts are not Factory obligations. They hold the
-  worker's result only through T3's delegated wait answer.
+- Subagents and background work a worker starts are not AgentEasel obligations. They hold the
+  worker's result only through T3 Code's delegated wait answer.
 - A failed worker execution stays a Problem until the thread recovers or the Block reports;
-  Factory does not launch a replacement worker for it.
+  AgentEasel does not launch a replacement worker for it.
 - Later turns of the worker thread, including ones after an accepted final, are ordinary
   thread work: they hold release until the thread is finished, and a `finished` report from
   one of them replaces the result under the [report rules](#report-acceptance).
@@ -864,27 +864,27 @@ automatically.
 
 ## Native thread organization
 
-T3 Settled is separate from Factory attention. When native settle is supported, Factory
+T3 Code Settled is separate from AgentEasel attention. When native settle is supported, AgentEasel
 best-effort settles a Block's bound worker thread while the Run is still in progress when that
 Block's current report is an accepted `finished` result, the [completion rule](#worker-thread-completion)
 confirms the worker thread is done, no execution-failed attention is pending on the Block, and
 the Run is not [Archived](#archive). A [Continuation](#continuations)'s result settles the
-thread its prompt ran on, for the prompt's T3 run, under the same conditions once its response is
+thread its prompt ran on, for the prompt's T3 Code run, under the same conditions once its response is
 released. A current `working` report, a missing-report Problem, or
 open execution-failed attention leaves the thread unsettled. The sweep runs in each
 reconciliation pass for Active, Snoozed and [Settled](#settled-runs) Runs that still owe
 operations—handoff Blocks, terminal activations and long-running Flows alike.
 
 [Run settlement](#settled-runs) keeps its thread sweep as fallback for threads without
-`finished`, and shares one settlement claim keyed on Run, thread and T3 run so no thread is
-requested twice. The claimed T3 run is the one that produced the Block's result, not the
-thread's latest active run. The claim is recorded before the T3 request is sent; a possibly
-issued request is never replayed. A replaced result or changed exit in the same T3 run does not
-settle again; a revisited Block that starts a new T3 run on the same thread may be settled
+`finished`, and shares one settlement claim keyed on Run, thread and T3 Code run so no thread is
+requested twice. The claimed T3 Code run is the one that produced the Block's result, not the
+thread's latest active run. The claim is recorded before the T3 Code request is sent; a possibly
+issued request is never replayed. A replaced result or changed exit in the same T3 Code run does not
+settle again; a revisited Block that starts a new T3 Code run on the same thread may be settled
 again after it finishes.
 
 Automatic Run settlement settles remaining threads within its reconciliation pass; manual
-settlement triggers the Run sweep in the background once it settles. Factory never unsettles. New Runs have no Run
+settlement triggers the Run sweep in the background once it settles. AgentEasel never unsettles. New Runs have no Run
 conversation to organize, and historical Run conversations are not settled. Runs created
 before per-Block settlement keep Run-level settlement only. Failure changes no results or Run state; without native settle support this is
 a no-op. With no native compare-and-set or replay key, direct activity can still race the
@@ -893,7 +893,7 @@ request; that existing limitation now applies while the Run is still in progress
 Per-Block settlement, Settled-Run settlement, Archive's worker interruption and
 [title thread cleanup](#run-title-generations) follow one owned-thread rule: a pass that has a
 thread to settle or stop makes one connection check, sends the settle or Stop only when that
-check found T3 supporting it under the Run's live authorization context, records the claim in
+check found T3 Code supporting it under the Run's live authorization context, records the claim in
 the store before sending, and treats the request as best effort.
 A request whose claim was already recorded, also before a restart, is never sent again.
 Archive's claim is its own transition, so only the call that archived the Run interrupts.

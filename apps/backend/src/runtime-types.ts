@@ -90,9 +90,9 @@ export type RuntimeReply = {
 
 const NEXT: Record<RuntimeReport["status"], string> = {
   working:
-    "Factory shows this message on your Block and raises no missing-report Problem while it is your latest report. It stays current across later turns of this visit, including questions to the user and their replies, so do not report again for those. Report finished when the task is complete, or working again only to replace this message.",
+    "AgentEasel shows this message on your Block and raises no missing-report Problem while it is your latest report. It stays current across later turns of this visit, including questions to the user and their replies, so do not report again for those. Report finished when the task is complete, or working again only to replace this message.",
   finished:
-    "This is the Block's result. Factory hands it off after this thread and its delegated work settle. A later finished report replaces it: before hand-off only the newest result is passed on; afterwards the same exit only updates the result, and a different exit also starts that exit's next Blocks. If you reopen the task, report working first.",
+    "This is the Block's result. AgentEasel hands it off after this thread and its delegated work settle. A later finished report replaces it: before hand-off only the newest result is passed on; afterwards the same exit only updates the result, and a different exit also starts that exit's next Blocks. If you reopen the task, report working first.",
 };
 
 /** Replies that report success to the harness; every other code is a tool error. */
@@ -116,7 +116,7 @@ export const RUN_SETTLED: RuntimeReply = {
   code: "RUN_SETTLED",
   state: "settled",
   allowedTransitions: [],
-  next: "The user settled this Run, so Factory recorded nothing. Stop work on this Block and end the turn.",
+  next: "The user settled this Run, so AgentEasel recorded nothing. Stop work on this Block and end the turn.",
 };
 
 /** Every report for a Run whose confirmed manual settlement is still in progress succeeds and
@@ -125,7 +125,7 @@ export const RUN_SETTLING: RuntimeReply = {
   code: "RUN_SETTLING",
   state: "settling",
   allowedTransitions: [],
-  next: "The user is settling this Run: Factory accepts no new work for it and is stopping its workers, so Factory recorded nothing. Stop work on this Block and end the turn.",
+  next: "The user is settling this Run: AgentEasel accepts no new work for it and is stopping its workers, so AgentEasel recorded nothing. Stop work on this Block and end the turn.",
 };
 
 /** Every report for an archived Run succeeds and changes nothing. */
@@ -133,7 +133,7 @@ export const RUN_ARCHIVED: RuntimeReply = {
   code: "RUN_ARCHIVED",
   state: "archived",
   allowedTransitions: [],
-  next: "This Run is archived, so Factory recorded nothing. Stop work on this Block and end the turn.",
+  next: "This Run is archived, so AgentEasel recorded nothing. Stop work on this Block and end the turn.",
 };
 
 /** The reports a current visit accepts; the latest one is the Block's current report. */

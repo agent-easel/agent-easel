@@ -9,8 +9,8 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-d
 function settleDescription(workers: readonly RunSettlementWorker[]) {
   const working = workers.filter((worker) => worker.state !== "finished").length;
   return working === 1
-    ? "Factory asks T3 to stop the working Agent and ends the Run once T3 confirms it stopped."
-    : `Factory asks T3 to stop the ${working} working Agents and ends the Run once T3 confirms they stopped.`;
+    ? "AgentEasel asks T3 Code to stop the working Agent and ends the Run once T3 Code confirms it stopped."
+    : `AgentEasel asks T3 Code to stop the ${working} working Agents and ends the Run once T3 Code confirms they stopped.`;
 }
 
 /** Every Settle entry point waits for explicit authorization before stopping workers. */

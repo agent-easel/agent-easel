@@ -329,7 +329,7 @@ it("a failed re-read marks the view not current until a later read succeeds", as
   expect(run.envelopes.map((envelope) => envelope.current)).toStrictEqual([true, false, true]);
 });
 
-it("a T3 connection change reaches connection subscribers without another read", async (c) => {
+it("a T3 Code connection change reaches connection subscribers without another read", async (c) => {
   // Arrange
   const t3 = new ControlledT3();
   t3.connection.authorized = true;

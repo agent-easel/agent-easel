@@ -22,7 +22,7 @@ export function promptOn(world: ScenarioWorld, worker: WorkerHandle) {
   const send = [...world.t3.threads.sends.values()]
     .filter((entry) => entry.payload.threadId === worker.threadId)
     .at(-1);
-  if (!send) throw Error(`T3 received no prompt on ${worker.threadId}.`);
+  if (!send) throw Error(`T3 Code received no prompt on ${worker.threadId}.`);
   return { message: send.payload.message, blockId: launchBlockId(send.payload.message) };
 }
 

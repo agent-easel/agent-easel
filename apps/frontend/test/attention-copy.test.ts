@@ -18,7 +18,7 @@ const binding = (id: string, role: RunThreadBinding["role"], link: string): RunT
   link,
 });
 
-it("a settlement T3 cannot stop leads with Open in T3", () => {
+it("a settlement T3 Code cannot stop leads with Open in T3 Code", () => {
   // Arrange
   const run = {
     ...runDetail(),
@@ -135,13 +135,13 @@ it("a failed worktree opens the Flow-input thread and never the title thread", (
   expect(href).toBe("https://t3.example/creator");
 });
 
-it("a failed worktree with no worker or coordinator thread has no T3 fix link", () => {
+it("a failed worktree with no worker or coordinator thread has no T3 Code fix link", () => {
   // Arrange
   const run = {
     ...runDetail(),
     titleGeneration: {
       state: "failed" as const,
-      reason: "T3 rejected the title thread launch.",
+      reason: "T3 Code rejected the title thread launch.",
       modelLabel: "Model",
       deadlineAt: "2026-11-08T00:00:30Z",
       automaticTitle: "Run",

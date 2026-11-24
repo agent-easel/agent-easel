@@ -327,7 +327,7 @@ function FlowRemoveDialog({
       onClose();
     } catch (cause) {
       setIssues(cause instanceof ApiError ? cause.detail.issues : []);
-      setError(cause instanceof Error ? cause.message : "Factory could not remove this Flow.");
+      setError(cause instanceof Error ? cause.message : "AgentEasel could not remove this Flow.");
       setRemoving(false);
     }
   }

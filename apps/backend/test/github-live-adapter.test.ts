@@ -52,9 +52,11 @@ it("a host without gh reports it missing with the steps to take on the host", as
   assert(!readiness.ok);
   expect(readiness.failure).toStrictEqual({ reason: "gh_missing" });
   expect(gitHubRepairGuidance(readiness.failure)).toContain(
-    "Install GitHub CLI (gh) on the Factory host",
+    "Install GitHub CLI (gh) on the AgentEasel host",
   );
-  expect(gitHubRepairGuidance(readiness.failure)).toContain("restart a Factory opened from Finder");
+  expect(gitHubRepairGuidance(readiness.failure)).toContain(
+    "restart an AgentEasel opened from Finder",
+  );
 });
 
 it("an issue query reaches gh unchanged as one argument", async (context) => {

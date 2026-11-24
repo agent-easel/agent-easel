@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in T3 Factory.
+description: Report a reproducible problem in AgentEasel.
 labels: [bug, needs-triage]
 body:
   - type: markdown
@@ -20,7 +20,7 @@ body:
       label: Steps to reproduce
       description: Give the smallest reproduction, ideally using the simulated demo and dummy data.
       placeholder: |
-        1. Start Factory with...
+        1. Start AgentEasel with...
         2. Open...
         3. Observe...
     validations:
@@ -46,7 +46,7 @@ body:
     id: environment
     attributes:
       label: Versions and environment
-      description: Include Factory commit/build, OS and architecture, browser, Node/pnpm (source), and T3/harness versions if relevant.
+      description: Include AgentEasel commit/build, OS and architecture, browser, Node/pnpm (source), and T3 Code/harness versions if relevant.
     validations:
       required: true
   - type: textarea

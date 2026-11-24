@@ -61,7 +61,7 @@ export function AppearanceChoice() {
         >
           {appearance === failure.preference
             ? failure.message
-            : `Factory stays in ${labels[appearance]}. Try again.`}
+            : `AgentEasel stays in ${labels[appearance]}. Try again.`}
         </ProblemCard>
       )}
     </>

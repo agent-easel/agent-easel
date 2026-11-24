@@ -206,8 +206,8 @@ it("an unknown title generation id is refused with repair guidance", async (c) =
   expect(result.isError).toBe(true);
   expect(toolReply(result)).toStrictEqual({
     code: "UNKNOWN_TITLE_GENERATION",
-    reason: "No Factory title generation has this titleGenerationId.",
-    next: "Copy titleGenerationId exactly from this thread's Factory title message. Only the title thread that received it can set its Run's title; a Block id is not a titleGenerationId.",
+    reason: "No AgentEasel title generation has this titleGenerationId.",
+    next: "Copy titleGenerationId exactly from this thread's AgentEasel title message. Only the title thread that received it can set its Run's title; a Block id is not a titleGenerationId.",
   });
   const run = await f.f.getRun(f.runId);
   assert(run.ok);

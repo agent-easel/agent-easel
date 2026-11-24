@@ -2,15 +2,15 @@
 
 What deserves a test, how to structure it, and which suite it belongs in.
 
-Backend behavior tests exercise public Factory operations with temporary SQLite
-and controlled T3 modules. Tests configure the same concerns that live Factory
+Backend behavior tests exercise public AgentEasel operations with temporary SQLite
+and controlled T3 Code modules. Tests configure the same concerns that live AgentEasel
 composes over one connection: authorization, contract inspection, threads, Projects
 and environment. They are application integration tests: persistence
 is part of the workflow being checked. Pure exported domain rules can be tested
-without a database. External fixtures own simulated T3 state independently of Factory so
+without a database. External fixtures own simulated T3 Code state independently of AgentEasel so
 restart checks can retain it. Close the owning backend before a recovery process opens
 the same database. Use disposable credentials and explicit test homes; never log secret
-values or inherit real T3 identities into fixture processes. The policy applies to existing and new tests. Review tests
+values or inherit real T3 Code identities into fixture processes. The policy applies to existing and new tests. Review tests
 affected by the change for value and AAA structure; a focused change does not
 require a cleanup of unrelated suites.
 
@@ -33,7 +33,7 @@ reached through a public operation is usually not a behavior worth pinning.
 Do not write unit tests for:
 
 - trivial getters, mappers and pass-through wrappers;
-- framework or library behavior (Effect, SQLite, React, Vite+, the T3 SDK);
+- framework or library behavior (Effect, SQLite, React, Vite+, the T3 Code SDK);
 - React rendering details;
 - configuration plumbing and type-only code;
 - raising coverage. Coverage is not a goal; a test must protect a business
@@ -63,7 +63,7 @@ Rules:
   `if (!result.ok) throw`. Write a separate test per input case instead of
   looping over inputs.
 - **Shared setup lives in `test/support/` factories** (`factoryHarness`,
-  `prepared`, controlled T3), with definition and report builders in
+  `prepared`, controlled T3 Code), with definition and report builders in
   `test/support/scenarios.ts`. Extend a factory rather than copying setup between
   tests; keep test bodies limited to what distinguishes the case. A named state serves
   Arrange and is never a test's Act.
@@ -94,7 +94,7 @@ assertion narrowing from `@effect/vitest`. `pnpm test` runs the backend, desktop
 repository script tests (`scripts/*.test.mjs`) with `node:test` through `pnpm test:scripts`; those
 scripts run in CI before dependencies install, so their tests need no workspace packages;
 `pnpm --filter @agent-easel/backend test test/flows.test.ts` selects a file.
-Backend tests import backend source directly; the test runner and spawned Factory
+Backend tests import backend source directly; the test runner and spawned AgentEasel
 processes enable `factory-source` for shared packages. `pnpm test` needs no build output.
 
 Use `expect` for observable comparisons (`toBe` for strict scalar equality,
@@ -130,7 +130,7 @@ their cause; do not add retries or larger per-test timeouts.
 - **Behavior tests** (`pnpm test`) own business rules, branches, races and recovery.
   They are fast and run in the [pre-push gate](quality-gates.md).
 - **E2E journeys** (`tests/*.e2e.ts`, `pnpm test:e2e`) drive the built UI in
-  Chromium against controlled T3 modules. Add one only for a user-visible
+  Chromium against controlled T3 Code modules. Add one only for a user-visible
   journey that crosses UI, HTTP and backend, and keep it on the happy path plus
   the states the user must see. Do not re-test in E2E what a unit test already
   covers. Follow the [verification cadence](#verification-cadence) for when to run journeys.
@@ -161,7 +161,7 @@ and `[]` means no specs. For a known journey, pass the spec directly to
 ### Fixture modules
 
 One fixture process serves every journey in a runner invocation. It proxies the
-browser to Factory and composes **fixture modules** in `tests/support/fixture/`,
+browser to AgentEasel and composes **fixture modules** in `tests/support/fixture/`,
 one per concern. A module owns its controlled doubles and setup, its actions, and
 a reset that returns its state to the start-of-journey baseline. A feature that
 needs a controlled world adds or extends its own module and registers it in the
@@ -169,7 +169,7 @@ fixture server, instead of adding setup or flags to the server itself.
 
 Journeys import `test` and its hooks from `tests/support/test.ts`. Before each
 journey, its `fixture` runs the shared reset, which resets every module in a
-fixed order, starting with the host's T3 connection. It then exposes one typed
+fixed order, starting with the host's T3 Code connection. It then exposes one typed
 handle per module. A handle is the only way journeys and support helpers reach
 fixture actions. It is typed from the module's actions and throws at the call
 with the fixture's error when the fixture rejects a call, including an unknown
@@ -219,7 +219,7 @@ ruleset step tracked in [#203](https://github.com/alimek/t3-factory/issues/203).
 Keep one representative captured database from the supported released
 baseline, plus a capture only where a stored-shape migration needs data that baseline lacks
 (see the [fixtures README](../apps/backend/test/fixtures/README.md)). Open each with the current
-Factory and assert important public outcomes:
+AgentEasel and assert important public outcomes:
 retained definitions, pending work, client access and immutable history. The
 fixture and its provenance are reviewed test inputs, not a source archive or a
 production backup.
@@ -264,7 +264,7 @@ Before finishing a test change:
 
 ## Local development acceptance
 
-Use the isolated [verification fixture](../.agents/skills/verify-t3-factory/SKILL.md) for automated regression checks and destructive exploration. A user's explicitly chosen `dev:prod` installation is a live
+Use the isolated [verification fixture](../.agents/skills/verify-agenteasel/SKILL.md) for automated regression checks and destructive exploration. A user's explicitly chosen `dev:prod` installation is a live
 acceptance environment: use it for the requested interaction, preserving unrelated data and work. Existing use of that installation does not authorize new diagnostic model workloads, OAuth changes or resets;
 live qualification still follows the [bounded runbook](installation.md#bounded-live-verification).
 
@@ -273,7 +273,7 @@ For a browser UI change, verify the checkout and server being exercised and use 
 unverified. Keep private addresses and execution evidence outside Git.
 
 For client approval, revocation, TLS, offline recovery or protocol changes, exercise the approved-client HTTPS listener; Vite's host-local proxy does not prove those boundaries. For live delivery, distinguish snapshot/update and reconnect evidence from ordinary HTTP
-reads. Run detail, sidebar navigation, shared T3 connection status and composer launch
+reads. Run detail, sidebar navigation, shared T3 Code connection status and composer launch
 choices no longer poll, Studio's lists and editors are not re-read, the command palette reads the navigation and Studio scopes, and Agent reporting reads Agents from the Studio scope; approvals, Agent reporting installations, Discord status, updater and client-gate checks read through the frontend refresh schedule, which pauses while the page is hidden. A
 stationary Run trace should separate those consumers and compact observation
 metadata from repeated Run data. Controlled public-stream tests establish delivery and
@@ -290,8 +290,8 @@ worktree. A missing UI entry point, missing signature or changed input contents
 refuses startup; run `pnpm e2e:prepare` to build the frontend and its dependencies, including when upgrading
 from output that predates the signature.
 
-The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI against a real temporary SQLite backend and `ControlledT3`, validating Factory behavior without live OAuth or paid T3 workloads. The
-[verification skill](../.agents/skills/verify-t3-factory/SKILL.md) and its [feature map](../.agents/skills/verify-t3-factory/features/README.md) define paths, charters and evidence standards.
+The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI against a real temporary SQLite backend and `ControlledT3`, validating AgentEasel behavior without live OAuth or paid T3 Code workloads. The
+[verification skill](../.agents/skills/verify-agenteasel/SKILL.md) and its [feature map](../.agents/skills/verify-agenteasel/features/README.md) define paths, charters and evidence standards.
 Live integration is covered by [live verification](installation.md).
 
 From the root, after `pnpm install --frozen-lockfile`:
@@ -305,7 +305,7 @@ pnpm exec e2e run tests/flow-authoring.e2e.ts --trace on --video on --output .e2
 ```
 
 Doctor writes to `.e2e/doctor`, screenshots to `.e2e/screenshots` and default regressions to `.e2e`, each with a `report.json` of artifact paths and results. A later run replaces that output's results, so
-give important proof a unique `--output`. Artifacts are ignored by Git. One `e2e.config.ts` starts an isolated fixture for every regression journey, including worker lifecycle and approved-client access. The runner allocates ports and cleans up its temporary Factory home and repositories. These journeys do not establish live remote worker support.
+give important proof a unique `--output`. Artifacts are ignored by Git. One `e2e.config.ts` starts an isolated fixture for every regression journey, including worker lifecycle and approved-client access. The runner allocates ports and cleans up its temporary AgentEasel home and repositories. These journeys do not establish live remote worker support.
 
 Canvas gestures use synthetic wheel and Safari gesture events; real trackpad sensitivity remains a manual check.
 

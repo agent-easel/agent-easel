@@ -317,7 +317,7 @@ export async function oauthT3(
       return {
         protocolVersion: message.params!.protocolVersion,
         capabilities: { tools: {} },
-        serverInfo: { name: "OAuth fixture T3", version: "future-compatible-version" },
+        serverInfo: { name: "OAuth fixture T3 Code", version: "future-compatible-version" },
       };
     if (message.method === "tools/list") return toolsPage(message.params?.cursor);
     if (message.method === "tools/call") {

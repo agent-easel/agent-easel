@@ -87,7 +87,7 @@ export function desktopBridgeScript({
     },
     probeServer: async () => ({
       ok: false,
-      message: "No Factory server answered securely at that address.",
+      message: "No AgentEasel server answered securely at that address.",
     }),
     connectServer: async () => ({ ok: true }),
     forgetServer: async () => ({ ok: true }),

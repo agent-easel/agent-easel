@@ -37,7 +37,7 @@ import {
 const ORIGINAL = /^\/api\/v10\/webhooks\/\d+\/[^/]+\/messages\/%40original$/;
 const LONG_REQUEST = "x".repeat(7900);
 
-it("Find Runs returns ID, number, title, Project and state of the permitted Projects' Runs, including Runs started in Factory", async (c) => {
+it("Find Runs returns ID, number, title, Project and state of the permitted Projects' Runs, including Runs started in AgentEasel", async (c) => {
   // Arrange
   const fixture = await runConversation(c);
   const first = await startedRun(fixture, {

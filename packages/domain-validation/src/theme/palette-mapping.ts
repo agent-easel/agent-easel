@@ -79,7 +79,7 @@ function parsePalette(palette: T3ThemePalette) {
   const parsed: Partial<Record<keyof T3ThemePalette, Oklch>> = {};
   for (const [role, value] of Object.entries(palette) as [keyof T3ThemePalette, string][]) {
     const color = parseColor(value);
-    if (!color) throw new Unreadable("colors Factory cannot read");
+    if (!color) throw new Unreadable("colors AgentEasel cannot read");
     parsed[role] = color;
   }
   return parsed as Record<keyof T3ThemePalette, Oklch>;
@@ -187,7 +187,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
 
 function presentMode(theme: ResolvedTheme, mode: Appearance): AppearanceModeResult {
   const palette = theme.modes[mode];
-  const fallback = `Factory’s ${modeLabel(mode)} colors are used.`;
+  const fallback = `AgentEasel’s ${modeLabel(mode)} colors are used.`;
   if (!palette)
     return {
       kind: "baseline",

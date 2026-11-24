@@ -16,7 +16,7 @@ import {
 import { controlledDiscord, messageEvent, PARTICIPANT_ID } from "./support/controlled-discord.ts";
 import { controlledModelProvider } from "./support/controlled-model.ts";
 
-it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, with their execution settings in the project checkout, with an empty Revisit instruction on every Agent block and no Finish block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run, leaves Generate Run titles off starts Chat control Off with an empty Language model and Discord connection and treats the saved T3 endpoint as First-run setup already completed", async (c) => {
+it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, with their execution settings in the project checkout, with an empty Revisit instruction on every Agent block and no Finish block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run, leaves Generate Run titles off starts Chat control Off with an empty Language model and Discord connection and treats the saved T3 Code endpoint as First-run setup already completed", async (c) => {
   // Arrange
   const fixture = await releasedUpgradeData(c);
   expect(fixture.pendingStop.closedAt).toBeNull();
@@ -167,7 +167,7 @@ it("after upgrading v0.2.0 the released Agent saves without a model while its ca
   });
 });
 
-it("upgraded Runs have no originating thread: with Chat control On and their Project granted, an invocation's reply is the only message Factory posts", async (c) => {
+it("upgraded Runs have no originating thread: with Chat control On and their Project granted, an invocation's reply is the only message AgentEasel posts", async (c) => {
   // Arrange
   const fixture = await releasedUpgradeData(c);
   const model = await controlledModelProvider(c);

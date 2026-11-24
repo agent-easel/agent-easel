@@ -197,7 +197,7 @@ function resolveStartWorkspace(
       return workspaceIssue(
         "workspace_remote_host",
         "workspace.mode",
-        "A new worktree needs T3 on this computer. Choose the project checkout for this Flow.",
+        "A new worktree needs T3 Code on this computer. Choose the project checkout for this Flow.",
       );
     const resolved = yield* Effect.tryPromise({
       try: () => git.resolveBaseRef(project.endpoint, project.workspaceRoot, workspace.base),
@@ -233,7 +233,7 @@ function attachmentIssues(snapshot: T3ContractSnapshot, count: number): Validati
     {
       code: "attachments_unsupported",
       path: "images",
-      message: `This T3 cannot receive image attachments: update T3 or remove the images. ${support.explanation}`,
+      message: `This T3 Code cannot receive image attachments: update T3 Code or remove the images. ${support.explanation}`,
     },
   ];
 }
@@ -246,7 +246,7 @@ function prepareStartWork(definitions: RunDefinitions, prompt: StartPrompt) {
       workerPromptText(prompt.segments, prompt.images),
     )
   )
-    return failure("validation", "The Agent prompt exceeds T3's first-message limit.");
+    return failure("validation", "The Agent prompt exceeds T3 Code's first-message limit.");
   return { ok: true as const };
 }
 type RunSource = "manual" | "trigger" | "chat_control" | "mcp";
@@ -294,7 +294,7 @@ export function openRunnerStart(
       if (isClosed())
         return failure(
           "conflict",
-          "Factory is shutting down. Retry this same Start request after restart.",
+          "AgentEasel is shutting down. Retry this same Start request after restart.",
         );
       if (!validStartKeys(rawInput))
         return failure("validation", "Choose a project and Flow before starting.", [
@@ -421,7 +421,7 @@ export function openRunnerStart(
           return issue(
             "image_not_staged",
             `images.${index}`,
-            `${name} is not staged in Factory. Stage it with factory_stage_run_image and retry.`,
+            `${name} is not staged in AgentEasel. Stage it with factory_stage_run_image and retry.`,
           );
         manifest.push({ imageId: `image-${index + 1}`, name, ...staged.value });
       }
@@ -541,12 +541,12 @@ export function openRunnerStart(
       if (!target)
         return failure(
           "validation",
-          "Connect T3 and restore this project's repository before starting.",
+          "Connect T3 Code and restore this project's repository before starting.",
           [
             {
               code: "project_connection",
               path: "projectId",
-              message: "Check project and T3 connection settings.",
+              message: "Check project and T3 Code connection settings.",
             },
           ],
         );
@@ -588,7 +588,7 @@ export function openRunnerStart(
                 path: "connection.contract",
                 message:
                   support.explanation ??
-                  "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
+                  "T3 Code launch capabilities are unavailable. Recheck the connection and retry this Start.",
               },
             ]
           : []),
@@ -598,7 +598,7 @@ export function openRunnerStart(
                 code: "fresh_context_unsupported",
                 path: "connection.contract",
                 message:
-                  "This T3 does not support fresh-context revisits. Update T3 or set Agent blocks to keep context on revisit.",
+                  "This T3 Code does not support fresh-context revisits. Update T3 Code or set Agent blocks to keep context on revisit.",
               },
             ]
           : []),

@@ -73,7 +73,7 @@ test("selecting a returned invocation from history shows its recipient and produ
   await expect(
     inspector
       .getByRole("region", "Selected invocation", { exact: true })
-      .getByRole("link", "Open in T3", { exact: true })
+      .getByRole("link", "Open in T3 Code", { exact: true })
       .first(),
   ).toHaveAttribute("href", worker!.link!);
   await expect(inspector.getByRole("region", "Recipients", { exact: true })).toContainText(

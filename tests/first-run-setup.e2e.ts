@@ -52,7 +52,7 @@ async function expectNoAddressFormOrApplication(screen: Screen) {
 
 /** Step 1 turned done once T3 Connected, and step 2 is the current step. */
 async function expectInstallStepOpen(screen: Screen) {
-  await expect(screen.getByRole("heading", "Connected to T3 0.1.11, done")).toBeVisible({
+  await expect(screen.getByRole("heading", "Connected to T3 Code 0.1.11, done")).toBeVisible({
     timeout: 8_000,
   });
   await expect(screen.getByRole("heading", "Install in your agents, current step")).toBeVisible();
@@ -78,16 +78,16 @@ async function readyHost(context: {
 }) {
   await openInstallStep(context, {});
   await context.screen.getByRole("button", "Install in 2 harnesses").tap();
-  await expect(context.screen.getByRole("heading", "Factory is ready")).toBeVisible({
+  await expect(context.screen.getByRole("heading", "AgentEasel is ready")).toBeVisible({
     timeout: 8_000,
   });
-  await expectActionShown(context.browser, "Open Factory");
+  await expectActionShown(context.browser, "Open AgentEasel");
 }
 
 /** The harness list is being read again, and nothing rests on the earlier one meanwhile. */
 async function expectListBeingRead(screen: Screen) {
   await expect(screen.getByText("Checking harnesses…")).toBeVisible({ timeout: 8_000 });
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
   await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
 }
 
@@ -110,11 +110,11 @@ const hostAction = <T>(baseUrl: string | undefined, path: string) =>
   hostCall<T>(baseUrl, path, { method: "POST", headers: { "X-Factory-Request": "1" } });
 
 const failedReopen = /Factory could not open the backend-host browser\. The pending approval/;
-const approvalPageOpen = /T3’s approval page is open in the browser on this computer/;
+const approvalPageOpen = /T3 Code’s approval page is open in the browser on this computer/;
 const continueWithoutReporting =
-  /Open Factory to continue without reporting\. Once this is fixed, install it from Settings → Agent reporting, or set it up by hand\./;
+  /Open AgentEasel to continue without reporting\. Once this is fixed, install it from Settings → Agent reporting, or set it up by hand\./;
 const cannotInstallHere =
-  "Factory can’t install here; waiting for the Factory host to open Factory";
+  "AgentEasel can’t install here; waiting for the AgentEasel host to open AgentEasel";
 
 /** An approved remote browser on a fresh host that has not finished setup. */
 async function openApprovedClient(
@@ -181,10 +181,10 @@ async function expectRefusalExplained(screen: Screen, explanation: RegExp) {
 /** Neither an install nor Open Factory is offered on this screen. */
 async function expectNoInstallOrOpenFactory(screen: Screen) {
   await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
 }
 
-test("a fresh host connects to the detected T3, installs in its harnesses and opens Factory for good", async ({
+test("a fresh host connects to the detected T3 Code, installs in its harnesses and opens AgentEasel for good", async ({
   fixture,
   app,
   screen,
@@ -192,15 +192,17 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
 }) => {
   // Arrange
   await openFreshSetup({ fixture, app, browser });
-  await expect(screen.getByRole("heading", "Set up Factory")).toBeVisible();
-  await expect(screen.getByRole("heading", "Connect to T3, current step")).toBeVisible();
+  await expect(screen.getByRole("heading", "Set up AgentEasel")).toBeVisible();
+  await expect(screen.getByRole("heading", "Connect to T3 Code, current step")).toBeVisible();
   await expect(screen.getByRole("heading", "Install in your agents, upcoming step")).toBeVisible();
-  await expect(screen.getByText("T3 0.1.11 is running on this computer")).toBeVisible();
+  await expect(screen.getByText("T3 Code 0.1.11 is running on this computer")).toBeVisible();
   await expect(screen.getByText("http://127.0.0.1:3773/mcp", { exact: true })).toBeVisible();
-  await expect(screen.getByText(/Connect opens T3’s approval page in your browser/)).toBeVisible();
+  await expect(
+    screen.getByText(/Connect opens T3 Code’s approval page in your browser/),
+  ).toBeVisible();
   // A fresh home has no saved address, and nothing explains a failure no one attempted.
   expect(await savedEndpoint(app.baseUrl)).toBeNull();
-  await expect(screen.getByText("Factory can’t reach T3")).toHaveCount(0);
+  await expect(screen.getByText("AgentEasel can’t reach T3 Code")).toHaveCount(0);
   // The disclosure stays closed while T3 is detected, and no product route mounts behind it.
   await expectNoAddressFormOrApplication(screen);
   await expect(screen.getByRole("button", "Connect")).toBeEnabled();
@@ -211,10 +213,10 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   await screen.getByRole("button", "Connect").tap();
 
   // Assert: Connect saved the detected address and started approval in the host's browser.
-  await expect(screen.getByText("Approve Factory in your browser")).toBeVisible();
+  await expect(screen.getByText("Approve AgentEasel in your browser")).toBeVisible();
   await expect(screen.getByText("Waiting for approval", { exact: true })).toBeVisible();
   await expect(
-    screen.getByText(/T3’s approval page is open in the browser on this computer/),
+    screen.getByText(/T3 Code’s approval page is open in the browser on this computer/),
   ).toBeVisible();
   await expect(screen.getByRole("button", "Reopen approval page")).toBeVisible();
   expect(await savedEndpoint(app.baseUrl)).toBe("http://127.0.0.1:3773/mcp");
@@ -224,7 +226,7 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   // The owner approves in T3; nobody touches this screen.
   await fixture.firstRunSetup.t3Approve();
   await expectInstallStepOpen(screen);
-  await expect(screen.getByText("Approve Factory in your browser")).toHaveCount(0);
+  await expect(screen.getByText("Approve AgentEasel in your browser")).toHaveCount(0);
 
   // Step 2 lists the installable harnesses T3 has on with their messages, and names the ones it
   // keeps off.
@@ -238,7 +240,7 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   await expect(codex).toContainText("reporting-codex/config.toml · ");
   await expect(codex).toContainText("reporting-codex/skills");
   await expect(
-    screen.getByText("Cursor and Grok are off in T3. Turn them on there to include them."),
+    screen.getByText("Cursor and Grok are off in T3 Code. Turn them on there to include them."),
   ).toBeVisible();
   await expect(screen.getByRole("group", "Cursor", { exact: true })).toHaveCount(0);
   await app.screenshot("first-run-setup-install");
@@ -250,7 +252,7 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   await screen.getByRole("button", "Install in 2 harnesses").tap();
 
   // Ready: both steps done, and a reminder that open sessions keep the tools they loaded.
-  await expect(screen.getByRole("heading", "Factory is ready")).toBeVisible({
+  await expect(screen.getByRole("heading", "AgentEasel is ready")).toBeVisible({
     timeout: 8_000,
   });
   await expect(screen.getByRole("heading", "Installed in Claude and Codex, done")).toBeVisible();
@@ -263,19 +265,19 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
   expect(await setupCompleted(app.baseUrl)).toBe(false);
   await app.screenshot("first-run-setup-ready");
 
-  await screen.getByRole("button", "Open Factory").tap();
+  await screen.getByRole("button", "Open AgentEasel").tap();
 
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible();
-  await expect(screen.getByRole("heading", "Factory is ready")).toHaveCount(0);
+  await expect(screen.getByRole("heading", "AgentEasel is ready")).toHaveCount(0);
   expect(await setupCompleted(app.baseUrl)).toBe(true);
   // Completion is durable: a reload, even with T3 gone, opens the application.
   await fixture.firstRunSetup.t3Unavailable();
   await browser.reload();
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible();
-  await expect(screen.getByRole("heading", "Set up Factory")).toHaveCount(0);
+  await expect(screen.getByRole("heading", "Set up AgentEasel")).toHaveCount(0);
 });
 
-test("with no running T3 the step offers an address, and proposes T3 with the disclosure closed once it starts", async ({
+test("with no running T3 Code the step offers an address, and proposes T3 Code with the disclosure closed once it starts", async ({
   fixture,
   app,
   screen,
@@ -283,7 +285,7 @@ test("with no running T3 the step offers an address, and proposes T3 with the di
 }) => {
   // Arrange
   await openFreshSetup({ fixture, app, browser }, { t3Running: false });
-  await expect(screen.getByText("No running T3 found on this computer")).toBeVisible();
+  await expect(screen.getByText("No running T3 Code found on this computer")).toBeVisible();
   // Save and connect waits for an address; the input shows the default one as its placeholder.
   await expect(screen.getByRole("button", "Save and connect")).toBeDisabled();
   await app.screenshot("first-run-setup-t3-not-found");
@@ -292,10 +294,10 @@ test("with no running T3 the step offers an address, and proposes T3 with the di
   await fixture.firstRunSetup.t3Starts();
 
   // Assert
-  await expect(screen.getByText("T3 0.1.11 is running on this computer")).toBeVisible({
+  await expect(screen.getByText("T3 Code 0.1.11 is running on this computer")).toBeVisible({
     timeout: 8_000,
   });
-  await expect(screen.getByText("No running T3 found on this computer")).toHaveCount(0);
+  await expect(screen.getByText("No running T3 Code found on this computer")).toHaveCount(0);
   await expect(screen.getByRole("button", "Save and connect")).toHaveCount(0);
   await expect(screen.getByRole("button", "Use another address · how to find it")).toBeVisible();
 });
@@ -365,11 +367,13 @@ test("an approval that ended without consent is explained after a reload", async
 
   // Assert
   await expect(screen.getByText("Approval didn’t finish")).toBeVisible();
-  await expect(screen.getByText(/Approve access in T3 by opening authorization/)).toBeVisible();
+  await expect(
+    screen.getByText(/Approve access in T3 Code by opening authorization/),
+  ).toBeVisible();
   await expect(screen.getByRole("button", "Connect")).toBeVisible();
 });
 
-test("with no installable harness on in T3, the install step asks to turn one on and offers no install", async ({
+test("with no installable harness on in T3 Code, the install step asks to turn one on and offers no install", async ({
   fixture,
   app,
   screen,
@@ -384,17 +388,17 @@ test("with no installable harness on in T3, the install step asks to turn one on
 
   // Assert
   await expectInstallStepOpen(screen);
-  await expect(screen.getByText("Turn on a harness in T3")).toBeVisible();
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toBeVisible();
   await expect(
     screen.getByText(
-      "Claude, Codex, Cursor, and Grok are off in T3. Turn them on there to include them.",
+      "Claude, Codex, Cursor, and Grok are off in T3 Code. Turn them on there to include them.",
     ),
   ).toBeVisible();
   await expectNoInstallOrOpenFactory(screen);
   await app.screenshot("first-run-setup-no-harness");
 });
 
-test("a harness turned on in T3 during the install step joins the list and leaves the caption", async ({
+test("a harness turned on in T3 Code during the install step joins the list and leaves the caption", async ({
   fixture,
   app,
   screen,
@@ -402,7 +406,7 @@ test("a harness turned on in T3 during the install step joins the list and leave
 }) => {
   // Arrange
   await openInstallStep({ fixture, app, browser, screen }, { harnessesOn: false });
-  await expect(screen.getByText("Turn on a harness in T3")).toBeVisible();
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toBeVisible();
 
   // Act
   await fixture.firstRunSetup.codexTurnedOn();
@@ -413,12 +417,14 @@ test("a harness turned on in T3 during the install step joins the list and leave
     { timeout: 8_000 },
   );
   await expect(
-    screen.getByText("Claude, Cursor, and Grok are off in T3. Turn them on there to include them."),
+    screen.getByText(
+      "Claude, Cursor, and Grok are off in T3 Code. Turn them on there to include them.",
+    ),
   ).toBeVisible();
-  await expect(screen.getByText("Turn on a harness in T3")).toHaveCount(0);
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toHaveCount(0);
 });
 
-test("when discovery cannot read the connected T3's harnesses, the install step names the blocker and the host can still open Factory", async ({
+test("when discovery cannot read the connected T3 Code's harnesses, the install step names the blocker and the host can still open AgentEasel", async ({
   fixture,
   app,
   screen,
@@ -428,28 +434,28 @@ test("when discovery cannot read the connected T3's harnesses, the install step 
   await openInstallStep({ fixture, app, browser, screen }, { sameT3: false });
   await expectRefusalExplained(
     screen,
-    /Connected T3 identity does not match local state\. Set FACTORY_T3_STATE/,
+    /Connected T3 Code identity does not match local state\. Set FACTORY_T3_STATE/,
   );
   await expect(screen.getByRole("link", "set it up by hand")).toHaveAttribute(
     "href",
     "https://github.com/alimek/t3-factory/blob/main/docs/t3-integration.md#reporting-installation",
   );
-  await expect(screen.getByText("Turn on a harness in T3")).toHaveCount(0);
-  await expect(screen.getByText(/are off in T3/)).toHaveCount(0);
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toHaveCount(0);
+  await expect(screen.getByText(/are off in T3 Code/)).toHaveCount(0);
   // Nothing was installed, so there is no new session to open.
   await expect(screen.getByText("Open a new agent session")).toHaveCount(0);
-  await expectActionShown(browser, "Open Factory");
+  await expectActionShown(browser, "Open AgentEasel");
   await app.screenshot("first-run-setup-discovery-refused");
 
   // Act
-  await screen.getByRole("button", "Open Factory").tap();
+  await screen.getByRole("button", "Open AgentEasel").tap();
 
   // Assert
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible();
   expect(await setupCompleted(app.baseUrl)).toBe(true);
 });
 
-test("a listed harness Factory can neither install nor repair waits until the installable ones are installed, then the host may open Factory", async ({
+test("a listed harness AgentEasel can neither install nor repair waits until the installable ones are installed, then the host may open AgentEasel", async ({
   fixture,
   app,
   screen,
@@ -461,7 +467,7 @@ test("a listed harness Factory can neither install nor repair waits until the in
   await expect(screen.getByRole("group", "Codex", { exact: true }).getByRole("status")).toHaveText(
     "Needs attention",
   );
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
 
   // Act
   await screen.getByRole("button", "Install in 1 harness").tap();
@@ -474,11 +480,11 @@ test("a listed harness Factory can neither install nor repair waits until the in
   await expect(screen.getByText("Codex’s configuration folder is missing")).toBeVisible();
   await expect(screen.getByRole("heading", "Install in your agents, current step")).toBeVisible();
   await expect(screen.getByText("Open a new agent session")).toBeVisible();
-  await expectActionShown(browser, "Open Factory");
+  await expectActionShown(browser, "Open AgentEasel");
   await app.screenshot("first-run-setup-manual-harness");
 });
 
-test("when T3's settings file cannot be read, the install step says where Factory reads T3's state and how to continue", async ({
+test("when T3 Code's settings file cannot be read, the install step says where AgentEasel reads T3 Code's state and how to continue", async ({
   fixture,
   app,
   screen,
@@ -495,13 +501,13 @@ test("when T3's settings file cannot be read, the install step says where Factor
   await expectInstallStepOpen(screen);
   await expectRefusalExplained(
     screen,
-    /Cannot discover local T3 configuration: .+\. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory\./,
+    /Cannot discover local T3 Code configuration: .+\. Check that T3 Code has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 Code state directory\./,
   );
-  await expectActionShown(browser, "Open Factory");
+  await expectActionShown(browser, "Open AgentEasel");
   await app.screenshot("first-run-setup-settings-unreadable");
 });
 
-test("a harness turned on in T3 beside one needing manual setup withholds Open Factory until the list read again offers its install", async ({
+test("a harness turned on in T3 Code beside one needing manual setup withholds Open AgentEasel until the list read again offers its install", async ({
   fixture,
   app,
   screen,
@@ -510,7 +516,7 @@ test("a harness turned on in T3 beside one needing manual setup withholds Open F
   // Arrange: Claude installed and Codex needing manual setup, so Open Factory is offered.
   await openInstallStep({ fixture, app, browser, screen }, { codexHome: false });
   await screen.getByRole("button", "Install in 1 harness").tap();
-  await expectActionShown(browser, "Open Factory");
+  await expectActionShown(browser, "Open AgentEasel");
   await fixture.firstRunSetup.holdReportingReads();
 
   // Act
@@ -518,9 +524,9 @@ test("a harness turned on in T3 beside one needing manual setup withholds Open F
 
   // Assert: once setup sees the change, the list is read again and Open Factory waits for it.
   await expect(
-    screen.getByText("Cursor is off in T3. Turn it on there to include it."),
+    screen.getByText("Cursor is off in T3 Code. Turn it on there to include it."),
   ).toBeVisible({ timeout: 8_000 });
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
   await expect(screen.getByText("Checking harnesses…")).toBeVisible();
   await app.screenshot("first-run-setup-list-refreshing");
   // The read answers: Grok is installable, so Install comes back and Open Factory stays away.
@@ -529,10 +535,10 @@ test("a harness turned on in T3 beside one needing manual setup withholds Open F
     "Not installed",
   );
   await expect(screen.getByRole("button", "Install in 1 harness")).toBeVisible();
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
 });
 
-test("after T3 grants a new authorization with the same harnesses off, Open Factory waits for a list read for it", async ({
+test("after T3 Code grants a new authorization with the same harnesses off, Open AgentEasel waits for a list read for it", async ({
   fixture,
   app,
   screen,
@@ -548,11 +554,11 @@ test("after T3 grants a new authorization with the same harnesses off, Open Fact
   // Assert: the caption is unchanged, yet the list read for the earlier authorization no longer counts.
   await expectListBeingRead(screen);
   await expect(
-    screen.getByText("Cursor and Grok are off in T3. Turn them on there to include them."),
+    screen.getByText("Cursor and Grok are off in T3 Code. Turn them on there to include them."),
   ).toBeVisible();
 });
 
-test("after T3 disconnects and reconnects, Open Factory waits for a list read since reconnecting", async ({
+test("after T3 Code disconnects and reconnects, Open AgentEasel waits for a list read since reconnecting", async ({
   fixture,
   app,
   screen,
@@ -561,7 +567,7 @@ test("after T3 disconnects and reconnects, Open Factory waits for a list read si
   // Arrange
   await readyHost({ fixture, app, browser, screen });
   await fixture.firstRunSetup.t3Unavailable();
-  await expect(screen.getByRole("heading", "Connect to T3, current step")).toBeVisible({
+  await expect(screen.getByRole("heading", "Connect to T3 Code, current step")).toBeVisible({
     timeout: 8_000,
   });
   await fixture.firstRunSetup.holdReportingReads();
@@ -574,7 +580,7 @@ test("after T3 disconnects and reconnects, Open Factory waits for a list read si
   await expectListBeingRead(screen);
 });
 
-test("an approved client waits read-only while the host sets up, then opens Factory by itself", async ({
+test("an approved client waits read-only while the host sets up, then opens AgentEasel by itself", async ({
   fixture,
   app,
   screen,
@@ -584,11 +590,11 @@ test("an approved client waits read-only while the host sets up, then opens Fact
   await openApprovedClient({ fixture, app, browser });
 
   // Assert: the host's progress, read-only, with Check again as the only action.
-  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toBeVisible();
+  await expect(screen.getByRole("heading", "Finish setup on the AgentEasel host")).toBeVisible();
   await expect(
-    screen.getByText(/happen on the computer where Factory runs\. Open Factory there/),
+    screen.getByText(/happen on the computer where AgentEasel runs\. Open AgentEasel there/),
   ).toBeVisible();
-  await expect(screen.getByRole("heading", "Connect to T3, current step")).toBeVisible();
+  await expect(screen.getByRole("heading", "Connect to T3 Code, current step")).toBeVisible();
   await expect(screen.getByText("Not connected yet")).toBeVisible();
   await expect(screen.getByRole("heading", "Install in your agents, upcoming step")).toBeVisible();
   await expect(screen.getByText("Waiting for step 1")).toBeVisible();
@@ -596,7 +602,7 @@ test("an approved client waits read-only while the host sets up, then opens Fact
   await expect(screen.getByRole("button", /another address/)).toHaveCount(0);
   await expectNoAddressFormOrApplication(screen);
   await screen.getByRole("button", "Check again").tap();
-  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toBeVisible();
+  await expect(screen.getByRole("heading", "Finish setup on the AgentEasel host")).toBeVisible();
   await app.screenshot("first-run-setup-approved-client");
 
   // Act: the owner connects the detected T3 on the host and approves it.
@@ -608,7 +614,7 @@ test("an approved client waits read-only while the host sets up, then opens Fact
     "Not installed",
   );
   await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
   await app.screenshot("first-run-setup-approved-client-connected");
 
   // Act: the owner finishes setup on the host.
@@ -616,7 +622,7 @@ test("an approved client waits read-only while the host sets up, then opens Fact
 
   // Assert: the client leaves the setup screen without a reload.
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible({ timeout: 8_000 });
-  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toHaveCount(0);
+  await expect(screen.getByRole("heading", "Finish setup on the AgentEasel host")).toHaveCount(0);
 });
 
 test("an approved client is not told installation is impossible from a read made before the host connected", async ({
@@ -635,12 +641,12 @@ test("an approved client is not told installation is impossible from a read made
 
   // Assert: until a list read since connecting answers, the client only waits for the install.
   await expectInstallStepOpen(screen);
-  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Waiting for the install on the AgentEasel host")).toBeVisible();
   await expect(screen.getByText(cannotInstallHere)).toHaveCount(0);
   await app.screenshot("first-run-setup-approved-client-list-pending");
 });
 
-test("an approved client on a host where installation is impossible waits for the host to open Factory", async ({
+test("an approved client on a host where installation is impossible waits for the host to open AgentEasel", async ({
   fixture,
   app,
   screen,
@@ -660,7 +666,7 @@ test("an approved client on a host where installation is impossible waits for th
   await app.screenshot("first-run-setup-approved-client-blocked");
 });
 
-test("an approved client is not told installation is impossible from a list read for an earlier T3 authorization", async ({
+test("an approved client is not told installation is impossible from a list read for an earlier T3 Code authorization", async ({
   fixture,
   app,
   screen,
@@ -674,13 +680,13 @@ test("an approved client is not told installation is impossible from a list read
   await fixture.firstRunSetup.t3NewAuthorization();
 
   // Assert
-  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible({
+  await expect(screen.getByText("Waiting for the install on the AgentEasel host")).toBeVisible({
     timeout: 8_000,
   });
   await expect(screen.getByText(cannotInstallHere)).toHaveCount(0);
 });
 
-test("an approved client shows no harnesses read before T3 disconnected until a list read since reconnecting answers", async ({
+test("an approved client shows no harnesses read before T3 Code disconnected until a list read since reconnecting answers", async ({
   fixture,
   app,
   screen,
@@ -701,6 +707,6 @@ test("an approved client shows no harnesses read before T3 disconnected until a 
 
   // Assert
   await expectInstallStepOpen(screen);
-  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Waiting for the install on the AgentEasel host")).toBeVisible();
   await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
 });

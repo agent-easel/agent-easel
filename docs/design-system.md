@@ -1,6 +1,6 @@
 # Frontend design system
 
-Factory uses shadcn/ui on Tailwind CSS v4 with one set of semantic tokens, each with a
+AgentEasel uses shadcn/ui on Tailwind CSS v4 with one set of semantic tokens, each with a
 Light and a Dark value. Reuse the existing primitives and token vocabulary; do not introduce
 parallel stylesheets, global element styling or per-screen color palettes.
 
@@ -27,35 +27,35 @@ so controls do not fade one by one. Light is its own baseline, not an inversion 
 white canvases and zinc structure, primary actions at a darker indigo, and status colors at
 darker shades of the same hue families so text and dots stay readable on light surfaces.
 Typography, geometry, radii and motion are identical in both modes. Raw Run images, project
-favicons and emoji keep their pixels. Forced-colors mode replaces Factory's colors with the
+favicons and emoji keep their pixels. Forced-colors mode replaces AgentEasel's colors with the
 system palette in either mode; meaning stays carried by labels and icons.
 
 ### Custom theme colors
 
 With [custom color themes](desktop-and-clients.md#appearance), every color token can come
-from a per-device JSON color config (compatible with T3's theme format) instead of the baseline,
+from a per-device JSON color config (compatible with T3 Code's theme format) instead of the baseline,
 separately per mode. The effective appearance picks the palette. A mode without an accepted custom
 palette keeps its baseline. Appearance shows **Custom colors** when either mode uses custom colors,
-and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and
+and **AgentEasel colors** otherwise. AgentEasel keeps its own typography, geometry, radii, shadows and
 motion; raw CSS fields are ignored.
 
 The client maps theme roles by meaning: canvas to the background, raised surfaces to cards and
 popovers, text and muted text to the foregrounds, sidebar roles to the sidebar, borders and
 inputs to lines, accent to primary actions and links, focus to the focus ring. Hover, pressed and
 selected fills are derived from the canvas or sidebar with that surface's own hue and chroma, so
-they stay neutral and never take the accent. Status colors keep Factory's hue families from the
+they stay neutral and never take the accent. Status colors keep AgentEasel's hue families from the
 mode's baseline. A mode must keep its own polarity (a dark canvas in Dark, a light one in Light).
 
 Contrast policy: text, secondary text, action labels, links and status colors need 4.5:1 on
 every surface they appear on, focus rings and section labels need 3:1, and borders and inputs
 need 1.3:1. A color that misses is moved toward black or white in lightness until it passes,
 clamping chroma only as needed to fit the sRGB gamut; if a required pair cannot pass, that
-whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
-shows **Technical details** when Factory cannot use the config at all.
+whole mode uses its AgentEasel baseline. Appearance identifies which colors each mode uses and
+shows **Technical details** when AgentEasel cannot use the config at all.
 The primary action darkens on hover as in the baselines; an accent of middle lightness, on which
 only a dark label is readable, lightens on hover instead so the label stays readable. The same
 mapping and policy apply to seed-generated, overridden and variant palettes.
-Custom colors are formatted by Factory and applied through the CSSOM as one rule per mode.
+Custom colors are formatted by AgentEasel and applied through the CSSOM as one rule per mode.
 
 ## Visual rules
 
@@ -96,7 +96,7 @@ outside it as secondary text. Run and Block work states use the canonical labels
 Attention, Error, Neutral, Checking and Info kinds with their own label, such as Connected,
 Installed, Not installed or Install failed; readiness reads **Ready** (Success) or **Not ready**
 (Error). The glyph changes only where the meaning needs it: Unplug for Disconnected, a key for
-authorization, a lock for Managed on the Factory host, a dashed circle for Not installed.
+authorization, a lock for Managed on the AgentEasel host, a dashed circle for Not installed.
 
 A field that shows a state tag sets `aria-invalid` and `aria-describedby` pointing at the one
 message that explains it, as text next to the field or one card, never both. That message is a
@@ -177,13 +177,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 
 - **State tag**: StatusBadge, with the Run kinds or the Setting kinds above.
 - **Run row**: RunRow (Figma Run/RunRow), with Show ending for a Settled Run's recorded ending: a neutral
-  StatusBadge with the Flag icon and the ending name on the meta line, after the Run number and before **Not in T3**.
-  It is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, and shortens to its flag so **Not in T3** beside it stays in full.
+  StatusBadge with the Flag icon and the ending name on the meta line, after the Run number and before **Not in T3 Code**.
+  It is capped at 88 px in a 300 px sidebar and 64 px in a 224 px one, and shortens to its flag so **Not in T3 Code** beside it stays in full.
 - **Problem, notice or explanation**: ProblemCard, one card per issue with its next step. Its
   tones are the Setting kinds Error, Attention, Info and Neutral, so a field tag and its card
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
   and Studio card; compact is the composer, Run page and dialog card. The next step is one
-  TextLink: an action, or a chevron link to Settings or Studio, or an external link to T3.
+  TextLink: an action, or a chevron link to Settings or Studio, or an external link to T3 Code.
 - **Bordered container**: Surface, in one of four tones. Inset is content inside a panel or
   card; Group holds grouped rows, as in Settings, divided by borders and clipped; Raised is a
   card that stands on the page; Floating is a control or popup over the canvas, with the
@@ -193,7 +193,7 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Text link**: TextLink, for inline links and link-style actions. Its Link tone uses `--link`;
   Neutral keeps secondary text and turns primary on hover and focus. The optional trailing icon
   accepts any Lucide icon component. Common choices are `ChevronRight` for forward navigation in
-  the app, `ExternalLink` for leaving the app or opening T3, and `Maximize2` for opening a reader.
+  the app, `ExternalLink` for leaving the app or opening T3 Code, and `Maximize2` for opening a reader.
   It underlines on hover only, shows the `--ring` outline on keyboard focus, and a disabled action
   is at 50% opacity. In-app routes wrap AppLink, which stays the typed-route link; external links
   open in a new tab; actions are buttons.
@@ -242,13 +242,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   segments, as a Finish ending's Output.
 - **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
   the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
-  reader without a preview. Human-written text and Factory messages stay plain text.
+  reader without a preview. Human-written text and AgentEasel messages stay plain text.
 - **Run result**: ResultSection (Figma Run/ResultSection), the Run overview's Result: the
   reached ending's name with the flag icon, its output, Output missing tag or neither, its From,
   By when the author differs from the worker, Worker when known, and At facts, the Stopping tag while the Run stops its workers, and No result yet
   or No result before a result. The Finish block's inspector shows the same output and facts.
-- **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
-  an Attention card whose action is going to T3.
+- **Way out to T3 Code**: OpenInT3, the "Open in T3 Code ↗" TextLink; its filled button form is only for
+  an Attention card whose action is going to T3 Code.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
   After its destination changes, a stored secret shows the Choose tag and adds Use stored key;
   Save waits for a choice, and Undo or Cancel return to it.
@@ -264,7 +264,7 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   success check, then the title and its one-sentence reason. The heading names the state, so it
   is announced without colour.
 - **Setup harness**: HarnessRow (Figma Setup/HarnessRow) for one agent harness in First-run
-  setup: the harness name, the configuration paths Factory writes, the installation's own message
+  setup: the harness name, the configuration paths AgentEasel writes, the installation's own message
   and its install status badge, as a group named after the harness. Rows sit in a grouped Surface.
 - **Canvas**: the canvas surface, which owns block geometry, ports, wires and the dot grid for
   both the Flow editor and the execution canvas.
@@ -307,7 +307,7 @@ helper and accept `className` where the primitive supports it.
 
 Define new semantic tokens in `apps/frontend/src/styles.css` with a value in both the Dark
 `:root` block and the Light block, and expose them through `@theme inline`. A new color token
-also joins the contracts' appearance token list and needs a T3 mapping, so inherited palettes keep
+also joins the contracts' appearance token list and needs a T3 Code mapping, so inherited palettes keep
 covering every color. Check new colors in both modes. Keep their purpose clear; exact values and component variants belong in that
 source rather than a second documentation inventory.
 

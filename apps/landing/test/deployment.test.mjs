@@ -41,26 +41,28 @@ await test("the production canonical URL and root Release download appear in bui
   );
 
   // Act
-  const output = buildLanding(context, { FACTORY_SITE_URL: "https://t3factory.app/" });
+  const output = buildLanding(context, { FACTORY_SITE_URL: "https://agenteasel.app/" });
 
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
-  assert.ok(html.includes('<link rel="canonical" href="https://t3factory.app/"'));
-  assert.ok(html.includes('<meta property="og:url" content="https://t3factory.app/"'));
+  assert.ok(html.includes('<link rel="canonical" href="https://agenteasel.app/"'));
+  assert.ok(html.includes('<meta property="og:url" content="https://agenteasel.app/"'));
   assert.ok(
-    html.includes('<meta property="og:image" content="https://t3factory.app/og-image.png"'),
+    html.includes('<meta property="og:image" content="https://agenteasel.app/og-image.png"'),
   );
   assert.ok(
-    html.includes('<meta name="twitter:image" content="https://t3factory.app/og-image.png"'),
+    html.includes('<meta name="twitter:image" content="https://agenteasel.app/og-image.png"'),
   );
-  assert.ok(html.includes(`/releases/download/v${version}/T3.Factory-${version}-arm64.dmg`));
+  assert.ok(html.includes(`/releases/download/v${version}/AgentEasel-${version}-arm64.dmg`));
   assert.ok(
     readFileSync(join(output, "robots.txt"), "utf8").includes(
-      "Sitemap: https://t3factory.app/sitemap.xml",
+      "Sitemap: https://agenteasel.app/sitemap.xml",
     ),
   );
   assert.ok(
-    readFileSync(join(output, "sitemap.xml"), "utf8").includes("<loc>https://t3factory.app/</loc>"),
+    readFileSync(join(output, "sitemap.xml"), "utf8").includes(
+      "<loc>https://agenteasel.app/</loc>",
+    ),
   );
 });
 
@@ -74,7 +76,7 @@ await test("a build without a site URL uses the production domain", (context) =>
   // Assert
   assert.ok(
     readFileSync(join(output, "index.html"), "utf8").includes(
-      '<link rel="canonical" href="https://t3factory.app/"',
+      '<link rel="canonical" href="https://agenteasel.app/"',
     ),
   );
 });

@@ -82,7 +82,7 @@ export function openRunRequestReport(database: RunnerDatabase) {
             { environmentId: current.environment_id },
             threadId,
             key,
-            "Factory Request report: assess the existing work without repeating the task.",
+            "AgentEasel Request report: assess the existing work without repeating the task.",
             block!.public_id,
           ),
           contextId: current.context_id,

@@ -82,7 +82,7 @@ export const pageInfolessLabelStates = () =>
  * explicit PATH and HOME and no fallback directories unless given, so it never finds a real `gh`.
  */
 export async function fakeGh(context: TestContext) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "t3-factory-gh-")));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agenteasel-gh-")));
   context.onTestFinished(() => rm(root, { recursive: true, force: true }));
   const home = join(root, "home");
   await mkdir(home);

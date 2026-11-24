@@ -235,7 +235,7 @@ function saveRequest(
       submitted: asContent(submitted),
       send: () => operations.updateAgent(agent.id, validation.value),
       unknownMessage:
-        "Factory may have saved this Agent. Your changes are kept and nothing is retried.",
+        "AgentEasel may have saved this Agent. Your changes are kept and nothing is retried.",
       fallback,
     };
   }
@@ -245,7 +245,8 @@ function saveRequest(
   return {
     submitted: asContent(input),
     send: () => create(validation.value),
-    unknownMessage: "Factory may have created this Agent. Checking before it can be created again…",
+    unknownMessage:
+      "AgentEasel may have created this Agent. Checking before it can be created again…",
     fallback,
   };
 }
@@ -414,7 +415,7 @@ export function createAgentDraft(
     },
     dismissUpdate: draft.dismissUpdate,
     clearRemovalError: draft.clearRemovalError,
-    remove: () => draft.remove(source.removeAgent, "Factory could not remove this Agent."),
+    remove: () => draft.remove(source.removeAgent, "AgentEasel could not remove this Agent."),
     /**
      * Validates and sends the draft against its saved revision, or creates it owned by `owner`
      * (null for a global Agent); a save never changes the owner.

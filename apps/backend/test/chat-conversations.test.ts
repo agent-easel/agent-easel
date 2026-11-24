@@ -135,7 +135,7 @@ it("Flows beyond the first page stay reachable through later pages", async (c) =
   expect(flows.every((created) => created.ok)).toBe(true);
 });
 
-it("the model receives fixed policy with the requester and permitted Projects from Factory, and the message as an untrusted envelope", async (c) => {
+it("the model receives fixed policy with the requester and permitted Projects from AgentEasel, and the message as an untrusted envelope", async (c) => {
   // Arrange
   const { discord, model, project } = await conversing(c);
 
@@ -145,7 +145,7 @@ it("the model receives fixed policy with the requester and permitted Projects fr
   });
 
   // Assert
-  expect(systemText(model, 0)).toContain("Factory alone decides who may use you");
+  expect(systemText(model, 0)).toContain("AgentEasel alone decides who may use you");
   expect(systemText(model, 0)).toContain(`Requester: Discord user ${PARTICIPANT_ID}.`);
   expect(systemText(model, 0)).toContain(`Projects this thread permits now: 1 (${project.id}).`);
   expect(userEnvelopes(model, 0)).toStrictEqual([
@@ -156,7 +156,7 @@ it("the model receives fixed policy with the requester and permitted Projects fr
   ]);
 });
 
-it("a mention Factory does not admit sends the language model nothing", async (c) => {
+it("a mention AgentEasel does not admit sends the language model nothing", async (c) => {
   // Arrange
   const { discord, model } = await conversing(c);
   discord.deliver(invocation("300000000000000104", { channelId: OTHER_CHANNEL }));
@@ -352,7 +352,7 @@ it("an edit after admission leaves the retained snapshot unchanged", async (c) =
   ]);
 });
 
-it("Factory's replies mention nobody, whatever the model wrote", async (c) => {
+it("AgentEasel's replies mention nobody, whatever the model wrote", async (c) => {
   // Arrange
   const { discord, model } = await conversing(c);
   model.script({ text: "@everyone look <@200000000000000002>" });

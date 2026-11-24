@@ -471,10 +471,10 @@ it("Request report on a Continuation asks the worker's thread once, under the Co
   );
   expect(sends).toHaveLength(2);
   expect(promptOn(f.world, worker).blockId).toBe(prompt.blockId);
-  expect(sends[1]!.payload.message).toContain("Factory Request report");
+  expect(sends[1]!.payload.message).toContain("AgentEasel Request report");
 });
 
-it("a Continuation prompt T3 cancels before it starts, first seen beside a running later turn, shows a Problem in work history", async (c) => {
+it("a Continuation prompt T3 Code cancels before it starts, first seen beside a running later turn, shows a Problem in work history", async (c) => {
   // Arrange
   const f = await prepared(c, continuationFlow);
   const worker = await workerAtWork(f.world, f.input);

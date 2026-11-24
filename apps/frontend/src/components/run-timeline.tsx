@@ -67,9 +67,9 @@ function intentOf(run: RunDetail, event: RunEvent) {
 }
 
 const threadWords = {
-  new: { again: "", thread: "new T3 thread" },
-  same: { again: " again", thread: "same T3 thread" },
-  prepared: { again: "", thread: "prepared idle T3 thread" },
+  new: { again: "", thread: "new T3 Code thread" },
+  same: { again: " again", thread: "same T3 Code thread" },
+  prepared: { again: "", thread: "prepared idle T3 Code thread" },
 };
 
 /** A block received work: a fresh T3 thread, a message into the thread it already has, or the
@@ -102,7 +102,10 @@ function reported(run: RunDetail, event: RunEvent): EventPhrase {
   const report = run.reports.find((item) => item.id === event.causeId);
   if (!report) return { actorId: event.blockId, text: "reported" };
   if (report.status === "waiting")
-    return { actorId: event.blockId, text: "waiting for your reply in T3 · not a final result" };
+    return {
+      actorId: event.blockId,
+      text: "waiting for your reply in T3 Code · not a final result",
+    };
   const version = resultVersion(run, report);
   if (version > 1)
     return {
@@ -192,11 +195,11 @@ function omittedConditionArrivals(run: RunDetail) {
 
 const attentionWords: Record<RunAttention["kind"], string> = {
   human: "needs input · your answer",
-  "native-request": "needs input · T3 question or permission",
-  "conversation-waiting": "needs input · Agent question in T3",
+  "native-request": "needs input · T3 Code question or permission",
+  "conversation-waiting": "needs input · Agent question in T3 Code",
   "missing-report": "problem · no report",
   "report-problem": "problem · report needs a fix",
-  "execution-failed": "problem · T3 execution failed",
+  "execution-failed": "problem · T3 Code execution failed",
   "condition-integrity": "problem · Condition cannot number its next arrival",
   "join-integrity": "problem · Join cannot forward its next round",
   "subflow-stop-unresolved": "problem · Subflow could not stop its workers",
@@ -218,7 +221,7 @@ function continuationPromptSent(run: RunDetail, event: RunEvent): EventPhrase {
   const { owner, link } = continuationThread(run, event);
   return {
     actorId: event.blockId,
-    text: `prompt sent to ${owner ? `${owner}'s` : "the incoming"} T3 thread`,
+    text: `prompt sent to ${owner ? `${owner}'s` : "the incoming"} T3 Code thread`,
     thread: true,
     threadLink: link,
   };
@@ -265,7 +268,7 @@ function operationUnresolved(run: RunDetail, event: RunEvent): EventPhrase {
   if (intent?.targetEndingId)
     return endingStatus(run, intent.targetEndingId, "delivery unresolved");
   const kind = intent?.kind ?? "operation";
-  return { actorId: event.blockId, text: `${kind} outcome in T3 not confirmed yet` };
+  return { actorId: event.blockId, text: `${kind} outcome in T3 Code not confirmed yet` };
 }
 
 /** T3-observed engine facts keep their recorded status and T3's own time when reported. */
@@ -275,7 +278,7 @@ function observed(lead: string) {
     text: [
       lead,
       event.engineStatus ? ` · ${event.engineStatus}` : "",
-      event.sourceAt ? ` · T3 time ${clockTime(event.sourceAt)}` : "",
+      event.sourceAt ? ` · T3 Code time ${clockTime(event.sourceAt)}` : "",
     ].join(""),
   });
 }
@@ -329,11 +332,11 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
   "source-completion-confirmed": said(
     "source execution completion confirmed · no native requests observed",
   ),
-  "work-started": observed("T3 execution first observed"),
-  "execution-observed": observed("T3 reports"),
+  "work-started": observed("T3 Code execution first observed"),
+  "execution-observed": observed("T3 Code reports"),
   "root-work-observed": observed("Run conversation execution"),
-  "observation-refreshed": said("T3 status refreshed"),
-  "observation-unavailable": said("T3 status unavailable · last observation kept"),
+  "observation-refreshed": said("T3 Code status refreshed"),
+  "observation-unavailable": said("T3 Code status unavailable · last observation kept"),
   "human-waiting": said("entered · waiting for your answer"),
   "human-answered": answered,
   "report-recovery-requested": (_run, event) => ({
@@ -386,7 +389,7 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
           : "settled · every visited Block has its result and its worker thread is finished",
   }),
   "run-activated": said("reported · the Run is Active again"),
-  "run-archived": said("archived · Factory asked T3 to interrupt every worker thread"),
+  "run-archived": said("archived · AgentEasel asked T3 Code to interrupt every worker thread"),
 };
 
 /** Words derived only from the event's own recorded facts; unknown kinds stay visible. */
@@ -584,7 +587,7 @@ function StatusUpdates({
   const first = row.events[0];
   const last = row.events.at(-1) ?? first;
   const statuses = [...new Set(row.events.flatMap((event) => event.engineStatus ?? []))];
-  const updates = `${row.events.length} T3 status ${row.events.length === 1 ? "update" : "updates"}`;
+  const updates = `${row.events.length} T3 Code status ${row.events.length === 1 ? "update" : "updates"}`;
   const text = [`${updates} from ${nameOf(run, row.blockId)}`, statuses.join(" ↔ ")]
     .filter(Boolean)
     .join(" · ");

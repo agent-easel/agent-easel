@@ -24,7 +24,7 @@ const queuedSend = {
 const threadReadSession = (requests: readonly { session: string; tool?: string }[]) =>
   requests.findLast((request) => request.tool === "t3_thread_read")?.session;
 
-it("inspections and concurrent T3 calls on one endpoint share one MCP connection", async (context) => {
+it("inspections and concurrent T3 Code calls on one endpoint share one MCP connection", async (context) => {
   // Arrange
   let readReached!: () => void;
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
@@ -60,7 +60,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
   expect(external.openedSessions).toBe(1);
 });
 
-it("after T3 forgets its sessions, the next call succeeds on a new connection", async (context) => {
+it("after T3 Code forgets its sessions, the next call succeeds on a new connection", async (context) => {
   // Arrange
   const { threads, external, endpoint } = await connectedLiveT3(context);
   external.dropSessions();
@@ -73,7 +73,7 @@ it("after T3 forgets its sessions, the next call succeeds on a new connection", 
   expect(external.openedSessions).toBe(2);
 });
 
-it("after T3 changes a tool's output schema, the shared connection checks the new schema", async (context) => {
+it("after T3 Code changes a tool's output schema, the shared connection checks the new schema", async (context) => {
   // Arrange
   let environmentId = "fixture-environment";
   const { live, external, endpoint } = await authorizedLiveOAuth(context, {
@@ -95,7 +95,7 @@ it("after T3 changes a tool's output schema, the shared connection checks the ne
   expect(external.openedSessions).toBe(1);
 });
 
-it("opening LiveT3Connection removes obsolete t3-appearance credential files while keeping active T3 credentials", async (context) => {
+it("opening LiveT3Connection removes obsolete t3-appearance credential files while keeping active T3 Code credentials", async (context) => {
   // Arrange
   const dir = mkdtempSync(join(tmpdir(), "factory-cred-cleanup-"));
   context.onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
@@ -117,14 +117,14 @@ it("opening LiveT3Connection removes obsolete t3-appearance credential files whi
   expect(existsSync(active)).toBe(true);
 });
 
-it("a send whose request may have reached T3 is not resent and reports T3 unavailable", async (context) => {
+it("a send whose request may have reached T3 Code is not resent and reports T3 Code unavailable", async (context) => {
   // Arrange
   const sends: unknown[] = [];
   const { threads, external, endpoint } = await connectedLiveT3(context, {
     send: (args) => {
       sends.push(args);
       external.dropSessions();
-      throw new Error("T3 restarts before answering.");
+      throw new Error("T3 Code restarts before answering.");
     },
   });
 
@@ -136,7 +136,7 @@ it("a send whose request may have reached T3 is not resent and reports T3 unavai
   expect(sends).toStrictEqual([queuedSend]);
 });
 
-it("a reply lost after T3's 200 headers reports T3 unavailable, not an invalid answer", async (context) => {
+it("a reply lost after T3 Code's 200 headers reports T3 Code unavailable, not an invalid answer", async (context) => {
   // Arrange
   const { threads, external, endpoint } = await connectedLiveT3(context);
   external.cutNextToolReply();
@@ -178,7 +178,7 @@ it.for([
       await live.contract.inspect({ endpoint: other });
     },
   ],
-  ["closing T3", (live: T3Modules) => live.close()],
+  ["closing T3 Code", (live: T3Modules) => live.close()],
 ] as const)("after %s, the next call opens a new connection", async ([, change], context) => {
   // Arrange
   const { live, threads, external, endpoint } = await connectedLiveT3(context);

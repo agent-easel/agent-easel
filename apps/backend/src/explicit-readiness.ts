@@ -26,8 +26,8 @@ export function reportingInstallationProblem(
     : target?.status === "needs-attention" || target?.status === "unsupported"
       ? target.message
       : !target
-        ? `Agent reporting lists no installation for this provider. If the provider is disabled in T3, enable it there and recheck, or choose another provider in ${chooseProviderIn}.`
-        : "Install Factory MCP for this provider's effective home in Settings → Agent reporting, then start a fresh session.";
+        ? `Agent reporting lists no installation for this provider. If the provider is disabled in T3 Code, enable it there and recheck, or choose another provider in ${chooseProviderIn}.`
+        : "Install AgentEasel MCP for this provider's effective home in Settings → Agent reporting, then start a fresh session.";
 }
 
 export const explicitReadiness = Effect.fn(function* (

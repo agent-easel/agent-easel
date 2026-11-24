@@ -1,5 +1,5 @@
 import type { FactoryProject } from "../../packages/contracts/src/index.ts";
-import type { Factory } from "../../apps/backend/src/index.ts";
+import type { AgentEasel } from "../../apps/backend/src/index.ts";
 import type { ControlledGitHub } from "../../apps/backend/test/support/controlled-github.ts";
 import {
   launchedWorkers,
@@ -68,7 +68,7 @@ export async function createDemoTriggers(
   return triggerStartedRun(context, healthy.id);
 }
 
-async function flowNamed(factory: Factory, name: string) {
+async function flowNamed(factory: AgentEasel, name: string) {
   return requireSuccess(await factory.listFlows()).find((flow) => flow.name === name)!.id;
 }
 

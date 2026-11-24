@@ -155,7 +155,7 @@ it("a rejected worker launch is an error and later reconciliation does not searc
     state: "error",
     threadId: null,
     recovery: null,
-    problem: "T3 rejected the worker launch.",
+    problem: "T3 Code rejected the worker launch.",
   });
   expect(fixture.t3.threads.launches.size).toBe(1);
 });

@@ -22,7 +22,7 @@ const REFRESH_MS = 8_000;
 const typingIn = (discord: ControlledDiscord) =>
   discord.requested("POST", TYPING).map((request) => request.path.split("/")[4]);
 
-it("an authorized invocation shows Factory typing in its thread while it is interpreted", async (c) => {
+it("an authorized invocation shows AgentEasel typing in its thread while it is interpreted", async (c) => {
   // Arrange
   const { discord, model } = await conversing(c);
   model.held();

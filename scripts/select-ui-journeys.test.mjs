@@ -103,7 +103,7 @@ await test("scripts under docs run journeys", () => {
 
 await test("verification skill changes run journeys", () => {
   // Arrange
-  const paths = [".agents/skills/verify-t3-factory/SKILL.md"];
+  const paths = [".agents/skills/verify-agenteasel/SKILL.md"];
 
   // Act
   const run = shouldRunUiJourneys(paths);

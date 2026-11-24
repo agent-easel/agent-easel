@@ -14,14 +14,14 @@ import {
   JOIN_OUTPUT,
 } from "../../apps/backend/test/support/scenarios.ts";
 import { FINISH_BLOCK_ID } from "../../packages/contracts/src/index.ts";
-import type { Factory } from "../../apps/backend/src/index.ts";
+import type { AgentEasel } from "../../apps/backend/src/index.ts";
 import type { FlowGraphInput, FlowWorkspace } from "../../packages/contracts/src/index.ts";
 import { requireSuccess } from "./seed-support.ts";
 import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 
 /** Creates the named Flow with `graph` and requires it to be ready to start. */
 export async function saveFlow(
-  factory: Factory,
+  factory: AgentEasel,
   name: string,
   graph: FlowGraphInput,
   workspace: FlowWorkspace = { mode: "checkout" },
@@ -46,7 +46,7 @@ const accessibilityReview = (agentId: string, x: number) =>
 /** The incomplete Flow the seed leaves as a draft; the error Trigger starts in it. */
 export const draftFlowName = "Demo · Release checklist (draft)";
 
-export async function createDemoFlows(factory: Factory, agents: DemoAgents): Promise<DemoFlows> {
+export async function createDemoFlows(factory: AgentEasel, agents: DemoAgents): Promise<DemoFlows> {
   requireSuccess(await factory.createFlow({ name: draftFlowName }));
   const worker = agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 });
   const simple = await saveFlow(factory, "Demo · Focused change", {
@@ -159,7 +159,7 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
   };
 }
 
-async function createJoinFlow(factory: Factory, agents: DemoAgents) {
+async function createJoinFlow(factory: AgentEasel, agents: DemoAgents) {
   const changes = [blockExit("changes", "Changes requested", "List each requested change.")];
   return saveFlow(factory, "Demo · Parallel review joined for your decision", {
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),
@@ -190,7 +190,7 @@ async function createJoinFlow(factory: Factory, agents: DemoAgents) {
   });
 }
 
-function createApprovedEndingFlow(factory: Factory, agents: DemoAgents) {
+function createApprovedEndingFlow(factory: AgentEasel, agents: DemoAgents) {
   return saveFlow(factory, "Demo · Approve and ship", {
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),
     blocks: [
@@ -223,7 +223,7 @@ function createApprovedEndingFlow(factory: Factory, agents: DemoAgents) {
   });
 }
 
-function createEndingsFlow(factory: Factory, agents: DemoAgents) {
+function createEndingsFlow(factory: AgentEasel, agents: DemoAgents) {
   const done = [blockExit("done", "Done", "Done")];
   return saveFlow(factory, "Demo · Ship or drop", {
     flowInput: flowInput(["worker", "reviewer"], { x: 40, y: 180 }),
@@ -277,7 +277,7 @@ function createEndingsFlow(factory: Factory, agents: DemoAgents) {
 /** Review rounds that return changes to the worker until arrival 3 escalates to you, parallel
  * approvals where only the first reaches your decision and later ones go into the release notes,
  * and a saved Condition draft whose rules block Start. */
-async function createConditionFlows(factory: Factory, agents: DemoAgents) {
+async function createConditionFlows(factory: AgentEasel, agents: DemoAgents) {
   const graph = (rules: Parameters<typeof conditionBlock>[2]) => ({
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),
     blocks: [
@@ -351,7 +351,7 @@ async function createConditionFlows(factory: Factory, agents: DemoAgents) {
 
 /** A Wait between implementation and review, Waits holding parallel reviews for a decision, an
  * approval held for the release window, and a saved Wait draft with no duration yet. */
-async function createWaitFlows(factory: Factory, agents: DemoAgents) {
+async function createWaitFlows(factory: AgentEasel, agents: DemoAgents) {
   const review = agentBlock("reviewer", "Review implementation", agents.reviewer, {
     x: 1080,
     y: 180,
@@ -431,7 +431,7 @@ async function createWaitFlows(factory: Factory, agents: DemoAgents) {
 
 /** Ready wiring followed by an Agent edit exposes saved, repairable exit-contract issues. */
 async function createExitReadinessScenarios(
-  factory: Factory,
+  factory: AgentEasel,
   reviewerId: string,
   workerId: string,
 ) {
@@ -514,7 +514,7 @@ async function createExitReadinessScenarios(
   );
 }
 
-async function createSubflowCompositionFlows(factory: Factory, agents: DemoAgents) {
+async function createSubflowCompositionFlows(factory: AgentEasel, agents: DemoAgents) {
   const reviewPanelId = await saveFlow(factory, "Demo · Review panel", {
     flowInput: flowInput(["security", "accessibility"], { x: 40, y: 180 }),
     blocks: [

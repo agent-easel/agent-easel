@@ -217,11 +217,11 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     Result<void>,
     unknown
   > {
-    if (closed) return failure("conflict", "Factory is shutting down.");
+    if (closed) return failure("conflict", "AgentEasel is shutting down.");
     return yield* sweeps
       .withPermit(
         Effect.gen(function* () {
-          if (closed) return failure("conflict", "Factory is shutting down.");
+          if (closed) return failure("conflict", "AgentEasel is shutting down.");
           // A Settled Run is driven only while it still owes an operation, so its work continues.
           const ids = yield* store.runsToReconcile();
           // Restart observes every Run before dispatching any pending intent.
@@ -291,7 +291,10 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         const run = yield* row(runId);
         if (!run) return failure("not_found", "This Run does not exist.");
         if (closed || snapshot.contextId !== run.context_id)
-          return failure("conflict", "The Runner or this Run’s T3 authorization is unavailable.");
+          return failure(
+            "conflict",
+            "The Runner or this Run’s T3 Code authorization is unavailable.",
+          );
         const attempted = yield* store.retryInvocation(runId, invocationId, run.context_id);
         if (!attempted.ok) return attempted;
         yield* fork(drive(runId, "dispatch"));

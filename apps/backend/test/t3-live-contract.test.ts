@@ -82,7 +82,7 @@ it("a send replay proof that cannot be established leaves only send support unkn
   expect(inspection.support.reportReads).toBe(true);
 });
 
-it("T3 advertising upload preparation and launch attachments supports image launches", async (c) => {
+it("T3 Code advertising upload preparation and launch attachments supports image launches", async (c) => {
   // Arrange
   const { live, external } = await launchFixture(c);
 
@@ -111,7 +111,7 @@ it("a launch schema without attachments does not support image launches", async 
   expect(support.supported).toBe(false);
 });
 
-it("T3's workspace strategy schema supports worktree launches", async (c) => {
+it("T3 Code's workspace strategy schema supports worktree launches", async (c) => {
   // Arrange
   const { live, external } = await launchFixture(c);
 
@@ -207,7 +207,7 @@ it("report support rejects a public schema whose read bounds cannot cover the re
   expect(support.supported).toBe(false);
 });
 
-it("a ready T3 advertising a malformed send schema is an invalid answer, not an unclassified error", async (c) => {
+it("a ready T3 Code advertising a malformed send schema is an invalid answer, not an unclassified error", async (c) => {
   // Arrange
   const { live, endpoint } = await malformedSendLiveT3(c);
 
@@ -219,7 +219,7 @@ it("a ready T3 advertising a malformed send schema is an invalid answer, not an 
   await expect(inspection).rejects.toMatchObject({ kind: "invalid-response" });
 });
 
-it("a malformed send schema read after a recovered T3 server error is classified as unavailable", async (c) => {
+it("a malformed send schema read after a recovered T3 Code server error is classified as unavailable", async (c) => {
   // Arrange
   const { live, external, endpoint } = await malformedSendLiveT3(c, {
     resourceMetadataUnavailable: true,
@@ -247,7 +247,7 @@ const renameProperties = {
   clientRequestId: { type: "string", minLength: 1, maxLength: 256 },
 };
 
-it("an advertised rename schema is optional support and omits environmentId when T3 does not list it", () => {
+it("an advertised rename schema is optional support and omits environmentId when T3 Code does not list it", () => {
   // Arrange
   const tools = renameTool(renameProperties);
 

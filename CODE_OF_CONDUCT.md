@@ -1,6 +1,6 @@
 # Community standards
 
-T3 Factory welcomes contributors of all backgrounds and experience levels. These
+AgentEasel welcomes contributors of all backgrounds and experience levels. These
 standards apply to issues, pull requests, reviews and other project spaces.
 
 - Be respectful and constructive. Critique ideas and code; do not attack people.

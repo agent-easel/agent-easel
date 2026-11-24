@@ -41,7 +41,7 @@ and summarize results in the PR.
 
 For UI changes, follow the [design system](docs/design-system.md).
 For acceptance on an existing local installation, follow [local development acceptance](docs/testing.md#local-development-acceptance), including the browser/desktop and same-device/remote verification boundaries.
-For UI changes, exploration, or application screenshots, use [verify-t3-factory](.agents/skills/verify-t3-factory/SKILL.md). It runs the isolated e2e fixture and defines evidence requirements. The e2e runner's own reference (writing tests, MCP, debugging) is printed by `pnpm exec e2e guide [topic]` for the installed version.
+For UI changes, exploration, or application screenshots, use [verify-agenteasel](.agents/skills/verify-agenteasel/SKILL.md). It runs the isolated e2e fixture and defines evidence requirements. The e2e runner's own reference (writing tests, MCP, debugging) is printed by `pnpm exec e2e guide [topic]` for the installed version.
 
 ### Quality gates
 

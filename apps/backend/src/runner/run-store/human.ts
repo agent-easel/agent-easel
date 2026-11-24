@@ -79,7 +79,7 @@ export function openRunHuman(database: RunnerDatabase) {
               return failure(
                 "conflict",
                 (yield* readRunSettlement(sql, runRow))
-                  ? "Factory is settling this Run and stopping its workers, so it accepts no answers."
+                  ? "AgentEasel is settling this Run and stopping its workers, so it accepts no answers."
                   : "This Run is archived or settled by you, so it accepts no answers.",
               );
             if (!occurrence) return failure("not_found", "This Human occurrence does not exist.");

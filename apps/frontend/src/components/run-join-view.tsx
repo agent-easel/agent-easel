@@ -235,7 +235,7 @@ export function JoinInspection({ run, block }: { run: RunDetail; block: JoinBloc
 export function WorkerlessNote() {
   return (
     <p className="text-xs text-subtle-foreground">
-      Workerless · no T3 thread. Settle or Archive ends a round that never completes.
+      Workerless · no T3 Code thread. Settle or Archive ends a round that never completes.
     </p>
   );
 }

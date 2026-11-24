@@ -127,7 +127,7 @@ function useChatModelPage() {
       .testChatModel({ revision })
       .then(section.setSettings)
       .catch((cause: unknown) => {
-        setTestError(chatControlError(cause, "Factory could not run the Test."));
+        setTestError(chatControlError(cause, "AgentEasel could not run the Test."));
       })
       .finally(() => {
         setTesting(false);

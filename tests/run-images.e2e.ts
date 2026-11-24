@@ -265,7 +265,7 @@ test("a lost image Start stays read-only and Check same request recovers exactly
   expect(await runsTitled(app.baseUrl, "UI images lost Start")).toHaveLength(1);
 });
 
-test("an image Factory reports missing at Start is uploaded again and the Run starts once", async ({
+test("an image AgentEasel reports missing at Start is uploaded again and the Run starts once", async ({
   app,
   screen,
   browser,
@@ -286,7 +286,7 @@ test("an image Factory reports missing at Start is uploaded again and the Run st
   expect(await runsTitled(app.baseUrl, "UI images missing upload")).toHaveLength(1);
 });
 
-test("a T3 without attachment support rejects the image Start and keeps the draft editable", async ({
+test("a T3 Code without attachment support rejects the image Start and keeps the draft editable", async ({
   fixture,
   app,
   screen,
@@ -301,7 +301,7 @@ test("a T3 without attachment support rejects the image Start and keeps the draf
   await screen.getByRole("button", "Start", { exact: true }).tap();
 
   // Assert
-  await expect(screen.getByText(/update T3 or remove the images/)).toBeVisible();
+  await expect(screen.getByText(/update T3 Code or remove the images/)).toBeVisible();
   await expect(screen.getByRole("button", "Remove screenshot.png")).toBeVisible();
   expect(await runsTitled(app.baseUrl, "UI images unsupported")).toHaveLength(0);
   await app.screenshot("images-attachments-unsupported");

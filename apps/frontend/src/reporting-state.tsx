@@ -47,7 +47,7 @@ export function agentReportingStatus(
       label: "Reporting not configured",
       launchSkill: null,
       message:
-        "Factory could not find a reporting installation for this provider. Check Agent reporting before starting a Run.",
+        "AgentEasel could not find a reporting installation for this provider. Check Agent reporting before starting a Run.",
     };
   if (target.status === "installed")
     return {
@@ -134,7 +134,7 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
         targets: null,
         agents,
         error:
-          "Factory could not check Agent reporting. Check that Factory is running, then check again.",
+          "AgentEasel could not check Agent reporting. Check that AgentEasel is running, then check again.",
       }
     : { targets, agents, error: "" };
   const installHome = async (target: ReportingInstallation) => {

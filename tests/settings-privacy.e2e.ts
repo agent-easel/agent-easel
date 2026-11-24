@@ -88,7 +88,7 @@ test("an approved remote client sees effective analytics status and disclosure w
   await openApproved(app, "/settings/privacy");
 
   // Assert
-  await expect(screen.getByText("Managed on the Factory host", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Managed on the AgentEasel host", { exact: true })).toBeVisible();
   await expect(
     screen.getByRole("region", "Product analytics").getByText("On", { exact: true }),
   ).toBeVisible();

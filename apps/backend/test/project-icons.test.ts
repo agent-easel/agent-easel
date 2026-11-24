@@ -31,7 +31,7 @@ it("the last known project icon survives a fresh backend process without its con
   expect(recovered.value.projects[0]?.availability).toBe("connection-unavailable");
 });
 
-it("a project absent from T3 keeps its selected history and last known icon", async (context) => {
+it("a project absent from T3 Code keeps its selected history and last known icon", async (context) => {
   // Arrange
   const icon = { kind: "emoji" as const, emoji: "🧪" };
   const { factory, t3, original } = await iconProject(context, icon);

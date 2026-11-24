@@ -127,7 +127,7 @@ function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind
   if (kind === "needs-input")
     return block.kind === "human"
       ? `Waiting for your decision${since(latest?.start)}`
-      : `Review in T3${since(reviewInT3Since(run, recorded))}`;
+      : `Review in T3 Code${since(reviewInT3Since(run, recorded))}`;
   const continuation = continuationProgress(run, block, recorded);
   if (continuation) return continuation;
   if (activeStates.includes(recorded.state)) return currentVisitText(run, block, visits);
@@ -151,7 +151,9 @@ function RunProgress({ run, waitingForWorkers }: { run: RunDetail; waitingForWor
   return (
     <InspectorSection
       title="Progress"
-      count={waitingForWorkers ? `${count} · waiting for T3 to confirm workers finished` : count}
+      count={
+        waitingForWorkers ? `${count} · waiting for T3 Code to confirm workers finished` : count
+      }
       label="Progress"
     >
       <ul className="-mt-1 flex flex-col gap-1">
@@ -258,7 +260,7 @@ function InitialPrompt({ run }: { run: RunDetail }) {
 }
 
 const worktreeNote = {
-  preparing: ". Other workers join it once T3 reports its path and branch.",
+  preparing: ". Other workers join it once T3 Code reports its path and branch.",
   bound: ", shared by every worker of this Run.",
   failed: ". No worker falls back to the project checkout.",
 };
@@ -314,7 +316,7 @@ function PendingIntents({ run }: { run: RunDetail }) {
           {intent.state === "pending" ? `${intent.kind} pending` : `Uncertain ${intent.kind}`}:{" "}
           {intent.kind === "handoff" && intent.state === "pending"
             ? (intent.problem ?? "Handoff held; delivery has not started.")
-            : (intent.problem ?? "Awaiting the exact T3 reference.")}
+            : (intent.problem ?? "Awaiting the exact T3 Code reference.")}
         </p>
       ))}
     </div>
@@ -352,8 +354,8 @@ function WorkPeriods({ run }: { run: RunDetail }) {
                 {execution.executionId}
               </h4>
               <p className="flex flex-wrap items-center gap-1">
-                T3 execution: <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> ·
-                Report:{" "}
+                T3 Code execution:{" "}
+                <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> · Report:{" "}
                 {execution.reportStatus
                   ? `accepted ${execution.reportStatus}`
                   : binding?.role === "descendant"
@@ -455,7 +457,7 @@ function RunOverview({
         <InspectorSection title="Project">
           <p className="text-sm text-emphasis-foreground">
             {project?.title ?? "Project"}
-            {projectUnavailable ? " · Not in T3" : ""}
+            {projectUnavailable ? " · Not in T3 Code" : ""}
           </p>
         </InspectorSection>
         <InspectorSection title="Flow revision">

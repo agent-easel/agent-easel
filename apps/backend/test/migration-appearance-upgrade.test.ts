@@ -6,7 +6,7 @@ import { migrate } from "../src/database.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { loadMigrationData } from "./support/migration-data.ts";
 
-it("upgrading from a database with a stored T3 theme snapshot drops the retired table and preserves unaffected data", async (c) => {
+it("upgrading from a database with a stored T3 Code theme snapshot drops the retired table and preserves unaffected data", async (c) => {
   // Arrange
   const h = await factoryHarness(c);
   await loadMigrationData(h.databasePath, "appearance-grant-upgrade-data.json");

@@ -8,7 +8,7 @@ const reportingWarning = {
   launchSkill: null,
 } as const;
 
-it("Factory Offline wins over a lost T3 connection and a reporting warning", () => {
+it("AgentEasel Offline wins over a lost T3 Code connection and a reporting warning", () => {
   // Arrange
   const state = {
     factory: { kind: "offline", observedAt: Date.UTC(2026, 10, 22, 15, 53, 48) },

@@ -89,7 +89,7 @@ function DefinitionImportDialog({
         ref={chooser}
         type="file"
         accept=".json,application/json"
-        aria-label="Choose a Factory export file"
+        aria-label="Choose an AgentEasel export file"
         hidden
         onChange={(event) => void chosen(event.currentTarget)}
       />
@@ -256,7 +256,7 @@ function ImportReviewContent({
       <ProblemCard
         density="compact"
         tone="attention"
-        title="Imported prompts run with your T3 permissions"
+        title="Imported prompts run with your T3 Code permissions"
       >
         Read them in Studio before you start a Run.
         {count > 0 &&

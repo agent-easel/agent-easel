@@ -2,7 +2,7 @@
   "name": "@agent-easel/desktop",
   "version": "0.11.0",
   "private": true,
-  "description": "T3 Factory desktop application for macOS on Apple Silicon",
+  "description": "AgentEasel desktop application for macOS on Apple Silicon",
   "type": "module",
   "main": "build/main.js",
   "scripts": {

@@ -83,7 +83,7 @@ const guard = <A>(operation: Effect.Effect<Result<A>, unknown>): Effect.Effect<R
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)
         ? Effect.interrupt
-        : Effect.succeed(failure("internal", "Factory could not complete the operation.")),
+        : Effect.succeed(failure("internal", "AgentEasel could not complete the operation.")),
     ),
   );
 

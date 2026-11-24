@@ -47,7 +47,7 @@ try {
     }
   }
   if (prepareOnly) {
-    console.log(`Factory demo scenarios prepared: ${home}`);
+    console.log(`AgentEasel demo scenarios prepared: ${home}`);
     owner.release();
   } else {
     const server = await startServer(config, {
@@ -58,7 +58,7 @@ try {
       reportingStateDirectory: join(home, "reporting-t3-state"),
     });
     console.log(
-      `Factory DEMO API: http://${config.host}:${server.address.port} (simulated T3; no external workloads)`,
+      `AgentEasel DEMO API: http://${config.host}:${server.address.port} (simulated T3 Code; no external workloads)`,
     );
     console.log(`Persistent demo data: ${home}. Restore scenarios with pnpm db:reset.`);
     let advancing: Promise<void> | undefined;
@@ -86,6 +86,6 @@ try {
   }
 } catch (error) {
   release?.();
-  console.error("Factory demo could not start:", error);
+  console.error("AgentEasel demo could not start:", error);
   process.exitCode = 1;
 }

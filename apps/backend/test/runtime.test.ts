@@ -23,7 +23,7 @@ it("missing user installation blocks readiness without launching setup work", as
   expect(t3.connection.authorizationStarts).toBe(0);
 });
 
-it("recheckRuntime reports reporting_unsupported when T3 lacks report support", async (c) => {
+it("recheckRuntime reports reporting_unsupported when T3 Code lacks report support", async (c) => {
   // Arrange
   const { f, t3, selection } = await runtimeReadinessFixture(c);
   t3.contract.support.reportReads = false;
@@ -182,7 +182,7 @@ it("an installed Mistral Vibe instance is ready to run", async (context) => {
   expect(result.value.issues).toEqual([]);
 });
 
-it("a saved Agent's provider that T3 later offers as an unsupported harness stays visible and blocks runtime readiness", async (c) => {
+it("a saved Agent's provider that T3 Code later offers as an unsupported harness stays visible and blocks runtime readiness", async (c) => {
   // Arrange
   const { t3, f, p, input } = await claudeRuntimeConfig(c);
   const future = await f.createAgent({

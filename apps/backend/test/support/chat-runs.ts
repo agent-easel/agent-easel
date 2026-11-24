@@ -2,7 +2,7 @@ import { assert, expect, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { FactoryProject } from "@agent-easel/contracts";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import {
   ALLOWED_CHANNEL,
   discordBot,
@@ -32,7 +32,7 @@ export async function chatWorlds(c: TestContext) {
 /** Saves the Language model and connection, allows the participant and collaborator for
  * `projectIds` in the allowed channel and turns Chat control On. */
 async function operating(
-  factory: Factory,
+  factory: AgentEasel,
   { model, discord }: { model: ControlledModel; discord: ControlledDiscord },
   projectIds: readonly string[],
 ) {

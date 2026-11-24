@@ -15,7 +15,7 @@ export function AppearanceSettings() {
         customized ? (
           <StatusBadge kind="success">Custom colors</StatusBadge>
         ) : (
-          <StatusBadge kind="neutral">Factory colors</StatusBadge>
+          <StatusBadge kind="neutral">AgentEasel colors</StatusBadge>
         )
       }
     >

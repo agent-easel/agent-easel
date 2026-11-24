@@ -16,3 +16,4 @@ export * from "./update.ts";
 export * from "./factory.ts";
 export * from "./live.ts";
 export * from "./feature-usage.ts";
+export * from "./product.ts";

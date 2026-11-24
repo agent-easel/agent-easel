@@ -189,7 +189,7 @@ it("a failure mentioning a newer revision without a conflict code does not raise
   });
 });
 
-it("a rejected save keeps the edits unsaved and shows Factory's message and issues", async () => {
+it("a rejected save keeps the edits unsaved and shows AgentEasel's message and issues", async () => {
   // Arrange
   const { draft, factory } = editedFlow("Edited");
   const issue = { code: "required", path: "name", message: "Name is required." };
@@ -626,7 +626,7 @@ it("a save the offline window did not send keeps the draft and says nothing was 
     dirty: true,
     saving: false,
     saveOutcome: "not-sent",
-    error: "Factory is offline. Nothing was sent; reconnect and check the current state first.",
+    error: "AgentEasel is offline. Nothing was sent; reconnect and check the current state first.",
   });
   expect(factory.updateAgent).toHaveBeenCalledTimes(1);
 });
@@ -971,7 +971,7 @@ it("after a stale-owner refusal, a queued delivery read before the refusing move
 it("after a stale-owner refusal whose read fails, a queued delivery read before the refusing move keeps waiting", async () => {
   // Arrange
   const setup = editedAgent();
-  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.getAgent.mockRejectedValue(new Error("AgentEasel could not read the Agent."));
   setup.factory.moveElsewhere("northwind");
   const queued = setup.factory.moveElsewhere(null);
   setup.factory.moveElsewhere("northwind");
@@ -992,7 +992,7 @@ it("after a stale-owner refusal whose read fails, a queued delivery read before 
 it("after a stale-owner refusal whose read failed, the next delivery reads again and the owner moved back lets the edits save", async () => {
   // Arrange
   const setup = editedAgent();
-  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.getAgent.mockRejectedValue(new Error("AgentEasel could not read the Agent."));
   setup.factory.moveElsewhere("northwind");
   await setup.draft.save();
   setup.factory.getAgent.mockImplementation(async () => setup.factory.latest());
@@ -1014,7 +1014,7 @@ it("after a stale-owner refusal whose read failed, the next delivery reads again
 it("a retried read after a stale-owner refusal checks the owner Studio delivered while it ran", async () => {
   // Arrange
   const setup = editedAgent();
-  const unread = new Error("Factory could not read the Agent.");
+  const unread = new Error("AgentEasel could not read the Agent.");
   setup.factory.getAgent.mockRejectedValueOnce(unread).mockRejectedValueOnce(unread);
   setup.factory.moveElsewhere("northwind");
   const queued = setup.factory.moveElsewhere(null);

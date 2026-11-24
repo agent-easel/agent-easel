@@ -39,21 +39,21 @@ const contextValue = (row: ContextRow): AuthorizationContext => ({
 });
 const explanations: Record<T3ConnectionReason, string> = {
   connected:
-    "T3 connection is ready. Project, harness and runtime execution readiness still require separate checks.",
+    "T3 Code connection is ready. Project, harness and runtime execution readiness still require separate checks.",
   "approval-required":
-    "Approve access in T3 by opening authorization on the Factory host; consent happens in that computer's browser. No token copying is needed.",
+    "Approve access in T3 Code by opening authorization on the AgentEasel host; consent happens in that computer's browser. No token copying is needed.",
   "approval-pending":
-    "Approve access in the browser opened on the backend host. Factory will recheck automatically.",
+    "Approve access in the browser opened on the backend host. AgentEasel will recheck automatically.",
   "approval-reopen-failed":
-    "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
+    "AgentEasel could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
   "browser-unavailable":
-    "Factory could not open the backend-host browser. Check its desktop/browser setup and choose Authorize again.",
+    "AgentEasel could not open the backend-host browser. Check its desktop/browser setup and choose Authorize again.",
   "callback-unavailable":
-    "Factory could not bind the loopback OAuth callback on port 43827. Free that port and choose Authorize again.",
+    "AgentEasel could not bind the loopback OAuth callback on port 43827. Free that port and choose Authorize again.",
   "approval-expired":
     "OAuth approval expired or was denied. Choose Authorize to try again on the backend host.",
   "contract-missing":
-    "T3 does not satisfy the connection contract. Inspect the reported problems, update T3 if needed, and recheck.",
+    "T3 Code does not satisfy the connection contract. Inspect the reported problems, update T3 Code if needed, and recheck.",
 };
 
 /** Bounds how often anyone may open the host browser through `openConnectionAuthorization`. */
@@ -104,7 +104,7 @@ export const makeConnection = (
     let status: T3Connection = {
       endpoint: saved?.endpoint ?? null,
       state: "unavailable",
-      explanation: "Save your T3 MCP endpoint to connect.",
+      explanation: "Save your T3 Code MCP endpoint to connect.",
       checkedAt: null,
       authorizationContext: current ? contextValue(current) : null,
       authorizationPending: false,
@@ -230,7 +230,7 @@ export const makeConnection = (
             state: "incompatible",
             readyGeneration: null,
             explanation:
-              "T3 did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
+              "T3 Code did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
           };
           publishCheck(before);
         }
@@ -249,7 +249,7 @@ export const makeConnection = (
               readyGeneration: null,
               contract: null,
               explanation:
-                "T3 is unavailable. Start T3 or check the endpoint and network. Factory will reconnect automatically.",
+                "T3 Code is unavailable. Start T3 Code or check the endpoint and network. AgentEasel will reconnect automatically.",
             };
             publishCheck(before);
             return value();
@@ -284,7 +284,7 @@ export const makeConnection = (
               status = {
                 ...status,
                 explanation:
-                  "Authorization could not start. Check T3, backend-host browser and loopback callback port 43827, then authorize again.",
+                  "Authorization could not start. Check T3 Code, backend-host browser and loopback callback port 43827, then authorize again.",
               };
               changes.connectionChanged();
               return value();
@@ -336,7 +336,7 @@ export const makeConnection = (
       authorizeConnection: () =>
         serial(
           Effect.gen(function* () {
-            if (!saved) return missingEndpoint("Save a T3 endpoint before authorizing.");
+            if (!saved) return missingEndpoint("Save a T3 Code endpoint before authorizing.");
             return yield* startAuthorization(saved);
           }),
         ),
@@ -345,7 +345,7 @@ export const makeConnection = (
           Effect.gen(function* () {
             if (!saved)
               return missingEndpoint(
-                "The Factory host has no T3 endpoint yet. Save it on the Factory host first.",
+                "The AgentEasel host has no T3 Code endpoint yet. Save it on the AgentEasel host first.",
               );
             const endpoint = saved;
             // Fresh evidence first: an approval that just completed is never replaced.
@@ -397,7 +397,7 @@ export function parseEndpoint(input: unknown): Result<string> {
           {
             code: "endpoint_invalid",
             path: "endpoint",
-            message: "Enter the T3 MCP URL without secrets.",
+            message: "Enter the T3 Code MCP URL without secrets.",
           },
         ],
       },

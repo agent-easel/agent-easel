@@ -522,7 +522,7 @@ test("a chosen not-ready Flow stays invalid and explained while another card has
   await fixture.remoteAccess.t3Unavailable();
 
   // Assert
-  await expect(screen.getByText("T3 is disconnected", { exact: true })).toBeVisible();
+  await expect(screen.getByText("T3 Code is disconnected", { exact: true })).toBeVisible();
   await expect(flowPicker).toContainText("Not ready");
   await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
   expect(pageString(await browser.evaluate(flowDescription))).toBe(
@@ -556,7 +556,7 @@ test("the Project menu lists available projects and Refresh projects", async ({
   ).toHaveCount(0);
   await expect(screen.getByRole("menuitem", "Add repository", { exact: true })).toHaveCount(0);
   await expect(screen.getByRole("menuitem", "Recheck projects", { exact: true })).toHaveCount(0);
-  await expect(screen.getByText("Projects from T3", { exact: true })).toHaveCount(0);
+  await expect(screen.getByText("Projects from T3 Code", { exact: true })).toHaveCount(0);
   await expect(
     screen.getByText("No projects found. Add an existing repository to get started.", {
       exact: true,

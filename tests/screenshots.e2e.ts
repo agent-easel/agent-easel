@@ -46,7 +46,7 @@ test("capture Studio and an authored Flow that survives reload", async ({
   await expect(screen.getByRole("heading", /What should we work on/)).toBeVisible();
   await app.screenshot("runs");
   await app.open("/settings/connection");
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toBeVisible();
   await app.screenshot("settings-connection");
   await app.open("/settings/agent-reporting");
   await expect(screen.getByRole("heading", "Agent reporting", { exact: true })).toBeVisible();

@@ -1,7 +1,7 @@
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 
-test("Factory serves the built UI and seeded Flows", async ({ app, screen }) => {
+test("AgentEasel serves the built UI and seeded Flows", async ({ app, screen }) => {
   // Arrange
   // Act
   await app.open("/studio/flows");

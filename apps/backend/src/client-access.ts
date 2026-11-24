@@ -66,10 +66,10 @@ const verificationCode = () => {
 };
 
 const unauthorizedMessage: Record<ClientAccessStatus | "none", string> = {
-  none: "This client is not approved. Request access and approve it on the Factory host.",
-  pending: "Waiting for approval on the Factory host.",
-  denied: "The Factory host denied this client. Request access again if this was a mistake.",
-  revoked: "The Factory host revoked this client's access.",
+  none: "This client is not approved. Request access and approve it on the AgentEasel host.",
+  pending: "Waiting for approval on the AgentEasel host.",
+  denied: "The AgentEasel host denied this client. Request access again if this was a mistake.",
+  revoked: "The AgentEasel host revoked this client's access.",
   approved: "",
 };
 
@@ -130,7 +130,7 @@ export const makeClientAccess = Effect.gen(function* () {
           if ((pending?.count ?? 0) >= MAX_PENDING)
             return failure(
               "conflict",
-              "Too many clients are waiting for approval. Approve or deny them on the Factory host first.",
+              "Too many clients are waiting for approval. Approve or deny them on the AgentEasel host first.",
             );
           // Part of the credential, so it comes from cryptographic randomness like the secret.
           const id = randomUUID();

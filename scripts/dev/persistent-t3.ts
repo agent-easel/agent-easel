@@ -265,6 +265,6 @@ function saveAccepted(save: () => void) {
   try {
     save();
   } catch {
-    throw new T3Failure("unavailable", "The demo T3 could not save its state.");
+    throw new T3Failure("unavailable", "The demo T3 Code could not save its state.");
   }
 }

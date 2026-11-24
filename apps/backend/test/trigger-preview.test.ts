@@ -162,7 +162,7 @@ it("a preview names several other Triggers on the repository in one warning", as
   ]);
 });
 
-it("a preview while T3 cannot launch reports the check's problem and starts no issue now", async (c) => {
+it("a preview while T3 Code cannot launch reports the check's problem and starts no issue now", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);
   world.readyIssue(1, "Would start");
@@ -177,7 +177,7 @@ it("a preview while T3 cannot launch reports the check's problem and starts no i
     issues: [],
     problem: {
       code: "start_blocked",
-      message: expect.stringContaining("T3 launch contract is unsupported."),
+      message: expect.stringContaining("T3 Code launch contract is unsupported."),
     },
   });
 });

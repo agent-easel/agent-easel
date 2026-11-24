@@ -296,7 +296,7 @@ const missingDigests = (error: ApiError) =>
 class LocalImageMissing extends Error {}
 
 const missingImagesOutcome =
-  "Factory still lacks some images of this request. Check the same request to upload them again.";
+  "AgentEasel still lacks some images of this request. Check the same request to upload them again.";
 
 export function createRunDraft(
   startRun: (submission: StartRunInput) => Promise<{ id: string }> = admittedStart.startRun,

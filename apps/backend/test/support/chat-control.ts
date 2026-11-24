@@ -8,7 +8,7 @@ import type {
   UpdateChatModelInput,
   UpdateDiscordConnectionInput,
 } from "@agent-easel/contracts";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import {
   controlledDiscord,
@@ -34,7 +34,7 @@ export const chatModelSave = (overrides: Partial<UpdateChatModelInput> = {}) =>
 
 /** The Language model saved once from the empty section; the save must succeed. */
 export async function savedChatModel(
-  factory: Pick<Factory, "updateChatModelSettings">,
+  factory: Pick<AgentEasel, "updateChatModelSettings">,
   overrides: Partial<UpdateChatModelInput> = {},
 ): Promise<ChatModelSettings> {
   const saved = await factory.updateChatModelSettings(chatModelSave(overrides));
@@ -61,7 +61,7 @@ export const discordConnectionSave = (overrides: Partial<UpdateDiscordConnection
 
 /** The Discord connection saved once from the empty section; the save must succeed. */
 export async function savedDiscordConnection(
-  factory: Pick<Factory, "updateDiscordConnection">,
+  factory: Pick<AgentEasel, "updateDiscordConnection">,
   overrides: Partial<UpdateDiscordConnectionInput> = {},
 ): Promise<DiscordSettings> {
   const saved = await factory.updateDiscordConnection(discordConnectionSave(overrides));
@@ -130,7 +130,7 @@ const COMMANDS = /^\/api\/v10\/applications\/\d+\/commands$/;
  * its command right after attaching its handlers. `registrations` counts every registration so far.
  */
 export async function turnedOn(
-  factory: Pick<Factory, "setChatControlEnabled">,
+  factory: Pick<AgentEasel, "setChatControlEnabled">,
   discord: ControlledDiscord,
   registrations = 1,
 ) {
@@ -184,7 +184,7 @@ const OBSERVATION_PASSES = 2000;
  * settings again after yielding to pending I/O, for a bounded number of passes.
  */
 export async function discordSettingsWhen(
-  factory: Pick<Factory, "getDiscordSettings">,
+  factory: Pick<AgentEasel, "getDiscordSettings">,
   until: (settings: DiscordSettings) => boolean,
 ) {
   for (let pass = 0; pass < OBSERVATION_PASSES; pass++) {

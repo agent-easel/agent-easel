@@ -47,7 +47,7 @@ import { execFile } from "node:child_process";
 import { access, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { Factory } from "../../apps/backend/src/index.ts";
+import type { AgentEasel } from "../../apps/backend/src/index.ts";
 import type { PersistentT3 } from "./persistent-t3.ts";
 import { createDemoFlows } from "./seed-flows.ts";
 import { createDemoTriggers } from "./seed-triggers.ts";
@@ -62,7 +62,7 @@ import {
   type ScenarioNamespace,
 } from "./seed-support.ts";
 
-async function createDemoProject(factory: Factory, t3: PersistentT3, home: string) {
+async function createDemoProject(factory: AgentEasel, t3: PersistentT3, home: string) {
   const root = join(home, "demo-repositories", "atlas");
   await mkdir(root, { recursive: true });
   const initialized = await access(join(root, ".git")).then(
@@ -72,7 +72,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
   if (!initialized) await promisify(execFile)("git", ["init", root]);
   await writeFile(
     join(root, "README.md"),
-    "# Atlas demo\n\nA disposable local project for exploring T3 Factory.\n" +
+    "# Atlas demo\n\nA disposable local project for exploring AgentEasel.\n" +
       "The development simulator does not call an external model or modify your real repositories.\n",
   );
   const project = requireSuccess(await factory.addRepository({ path: root }));
@@ -90,7 +90,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
   return project;
 }
 
-async function createDemoAgents(factory: Factory, t3: PersistentT3) {
+async function createDemoAgents(factory: AgentEasel, t3: PersistentT3) {
   const agents: DemoAgents = { worker: "", reviewer: "", accessibility: "", releaseNotes: "" };
   for (const [key, name, prompt, exits] of [
     [
@@ -159,7 +159,7 @@ async function createDemoReporting(home: string, environmentId: string) {
  * revoked device. Unanswered requests expire after 15 minutes, so a pending request is
  * shown by requesting access from a browser instead of being seeded.
  */
-async function createDemoClients(factory: Factory) {
+async function createDemoClients(factory: AgentEasel) {
   const office = requireSuccess(
     await factory.requestClientAccess({ label: "Demo · Office browser", kind: "browser" }),
   );
@@ -177,7 +177,7 @@ async function createDemoClients(factory: Factory) {
  * GitHub the Factory's Triggers read.
  */
 export async function seedDevelopment(
-  factory: Factory,
+  factory: AgentEasel,
   t3: PersistentT3,
   github: ControlledGitHub,
   home: string,

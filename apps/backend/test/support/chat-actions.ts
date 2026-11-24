@@ -1,7 +1,7 @@
 import { assert, type TestContext } from "@effect/vitest";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { ALLOWED_CHANNEL, discordBot, discordGuild } from "./chat-control.ts";
 import { invocation, operatingService, THREAD } from "./chat-conversation.ts";
 import { chatWorlds, runConversation } from "./chat-runs.ts";
@@ -139,7 +139,7 @@ export async function proposed(
 }
 
 const CONFIRMATION_ANSWER =
-  /^(?:🔒 Only the person|↪️ Nothing was done|🔤 That is not|🚫 This confirmation|⌛ This review|🚫 Chat control does not accept this confirmation|⚠️ Factory could not (?:confirm your access|act on this)|⏳ Factory is already|❓ Factory cannot tell|You already confirmed)/;
+  /^(?:🔒 Only the person|↪️ Nothing was done|🔤 That is not|🚫 This confirmation|⌛ This review|🚫 Chat control does not accept this confirmation|⚠️ AgentEasel could not (?:confirm your access|act on this)|⏳ AgentEasel is already|❓ AgentEasel cannot tell|You already confirmed)/;
 
 const isConfirmationAnswer = (message: CreatedMessage) => CONFIRMATION_ANSWER.test(message.content);
 
@@ -253,7 +253,7 @@ export async function privateStartingWorld(c: TestContext) {
 }
 
 /** The Runs Factory shows in navigation, as identity and title. */
-export async function runsOf(factory: Pick<Factory, "listRunNavigation">) {
+export async function runsOf(factory: Pick<AgentEasel, "listRunNavigation">) {
   const navigation = await factory.listRunNavigation();
   assert(navigation.ok, JSON.stringify(navigation));
   return navigation.value.map((entry) => ({ number: entry.number, title: entry.title }));
@@ -320,7 +320,7 @@ export const answerCall = (
 });
 
 /** The occurrence `id` of the Run as Factory shows it now. */
-export async function occurrenceOf(factory: Pick<Factory, "getRun">, runId: string, id: string) {
+export async function occurrenceOf(factory: Pick<AgentEasel, "getRun">, runId: string, id: string) {
   const run = await factory.getRun(runId);
   assert(run.ok, JSON.stringify(run));
   return {
@@ -345,7 +345,7 @@ export const archiveCall = (input: Record<string, unknown> = {}) => ({
 });
 
 /** The Run's lifecycle as Factory shows it now. */
-export async function lifecycleOf(factory: Pick<Factory, "getRun">, runId: string) {
+export async function lifecycleOf(factory: Pick<AgentEasel, "getRun">, runId: string) {
   const run = await factory.getRun(runId);
   assert(run.ok, JSON.stringify(run));
   return run.value.lifecycle;

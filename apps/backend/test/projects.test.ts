@@ -5,7 +5,7 @@ import { factoryHarness } from "./support/factory.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import { assertOk, projectsHarness, uncertainProjectCreation } from "./support/domain-setup.ts";
 
-it("addRepository creates a new T3 project when the path was not discovered", async (context) => {
+it("addRepository creates a new T3 Code project when the path was not discovered", async (context) => {
   // Arrange
   const { factory, t3 } = await projectsHarness(context);
   const first = assertOk(await factory.recheckProjects()).projects[0]!;
@@ -41,7 +41,7 @@ it("project selection and catalog survive restart while connection is unavailabl
   expect(recovered.value.projects[0].availability).toBe("connection-unavailable");
 });
 
-it("recheckProjects marks a project unavailable when T3 drops it from discovery", async (context) => {
+it("recheckProjects marks a project unavailable when T3 Code drops it from discovery", async (context) => {
   // Arrange
   const { factory, t3 } = await projectsHarness(context);
   assertOk(await factory.recheckProjects());
@@ -82,7 +82,7 @@ it("recheckProjects records different-environment when the grant environment cha
   expect(assertOk(await factory.getProjectReadiness(original.id)).ready).toBe(false);
 });
 
-it("uncertain T3 project creation does not leak private errors or retry automatically", async (context) => {
+it("uncertain T3 Code project creation does not leak private errors or retry automatically", async (context) => {
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
@@ -104,7 +104,7 @@ it("uncertain T3 project creation does not leak private errors or retry automati
   expect(t3.projects.projectCreates).toBe(1);
 });
 
-it("incomplete T3 discovery retains history and blocks new mutations until recovery", async (context) => {
+it("incomplete T3 Code discovery retains history and blocks new mutations until recovery", async (context) => {
   // Arrange
   const { factory, t3 } = await projectsHarness(context);
   assertOk(await factory.recheckProjects());

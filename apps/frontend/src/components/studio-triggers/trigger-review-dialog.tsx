@@ -147,7 +147,7 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
           read: {
             status: "failed",
             message:
-              cause instanceof Error ? cause.message : "Factory could not preview this Trigger.",
+              cause instanceof Error ? cause.message : "AgentEasel could not preview this Trigger.",
           },
         }),
     );

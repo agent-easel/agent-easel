@@ -99,7 +99,7 @@ it("the launch message states the Block id and issues no tool ref", async (c) =>
   // Assert
   const message = [...fixture.t3.threads.launches.values()][0]?.payload.message;
   expect(message).toMatch(/^\$factory-block\n\nFactory Block id: [0-9a-f-]{36}\. /);
-  expect(message).not.toContain("Factory tool ref");
+  expect(message).not.toContain("AgentEasel tool ref");
 });
 
 it("a call without a Block id is refused with repair guidance", async (c) => {
@@ -139,7 +139,7 @@ it("an unknown Block id is refused with repair guidance", async (c) => {
   expect(run.value.attention).toStrictEqual([]);
 });
 
-it("a worker reads its Block while Factory is still confirming its launch", async (c) => {
+it("a worker reads its Block while AgentEasel is still confirming its launch", async (c) => {
   // Arrange
   const setup = await prepared(c);
   setup.t3.threads.discoverAvailable = false;
@@ -311,7 +311,7 @@ it("a fresh-context revisit with a Revisit instruction includes the Agent prompt
   );
 });
 
-it("starting a Flow with a fresh-context revisit block is refused when T3 does not support freshContext", async (c) => {
+it("starting a Flow with a fresh-context revisit block is refused when T3 Code does not support freshContext", async (c) => {
   // Arrange
   const fixture = await prepared(c, { revisit: true, revisitContext: "fresh" });
   fixture.t3.contract.support.freshContextSend = false;

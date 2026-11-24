@@ -12,7 +12,7 @@ const TITLE_LIMIT = 200;
 
 /** The first line of a card that replaced another application's cards in its thread. */
 const APPLICATION_NOTICE =
-  "Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card.";
+  "AgentEasel's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card.";
 
 export const clip = (text: string, limit: number) => {
   const characters = Array.from(text);
@@ -53,7 +53,7 @@ const PROBLEMS: Partial<Record<NonNullable<Block["problem"]>, string>> = {
   "settlement-unresolved": "Settle could not stop workers",
 };
 
-const STOPPING = "⏹️ Settle confirmed: Factory is stopping this Run's workers.";
+const STOPPING = "⏹️ Settle confirmed: AgentEasel is stopping this Run's workers.";
 const UNRESOLVED = "⚠️ Settle confirmed, but some workers could not be confirmed stopped.";
 const oneLine = (text: string) => text.replace(/[\r\n\u2028\u2029]+/g, " ");
 
@@ -61,7 +61,7 @@ function blockStatus(block: Block) {
   const label = name(oneLine(block.name));
   if (block.problem !== null) return `⚠️ **${label}** — ${PROBLEMS[block.problem] ?? "problem"}`;
   if (block.needsInput !== null)
-    return `🙋 **${label}** — needs input${block.needsInput === "T3" ? " (answer in T3)" : ""}`;
+    return `🙋 **${label}** — needs input${block.needsInput === "T3" ? " (answer in T3 Code)" : ""}`;
   if (block.wait)
     return `⏰ ${label} — waits until ${at(block.wait.deadlineAt)}${block.wait.count > 1 ? ` · ${block.wait.count} waiting` : ""}`;
   if (block.join && block.join.arrived > 0)

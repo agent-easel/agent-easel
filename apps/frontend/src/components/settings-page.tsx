@@ -38,7 +38,7 @@ export function SettingsPage({
           {badge}
           {hostManaged && (
             <StatusBadge kind="neutral" icon={Lock}>
-              Managed on the Factory host
+              Managed on the AgentEasel host
             </StatusBadge>
           )}
           {action && <div className="ml-auto flex flex-wrap items-center gap-2">{action}</div>}

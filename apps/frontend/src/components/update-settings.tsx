@@ -99,11 +99,11 @@ function UpdateProblem({ upgrade }: { upgrade: ReturnType<typeof useUpgrade> }) 
       tone="error"
       title={
         upgrade.failure?.title ??
-        (version ? `Couldn’t install ${version}` : "Couldn’t update Factory")
+        (version ? `Couldn’t install ${version}` : "Couldn’t update AgentEasel")
       }
       details={details}
     >
-      Factory stays on its current version.
+      AgentEasel stays on its current version.
     </ProblemCard>
   );
 }

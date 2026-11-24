@@ -43,7 +43,7 @@ export function runOverview(
     const blocked = (detail.settlement?.workers ?? [])
       .filter((worker) => worker.state === "unresolved")
       .map((worker) => `${worker.blockName}: ${worker.problem ?? "not resolved"}`);
-    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3, or Archive the Run.`;
+    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3 Code, or Archive the Run.`;
   };
 
   const run = {

@@ -70,7 +70,7 @@ export async function developmentHome(env: NodeJS.ProcessEnv = process.env): Pro
   }
   const checkout = await realpath(fileURLToPath(new URL("../../", import.meta.url)));
   if (contains(checkout, home) || contains(home, checkout))
-    throw new Error("FACTORY_DEV_HOME must be outside the Factory checkout and its ancestors.");
+    throw new Error("FACTORY_DEV_HOME must be outside the AgentEasel checkout and its ancestors.");
   for (const file of guardedFiles) await assertPlain(join(home, file));
   for (const entry of [
     "demo-repositories",

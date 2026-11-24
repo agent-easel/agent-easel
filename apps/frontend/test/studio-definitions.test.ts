@@ -219,7 +219,7 @@ it("a Project group shows its title and repository path, and an unavailable one 
   });
 });
 
-it("a Project no longer in T3 groups last, and a missing folder or a lost connection does not", () => {
+it("a Project no longer in T3 Code groups last, and a missing folder or a lost connection does not", () => {
   // Arrange
   const alpha = factoryProject("alpha", "Alpha");
   const gone = factoryProject("gone", "Aardvark", {
@@ -266,7 +266,7 @@ it("a Project no longer in T3 groups last, and a missing folder or a lost connec
   expect(groups[2]?.owner).toMatchObject({
     gone: false,
     folderMissing: false,
-    unavailable: "T3 connection unavailable",
+    unavailable: "T3 Code connection unavailable",
   });
   expect(groups[3]?.owner).toMatchObject({
     gone: true,
@@ -345,7 +345,7 @@ it("an Agent added from a Flow editor defaults to that Flow's owner whatever the
 it("owner targets offer Global and only the available Projects, like the Run composer", () => {
   // Arrange
   const northwind = factoryProject("northwind", "Northwind");
-  const removed = factoryProject("removed", "Removed in T3", {
+  const removed = factoryProject("removed", "Removed in T3 Code", {
     availability: "project-unavailable",
   });
 

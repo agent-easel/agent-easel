@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
-import type { Factory } from "../src/index.ts";
+import type { AgentEasel } from "../src/index.ts";
 import {
   answerCall,
   answeringWorld,
@@ -45,18 +45,20 @@ const HERMES_MENTION = `<@${HERMES_ID}>`;
 const hermes = { authorId: HERMES_ID, authorIsBot: true } as const;
 const hermesReply = { userId: HERMES_ID, authorIsBot: true } as const;
 const SENTINEL = "390000000000000001";
-const LOOP_REFUSAL = /^Factory paused bot requests in this thread/;
-const RATE_REFUSAL = /^Factory paused requests from this bot/;
+const LOOP_REFUSAL = /^AgentEasel paused bot requests in this thread/;
+const RATE_REFUSAL = /^AgentEasel paused requests from this bot/;
 const START_REJECTED = /^❌ \*\*Start not accepted\*\*/;
 const BUSY =
-  "Factory is already working on four requests in this thread: one is being answered and three are waiting. This message was not taken; send it again after Factory replies.";
+  "AgentEasel is already working on four requests in this thread: one is being answered and three are waiting. This message was not taken; send it again after AgentEasel replies.";
 
 const namedReply = (target: CreatedMessage) => ({
   ...hermes,
   replyTo: { ...target, authorId: discordBot.applicationId, authorIsBot: true },
 });
 
-async function hermesListed(factory: Pick<Factory, "getDiscordSettings" | "updateDiscordAccess">) {
+async function hermesListed(
+  factory: Pick<AgentEasel, "getDiscordSettings" | "updateDiscordAccess">,
+) {
   const settings = await factory.getDiscordSettings();
   assert(settings.ok, JSON.stringify(settings));
   const saved = await factory.updateDiscordAccess({
@@ -81,7 +83,7 @@ const hermesProposedStart = (world: StartingWorld, id: string, messages = 2) =>
     hermes,
   );
 
-it("a listed bot that mentions Factory gets a Start review that mentions it, and its exact-phrase Reply starts the Run in its thread", async (c) => {
+it("a listed bot that mentions AgentEasel gets a Start review that mentions it, and its exact-phrase Reply starts the Run in its thread", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -109,7 +111,7 @@ it("a listed bot that mentions Factory gets a Start review that mentions it, and
   );
 });
 
-it("a listed bot's plain message and its reply to a Factory message are not admitted and never reach the language model", async (c) => {
+it("a listed bot's plain message and its reply to an AgentEasel message are not admitted and never reach the language model", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -124,7 +126,7 @@ it("a listed bot's plain message and its reply to a Factory message are not admi
   expect(userEnvelopes(world.model, 0).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
 });
 
-it("webhook messages, unlisted bots and Factory's own messages are ignored even when they mention Factory", async (c) => {
+it("webhook messages, unlisted bots and AgentEasel's own messages are ignored even when they mention AgentEasel", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -144,7 +146,7 @@ it("webhook messages, unlisted bots and Factory's own messages are ignored even 
   expect(userEnvelopes(world.model, 0).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
 });
 
-it("a bot's Reply to a status card is dropped even when it explicitly mentions Factory", async (c) => {
+it("a bot's Reply to a status card is dropped even when it explicitly mentions AgentEasel", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -162,7 +164,7 @@ it("a bot's Reply to a status card is dropped even when it explicitly mentions F
   expect(userEnvelopes(world.model, 1).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
 });
 
-it("a bot's Reply to a Start receipt is dropped even when it explicitly mentions Factory", async (c) => {
+it("a bot's Reply to a Start receipt is dropped even when it explicitly mentions AgentEasel", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -308,7 +310,7 @@ it("a bot's model request limit applies across threads with one unmentioned refu
   expect(userEnvelopes(world.model, 6).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
 });
 
-it.effect("a bot can invoke Factory again when its model request window clears", (c) =>
+it.effect("a bot can invoke AgentEasel again when its model request window clears", (c) =>
   Effect.gen(function* () {
     // Arrange
     const { discord, model } = yield* clockedStartingWorld(c, [HERMES_ID]);
@@ -328,7 +330,7 @@ it.effect("a bot can invoke Factory again when its model request window clears",
   }),
 );
 
-it("after two Start proposals Factory pauses the bot before calling the model, while its pending review stays confirmable", async (c) => {
+it("after two Start proposals AgentEasel pauses the bot before calling the model, while its pending review stays confirmable", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);
@@ -459,7 +461,7 @@ it("a bot-started Run's notices go to the requesting thread and mention the bot"
   );
 });
 
-it("a bot's Reply to a Run notice is dropped even when it explicitly mentions Factory", async (c) => {
+it("a bot's Reply to a Run notice is dropped even when it explicitly mentions AgentEasel", async (c) => {
   // Arrange
   const world = await reportedBotRun(c);
   assert((await world.factory.reconcileRuns()).ok);
@@ -475,7 +477,7 @@ it("a bot's Reply to a Run notice is dropped even when it explicitly mentions Fa
   expect(userEnvelopes(world.model, 1).at(-1)!.from).toBe(`discord-user:${PARTICIPANT_ID}`);
 });
 
-it("an allowed person still talks to Factory in a thread where a bot is conversing", async (c) => {
+it("an allowed person still talks to AgentEasel in a thread where a bot is conversing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   await hermesListed(world.factory);

@@ -91,7 +91,7 @@ it("a protocol 16 client, which cannot validate a Flow under its owning Project,
 
 const serverUpdate = {
   status: 426,
-  body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
+  body: { ok: false, error: { message: expect.stringMatching(/Update the AgentEasel server/) } },
 } as const;
 
 it.for([

@@ -6,7 +6,7 @@ import {
   solidPng,
   type WorkerHandle,
 } from "../../apps/backend/test/support/scenarios.ts";
-import type { Factory } from "../../apps/backend/src/index.ts";
+import type { AgentEasel } from "../../apps/backend/src/index.ts";
 import type { PersistentT3 } from "./persistent-t3.ts";
 import type { PromptSegment, Result } from "../../packages/contracts/src/index.ts";
 
@@ -16,7 +16,7 @@ export function requireSuccess<A>(result: Result<A>): A {
 }
 
 export interface SeedContext {
-  factory: Factory;
+  factory: AgentEasel;
   t3: PersistentT3;
   projectId: string;
 }

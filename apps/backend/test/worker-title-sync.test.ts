@@ -100,7 +100,7 @@ it("an applied generated title renames the worker and leaves the title thread on
     threadId: worker.reference.threadId,
     title: "F#1 Entry worker · Search ranking",
   });
-  expect(launch.title).toBe(`Factory title · Run #1 · ${started.value.id}`);
+  expect(launch.title).toBe(`AgentEasel title · Run #1 · ${started.value.id}`);
 });
 
 it("a title chosen while a launch is still in flight is applied when the worker binds", async (c) => {
@@ -126,7 +126,7 @@ it("a title chosen while a launch is still in flight is applied when the worker 
   );
 });
 
-it("archiving a Run drops a pending worker rename and a later rename is refused without calling T3", async (c) => {
+it("archiving a Run drops a pending worker rename and a later rename is refused without calling T3 Code", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
   const started = await f.startRun(input);
@@ -182,7 +182,7 @@ it("a settled Run still renames its bound worker thread", async (c) => {
   expect(await update).toMatchObject({ title: "F#1 Entry worker · Settled title" });
 });
 
-it("editing only the clipped tail of a Run title does not call T3 again", async (c) => {
+it("editing only the clipped tail of a Run title does not call T3 Code again", async (c) => {
   // Arrange
   const { f, t3, input, world } = await prepared(c);
   const started = await f.startRun(input);
@@ -192,7 +192,7 @@ it("editing only the clipped tail of a Run title does not call T3 again", async 
   assert((await f.renameRun(started.value.id, { title: "a".repeat(300) })).ok);
   const sent = await first;
   await f.awaitWorkerTitles();
-  t3.threads.remoteTitles.set(sent.threadId, "Manually chosen in T3");
+  t3.threads.remoteTitles.set(sent.threadId, "Manually chosen in T3 Code");
 
   // Act
   assert((await f.renameRun(started.value.id, { title: `${"a".repeat(299)}b` })).ok);
@@ -200,7 +200,7 @@ it("editing only the clipped tail of a Run title does not call T3 again", async 
   // Assert
   await f.awaitWorkerTitles();
   expect(t3.threads.renames.map((rename) => rename.title)).toStrictEqual([sent.title]);
-  expect(t3.threads.threadTitle(sent.threadId)).toBe("Manually chosen in T3");
+  expect(t3.threads.threadTitle(sent.threadId)).toBe("Manually chosen in T3 Code");
 });
 
 it("a Continuation keeps the launching Block's title when the Run is renamed", async (c) => {
@@ -224,7 +224,7 @@ it("a Continuation keeps the launching Block's title when the Run is renamed", a
   expect(fixture.t3.threads.launches.size).toBe(1);
 });
 
-it("an older T3 without rename support still accepts a Run rename and skips the thread update", async (c) => {
+it("an older T3 Code without rename support still accepts a Run rename and skips the thread update", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
   t3.contract.support.rename = false;
@@ -408,11 +408,11 @@ it("a capability withdrawn while connecting prevents dispatch of the claimed ren
   expect(t3.threads.renames).toStrictEqual([]);
 });
 
-it("returning to the acknowledged title before dispatch preserves the worker's manual T3 title", async (c) => {
+it("returning to the acknowledged title before dispatch preserves the worker's manual T3 Code title", async (c) => {
   // Arrange
   const { f, t3, world, input } = await prepared(c);
   const worker = await workerAtWork(world, input);
-  t3.threads.remoteTitles.set(worker.threadId, "Manual T3 title");
+  t3.threads.remoteTitles.set(worker.threadId, "Manual T3 Code title");
   t3.threads.beforeRename = async () => {
     delete t3.threads.beforeRename;
     assert((await f.renameRun(worker.runId, { title: input.title })).ok);
@@ -425,14 +425,14 @@ it("returning to the acknowledged title before dispatch preserves the worker's m
   await f.awaitWorkerTitles();
   expect(t3.threads.renames).toStrictEqual([]);
   expect(t3.threads.beforeRename).toBeUndefined();
-  expect(t3.threads.threadTitle(worker.threadId)).toBe("Manual T3 title");
+  expect(t3.threads.threadTitle(worker.threadId)).toBe("Manual T3 Code title");
 });
 
 it("restart after an expired session refusal preserves the manual title when the target returned to baseline", async (c) => {
   // Arrange
   const { h, f, t3, world, input } = await prepared(c);
   const worker = await workerAtWork(world, input);
-  t3.threads.remoteTitles.set(worker.threadId, "Chosen in T3");
+  t3.threads.remoteTitles.set(worker.threadId, "Chosen in T3 Code");
   const wire = await authorizedLiveOAuth(c);
   const { authorizationIdentity } = await wire.live.contract.inspect({ endpoint: wire.endpoint });
   assert(authorizationIdentity);
@@ -472,5 +472,5 @@ it("restart after an expired session refusal preserves the manual title when the
   // Assert
   await restored.awaitWorkerTitles();
   expect(t3.threads.renames).toStrictEqual([]);
-  expect(t3.threads.threadTitle(worker.threadId)).toBe("Chosen in T3");
+  expect(t3.threads.threadTitle(worker.threadId)).toBe("Chosen in T3 Code");
 });

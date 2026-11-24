@@ -56,13 +56,13 @@ await writeFile(
   join(isolated, "package.json"),
   JSON.stringify(
     {
-      name: "t3-factory",
-      productName: "T3 Factory",
+      name: "agenteasel",
+      productName: "AgentEasel",
       version: identity.version,
       factoryBuild: identity,
       ...(posthogPublicKey ? { factoryPosthogPublicKey: posthogPublicKey } : {}),
       description: desktop.description,
-      author: "T3 Factory",
+      author: "AgentEasel",
       license: "UNLICENSED",
       type: "module",
       main: "build/main.js",
@@ -122,5 +122,5 @@ await writeFile(join(stage, "package.json"), JSON.stringify(packagedManifest, nu
 await rm(join(stage, "node_modules"), { recursive: true, force: true });
 await rm(isolated, { recursive: true, force: true });
 console.log(
-  `Staged T3 Factory ${identity.version} for Electron ${electronVersion} arm64 at ${stage}`,
+  `Staged AgentEasel ${identity.version} for Electron ${electronVersion} arm64 at ${stage}`,
 );

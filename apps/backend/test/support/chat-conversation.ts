@@ -2,7 +2,7 @@ import { assert, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
-import type { Factory, FactoryService } from "../../src/index.ts";
+import type { AgentEasel, FactoryService } from "../../src/index.ts";
 import {
   ALLOWED_CHANNEL,
   chatControlWorld,
@@ -128,7 +128,7 @@ export async function conversationOf(discord: ControlledDiscord, count: number, 
 
 /** Saves Access allowing `users` in the allowed channel for `projectIds`. */
 export async function savedAccess(
-  factory: Pick<Factory, "getDiscordSettings" | "updateDiscordAccess">,
+  factory: Pick<AgentEasel, "getDiscordSettings" | "updateDiscordAccess">,
   users: readonly string[],
   projectIds: readonly string[],
 ) {

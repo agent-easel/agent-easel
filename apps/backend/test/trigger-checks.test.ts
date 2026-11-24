@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { Factory } from "../src/index.ts";
+import type { AgentEasel } from "../src/index.ts";
 import {
   launchedWorkers,
   resultReported,
@@ -19,7 +19,7 @@ import {
   unlabelIssue,
 } from "./support/triggers.ts";
 
-async function runsOf(f: Factory, projectId: string) {
+async function runsOf(f: AgentEasel, projectId: string) {
   const runs = await f.listRuns(projectId);
   assert(runs.ok);
   return runs.value;
@@ -232,7 +232,7 @@ it("an issue that left the query for another reason and returned with the same l
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
 });
 
-it("an issue Start rejected for a T3 blocker starts at the next check once the blocker is fixed", async (c) => {
+it("an issue Start rejected for a T3 Code blocker starts at the next check once the blocker is fixed", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(1, "Blocked first");
@@ -298,7 +298,7 @@ it("a check whose Flow moved to another Project sets the Error and starts nothin
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
 
-it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", async (c) => {
+it("a T3 Code launch blocker keeps the Trigger's Error while no issue is ready", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   const issue = world.readyIssue(1, "Blocked, then closed");
@@ -313,7 +313,7 @@ it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", asyn
   assert(checked.ok);
   expect(checked.value.error).toMatchObject({
     code: "start_blocked",
-    message: expect.stringContaining("T3 launch contract is unsupported."),
+    message: expect.stringContaining("T3 Code launch contract is unsupported."),
     firstSeenAt: blocked.error!.firstSeenAt,
     count: 2,
   });
@@ -357,7 +357,7 @@ it("a check that cannot read GitHub starts nothing, sets the Error with host gui
     error: {
       code: "github_signed_out",
       message:
-        "On the Factory host, run gh auth login --hostname github.com as the user Factory runs as.",
+        "On the AgentEasel host, run gh auth login --hostname github.com as the user AgentEasel runs as.",
       count: 1,
     },
   });

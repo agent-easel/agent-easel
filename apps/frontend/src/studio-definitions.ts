@@ -543,7 +543,7 @@ export function createChangeOwner(
       } catch (cause) {
         store.set({
           changing: false,
-          error: failureMessage(cause, "Factory could not change the owner."),
+          error: failureMessage(cause, "AgentEasel could not change the owner."),
           blockers: cause instanceof ApiError ? blockers(cause) : [],
         });
         return undefined;
@@ -601,7 +601,7 @@ export function createFlowDuplicate(
       if (asked !== request) return;
       store.set({
         previewing: false,
-        error: failureMessage(cause, "Factory could not prepare this Duplicate."),
+        error: failureMessage(cause, "AgentEasel could not prepare this Duplicate."),
       });
     }
   }
@@ -654,7 +654,7 @@ export function createFlowDuplicate(
         return result;
       } catch (cause) {
         store.set({ committing: false });
-        const message = failureMessage(cause, "Factory could not duplicate this Flow.");
+        const message = failureMessage(cause, "AgentEasel could not duplicate this Flow.");
         if (isStalePlan(cause))
           await preview(`${message} Review the updated plan, then Duplicate again.`);
         else store.set({ error: message });

@@ -57,7 +57,7 @@ it("saving On cannot enable delivery against the environment override", async (c
   expect(ingest.requests).toHaveLength(0);
 });
 
-it("an approved client cannot change the Factory host’s telemetry preference", async (context) => {
+it("an approved client cannot change the AgentEasel host’s telemetry preference", async (context) => {
   // Arrange
   const server = await remoteServer(context, { telemetry: { env: {} } });
   const laptop = await server.approved("Laptop");

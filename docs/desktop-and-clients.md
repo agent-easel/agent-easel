@@ -10,16 +10,16 @@ Each installation has exactly one role, chosen on first launch and changeable in
 
 | Role | What runs on this computer | Data |
 | --- | --- | --- |
-| **Run a server** | The single authoritative backend (Runner, SQLite, reporting acceptance, T3 OAuth context) and its local panel | The existing user-level home `~/.agenteasel` (or `FACTORY_HOME`) |
-| **Connect to a server** | Bundled UI only; no backend, Runner, T3 or reporting tooling | Desktop settings, the pinned server certificate and a Keychain-encrypted client credential |
+| **Run a server** | The single authoritative backend (Runner, SQLite, reporting acceptance, T3 Code OAuth context) and its local panel | The existing user-level home `~/.agenteasel` (or `FACTORY_HOME`) |
+| **Connect to a server** | Bundled UI only; no backend, Runner, T3 Code or reporting tooling | Desktop settings, the pinned server certificate and a Keychain-encrypted client credential |
 
-An installation never hosts one Factory and operates another at the same time. Switching
+An installation never hosts one AgentEasel and operates another at the same time. Switching
 from server to client asks for confirmation (with the open-Run count) and stops the
 backend in order; it never archives Runs. Local data stays where it is and is never copied
 to or merged with another server. Switching back reopens the same home and reconciles.
 
 A desktop server adopts an existing source installation's home: Flows, Agents, Runs,
-the T3 connection and reporting registrations stay available. Only one backend may own a
+the T3 Code connection and reporting registrations stay available. Only one backend may own a
 home. If a source backend (`pnpm start`, `pnpm dev:prod`) or another app already owns
 it, the desktop shows an actionable error with Retry; it never removes the live lock,
 kills the other backend or starts with an empty home. The source backend reports the
@@ -37,22 +37,22 @@ same conflict in the other direction.
   running, in both roles; they stop with Quit.
 - **Settings → Desktop app → Show in the menu bar** (desktop only) is off by
   default. When enabled, a menu-bar icon shows the installation's role and status with
-  **Open Factory** and **Quit Factory**. The choice is stored per installation and
+  **Open AgentEasel** and **Quit AgentEasel**. The choice is stored per installation and
   applies immediately, without a restart.
-- **Quit** on a server with open Runs asks for confirmation: Factory control stops,
-  reports and transitions wait, and T3 work already started may continue. **Cancel**
+- **Quit** on a server with open Runs asks for confirmation: AgentEasel control stops,
+  reports and transitions wait, and T3 Code work already started may continue. **Cancel**
   keeps everything running. Confirmed Quit shuts the backend down in order and
   releases ownership. Quit is not Archive; on the next start normal reconciliation runs
   before eligible work resumes. Quit with no open Runs needs no confirmation.
 - Closing or quitting a client never affects its server.
-- **Open Factory in the background at login** is off by default. When enabled, a login
+- **Open AgentEasel in the background at login** is off by default. When enabled, a login
   launch starts with the remembered role and no window. No daemon, operation after
   logout or sleep prevention is provided.
 
 ## Connecting a client
 
 The server owner enables **Settings → Devices & access → Allow approved devices on my
-LAN or tailnet**. Factory then serves a separate HTTPS listener (default port 4312,
+LAN or tailnet**. AgentEasel then serves a separate HTTPS listener (default port 4312,
 all interfaces) and shows its addresses and certificate fingerprint. The plain-HTTP
 loopback listener remains the host-local panel; requests to it from other machines are
 refused.
@@ -65,7 +65,7 @@ access under a device name.
 
 A browser profile opens the same HTTPS address. Trust the host's certificate on that
 device first (**Browser certificate → Download** on the host panel, or the `/factory-ca.pem` it
-serves, after comparing fingerprints). Installing the Factory CA grants system-wide
+serves, after comparing fingerprints). Installing the AgentEasel CA grants system-wide
 issuer trust to the execution host and processes using its account; use it only for
 a host you trust at that level. Alternatively configure a publicly trusted certificate such
 as one from `tailscale cert` (see [transport security](#transport-security)).
@@ -74,19 +74,19 @@ Knowing or reaching the address grants nothing. Every desktop installation and b
 profile is approved individually on the host panel, where each request shows its
 device name, kind and six-digit verification code. Waiting requests are listed first, and
 the **Devices & access** navigation item shows an attention dot while one waits. Approve only
-a request whose code matches the requesting screen. Approved clients have full normal Factory access: Flows,
+a request whose code matches the requesting screen. Approved clients have full normal AgentEasel access: Flows,
 Agents, Runs, Human answers, attention, history and Run operations, with the existing
-revision-conflict behavior. They can also install, repair and reinstall Factory MCP in
+revision-conflict behavior. They can also install, repair and reinstall AgentEasel MCP in
 **Settings → Agent reporting**. Clients control the authoritative server remotely:
 commands execute on the server and reporting setup changes the server's harness files.
 Keeping files and credentials on the server does not by itself restrict an operation
-to its local panel. The T3 endpoint and host reauthorization remain host-only: remote
-clients see their status and the "Managed on the Factory host" chip.
-When T3 needs approval, a remote client can choose **Authorize** or
+to its local panel. The T3 Code endpoint and host reauthorization remain host-only: remote
+clients see their status and the "Managed on the AgentEasel host" chip.
+When T3 Code needs approval, a remote client can choose **Authorize** or
 **Open the page again** for the saved endpoint. Both open the host's browser.
-See [T3 connection](t3-integration.md#authorizing). While the host's
+See [T3 Code connection](t3-integration.md#authorizing). While the host's
 [First-run setup](t3-integration.md#first-run-setup) is incomplete, an approved client waits
-read-only on **Finish setup on the Factory host** and opens the application once the host
+read-only on **Finish setup on the AgentEasel host** and opens the application once the host
 completes it. Lifecycle and approvals are host-local
 only; an approved client may check, download and install the server's own update
 ([updates](#updates)).
@@ -112,7 +112,7 @@ under **Technical details**.
 | Incompatible | Which side to update; product operations are blocked, the protocol is rechecked automatically, and local Application settings remain available |
 | Synchronizing | The connection is open while active live scopes obtain fresh snapshots; retained data stays visible, mutations are disabled, browsing and navigation remain available. When catching up takes over 500 ms, the sidebar footer shows **Synchronizing…** with a neutral dot |
 | Connected | The normal application with active live scopes synchronized |
-| Offline after connecting | The last observed view stays; the sidebar footer shows **Offline** in the Error colour with its observation time (**Offline** alone when none was recorded), and nothing overlays the window controls, title strip or page headers. Mutations are disabled and never sent or queued, Studio's blocked primary actions show **Offline** as their reason, browsing and navigation remain available, and Factory reconnects automatically and synchronizes |
+| Offline after connecting | The last observed view stays; the sidebar footer shows **Offline** in the Error colour with its observation time (**Offline** alone when none was recorded), and nothing overlays the window controls, title strip or page headers. Mutations are disabled and never sent or queued, Studio's blocked primary actions show **Offline** as their reason, browsing and navigation remain available, and AgentEasel reconnects automatically and synchronizes |
 
 A command whose response was lost is not repeated as new work: Start retries reuse
 the original request key and resolve to the same Run, and Settle or Archive is never
@@ -171,9 +171,9 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   notify again. Withdrawing never makes a matter notify again. A completion notification is
   withdrawn, best effort and without alerting again, once its Run returned to Active, was
   Archived or no longer has a row, or its Settled cycle differs from the one in the current
-  ready snapshot, also when the cycle changed while Factory was offline or quit. Opening the Run
-  in Factory does not withdraw it, and a later Rename leaves a delivered banner unchanged.
-- **Focused window**: while any Factory window of this installation is focused, no notification
+  ready snapshot, also when the cycle changed while AgentEasel was offline or quit. Opening the Run
+  in AgentEasel does not withdraw it, and a later Rename leaves a delivered banner unchanged.
+- **Focused window**: while any AgentEasel window of this installation is focused, no notification
   is shown. Matters that became pending and Runs that settled meanwhile count as seen and never
   notify later, also after switching to another app.
 - **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
@@ -186,7 +186,7 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   Turning **Notifications** or **Notify when a Run finishes** on announces no Run that is
   already Settled.
 - **Permission**: macOS asks the first time a notification would be shown, never at launch and
-  never while it would be suppressed. Factory reads the permission without a window at startup,
+  never while it would be suppressed. AgentEasel reads the permission without a window at startup,
   before each delivery, when the app becomes active or the Mac wakes, and about every 60
   seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
   A newly noticed grant announces no Run that is already Settled, except the one completion that
@@ -194,13 +194,13 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   cycle, also when a pending matter prompted the request together with it. A prompt that only a
   pending matter prompted exempts no completion, and Runs or cycles that settle while the prompt
   is open count as seen at **Allow**. The ledger keeps the last permission it
-  observed, so a grant made in System Settings while Factory was quit is noticed at the next
+  observed, so a grant made in System Settings while AgentEasel was quit is noticed at the next
   launch and also announces no Run that is already Settled. A ledger that cannot be written
-  does not stop Factory from starting; a grant it could not record is noticed again, with the
+  does not stop AgentEasel from starting; a grant it could not record is noticed again, with the
   same baseline, at the next permission read once the ledger can be written, and a grant that
-  follows a denial the ledger could not record has the same baseline. A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  follows a denial the ledger could not record has the same baseline. A denial leaves the badge working and AgentEasel never asks again. Settings shows the permission
   status and, after a denial, **Open System Settings**, which opens this app's page in System
-  Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
+  Settings → Notifications. A prompt left unanswered when AgentEasel quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
   `desktop-attention.json` beside its desktop settings, per server. After a restart or reconnect
   the fresh snapshot catches up with at most one notification per Run for matters still pending
@@ -219,17 +219,17 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   Archived, with no age limit, so a click after a cold launch opens it. After that the posted
   notification's record is kept while its banner is still in Notification Center, because
   withdrawal is best effort, and through the launch after it left, so a banner that outlived its
-  Run still routes when it launches Factory.
+  Run still routes when it launches AgentEasel.
 - **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
   now: with the Block selected while exactly one matter the notification announced is still
-  pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
+  pending (a native request's Block offers **Open in T3 Code**), otherwise the Run overview. An
   Archived Run opens its read-only history and a Run that no longer exists shows that it is
   unavailable; both also hold for a completion notification, which always opens the Run
   overview with no Block selected, whatever state the Run is in, and opens the inspector where
   the overview and the Run result show, also when it was closed. Every click applies its route
   again, also when the window already shows that Run after the owner closed the inspector or
   changed the selected Block. A
-  notification clicked after Quit relaunches Factory and opens its Run once the
+  notification clicked after Quit relaunches AgentEasel and opens its Run once the
   connection is ready, behind the connection gate. A Dock click with no window open opens the
   single waiting Run (its Block selected when it has one matter), the Run list's
   [Needs you (N)](runs.md#run-list) filter when several wait, or the last view when none does; with
@@ -260,7 +260,7 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
 Notifications are posted through `UNUserNotificationCenter` by a small native module, not
 Electron's `Notification` API: Electron withdraws its notifications when the app quits and asks
 for permission on its first call. Clicks arrive through Electron, which restores delivered
-notifications only once permission is decided; a notification that relaunched Factory is read
+notifications only once permission is decided; a notification that relaunched AgentEasel is read
 from the launch before any window opens. macOS accepts notifications only from an app registered from a
 non-temporary location, so a package run from a temporary folder badges but cannot notify.
 
@@ -273,56 +273,56 @@ outside the draggable region, fullscreen and window controls stay native, and th
 
 **Settings → Appearance** offers **System**, **Light** and **Dark**. System is the default
 and follows the device's Light or Dark appearance from the first frame, including changes
-while Factory is open. Light and Dark keep their selected mode when the device changes.
+while AgentEasel is open. Light and Dark keep their selected mode when the device changes.
 An upgrade keeps any saved Light or Dark value, including Dark saved as the former desktop
 default. A profile or installation without a saved value uses System.
 
-Each desktop installation and each browser profile per Factory address saves its own
-preference locally. Changing the server, role, T3 endpoint or authorization keeps that preference.
+Each desktop installation and each browser profile per AgentEasel address saves its own
+preference locally. Changing the server, role, T3 Code endpoint or authorization keeps that preference.
 Every connection and startup gate has an **Application settings** entry, including in
 browsers, and the preference works while offline. Visual rules are in the
 [design system](design-system.md#light-and-dark).
 
 Each desktop installation and each browser profile may also apply one custom color theme JSON in
-**Settings → Appearance** (pasted or uploaded as a `.json` file). The config uses T3's color theme
+**Settings → Appearance** (pasted or uploaded as a `.json` file). The config uses T3 Code's color theme
 format v1 (`appearance`, `canvas`, `accent`, `colors`, `variants`; unknown fields such as `css` are
-ignored) and is resolved, mapped onto Factory's color tokens and validated under the
+ignored) and is resolved, mapped onto AgentEasel's color tokens and validated under the
 [contrast policy](design-system.md#custom-theme-colors) directly on the device. Each mode
-(`light` / `dark`) applies its custom colors independently and falls back to Factory's colors when
+(`light` / `dark`) applies its custom colors independently and falls back to AgentEasel's colors when
 missing or unreadable. The **Appearance** header shows **Custom colors** when at least one mode
-uses custom colors and **Factory colors** otherwise. **Reset to Factory** removes the custom config
-and restores Factory's colors. The source JSON is stored locally in the browser profile or desktop
+uses custom colors and **AgentEasel colors** otherwise. **Reset to AgentEasel** removes the custom config
+and restores AgentEasel's colors. The source JSON is stored locally in the browser profile or desktop
 installation (`localStorage`), re-validated on load and across browser tabs of the same origin, and
-never travels to or through the Factory server. If a browser blocks storage, the custom colors apply
+never travels to or through the AgentEasel server. If a browser blocks storage, the custom colors apply
 until the tab closes and Settings explains why.
 
 Support limits of custom theme configs:
 
-- **Format.** T3's theme file version 1 only (at most 128 KB UTF-8): `appearance` (`light` or
+- **Format.** T3 Code's theme file version 1 only (at most 128 KB UTF-8): `appearance` (`light` or
   `dark`), optional `name` (1–48 characters, defaulting to `Custom theme`), optional `#rgb`/`#rrggbb`
   `canvas` and `accent` seeds, and `colors`/`variants` records mapping up to 256 role names to color
   strings of at most 64 characters. Unknown extra fields (such as `css`) are ignored.
 - **Base palette and variants.** The declared `appearance` starts from the palette generated from
-  `canvas` and `accent` when both seeds are given, or from T3 Chat's base palette for that mode
+  `canvas` and `accent` when both seeds are given, or from T3 Code Chat's base palette for that mode
   otherwise (including when only one seed is given), with `colors` overlaid on top. The opposite
-  mode exists only when `variants[other]` is declared: T3 Chat's base palette for that mode with the
-  variant's colors on top, never the seeds. Without that variant the opposite mode keeps Factory's
+  mode exists only when `variants[other]` is declared: T3 Code Chat's base palette for that mode with the
+  variant's colors on top, never the seeds. Without that variant the opposite mode keeps AgentEasel's
   colors.
-- **Mapped roles.** Factory reads the twelve T3 roles it maps (`canvas`, `text`, `textMuted`,
+- **Mapped roles.** AgentEasel reads the twelve T3 Code roles it maps (`canvas`, `text`, `textMuted`,
   `placeholder`, `surfaceRaised`, `border`, `input`, `focus`, `accent`, `accentForeground`,
   `sidebar`, `sidebarForeground`) and ignores every other role. A config with neither seed pair nor
-  any readable T3 role color is rejected.
+  any readable T3 Code role color is rejected.
 - **Color syntax and translucency.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with
   channels in 0–255, and `oklch()` with numbers or percentages. Unparseable color strings (such as
   named colors or `hsl()`) are ignored and reported, leaving the role at its base value. A mapped
-  role resolving to a translucent color (alpha < 1) rejects that mode to Factory's colors.
+  role resolving to a translucent color (alpha < 1) rejects that mode to AgentEasel's colors.
 
-- On **desktop**, Factory saves the preference with the installation's other settings.
+- On **desktop**, AgentEasel saves the preference with the installation's other settings.
   The effective mode drives native window chrome, dialogs and the window background.
   The bundled page opens and reloads with the effective mode already applied. If a
-  preference change fails to save, Factory restores the previous preference and appearance
+  preference change fails to save, AgentEasel restores the previous preference and appearance
   and shows the error in Settings.
-- In the **browser**, the profile saves the preference for the Factory address. The
+- In the **browser**, the profile saves the preference for the AgentEasel address. The
   page applies the effective mode to its colors and the browser theme color before
   the stylesheet paints. Other tabs of that profile follow saved preference changes.
   If the browser blocks storage, the preference applies until the tab closes and Settings
@@ -330,12 +330,12 @@ Support limits of custom theme configs:
 
 ## Application menu
 
-The desktop app replaces Electron's default menu with its own: **T3 Factory** (About,
+The desktop app replaces Electron's default menu with its own: **AgentEasel** (About,
 Settings, Check for Updates…, Hide, Quit), **File** (New Run, Close Window), **Edit**
 (standard text-editing roles, which keep the clipboard working in text fields), **View**
 (Command palette, Studio, Keyboard shortcuts, page zoom, Full Screen, Reload), **Go** (Back,
 Forward, Previous/Next Run, Search Runs), **Run** (Snooze or restore, Settle, Archive…,
-Rename), **Window** and **Help** (Factory documentation). Registry commands
+Rename), **Window** and **Help** (AgentEasel documentation). Registry commands
 appear once the window shows the connected application. Command labels and
 accelerators come from the [shortcut registry](keyboard-shortcuts.md) and follow the
 user's customized bindings; an unbound command shows no accelerator. **Run** items are
@@ -355,15 +355,15 @@ menu bar is hidden until Alt is pressed.
 
 ## Handoff to AgentEasel
 
-T3 Factory is renamed AgentEasel. The current release is the last T3 Factory build. A macOS update cannot change an app's bundle id, so users download AgentEasel once. Until they do, the Run sidebar shows a persistent, non-blocking **T3 Factory is now AgentEasel** notice with a **Download AgentEasel** link above its footer, in the desktop app and in the browser alike. Everything else keeps working.
+T3 Code AgentEasel is renamed AgentEasel. The current release is the last T3 Code AgentEasel build. A macOS update cannot change an app's bundle id, so users download AgentEasel once. Until they do, the Run sidebar shows a persistent, non-blocking **T3 Code AgentEasel is now AgentEasel** notice with a **Download AgentEasel** link above its footer, in the desktop app and in the browser alike. Everything else keeps working.
 
 This build never checks for updates of itself. Its own update state is unsupported, so the sidebar control and the release-channel setting describe only a remote server that still offers updates.
 
-When AgentEasel migrates an installation on its first launch, it writes `migrated-to-agenteasel.json` both into the old data home (`FACTORY_HOME`, by default `~/.t3-factory`) and into the old desktop profile. A client installation has no data home and gets only the profile tombstone. If either file exists, T3 Factory starts no backend, window, attention or update check. It turns off its login item and shows one blocking dialog with **Open AgentEasel**, **Move T3 Factory to Trash** and **Quit**. Each choice ends the process. **Open AgentEasel** opens the download page when AgentEasel is not installed. The old data stays untouched as AgentEasel's backup.
+When AgentEasel migrates an installation on its first launch, it writes `migrated-to-agenteasel.json` both into the old data home (`FACTORY_HOME`, by default `~/.t3-factory`) and into the old desktop profile. A client installation has no data home and gets only the profile tombstone. If either file exists, T3 Code AgentEasel starts no backend, window, attention or update check. It turns off its login item and shows one blocking dialog with **Open AgentEasel**, **Move T3 Code AgentEasel to Trash** and **Quit**. Each choice ends the process. **Open AgentEasel** opens the download page when AgentEasel is not installed. The old data stays untouched as AgentEasel's backup.
 
 ## Updates
 
-Desktop builds before the final T3 Factory release check for updates automatically on launch and every hour, so a running app shows a new Release or beta build in the sidebar without a manual check. **Settings → Desktop app → Updates** (desktop only) chooses the installation's **release channel**: **Stable** (tagged Releases) or **Beta** (nightly and
+Desktop builds before the final T3 Code AgentEasel release check for updates automatically on launch and every hour, so a running app shows a new Release or beta build in the sidebar without a manual check. **Settings → Desktop app → Updates** (desktop only) chooses the installation's **release channel**: **Stable** (tagged Releases) or **Beta** (nightly and
 on-demand [beta builds](release.md#beta-builds) of main, plus newer stable Releases). Until chosen, an installation follows the channel of the build it runs. Changing the channel discards an update found on the
 previous one and checks again; it is refused while a download is in progress. Leaving beta never downgrades: the installed beta stays until a newer Release exists, and Desktop app settings says so. The page header shows the update state and action. The Updates card shows the installed version, release channel and last check time when supported. The release-channel control is disabled during a download. Update failures keep their diagnostics under **Technical details**.
 
@@ -388,20 +388,20 @@ Ordinary Quit never installs. With two targets
 the server installs first: the client waits until the server answers its handshake with the target release and only then restarts. If the server does not return on that release within ten minutes, or reports an
 installation error, the upgrade stops with **Server update failed · Client kept** and the client is unchanged. A browser reloads its UI after the server upgrade.
 
-A server update keeps data, role, reporting registrations and T3 connection; Runs are not stopped and reconcile after restart, and clients go **Offline** meanwhile and reconnect automatically. The server's channel
+A server update keeps data, role, reporting registrations and T3 Code connection; Runs are not stopped and reconcile after restart, and clients go **Offline** meanwhile and reconnect automatically. The server's channel
 is chosen on its host. A server running from a source checkout, a development package or a release without the update API is not an upgrade target. Connection and startup gates without a sidebar keep a contextual
 **Application settings** entry with the channel and the same control for this app only, including in incompatible and offline states.
 
 The Available tooltip previews the changes of every release between the installed version and the update, newest first, from the feed's ten most recent entries; the stable channel leaves out beta builds, whose
 changes the Release notes already cover. Each change is one line without author, PR or commit references and without its Conventional Commit prefix; four are shown, then **+N more**. Notes are always read as
 text, never feed markup; a release without notes says so and does not block download. If installation fails before
-replacement, Factory clears the quitting state and reopens the same data home through normal reconciliation, keeping the error in the control.
+replacement, AgentEasel clears the quitting state and reopens the same data home through normal reconciliation, keeping the error in the control.
 
 ## Browser access on the host
 
 `pnpm start` and the desktop server keep serving the browser UI on loopback
 (`http://127.0.0.1:4310`) as the host-local panel. Other devices use the approved-client
-HTTPS address. Factory sends no CORS approval headers on either listener.
+HTTPS address. AgentEasel sends no CORS approval headers on either listener.
 
 ### Local developer builds
 
@@ -413,17 +413,17 @@ AgentEasel easel-flow mark shipped with the application.
 
 ## Two listeners, two trust domains
 
-Factory exposes two listeners with distinct trust boundaries:
+AgentEasel exposes two listeners with distinct trust boundaries:
 
 | Surface | Binding | Trust | Routes |
 | --- | --- | --- | --- |
-| `host` | `host`/`port` from `config.json` (loopback by default), plain HTTP | Host-local: the socket peer must be a loopback address, plus the existing Host and mutation checks | All product routes, host-setup routes, live delivery (`/api/live`), Factory MCP (`/mcp`), `/api/host/*` owner routes |
+| `host` | `host`/`port` from `config.json` (loopback by default), plain HTTP | Host-local: the socket peer must be a loopback address, plus the existing Host and mutation checks | All product routes, host-setup routes, live delivery (`/api/live`), AgentEasel MCP (`/mcp`), `/api/host/*` owner routes |
 | `remote` | `remoteAccess.host`/`port` (default `0.0.0.0:4312`), TLS 1.2+ only | Approved client credential on every request | Product routes including live delivery (`/api/live`); host-setup routes answer `host_only`; owner routes do not exist |
 
 The host surface keeps the [existing Host/Origin defenses](installation.md#configuration-and-storage).
 A request whose socket peer is not loopback is refused with `host_only`, even when the
 listener is bound to `0.0.0.0`, so plain-HTTP network access never reaches product data. Host-local trust is the same OS-user boundary that already protects the
-database, credentials and Factory MCP. Anything forwarding network traffic
+database, credentials and AgentEasel MCP. Anything forwarding network traffic
 into loopback (an SSH tunnel, Tailscale Serve, a reverse proxy, the `pnpm dev`
 Vite proxy) extends that host-local trust and is not an approved-client path.
 
@@ -447,18 +447,18 @@ product data. Reporting installation is an approved-client product operation; it
 the same server-side installer as the host panel and accepts only a discovered target
 identifier, not a client-supplied filesystem path. [Trigger](studio.md#triggers) management is
 likewise an approved-client product operation: bodies carry typed Trigger fields only, never commands,
-flags, paths or environment, and every check runs the host's `gh` with Factory's fixed arguments. Factory MCP (`/mcp`), endpoint changes
+flags, paths or environment, and every check runs the host's `gh` with AgentEasel's fixed arguments. AgentEasel MCP (`/mcp`), endpoint changes
 (`PUT /api/connection`), host reauthorization (`POST /api/connection/authorize`, which
 retires the current context), changing **Generate Run titles**
 (`PUT /api/settings/run-titles`) and every [Chat control](chat-control.md) operation, reads
 included (`/api/chat-control/*`), remain `hostOnly`: report ingress
-therefore cannot become a bypass into general APIs, and the T3 grant never leaves the
+therefore cannot become a bypass into general APIs, and the T3 Code grant never leaves the
 host. `POST /api/connection/authorization/open` is the one connection mutation an
 approved client may call: it only reopens a pending approval or starts one for the
 saved endpoint in the host's browser, and never changes a ready or incompatible grant
-(see [T3 connection](t3-integration.md#authorizing)). Its
+(see [T3 Code connection](t3-integration.md#authorizing)). Its
 response is the ordinary `T3Connection` status; consent URLs, OAuth state, verifier
-and tokens stay on the Factory host. The remote UI hides host-only controls, and the server enforces that boundary independently.
+and tokens stay on the AgentEasel host. The remote UI hides host-only controls, and the server enforces that boundary independently.
 
 ## Client identity, approval and revocation
 
@@ -469,14 +469,14 @@ also closes open sockets. IP address, reachability, `Origin` and the client-chos
 are never authority. Pending requests expire after 15 minutes and at most ten wait.
 Last-seen activity never revives a revoked client.
 
-This boundary is separate from Factory-to-T3 OAuth (host-only credentials in
+This boundary is separate from Factory-to-T3 Code OAuth (host-only credentials in
 `credentials/`) and from exact-execution report validation, which are unchanged.
 
 ## Transport security
 
 Secure remote access uses either:
 
-- **Factory's own authority** (default): a P-256 CA
+- **AgentEasel's own authority** (default): a P-256 CA
   (ten years) and a server leaf (397 days, renewed 30 days before expiry or when the
   machine's names change) with certificates covering loopback, every
   non-internal interface address, `<hostname>.local` and `allowedHosts`. Keys live in
@@ -490,7 +490,7 @@ by fingerprint. Requests run in the Electron main process over Node TLS with tha
 the only trust anchor, while hostname checks remain mandatory for every pinned issuer,
 including public roots. A changed LAN address must appear on the server certificate;
 restart the server to reissue its leaf after interface changes. Browsers rely
-on the OS trust store, so they need the Factory CA installed or a provided certificate.
+on the OS trust store, so they need the AgentEasel CA installed or a provided certificate.
 
 ## Protocol compatibility
 
@@ -505,7 +505,7 @@ read the fields and a protocol 27 client needs a server that sends them, so each
 gate naming the peer to update. Existing approvals, credentials and stored data carry forward.
 
 Protocol 25 removes the `WatchAppearance` live RPC and `ClientScope.appearanceSource` because
-custom color themes are configured per device rather than polled from T3. Protocol 24 and older
+custom color themes are configured per device rather than polled from T3 Code. Protocol 24 and older
 clients would subscribe to the removed RPC, and protocol 24 servers do not match this contract;
 both sides are refused at handshake and told to update. Existing approvals and credentials carry
 forward, and migration `125` drops the retired `appearance_snapshot` table on startup.
@@ -582,7 +582,7 @@ about the Run: its Block id and Block name are `null`, in navigation matters and
 attention. Protocol 15 kept protocol 14 clients working, since they ignore the added fields and leave
 an unknown attention kind out before reading its `null` Block id; protocol 16 refuses them.
 Protocol 14 dropped the appearance grant from theme-color presentations and sources: colors come from
-`t3_theme_read` over the T3 connection. Protocol 13 let an Agent have no execution settings (`execution` is `null`),
+`t3_theme_read` over the T3 Code connection. Protocol 13 let an Agent have no execution settings (`execution` is `null`),
 required the `execution` key on Agent create and save, and added Agent and Flow export and import
 ([definition export](studio.md#definition-export)).
 Every compatible server therefore serves the Studio live subscription (`WatchStudio`) and names the
@@ -622,7 +622,7 @@ the server descriptor (protocol range and application release, `source` for sour
 runs) so clients decide before showing product screens. Raise the protocol for any
 change a peer must understand, and the minimum only when older peers can no longer
 interoperate safely; application releases never decide compatibility. This is
-separate from T3 capability checks.
+separate from T3 Code capability checks.
 
 ## Desktop security
 
@@ -642,6 +642,6 @@ saved settings are kept aside rather than silently reused.
 `FACTORY_DESKTOP_USER_DATA` selects a disposable profile for probes, as `FACTORY_HOME`
 selects server data.
 
-The Factory CA is not name-constrained: other processes under the host account, including T3 workloads, can read its key. Browser system-wide trust therefore extends beyond Factory; the desktop's app-scoped pin leaves the system trust store unchanged. Local approvals share the host account's trust boundary.
+The AgentEasel CA is not name-constrained: other processes under the host account, including T3 Code workloads, can read its key. Browser system-wide trust therefore extends beyond AgentEasel; the desktop's app-scoped pin leaves the system trust store unchanged. Local approvals share the host account's trust boundary.
 
 The ten-slot pending queue is an availability limit: peers may fill it until requests expire or are denied, while approved clients continue to operate. A certificate SAN does not authorize an HTTP Host name; add desired `.local` or tailnet names to `allowedHosts` as well.

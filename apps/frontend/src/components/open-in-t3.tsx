@@ -25,7 +25,7 @@ export function OpenInT3({
     return (
       <Button asChild size="sm" className={cn("w-fit", className)}>
         <a href={href} target="_blank" rel="noreferrer">
-          Open in T3
+          Open in T3 Code
           <ExternalLink aria-hidden className="size-3" strokeWidth={1.75} />
         </a>
       </Button>
@@ -36,7 +36,7 @@ export function OpenInT3({
       trailingIcon={ExternalLink}
       className={cn("w-fit shrink-0 whitespace-nowrap", className)}
     >
-      Open in T3
+      Open in T3 Code
     </TextLink>
   );
 }

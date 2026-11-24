@@ -32,10 +32,10 @@ const badges: Record<
 const footerText: Record<ConnectionPresentation, string> = {
   ready: "",
   loading: "",
-  "load-error": "T3 status unavailable",
-  unavailable: "T3 disconnected",
-  "authorization-required": "T3 needs authorization",
-  incompatible: "T3 version incompatible",
+  "load-error": "T3 Code status unavailable",
+  unavailable: "T3 Code disconnected",
+  "authorization-required": "T3 Code needs authorization",
+  incompatible: "T3 Code version incompatible",
 };
 
 /** Sidebar footer text beside the Settings dot, so a non-connected state never relies on color. */

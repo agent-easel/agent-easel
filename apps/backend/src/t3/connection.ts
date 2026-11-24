@@ -88,8 +88,8 @@ export interface T3Session {
 }
 /** The answer's JSON; a T3 error is a refusal and a missing answer is outside the contract. */
 export function structured(answer: T3ToolAnswer): unknown {
-  if (answer.isError) throw new T3Failure("refused", "T3 tool returned isError");
-  if (answer.content === undefined) throw new Error("T3 tool returned no structured JSON");
+  if (answer.isError) throw new T3Failure("refused", "T3 Code tool returned isError");
+  if (answer.content === undefined) throw new Error("T3 Code tool returned no structured JSON");
   return answer.content;
 }
 

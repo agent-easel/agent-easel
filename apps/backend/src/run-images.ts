@@ -30,9 +30,9 @@ import { now } from "./time.ts";
 /** Staged images no Run references are swept after this age, counted from their first upload. */
 const STAGING_LIFETIME_MS = 24 * 60 * 60_000;
 const STORAGE_FAILURE =
-  "Factory could not store the image on disk. Check the free space of the Factory data home and retry.";
+  "AgentEasel could not store the image on disk. Check the free space of the AgentEasel data home and retry.";
 
-export const RUN_IMAGE_MISSING = "Run image missing from Factory storage";
+export const RUN_IMAGE_MISSING = "Run image missing from AgentEasel storage";
 
 const sha256Hex = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
 
@@ -376,7 +376,7 @@ export function stagedManifestProblem(
         missing.push({
           code: "missing_images",
           path: `images.${image.sha256}`,
-          message: `${image.name} is not uploaded to Factory.`,
+          message: `${image.name} is not uploaded to AgentEasel.`,
         });
       else if (row.mime_type !== image.mimeType || row.size_bytes !== image.sizeBytes)
         mismatched.push({

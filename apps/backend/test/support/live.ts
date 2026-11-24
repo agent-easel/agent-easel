@@ -23,7 +23,7 @@ import {
   type StudioLiveMessage,
 } from "@agent-easel/contracts";
 import { FactoryLive } from "@agent-easel/contracts/live-rpc";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import type { LiveStreams, makeLiveStreams } from "../../src/live-streams.ts";
 import { assertOk } from "./domain-setup.ts";
 
@@ -118,7 +118,7 @@ export function appliedStudio(
 }
 
 /** Studio's definitions as the public Agent, Flow and Trigger list reads return them. */
-export const publicStudio = async (factory: Factory): Promise<StudioDefinitions> => ({
+export const publicStudio = async (factory: AgentEasel): Promise<StudioDefinitions> => ({
   agents: assertOk(await factory.listAgents()),
   flows: assertOk(await factory.listFlows()),
   triggers: assertOk(await factory.listTriggers()),
@@ -182,7 +182,7 @@ export async function liveClient(context: TestContext, endpoint: LiveEndpoint) {
 }
 
 /** The factory's public reads, for live streams built over a replaced read. */
-export const liveReads = (factory: Factory): Parameters<typeof makeLiveStreams>[1] => ({
+export const liveReads = (factory: AgentEasel): Parameters<typeof makeLiveStreams>[1] => ({
   getConnection: () => Effect.promise(() => factory.getConnection()),
   listRunNavigation: () => Effect.promise(() => factory.listRunNavigation()),
   getRun: (id) => Effect.promise(() => factory.getRun(id)),

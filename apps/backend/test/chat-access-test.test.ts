@@ -84,8 +84,8 @@ it("the access test mentions every allowed user in each granting channel and rec
   });
   const mentions = `<@${PARTICIPANT_ID}> <@${SECOND_USER}>`;
   expect(discord.created.map(({ content }) => content)).toEqual([
-    `${mentions}, reply here to confirm you can use Factory.`,
-    `${mentions}, mention ${BOT_MENTION} in this post to confirm you can use Factory.`,
+    `${mentions}, reply here to confirm you can use AgentEasel.`,
+    `${mentions}, mention ${BOT_MENTION} in this post to confirm you can use AgentEasel.`,
   ]);
   expect(discord.created[0]!.channelId).toBe(ALLOWED_CHANNEL);
   // Only the allowed users are pinged, never a role or everyone.
@@ -94,7 +94,7 @@ it("the access test mentions every allowed user in each granting channel and rec
     Array(2).fill({ allowed_mentions }),
   );
   expect(discord.requested("POST", FORUM_POSTS).map((request) => request.body)).toMatchObject([
-    { name: "Factory access test", message: { allowed_mentions } },
+    { name: "AgentEasel access test", message: { allowed_mentions } },
   ]);
   // A channel that grants no Project admits no reply, so the test asks nobody there.
   expect(
@@ -330,7 +330,7 @@ it("an Access save during the access test's channel lookup applies to the post t
   assert(sent.ok, JSON.stringify(sent));
   expect(discord.requested("POST", POSTS).map((request) => request.body)).toEqual([
     {
-      content: `<@${PARTICIPANT_ID}>, reply here to confirm you can use Factory.`,
+      content: `<@${PARTICIPANT_ID}>, reply here to confirm you can use AgentEasel.`,
       allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
     },
   ]);
@@ -382,7 +382,7 @@ it("an Access save between the access test's split messages applies to the later
     content: `${users
       .slice(90)
       .map((userId) => `<@${userId}>`)
-      .join(" ")}, reply here to confirm you can use Factory.`,
+      .join(" ")}, reply here to confirm you can use AgentEasel.`,
     allowed_mentions: { parse: [], users: users.slice(90) },
   });
 });

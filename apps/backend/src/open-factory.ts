@@ -14,7 +14,7 @@ import type { RunUpdateSubscription } from "./run-updates.ts";
 import type { LiveStreams } from "./live-streams.ts";
 import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
-export interface Factory extends FactoryOperations {
+export interface AgentEasel extends FactoryOperations {
   readonly runtime: { [K in keyof RuntimeReports]: (input: unknown) => Promise<RuntimeReply> };
   /** Factory MCP's text-only Start through the same Start operation as `startRun`. */
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
@@ -63,7 +63,7 @@ function promiseOperations<T extends Record<keyof T, EffectOperation>, R>(
 }
 
 /** Promise compatibility for Node callers; business logic executes in FactoryService. */
-export async function openFactory(options: FactoryOptions): Promise<Factory> {
+export async function openFactory(options: FactoryOptions): Promise<AgentEasel> {
   const runtime = ManagedRuntime.make(
     options.clock
       ? Layer.provideMerge(factoryLayer(options), Layer.succeed(Clock.Clock)(options.clock))
