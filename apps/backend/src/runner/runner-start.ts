@@ -12,6 +12,7 @@ import type {
   Result,
   RunDetail,
   RunDefinitions,
+  RunImage,
   StartRunInput,
   T3Connection,
   ValidationIssue,
@@ -20,10 +21,12 @@ import {
   executionForProject,
   flowReadiness,
   isCanonicalTimestamp,
+  isSha256Hex,
   isStartTitleProvenance,
   promptText,
   promptTitle,
   readinessAgent,
+  RUN_IMAGE_LIMIT,
   TASK_TITLE_LIMIT,
   validateStartPrompt,
   type StartPrompt,
@@ -378,6 +381,53 @@ export function openRunnerStart(
       return yield* getRun(accepted.value);
     });
   }
+  function stagedManifest(
+    references: unknown,
+    alreadyAccepted: boolean,
+  ): Effect.Effect<Result<RunImage[]>, unknown> {
+    return Effect.gen(function* () {
+      if (references === undefined) return { ok: true as const, value: [] };
+      const issue = (code: string, path: string, message: string) =>
+        failure("validation", "Check the Run's images.", [{ code, path, message }]);
+      if (!Array.isArray(references))
+        return issue("start_images", "images", "Send images as a list of {sha256, name}.");
+      if (references.length > RUN_IMAGE_LIMIT)
+        return issue("image_count", "images", `Attach at most ${RUN_IMAGE_LIMIT} images.`);
+      const manifest: RunImage[] = [];
+      for (const [index, reference] of references.entries()) {
+        const { sha256, name } = (reference ?? {}) as Record<string, unknown>;
+        if (typeof name !== "string" || !isSha256Hex(sha256))
+          return issue(
+            "start_images",
+            `images.${index}`,
+            "Each image needs its lowercase hex sha256 and a name.",
+          );
+        const staged = yield* alreadyAccepted
+          ? images.getStagedImageRecord(sha256)
+          : images.getRunImageInfo(sha256);
+        if (!staged.ok && alreadyAccepted)
+          return failure(
+            "conflict",
+            "This Start key was already accepted with different content.",
+            [
+              {
+                code: "start_key_conflict",
+                path: "requestId",
+                message: "This Start request was accepted with other content.",
+              },
+            ],
+          );
+        if (!staged.ok)
+          return issue(
+            "image_not_staged",
+            `images.${index}`,
+            `${name} is not staged in Factory. Stage it with factory_stage_run_image and retry.`,
+          );
+        manifest.push({ imageId: `image-${index + 1}`, name, ...staged.value });
+      }
+      return { ok: true as const, value: manifest };
+    });
+  }
   /**
    * A text-only Start whose title and creation time are derived as the Start form derives them.
    * A retry of an accepted request reuses its stored creation time, so it keeps the same content.
@@ -387,15 +437,27 @@ export function openRunnerStart(
     authorization?: StartAuthorization,
   ): Effect.Effect<Result<RunDetail>, unknown> {
     return Effect.gen(function* () {
-      const { requestId, projectId, flowId, input, confirmCompletedIssues } = (
-        rawInput && typeof rawInput === "object" ? rawInput : {}
-      ) as Record<string, unknown>;
+      const {
+        requestId,
+        projectId,
+        flowId,
+        input,
+        confirmCompletedIssues,
+        title: manualTitle,
+        images: references,
+      } = (rawInput && typeof rawInput === "object" ? rawInput : {}) as Record<string, unknown>;
       if (typeof input !== "string")
         return failure("validation", "Send the Run's prompt as text.", [
           { code: "start_input", path: "input", message: "Send the prompt as text." },
         ]);
+      if (manualTitle !== undefined && (typeof manualTitle !== "string" || !manualTitle.trim()))
+        return failure("validation", "Give the Run a title or omit it.", [
+          { code: "run_title", path: "title", message: "Send a non-empty title or omit it." },
+        ]);
       const accepted =
         typeof requestId === "string" ? yield* store.acceptedStart(requestId) : undefined;
+      const manifest = yield* stagedManifest(references, accepted !== undefined);
+      if (!manifest.ok) return manifest;
       return yield* start(
         {
           requestId,
@@ -403,9 +465,9 @@ export function openRunnerStart(
           flowId,
           confirmCompletedIssues,
           segments: [{ type: "text", text: input }],
-          images: [],
-          title: promptTitle(input) ?? "",
-          titleProvenance: "automatic",
+          images: manifest.value,
+          title: manualTitle?.trim() ?? promptTitle(input) ?? "",
+          titleProvenance: manualTitle === undefined ? "automatic" : "manual",
           createdAt: accepted?.created_at ?? (yield* now),
         },
         authorization,

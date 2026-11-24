@@ -193,6 +193,13 @@ export const makeRunImages = (directory: string) =>
       });
     }
 
+    function getStagedImageRecord(sha256: string): Effect.Effect<Result<RunImageInfo>, unknown> {
+      return Effect.gen(function* () {
+        const row = isSha256Hex(sha256) ? yield* stagedRow(sha256) : undefined;
+        return row ? { ok: true as const, value: info(row) } : unavailable();
+      });
+    }
+
     function storedBytes(sha256: string): Effect.Effect<StoredImageBytes, unknown> {
       return Effect.tryPromise({
         try: () =>
@@ -336,6 +343,7 @@ export const makeRunImages = (directory: string) =>
     return {
       stageRunImage,
       getRunImageInfo,
+      getStagedImageRecord,
       getRunImage,
       listEligibleRunImages,
       deleteRunImages,
