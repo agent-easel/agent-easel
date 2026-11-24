@@ -2,14 +2,11 @@ import { OfflineError, protocolHeaders, transport, unreachableHeader } from "./t
 import {
   AGENT_CREATE_WINDOW_MS,
   agentOperations,
-  featureUsageOperations,
-  type ReportedFeature,
   definitionImportOperations,
   flowOperations,
   projectOperations,
   connectionOperations,
   runOperations,
-  privacyOperations,
   chatControlOperations,
   triggerOperations,
   clientAccessOperations,
@@ -125,16 +122,6 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
   return calls as OperationCalls<Definitions>;
 }
 
-export function reportFeature(feature: ReportedFeature): void {
-  const definition = featureUsageOperations.reportFeatureUsed;
-  void Promise.resolve()
-    .then(() =>
-      factoryRequest(operationPath(definition), requestInit(definition, feature), false, fetch),
-    )
-    .then((response) => response.body?.cancel())
-    .catch(() => undefined);
-}
-
 export const api = {
   ...operationCalls(agentOperations, false, {
     reserveAgentCreate: 5_000,
@@ -146,7 +133,6 @@ export const api = {
   ...operationCalls(projectOperations),
   ...operationCalls(connectionOperations),
   ...operationCalls(runOperations),
-  ...operationCalls(privacyOperations),
   ...operationCalls(chatControlOperations),
   ...operationCalls(triggerOperations),
   ...operationCalls(clientAccessOperations),

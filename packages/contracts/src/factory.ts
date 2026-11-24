@@ -4,7 +4,6 @@ import { definitionImportOperations } from "./portable-document.ts";
 import { projectOperations, projectServerOperations } from "./project.ts";
 import { connectionOperations } from "./connection.ts";
 import { runOperations } from "./run.ts";
-import { privacyOperations } from "./privacy.ts";
 import { chatControlOperations } from "./chat-control.ts";
 import {
   type ClientAccessState,
@@ -15,7 +14,6 @@ import {
 import type { FacadeOperations } from "./operation.ts";
 import type { Result } from "./result.ts";
 import { serverUpdateOperations } from "./update.ts";
-import { featureUsageOperations } from "./feature-usage.ts";
 import { triggerOperations } from "./trigger.ts";
 
 /** Every HTTP operation, including those answered by the server around the facade. */
@@ -27,13 +25,11 @@ export const httpOperations = {
   ...projectServerOperations,
   ...connectionOperations,
   ...runOperations,
-  ...privacyOperations,
   ...chatControlOperations,
   ...triggerOperations,
   ...clientAccessOperations,
   ...clientAccessServerOperations,
   ...serverUpdateOperations,
-  ...featureUsageOperations,
 };
 
 /** The Factory facade: derived from the operation definitions, plus operations HTTP does not reach. */

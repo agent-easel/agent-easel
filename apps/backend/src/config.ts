@@ -21,7 +21,6 @@ export interface Configuration {
   readonly port: number;
   readonly allowedHosts?: readonly string[];
   readonly remoteAccess?: RemoteAccessConfiguration;
-  readonly telemetryEnabled: boolean;
 }
 
 export const defaultRemotePort = 4312;
@@ -219,13 +218,9 @@ export async function loadConfiguration(
   const credentialsDirectory = await privateCredentialsDirectory(home);
   const saved = await savedConfiguration(home);
   const { host, port } = binding(env, saved);
-  const telemetryEnabled = "telemetryEnabled" in saved ? saved.telemetryEnabled : true;
-  if (typeof telemetryEnabled !== "boolean")
-    throw new Error("config.json telemetryEnabled must be a boolean.");
   return {
     allowedHosts: allowedHosts(env, saved),
     remoteAccess: remoteAccess(env, saved),
-    telemetryEnabled,
     home: resolve(home),
     databasePath: join(home, "factory.sqlite"),
     credentialsDirectory,

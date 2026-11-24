@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-await test("Git deployment is limited to main, ingest routes use PostHog EU and the old domain keeps its ingest route", () => {
+await test("Git deployment is limited to main and the old domain redirects every path", () => {
   // Arrange
   const file = new URL("../vercel.json", import.meta.url);
 
@@ -16,20 +16,13 @@ await test("Git deployment is limited to main, ingest routes use PostHog EU and 
   assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false, "**": false });
   assert.deepEqual(config.redirects, [
     {
-      source: "/:path((?!ingest(?:/|$)).*)",
+      source: "/:path*",
       has: [{ type: "host", value: "t3factory.app" }],
-      destination: "https://agenteasel.app/:path",
+      destination: "https://agenteasel.app/:path*",
       permanent: true,
     },
   ]);
-  assert.deepEqual(config.rewrites, [
-    {
-      source: "/ingest/static/:path*",
-      destination: "https://eu-assets.i.posthog.com/static/:path*",
-    },
-    { source: "/ingest/batch/", destination: "https://eu.i.posthog.com/batch/" },
-    { source: "/ingest/:path*", destination: "https://eu.i.posthog.com/:path*" },
-  ]);
+  assert.equal(config.rewrites, undefined);
 });
 
 function buildLanding(context, env) {

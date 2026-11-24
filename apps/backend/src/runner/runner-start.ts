@@ -50,7 +50,6 @@ import { fingerprint } from "../fingerprint.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { now } from "../time.ts";
 import { workerPromptText, type RunImages } from "../run-images.ts";
-import { telemetryCount, type Telemetry } from "../telemetry.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
@@ -249,7 +248,6 @@ function prepareStartWork(definitions: RunDefinitions, prompt: StartPrompt) {
     return failure("validation", "The Agent prompt exceeds T3 Code's first-message limit.");
   return { ok: true as const };
 }
-type RunSource = "manual" | "trigger" | "chat_control" | "mcp";
 
 export function openRunnerStart(
   store: RunStore,
@@ -263,32 +261,11 @@ export function openRunnerStart(
   planTitleGeneration: RunnerTitleGeneration["planTitleGeneration"],
   followTitleGeneration: (runId: string) => Effect.Effect<void, unknown>,
   images: RunImages,
-  telemetry: Telemetry,
 ) {
   const { isClosed, drive, getRun } = lifecycle;
-  const recordStarted = Effect.fn(function* (
-    flow: FlowDraft,
-    source: RunSource,
-    hasImages: boolean,
-  ) {
-    if (telemetry.enabled) {
-      const { blocks } = flow.graph;
-      const blockTypes = (["agent", "condition", "join", "wait", "subflow"] as const).filter(
-        (kind) => blocks.some((block) => block.kind === kind),
-      );
-      yield* telemetry.record("run.started", {
-        source,
-        flowScope: flow.projectId === null ? "global" : "project",
-        blockCount: telemetryCount(blocks.length + 1),
-        hasImages: hasImages,
-        blockTypes: [...blockTypes, "finish"],
-      });
-    }
-  });
   function start(
     rawInput: unknown,
     authorization?: StartAuthorization,
-    source: RunSource = "manual",
   ): Effect.Effect<Result<RunDetail>, unknown> {
     return Effect.gen(function* () {
       if (isClosed())
@@ -369,9 +346,6 @@ export function openRunnerStart(
       }
       const accepted = yield* store.acceptStart(plan, images.hasFile, authorization?.commit);
       if (!accepted.ok) return accepted;
-      yield* recordStarted(definitions.flow, source, prompt.value.images.length > 0).pipe(
-        Effect.when(Effect.succeed(accepted.value === runId)),
-      );
       // Deliberately detached from the response. The accepted Run survives a lost HTTP reply.
       // The title thread launches beside the Flow and never gates its dispatch.
       if (!isClosed()) {
@@ -471,7 +445,6 @@ export function openRunnerStart(
           createdAt: accepted?.created_at ?? (yield* now),
         },
         authorization,
-        authorization?.triggerIssue ? "trigger" : authorization ? "chat_control" : "mcp",
       );
     });
   }

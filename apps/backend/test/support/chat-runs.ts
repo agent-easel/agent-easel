@@ -53,16 +53,9 @@ async function operating(
  * collaborator are allowed in the allowed channel for the prepared Project, with the threads of
  * `conversing`. The model answers "OK" unless scripted.
  */
-export async function runConversation(
-  c: TestContext,
-  shape?: ReadyFlowShape,
-  telemetry?: NonNullable<Parameters<typeof prepared>[2]>["telemetry"],
-) {
+export async function runConversation(c: TestContext, shape?: ReadyFlowShape) {
   const worlds = await chatWorlds(c);
-  const fixture = await prepared(c, shape, {
-    discordApiUrl: worlds.discord.apiUrl,
-    ...(telemetry ? { telemetry } : {}),
-  });
+  const fixture = await prepared(c, shape, { discordApiUrl: worlds.discord.apiUrl });
   await operating(fixture.f, worlds, [fixture.project.id]);
   return { ...fixture, ...worlds };
 }

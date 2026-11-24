@@ -72,7 +72,6 @@ function launch(userData, debugPort, env = {}) {
       ...clean,
       FACTORY_DESKTOP_USER_DATA: userData,
       ...env,
-      FACTORY_TELEMETRY_ENABLED: "false",
     },
     stdio: ["ignore", log, log],
   });

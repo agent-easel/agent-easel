@@ -1,4 +1,3 @@
-import type { InstalledUpdateReceipt } from "@agent-easel/contracts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
@@ -12,7 +11,6 @@ import type { RuntimeReply } from "./runtime-types.ts";
 import type { RunListSource, RunReadSource } from "./run-read-source.ts";
 import type { RunUpdateSubscription } from "./run-updates.ts";
 import type { LiveStreams } from "./live-streams.ts";
-import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
 export interface AgentEasel extends FactoryOperations {
   readonly runtime: { [K in keyof RuntimeReports]: (input: unknown) => Promise<RuntimeReply> };
@@ -26,16 +24,8 @@ export interface AgentEasel extends FactoryOperations {
   ): Promise<Result<RunReadSource | null>>;
   /** Scoped live observation; each stream needs no services and runs on any Effect runtime. */
   readonly live: LiveStreams;
-  readonly telemetry: Pick<Telemetry, "enabled" | "disabledReason"> & {
-    setPreference(enabled: boolean): Promise<void>;
-  };
   setRuntimeBackendUrl(url: string): void;
   awaitWorkerTitles(): Promise<void>;
-  readonly recordTelemetry: <K extends EventName>(
-    event: K,
-    properties: EventProperties[K],
-  ) => Promise<void>;
-  recordClientUpdate(receipt: InstalledUpdateReceipt): Promise<Result<null>>;
   close(): Promise<void>;
 }
 
@@ -85,7 +75,6 @@ export async function openFactory(options: FactoryOptions): Promise<AgentEasel> 
     readRunByReference,
     setRuntimeBackendUrl,
     live,
-    telemetry,
     ...operations
   } = service;
   const facade = promiseOperations(runtime, operations);
@@ -100,14 +89,6 @@ export async function openFactory(options: FactoryOptions): Promise<AgentEasel> 
     readRunByReference: (reference) => runtime.runPromise(readRunByReference(reference)),
     setRuntimeBackendUrl,
     live,
-    recordTelemetry: (event, properties) => runtime.runPromise(telemetry.record(event, properties)),
-    telemetry: {
-      get enabled() {
-        return telemetry.enabled;
-      },
-      disabledReason: telemetry.disabledReason,
-      setPreference: (enabled) => runtime.runPromise(telemetry.setPreference(enabled)),
-    },
     close: () => (closing ??= runtime.dispose()),
   };
 }

@@ -18,10 +18,6 @@ const identity = buildIdentity(
   argv.includes("--release") ? "release" : argv.includes("--beta") ? "beta" : "development",
   argv[argv.indexOf("--beta") + 1],
 );
-const posthogPublicKey =
-  identity.channel === "development" ? undefined : process.env.FACTORY_POSTHOG_PUBLIC_KEY?.trim();
-if (posthogPublicKey && !/^phc_[a-z0-9]+$/i.test(posthogPublicKey))
-  throw new Error("FACTORY_POSTHOG_PUBLIC_KEY must be a public PostHog project token.");
 const electronVersion = desktop.devDependencies.electron;
 // Resolve the same fs-ext the backend depends on, never a separately chosen version.
 const backendRequire = createRequire(
@@ -60,7 +56,6 @@ await writeFile(
       productName: "AgentEasel",
       version: identity.version,
       factoryBuild: identity,
-      ...(posthogPublicKey ? { factoryPosthogPublicKey: posthogPublicKey } : {}),
       description: desktop.description,
       author: "AgentEasel",
       license: "UNLICENSED",

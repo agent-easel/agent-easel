@@ -50,13 +50,6 @@ export async function startHost(
       clock: time.clock,
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
-      telemetry: {
-        env: {
-          FACTORY_TELEMETRY_ENABLED: process.env.FACTORY_E2E_TELEMETRY === "off" ? "false" : "true",
-          FACTORY_POSTHOG_KEY: "fixture-analytics",
-        },
-        fetch: () => Promise.resolve(new Response(null, { status: 204 })),
-      },
       ...doubles,
     },
   );

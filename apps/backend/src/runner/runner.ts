@@ -29,7 +29,6 @@ import { makeWaitTimers } from "./runner-wait-timers.ts";
 import { openWorkerTitleDispatch } from "./worker-title-dispatch.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import type { RunImages } from "../run-images.ts";
-import type { Telemetry } from "../telemetry.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
 
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
@@ -47,7 +46,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   changes: LiveChanges,
   images: RunImages,
   titles: RunnerTitleGeneration,
-  telemetry: Telemetry,
 ) {
   const freshSnapshot = snapshots.fresh;
   const scope = yield* Effect.scope;
@@ -101,10 +99,9 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     titles.planTitleGeneration,
     followTitleGeneration,
     images,
-    telemetry,
   );
   const ownedThreads = openOwnedThreads(t3);
-  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads, telemetry);
+  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads);
   const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
   const actions = openRunActions({
     store,
@@ -114,7 +111,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     freshSnapshot,
     cancelWaitTimer: waitTimers.cancel,
     settlement,
-    telemetry,
     reconcileTitleGeneration: titles.reconcileTitleGeneration,
   });
 
