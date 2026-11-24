@@ -1,4 +1,4 @@
-import type { FlowBlock } from "@t3-factory/contracts";
+import type { FlowBlock } from "@agent-easel/contracts";
 
 import { fingerprint } from "../fingerprint.ts";
 

@@ -1,4 +1,4 @@
-import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
+import { clientAccessServerOperations, operationPath } from "@agent-easel/contracts";
 import { X509Certificate, createHash } from "node:crypto";
 import { Agent, request } from "node:https";
 import { isIP } from "node:net";

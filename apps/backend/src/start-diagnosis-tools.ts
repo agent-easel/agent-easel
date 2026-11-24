@@ -5,7 +5,7 @@ import type {
   Result,
   T3Connection,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { textResult, toolArguments } from "./authoring-tools.ts";
 
 export type StartDiagnosisOperations = Pick<

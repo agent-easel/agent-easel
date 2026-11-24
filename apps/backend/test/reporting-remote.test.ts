@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ReportingInstallation } from "@t3-factory/contracts";
+import type { ReportingInstallation } from "@agent-easel/contracts";
 import { remoteReporting } from "./support/remote-clients.ts";
 
 it("an approved client installs Factory MCP in the server's discovered harness home", async (c) => {

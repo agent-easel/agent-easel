@@ -2,7 +2,7 @@ import { solidPng, sha256Hex } from "./scenarios.ts";
 import { assert } from "@effect/vitest";
 import type { Factory, FactoryService } from "../../src/index.ts";
 import * as Effect from "effect/Effect";
-import type { PromptSegment, RunImage, StartRunInput } from "@t3-factory/contracts";
+import type { PromptSegment, RunImage, StartRunInput } from "@agent-easel/contracts";
 
 /** Red and blue screenshots share an original filename; green has its own. */
 export const screenshots = {

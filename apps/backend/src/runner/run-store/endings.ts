@@ -1,7 +1,7 @@
-import type { RunResult } from "@t3-factory/contracts";
+import type { RunResult } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID } from "@agent-easel/contracts";
 import { now } from "../../time.ts";
 import type { RunRow, StoredTarget } from "../runner-types.ts";
 import type { RunnerDatabase } from "./database.ts";

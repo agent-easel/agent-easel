@@ -1,4 +1,4 @@
-import type { FlowGraphInput } from "@t3-factory/contracts";
+import type { FlowGraphInput } from "@agent-easel/contracts";
 
 export interface JoinSlot {
   readonly sourceBlockId: string;

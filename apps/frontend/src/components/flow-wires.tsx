@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Trash2 } from "lucide-react";
-import type { FlowConnection } from "@t3-factory/contracts";
-import { wireRouteKey } from "@t3-factory/flow-layout";
+import type { FlowConnection } from "@agent-easel/contracts";
+import { wireRouteKey } from "@agent-easel/flow-layout";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

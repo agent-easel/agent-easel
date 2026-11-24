@@ -1,8 +1,8 @@
 import { exitDisplayName, studioExitLabel } from "../connection-label.ts";
 import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Workflow } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowDraft } from "@t3-factory/contracts";
-import type { CanvasBlock, CanvasDimensions } from "@t3-factory/flow-layout";
+import type { AgentDefinition, FlowBlock, FlowDraft } from "@agent-easel/contracts";
+import type { CanvasBlock, CanvasDimensions } from "@agent-easel/flow-layout";
 import { cn } from "@/lib/utils";
 import { TextLink } from "@/components/ui/text-link";
 import { JoinSourceList, joinExitCount, joinSources } from "./join-block.tsx";

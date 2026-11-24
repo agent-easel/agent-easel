@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DesktopState, FactoryDesktop } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopState, FactoryDesktop } from "@agent-easel/contracts/desktop-bridge";
 import { Button } from "@/components/ui/button";
 import { useUpgrade } from "../use-upgrade.ts";
 import { dayAndTime } from "../time-format.ts";

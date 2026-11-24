@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 
 /** How Studio and the Project picker name each Project availability. */

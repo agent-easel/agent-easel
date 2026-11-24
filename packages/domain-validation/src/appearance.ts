@@ -1,4 +1,4 @@
-import type { CustomThemePresentation } from "@t3-factory/contracts";
+import type { CustomThemePresentation } from "@agent-easel/contracts";
 import { presentThemeModes } from "./theme/palette-mapping.ts";
 import {
   resolveCustomThemeDefinition,

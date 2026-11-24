@@ -4,7 +4,7 @@ import type {
   RunDetail,
   RunNavigationEntry,
   RunSettlementWorker,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /** A pending attention matter of `kind` on `blockId`. */
 export const attention = (blockId: string, kind: RunAttention["kind"]): RunAttention => ({

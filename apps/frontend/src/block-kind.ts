@@ -1,6 +1,6 @@
 import { Bot, CornerDownLeft, Hourglass, Merge, Split, User, Workflow } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@t3-factory/contracts";
-import { joinSlots, type EffectiveExit, type ExitSource } from "@t3-factory/domain-validation";
+import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@agent-easel/contracts";
+import { joinSlots, type EffectiveExit, type ExitSource } from "@agent-easel/domain-validation";
 import { continuedThread } from "./flow-graph.ts";
 import { joinSummary } from "./components/join-block.tsx";
 import { waitDurationText } from "./wait-display.ts";

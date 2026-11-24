@@ -10,7 +10,7 @@ import type {
   UpdateAgentInput,
   UpdateRunTitleSettingInput,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { parseAgentExits } from "./block-exits.ts";
 import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
 

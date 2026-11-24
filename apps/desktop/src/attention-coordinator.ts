@@ -8,12 +8,12 @@ import {
   mattersNeedingOwner,
   type RunAttentionMatter,
   type RunNavigationEntry,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type {
   DesktopAlertSettings,
   DesktopRoute,
   NotificationPermission,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import {
   AttentionLedger,
   type AppearanceState,

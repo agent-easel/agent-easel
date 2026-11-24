@@ -2,14 +2,14 @@ import {
   flowGraphReferencesAgent,
   optionValue,
   resolveAgentModel,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
   AgentModelOptionDescriptor,
   AgentModelOptionValue,
   FlowDraft,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /** Saved Flows whose graph places `agentId`, in the list's order. */
 export function placingFlows(flows: readonly FlowDraft[], agentId: string): FlowDraft[] {

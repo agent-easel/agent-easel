@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
-import type { CommitImportInput, ImportResult, ImportReview } from "@t3-factory/contracts";
+import type { CommitImportInput, ImportResult, ImportReview } from "@agent-easel/contracts";
 import { ApiError } from "../src/api.ts";
 import { createDefinitionImport } from "../src/definition-import.ts";
 import { OfflineError } from "../src/transport.ts";

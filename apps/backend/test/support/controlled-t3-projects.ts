@@ -1,4 +1,4 @@
-import type { AgentEnvironment } from "@t3-factory/contracts";
+import type { AgentEnvironment } from "@agent-easel/contracts";
 import {
   T3Failure,
   type T3Endpoint,

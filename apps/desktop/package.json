@@ -1,5 +1,5 @@
 {
-  "name": "@t3-factory/desktop",
+  "name": "@agent-easel/desktop",
   "version": "0.11.0",
   "private": true,
   "description": "T3 Factory desktop application for macOS on Apple Silicon",
@@ -13,16 +13,16 @@
     "package": "node scripts/package.mjs"
   },
   "dependencies": {
-    "@t3-factory/backend": "workspace:*",
-    "@t3-factory/contracts": "workspace:*",
-    "@t3-factory/domain-validation": "workspace:*",
+    "@agent-easel/backend": "workspace:*",
+    "@agent-easel/contracts": "workspace:*",
+    "@agent-easel/domain-validation": "workspace:*",
     "effect": "4.1.2",
     "electron-updater": "6.8.11",
     "ws": "8.23.0"
   },
   "devDependencies": {
+    "@agent-easel/frontend": "workspace:*",
     "@electron/rebuild": "4.2.1",
-    "@t3-factory/frontend": "workspace:*",
     "@types/ws": "8.18.2",
     "electron": "45.4.1",
     "electron-builder": "26.18.0",

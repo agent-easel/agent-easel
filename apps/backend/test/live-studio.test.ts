@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { expect, it } from "@effect/vitest";
-import type { StudioLiveMessage } from "@t3-factory/contracts";
+import type { StudioLiveMessage } from "@agent-easel/contracts";
 import {
   assertOk,
   discoveredClones,

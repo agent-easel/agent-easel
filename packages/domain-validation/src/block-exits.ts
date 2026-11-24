@@ -8,7 +8,7 @@ import {
   type FlowGraphInput,
   type Result,
   type ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export type IssueReporter = (code: string, path: string, message: string) => void;
 

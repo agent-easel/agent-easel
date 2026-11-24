@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { JoinArrival, JoinDetail, JoinSummary } from "@t3-factory/contracts";
+import type { JoinArrival, JoinDetail, JoinSummary } from "@agent-easel/contracts";
 import { joinSourceText } from "../src/join-display.ts";
 
 const arrival = (exitName: string): JoinArrival => ({

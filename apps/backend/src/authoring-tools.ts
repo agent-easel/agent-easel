@@ -5,8 +5,8 @@ import type {
   FactoryOperations,
   FlowDraft,
   Result,
-} from "@t3-factory/contracts";
-import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@agent-easel/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 
 /** The definition operations Studio's API uses; authoring tools call nothing else. */

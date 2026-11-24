@@ -6,9 +6,9 @@ import type {
   ProjectCatalog,
   Result,
   RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { StartAuthorization } from "../runner/runner-start.ts";
-import { promptTitle } from "@t3-factory/domain-validation";
+import { promptTitle } from "@agent-easel/domain-validation";
 import {
   exceedsReviewLimit,
   type ActionOutcome,

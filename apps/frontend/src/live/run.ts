@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { applyRunChange, type RunDetail, type RunLiveMessage } from "@t3-factory/contracts";
+import { applyRunChange, type RunDetail, type RunLiveMessage } from "@agent-easel/contracts";
 import type { LiveScope } from "./owner.ts";
 import { useLiveScope } from "./live-connection.ts";
 

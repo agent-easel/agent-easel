@@ -5,8 +5,8 @@ import {
   type CreateFlowInput,
   type EndingOutput,
   type FlowGraphInput,
-} from "@t3-factory/contracts";
-import type { OwningProject } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import type { OwningProject } from "@agent-easel/domain-validation";
 import type { Factory } from "../../src/index.ts";
 import { assertOk, discoveredClones, sampleAgentInput } from "./domain-setup.ts";
 import { agentBlock, connection, flowInput, launchedWorkers } from "./scenarios.ts";

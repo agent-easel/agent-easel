@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import type { BlockExit } from "@t3-factory/contracts";
+import type { BlockExit } from "@agent-easel/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

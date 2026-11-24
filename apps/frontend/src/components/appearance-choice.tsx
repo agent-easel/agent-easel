@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Surface } from "@/components/ui/surface";
-import type { AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
+import type { AppearancePreference } from "@agent-easel/contracts/desktop-bridge";
 import { chooseAppearance, useAppearancePreference } from "../appearance.ts";
 import { SegmentedChoice } from "./segmented-choice.tsx";
 import { ProblemCard } from "./problem-card.tsx";

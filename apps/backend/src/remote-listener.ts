@@ -1,7 +1,7 @@
 import { createServer, type Server as HttpsServer } from "node:https";
 import type { Server } from "node:http";
 import { networkInterfaces } from "node:os";
-import type { RemoteAccessStatus, Result } from "@t3-factory/contracts";
+import type { RemoteAccessStatus, Result } from "@agent-easel/contracts";
 import type { Configuration, configurationWriter } from "./config.ts";
 import type { RemoteAccessControl } from "./access-routes.ts";
 import { listen, type Listener } from "./listener.ts";

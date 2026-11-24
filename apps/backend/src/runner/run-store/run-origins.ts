@@ -1,4 +1,4 @@
-import type { RunOrigin } from "@t3-factory/contracts";
+import type { RunOrigin } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 

@@ -5,8 +5,8 @@ import type {
   DiscordSettings,
   DiscordTokenChange,
   UpdateDiscordConnectionInput,
-} from "@t3-factory/contracts";
-import { validateDiscordPublicKey } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateDiscordPublicKey } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { TextLink } from "@/components/ui/text-link";
 import { Input } from "@/components/ui/input";

@@ -19,7 +19,7 @@ import {
   type PortableModelHint,
   type Result,
   type ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { validateCreateAgent, validateExecutionSettings, validateModelReference } from "./agent.ts";
 import { isRecord } from "./block-exits.ts";
 import { validateCreateFlow } from "./flow.ts";

@@ -10,13 +10,13 @@ import type {
   RunTitleSetting,
   StartTitleProvenance,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   optionAvailability,
   resolveAgentModel,
   validateUpdateRunTitleSetting,
-} from "@t3-factory/domain-validation";
-import type { StartPrompt } from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
+import type { StartPrompt } from "@agent-easel/domain-validation";
 import type { LaunchPayload, T3Threads } from "./t3/threads.ts";
 import type { T3ContractSnapshot } from "./t3/contract.ts";
 import { isT3Refusal } from "./t3/connection.ts";

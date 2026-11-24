@@ -1,5 +1,5 @@
 import type { RunSubflows } from "../run-subflows.ts";
-import type { RunAttention, SubflowInvocation } from "@t3-factory/contracts";
+import type { RunAttention, SubflowInvocation } from "@agent-easel/contracts";
 import { RunSubflowView } from "./run-subflow.tsx";
 import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
@@ -10,7 +10,7 @@ import {
   type RunBlock,
   type RunDetail,
   type RunTitleGeneration,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CircleCheck,
   CirclePause,

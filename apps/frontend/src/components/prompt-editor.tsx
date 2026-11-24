@@ -6,7 +6,7 @@ import {
   type Ref,
   type RefObject,
 } from "react";
-import type { PromptSegment, RunImage } from "@t3-factory/contracts";
+import type { PromptSegment, RunImage } from "@agent-easel/contracts";
 import { joinedSegments, type PlaceReferences } from "../run-draft.ts";
 import { cn } from "../lib/utils.ts";
 import { imageSize } from "../run-images.ts";

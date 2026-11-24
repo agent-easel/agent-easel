@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { FlowGraph, Result } from "@t3-factory/contracts";
+import type { FlowGraph, Result } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import { HttpServerResponse } from "effect/http";
 import { loadConfiguration } from "../src/config.ts";

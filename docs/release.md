@@ -19,7 +19,7 @@ pnpm desktop:package          # local build: base version + HEAD identity
 pnpm desktop:package:release  # clean checkout, release version, optional release feed
 pnpm desktop:package:beta 12  # clean checkout, beta build 12 of the next patch, optional feed
 pnpm desktop:probe /absolute/report.json
-pnpm --filter @t3-factory/desktop start   # stage, then run the shell from source output
+pnpm --filter @agent-easel/desktop start   # stage, then run the shell from source output
 ```
 
 `pnpm build` (and the quality gate) bundles `apps/desktop/build/` without native rebuild or network. Packaging rebuilds the native `fs-ext` addon for Electron in isolation; the workspace's Node binary must remain untouched so source operation and tests still work. Packaging needs Xcode Command Line Tools and network access for Electron
@@ -65,7 +65,7 @@ After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit 
 
 ### Landing page
 
-The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @t3-factory/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://t3factory.app/`.
+The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @agent-easel/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://t3factory.app/`.
 
 GitHub Actions owns the production deployment at `https://t3factory.app/`. The `landing` job runs after a successful `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. Beta builds leave the site unchanged. Use **Re-run failed jobs** when only the landing job failed.
 

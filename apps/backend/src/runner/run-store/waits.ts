@@ -1,6 +1,6 @@
 import { definitionsAtBlock } from "./run-definitions.ts";
-import type { WaitArrival } from "@t3-factory/contracts";
-import { handoffRecipients, WAIT_OUTPUT, waitDurationMs } from "@t3-factory/domain-validation";
+import type { WaitArrival } from "@agent-easel/contracts";
+import { handoffRecipients, WAIT_OUTPUT, waitDurationMs } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";

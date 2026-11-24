@@ -1,4 +1,4 @@
-import type { FlowWorkspace } from "@t3-factory/contracts";
+import type { FlowWorkspace } from "@agent-easel/contracts";
 import { ChevronDown, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

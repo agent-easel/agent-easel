@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import type { ArchivedRunMatch } from "@t3-factory/contracts";
+import type { ArchivedRunMatch } from "@agent-easel/contracts";
 import { Search, Unplug } from "lucide-react";
 import { api } from "../api.ts";
 import {

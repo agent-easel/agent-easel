@@ -1,4 +1,4 @@
-import type { FlowWorkspaceBase } from "@t3-factory/contracts";
+import type { FlowWorkspaceBase } from "@agent-easel/contracts";
 import type { GitAdapter } from "../../src/adapters/git.ts";
 
 /** Same-host Git without the host's `git`: every path is its own repository root. */

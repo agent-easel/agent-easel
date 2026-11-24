@@ -1,5 +1,5 @@
-import type { AppearanceColorToken, AppearanceModeResult } from "@t3-factory/contracts";
-import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
+import type { AppearanceColorToken, AppearanceModeResult } from "@agent-easel/contracts";
+import type { Appearance } from "@agent-easel/contracts/desktop-bridge";
 import {
   contrast,
   formatHex,

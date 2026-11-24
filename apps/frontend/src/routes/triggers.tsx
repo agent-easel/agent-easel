@@ -3,7 +3,7 @@ import type {
   TriggerCheckReply,
   TriggerDefinition,
   TriggerRepository,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";

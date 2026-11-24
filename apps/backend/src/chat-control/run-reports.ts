@@ -7,7 +7,7 @@ import {
   type FlowGraph,
   type RunAttention,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { runOverview } from "../runner/run-overview.ts";
 import { channelGrants, type Destination } from "./deliveries.ts";
 import { runSearch, type RunIdentity } from "./run-search.ts";

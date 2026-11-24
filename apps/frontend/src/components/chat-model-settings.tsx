@@ -4,8 +4,8 @@ import type {
   ChatModelProviderKind,
   ChatModelSettings,
   UpdateChatModelInput,
-} from "@t3-factory/contracts";
-import { validateChatModelBaseUrl } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateChatModelBaseUrl } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChoiceMenu } from "@/components/choice-menu";

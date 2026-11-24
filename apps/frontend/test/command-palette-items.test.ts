@@ -1,6 +1,6 @@
 import { Play } from "lucide-react";
 import { expect, it } from "vite-plus/test";
-import type { AgentDefinition } from "@t3-factory/contracts";
+import type { AgentDefinition } from "@agent-easel/contracts";
 import {
   paletteCatalog,
   paletteMatchesQuery,

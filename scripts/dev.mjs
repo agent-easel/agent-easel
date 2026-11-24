@@ -74,8 +74,8 @@ process.execve(
     "5000",
     "--names",
     "backend,frontend",
-    `pnpm --filter @t3-factory/backend ${productionData ? "dev:prod" : "dev"}`,
-    "pnpm --filter @t3-factory/frontend dev",
+    `pnpm --filter @agent-easel/backend ${productionData ? "dev:prod" : "dev"}`,
+    "pnpm --filter @agent-easel/frontend dev",
   ],
   env,
 );

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { RotateCcw, Upload } from "lucide-react";
-import type { CustomThemePresentation } from "@t3-factory/contracts";
-import { MAX_THEME_JSON_BYTES } from "@t3-factory/domain-validation";
+import type { CustomThemePresentation } from "@agent-easel/contracts";
+import { MAX_THEME_JSON_BYTES } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {

@@ -1,4 +1,4 @@
-import type { ChatActionOperation } from "@t3-factory/contracts";
+import type { ChatActionOperation } from "@agent-easel/contracts";
 
 export type RequesterKind = "human" | "bot";
 

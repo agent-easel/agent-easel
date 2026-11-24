@@ -4,7 +4,7 @@ import {
   agentCaptureBytes,
   readinessAgent,
   type CompositionDefinitions,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { readCurrentAgents, readFormerExitNames } from "./agent-revisions.ts";
 import { readCurrentFlows } from "./flow-revisions.ts";
 

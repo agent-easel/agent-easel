@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import type { RunImage, RunImageMimeType } from "@t3-factory/contracts";
-import { imageSignatureMime, RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
+import type { RunImage, RunImageMimeType } from "@agent-easel/contracts";
+import { imageSignatureMime, RUN_IMAGE_MAX_BYTES } from "@agent-easel/domain-validation";
 
 /**
  * Run draft image bytes, keyed by selected Factory server, draft and image. Metadata stays with

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { CapturedAgent, RunDefinitions } from "@t3-factory/contracts";
-import { executionForProject } from "@t3-factory/domain-validation";
+import type { CapturedAgent, RunDefinitions } from "@agent-easel/contracts";
+import { executionForProject } from "@agent-easel/domain-validation";
 import { readRunAgentRevisions, type AgentRevision } from "../../agent-revisions.ts";
 import { scopedGraph } from "./invocation-entry.ts";
 import type { ExecutionDefinitions } from "../runner-types.ts";

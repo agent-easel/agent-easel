@@ -1,6 +1,6 @@
 import type { TestContext } from "@effect/vitest";
 import type { Factory } from "../../src/index.ts";
-import type { BlockExit, FlowGraph } from "@t3-factory/contracts";
+import type { BlockExit, FlowGraph } from "@agent-easel/contracts";
 import { factoryHarness } from "./factory.ts";
 import {
   loadMigrationData,

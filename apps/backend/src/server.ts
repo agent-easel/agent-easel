@@ -23,12 +23,12 @@ import {
   LIVE_PATH,
   type ProtocolDescriptor,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   FACTORY_MINIMUM_PEER_PROTOCOL,
   FACTORY_PROTOCOL,
   RUN_IMAGE_MAX_BYTES,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { FactoryOptions } from "./factory-options.ts";
 import { openFactory, type Factory } from "./open-factory.ts";
 import { configurationWriter, type Configuration } from "./config.ts";

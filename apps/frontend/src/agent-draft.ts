@@ -12,12 +12,12 @@ import type {
   AgentProjectOverride,
   AgentProviderCapability,
   AgentModelCapability,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   buildOptions,
   validateCreateAgent,
   validateUpdateAgent,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { api } from "./api.ts";
 import { OfflineError } from "./transport.ts";
 import { randomId } from "./lib/ids.ts";

@@ -1,4 +1,4 @@
-import { optionAvailability, resolveAgentModel } from "@t3-factory/domain-validation";
+import { optionAvailability, resolveAgentModel } from "@agent-easel/domain-validation";
 import type { T3ProviderCapability } from "./t3/projects.ts";
 import { providerReporting } from "./reporting-drivers.ts";
 import type { VibeReportingLookup } from "./reporting-discovery.ts";
@@ -9,7 +9,7 @@ import type {
   AgentExecutionSettings,
   AgentSettingStatus,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * A save may not choose a provider T3 offers but Factory cannot take reports from, as Studio's

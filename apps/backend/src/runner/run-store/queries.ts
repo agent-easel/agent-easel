@@ -24,7 +24,7 @@ import {
   type RunDetail,
   type RunWorkspaceDetail,
   type TaskSummary,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { failure } from "../../result.ts";

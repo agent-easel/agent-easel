@@ -21,8 +21,8 @@ import {
   type RunLiveMessage,
   type StudioDefinitions,
   type StudioLiveMessage,
-} from "@t3-factory/contracts";
-import { FactoryLive } from "@t3-factory/contracts/live-rpc";
+} from "@agent-easel/contracts";
+import { FactoryLive } from "@agent-easel/contracts/live-rpc";
 import type { Factory } from "../../src/index.ts";
 import type { LiveStreams, makeLiveStreams } from "../../src/live-streams.ts";
 import { assertOk } from "./domain-setup.ts";

@@ -3,10 +3,10 @@ import {
   type LiveEnvelope,
   type OperationError,
   type RunViewLiveMessage,
-} from "@t3-factory/contracts";
-import type { LiveSession, LiveWatch, OpenLiveSession } from "@t3-factory/contracts/live-session";
+} from "@agent-easel/contracts";
+import type { LiveSession, LiveWatch, OpenLiveSession } from "@agent-easel/contracts/live-session";
 
-export type { LiveWatch, SubscriptionEvents } from "@t3-factory/contracts/live-session";
+export type { LiveWatch, SubscriptionEvents } from "@agent-easel/contracts/live-session";
 
 /**
  * `connecting`: no socket is open and none has failed since the window attached.

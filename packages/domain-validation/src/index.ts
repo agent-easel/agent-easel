@@ -7,7 +7,7 @@ import {
   type ProjectIcon,
   type ProjectIconColor,
   type StartTitleProvenance,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export const TASK_TITLE_LIMIT = 500;
 

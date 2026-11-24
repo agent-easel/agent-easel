@@ -1,6 +1,6 @@
 import type { ELK, ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
-import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
-import { CANVAS_COORD_MAX, isCanvasPosition } from "@t3-factory/domain-validation";
+import type { FlowBlock, FlowGraph } from "@agent-easel/contracts";
+import { CANVAS_COORD_MAX, isCanvasPosition } from "@agent-easel/domain-validation";
 import { exitRows, incomingIndex, wireRouteKey, type IncomingIndex } from "./graph.ts";
 
 export type LayoutBlock = FlowBlock & {

@@ -1,4 +1,4 @@
-import type { RunDetail, RunResult, WorkerProvenance } from "@t3-factory/contracts";
+import type { RunDetail, RunResult, WorkerProvenance } from "@agent-easel/contracts";
 
 export function targetsBlock(intent: RunDetail["intents"][number], blockId: string | null) {
   return intent.targetEndingId === null && intent.blockId === blockId;

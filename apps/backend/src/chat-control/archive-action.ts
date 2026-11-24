@@ -1,7 +1,7 @@
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { Result, RunDetail } from "@t3-factory/contracts";
+import type { Result, RunDetail } from "@agent-easel/contracts";
 import {
   exceedsReviewLimit,
   type ActionOutcome,

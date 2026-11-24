@@ -1,4 +1,4 @@
-import { CONDITION_ARRIVAL_PAGE_DEFAULT, CONDITION_ARRIVAL_PAGE_MAX } from "@t3-factory/contracts";
+import { CONDITION_ARRIVAL_PAGE_DEFAULT, CONDITION_ARRIVAL_PAGE_MAX } from "@agent-easel/contracts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
 const REJECTIONS: Readonly<Record<string, readonly [string, string]>> = {

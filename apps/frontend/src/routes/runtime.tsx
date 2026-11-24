@@ -1,6 +1,6 @@
 import { MutationGate } from "@/client-gate";
 import { useEffect, useId, useState } from "react";
-import type { ReportingInstallation } from "@t3-factory/contracts";
+import type { ReportingInstallation } from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { ProblemCard } from "../components/problem-card.tsx";

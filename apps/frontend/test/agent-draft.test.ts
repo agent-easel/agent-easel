@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { validateCreateAgent } from "@t3-factory/domain-validation";
+import { validateCreateAgent } from "@agent-easel/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { createShapedContent } from "../src/agent-draft.ts";
 import { comparedAgentLines } from "../src/components/studio-agents/agent-revision-panel.tsx";

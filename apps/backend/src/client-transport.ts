@@ -1,5 +1,5 @@
-import type { ProtocolCompatibility, ProtocolDescriptor } from "@t3-factory/contracts";
-import { protocolCompatibility } from "@t3-factory/domain-validation";
+import type { ProtocolCompatibility, ProtocolDescriptor } from "@agent-easel/contracts";
+import { protocolCompatibility } from "@agent-easel/domain-validation";
 
 /** Browser profiles hold their credential only in this HttpOnly cookie, never in script. */
 const credentialCookieName = "factory_client";

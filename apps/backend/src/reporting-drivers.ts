@@ -1,4 +1,4 @@
-import type { AgentProviderReporting } from "@t3-factory/contracts";
+import type { AgentProviderReporting } from "@agent-easel/contracts";
 import { HARNESS_PROFILES, type ReportingDriver } from "./harness-profiles.ts";
 
 export const isReportingDriver = (driverKind: unknown): driverKind is ReportingDriver =>

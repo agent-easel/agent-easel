@@ -4,7 +4,7 @@ import type {
   ProtocolDescriptor,
   RequestClientAccessInput,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * Factory client/server wire protocol. Raise `FACTORY_PROTOCOL` for any change a

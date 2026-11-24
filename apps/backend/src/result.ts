@@ -1,4 +1,4 @@
-import type { OperationError, Result, ValidationIssue } from "@t3-factory/contracts";
+import type { OperationError, Result, ValidationIssue } from "@agent-easel/contracts";
 
 export const failure = (
   code: OperationError["code"],

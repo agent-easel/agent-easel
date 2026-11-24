@@ -1,4 +1,4 @@
-import { LIVE_PATH } from "@t3-factory/contracts";
+import { LIVE_PATH } from "@agent-easel/contracts";
 import { WebSocket } from "ws";
 import type { ApiTarget } from "./protocol.ts";
 

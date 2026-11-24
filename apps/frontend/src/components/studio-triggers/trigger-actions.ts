@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { TriggerCheckReply, TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerCheckReply, TriggerDefinition } from "@agent-easel/contracts";
 import { ApiError } from "../../api.ts";
 import type { StudioDefinitions } from "../../studio-definitions.ts";
 import { currentSettings } from "../../trigger-review.ts";

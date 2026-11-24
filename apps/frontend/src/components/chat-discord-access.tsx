@@ -4,8 +4,8 @@ import type {
   DiscordSettings,
   FactoryProject,
   UpdateDiscordAccessInput,
-} from "@t3-factory/contracts";
-import { validateUpdateDiscordAccess } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateUpdateDiscordAccess } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

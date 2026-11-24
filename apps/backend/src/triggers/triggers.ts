@@ -12,7 +12,7 @@ import type {
   TriggerRepository,
   TriggerSave,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   mayStartFlow,
   validateCreateTrigger,
@@ -24,7 +24,7 @@ import {
   type TriggerPreviewSettings,
   type TriggerSettings,
   type TriggerUpdateSettings,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import {
   gitHubRepairGuidance,
   type GitHubAdapter,

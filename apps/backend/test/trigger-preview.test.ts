@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { TriggerPreview } from "@t3-factory/contracts";
+import type { TriggerPreview } from "@agent-easel/contracts";
 import { triggerChecked, triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,

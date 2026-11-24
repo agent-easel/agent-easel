@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import type { T3Threads } from "../t3/threads.ts";
 import type { RequestReportSettlement, RunStore } from "./run-store/run-store.ts";
 import { recoverOperation } from "./runner-effects.ts";

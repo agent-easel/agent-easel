@@ -1,7 +1,7 @@
 import { ProjectOption } from "./launch-picker-options.tsx";
 import { useMutationsAllowed } from "@/client-gate";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
-import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
+import type { FactoryProject, ProjectCatalog } from "@agent-easel/contracts";
 import { ChevronsUpDownIcon, RefreshCwIcon } from "lucide-react";
 import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";

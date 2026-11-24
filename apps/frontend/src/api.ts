@@ -22,7 +22,7 @@ import {
   type OperationParameterValues,
   type OperationError,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export class ApiError extends Error {
   constructor(readonly detail: OperationError) {

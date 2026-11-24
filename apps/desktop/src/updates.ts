@@ -1,6 +1,6 @@
 import { app } from "electron";
 import electronUpdater from "electron-updater";
-import type { ApplicationUpdate, UpdateChannel } from "@t3-factory/contracts";
+import type { ApplicationUpdate, UpdateChannel } from "@agent-easel/contracts";
 
 /** The track an installation follows until its user chooses one: the track of its own build. */
 export const buildChannel = (): UpdateChannel =>

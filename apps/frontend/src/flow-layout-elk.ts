@@ -1,10 +1,10 @@
 import type { ElkExtendedEdge, ElkNode, ElkPoint } from "elkjs/lib/elk-api.js";
-import type { FlowGraph } from "@t3-factory/contracts";
+import type { FlowGraph } from "@agent-easel/contracts";
 import {
   parseLayoutPositions,
   type FlowLayoutDimensions as LayoutDimensions,
   type FlowLayoutPositions,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import type { CanvasBlock } from "./flow-graph.ts";
 import type { CanvasFlow } from "./subflow-preview.ts";
 import type { Rect } from "./canvas-culling.ts";

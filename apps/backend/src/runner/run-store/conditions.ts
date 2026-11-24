@@ -3,8 +3,8 @@ import {
   CONDITION_OTHERWISE_ID,
   type ConditionSummary,
   type RunDefinitions,
-} from "@t3-factory/contracts";
-import { conditionStartReady, handoffRecipients } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { conditionStartReady, handoffRecipients } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { intactPayload } from "../../fingerprint.ts";

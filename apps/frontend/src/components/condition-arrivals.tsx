@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ConditionArrivalEvidence, RunDetail } from "@t3-factory/contracts";
+import type { ConditionArrivalEvidence, RunDetail } from "@agent-easel/contracts";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";

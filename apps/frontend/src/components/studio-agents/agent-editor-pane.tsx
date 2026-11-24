@@ -6,7 +6,7 @@ import type {
   AgentDefinition,
   FactoryProject,
   FlowDraft,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { ChevronRight, Copy, FolderGit2, MoreHorizontal, Unplug } from "lucide-react";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";

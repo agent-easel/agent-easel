@@ -7,7 +7,7 @@ import type {
   DesktopState,
   FactoryDesktop,
   NotificationPermission,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useDesktopState } from "../desktop-state.ts";

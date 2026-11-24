@@ -6,7 +6,7 @@ import type {
   PromptSegment,
   RunImage,
   StartRunInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { DraftImageStore, ImageUploads } from "../../src/draft-images.ts";
 import { createRunDraft } from "../../src/run-draft.ts";
 

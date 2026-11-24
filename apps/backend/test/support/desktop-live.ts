@@ -2,7 +2,7 @@ import type { TestContext } from "@effect/vitest";
 import { STATUS_CODES, type IncomingHttpHeaders } from "node:http";
 import { MessageChannel } from "node:worker_threads";
 import { WebSocketServer, type WebSocket } from "ws";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import type { ApprovedClient } from "../../../desktop/src/approved-client.ts";
 import { livePath, relayLive, type LivePort } from "../../../desktop/src/live-relay.ts";
 import { currentConnection, handshakeServer } from "./desktop-client.ts";

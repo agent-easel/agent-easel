@@ -1,5 +1,9 @@
-import type { RunBlock, RunDefinitions } from "@t3-factory/contracts";
-import { effectiveExits, exitsWithEndings, handoffRecipients } from "@t3-factory/domain-validation";
+import type { RunBlock, RunDefinitions } from "@agent-easel/contracts";
+import {
+  effectiveExits,
+  exitsWithEndings,
+  handoffRecipients,
+} from "@agent-easel/domain-validation";
 import { fingerprint } from "../fingerprint.ts";
 import type { ExecutionDefinitions } from "./runner-types.ts";
 import type { RuntimeReport } from "../runtime-types.ts";

@@ -1,6 +1,6 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
-import type { FactoryOperations, PortableDocument, Result } from "@t3-factory/contracts";
-import { OWNING_PROJECT_ID_LIMIT } from "@t3-factory/domain-validation";
+import type { FactoryOperations, PortableDocument, Result } from "@agent-easel/contracts";
+import { OWNING_PROJECT_ID_LIMIT } from "@agent-easel/domain-validation";
 import { answerDefinitionCall, fixIssuesNext, toolArguments } from "./authoring-tools.ts";
 import { MCP_ARGUMENTS_LIMIT_BYTES, mcpArgumentBytes } from "./http-support.ts";
 import { failure } from "./result.ts";

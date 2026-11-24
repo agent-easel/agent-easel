@@ -1,4 +1,4 @@
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerDefinition } from "@agent-easel/contracts";
 import { StatusBadge } from "../status-badge.tsx";
 
 /** How many Triggers a problem stops, as Studio's attention marks announce it. */

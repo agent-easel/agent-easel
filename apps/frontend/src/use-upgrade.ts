@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ApplicationUpdate, ServerUpdate, UpdateChannel } from "@t3-factory/contracts";
+import type { ApplicationUpdate, ServerUpdate, UpdateChannel } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
-import type { DesktopState } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopState } from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { OfflineError } from "./transport.ts";
 import { useDesktopState } from "./desktop-state.ts";

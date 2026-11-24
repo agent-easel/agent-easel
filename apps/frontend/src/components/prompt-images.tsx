@@ -7,8 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { Image as ImageIcon, X } from "lucide-react";
-import type { RunImage } from "@t3-factory/contracts";
-import { RUN_IMAGE_LIMIT, RUN_IMAGE_MIME_TYPES } from "@t3-factory/domain-validation";
+import type { RunImage } from "@agent-easel/contracts";
+import { RUN_IMAGE_LIMIT, RUN_IMAGE_MIME_TYPES } from "@agent-easel/domain-validation";
 import type { ImageRejection } from "../run-draft.ts";
 import { Button } from "./ui/button.tsx";
 import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "./ui/dialog.tsx";

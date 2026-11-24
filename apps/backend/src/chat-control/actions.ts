@@ -4,7 +4,7 @@ import type { JSONValue } from "ai";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { ChatActionOperation, ChatActionReconciliation } from "@t3-factory/contracts";
+import type { ChatActionOperation, ChatActionReconciliation } from "@agent-easel/contracts";
 import type { StartAuthorization } from "../runner/runner-start.ts";
 import { failure } from "../result.ts";
 import { newId } from "../ids.ts";

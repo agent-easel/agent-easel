@@ -2,7 +2,7 @@ import type {
   AgentModelCapability,
   AgentModelOptionDescriptor,
   AgentOptionChoice,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { T3ProviderCapability } from "./projects.ts";
 
 type PublishedDefault = { readonly default?: string | boolean };

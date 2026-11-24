@@ -1,4 +1,4 @@
-import type { RunDetail, WaitArrival, WaitDuration } from "@t3-factory/contracts";
+import type { RunDetail, WaitArrival, WaitDuration } from "@agent-easel/contracts";
 
 /** "1 minute", "36 hours"; a draft without a duration says so. */
 export function waitDurationText(duration: WaitDuration | null) {

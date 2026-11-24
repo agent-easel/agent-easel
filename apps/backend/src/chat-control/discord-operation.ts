@@ -14,7 +14,7 @@ import type {
   DiscordConnectionProblem,
   DiscordConnectionStatus,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { sqliteChatState } from "./chat-state.ts";

@@ -1,4 +1,4 @@
-import type { ConnectionState, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
+import type { ConnectionState, FlowWorkspace, T3Contract } from "@agent-easel/contracts";
 import type { T3ConnectionReason, T3Endpoint } from "./connection.ts";
 
 export interface T3ContractReader {

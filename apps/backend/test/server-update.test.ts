@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { ServerUpdate } from "@t3-factory/contracts";
+import type { ServerUpdate } from "@agent-easel/contracts";
 import { recordingUpdates, remoteServer } from "./support/remote-clients.ts";
 
 it("an approved client's install request reaches the server's updater", async (c) => {

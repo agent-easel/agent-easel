@@ -1,4 +1,4 @@
-import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
+import type { Appearance } from "@agent-easel/contracts/desktop-bridge";
 import { canonicalThemeColor, generateSeedColors } from "./t3-theme-generator.ts";
 
 const T3_THEME_ROLES = [

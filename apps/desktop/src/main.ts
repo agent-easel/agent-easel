@@ -32,7 +32,7 @@ import {
   type Result as OperationResult,
   type ServerUpdateAction,
   type UpdateChannel,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type {
   Appearance,
   AppearancePreference,
@@ -43,7 +43,7 @@ import type {
   DesktopRoute,
   DesktopState,
   FactoryDesktop,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
 import {
   factoryDataHome,

@@ -1,6 +1,6 @@
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
-import type { T3Connection } from "@t3-factory/contracts";
+import type { T3Connection } from "@agent-easel/contracts";
 import { KeyRound, LoaderCircle, Unplug } from "lucide-react";
 import { useClientScope } from "../client-scope.ts";
 import { Button } from "@/components/ui/button";

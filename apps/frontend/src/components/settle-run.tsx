@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
+import type { RunSettlementOutcome, RunSettlementWorker } from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { Button } from "./ui/button";

@@ -6,7 +6,7 @@ import {
   AUTHORING_DIMENSIONS,
   buildElkGraph,
   createFlowLayoutDimensions,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import {
   geometryGraph,
   joinGraph,

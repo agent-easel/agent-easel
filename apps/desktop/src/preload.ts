@@ -8,7 +8,7 @@ import {
   type DesktopRoute,
   type DesktopState,
   type FactoryDesktop,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { channels } from "./ipc.ts";
 
 contextBridge.exposeInMainWorld("factoryDesktop", {

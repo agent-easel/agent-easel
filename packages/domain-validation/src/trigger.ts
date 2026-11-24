@@ -5,7 +5,7 @@ import type {
   TriggerKind,
   TriggerSchedule,
   UpdateTriggerInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { invalid } from "./agent.ts";
 
 const TRIGGER_KINDS: readonly TriggerKind[] = ["github_issues"];

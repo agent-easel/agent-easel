@@ -1,4 +1,4 @@
-import type { RunBlock } from "@t3-factory/contracts";
+import type { RunBlock } from "@agent-easel/contracts";
 import type { WorkerThread } from "./worker-thread.ts";
 
 /** A failed, cancelled, interrupted or rolled-back run is an execution failure of its Block. */

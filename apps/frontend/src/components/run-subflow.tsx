@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RunDetail, SubflowInvocation, SubflowInvocationPage } from "@t3-factory/contracts";
+import type { RunDetail, SubflowInvocation, SubflowInvocationPage } from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import { useMutationsAllowed } from "@/client-gate";
 import { Button } from "@/components/ui/button";

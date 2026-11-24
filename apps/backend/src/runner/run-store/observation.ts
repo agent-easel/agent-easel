@@ -1,4 +1,4 @@
-import type { RunAttention, RunPullRequest } from "@t3-factory/contracts";
+import type { RunAttention, RunPullRequest } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as SqlClient from "effect/sql/SqlClient";

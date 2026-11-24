@@ -5,7 +5,7 @@ import type {
   SubflowInvocation,
   SubflowInvocationPath,
   SubflowPlacementSummary,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { api } from "./api.ts";
 import { selectExecutionTargets } from "./execution-focus.ts";
 import { placementKey } from "./subflow-preview.ts";

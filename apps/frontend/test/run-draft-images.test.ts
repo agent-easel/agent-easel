@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
+import { RUN_IMAGE_MAX_BYTES } from "@agent-easel/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { draftTitle } from "../src/run-draft.ts";
 import {

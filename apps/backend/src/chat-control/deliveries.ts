@@ -9,7 +9,7 @@ import type {
   ChatDeliveryProblem,
   Result,
   RetryChatDeliveryInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";

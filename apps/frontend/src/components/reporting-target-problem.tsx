@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import type { ReportingInstallation } from "@t3-factory/contracts";
+import type { ReportingInstallation } from "@agent-easel/contracts";
 import { providerName } from "../reporting-state.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 

@@ -6,7 +6,7 @@ import {
   type RunAttention,
   type RunNavigationEntry,
   type RunOrigin,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import { currentProgress } from "./current-report.ts";
 import type { RunnerDatabase } from "./database.ts";

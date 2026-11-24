@@ -1,4 +1,4 @@
-import type { RunDefinitions, RunImage } from "@t3-factory/contracts";
+import type { RunDefinitions, RunImage } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type { LaunchAttachment, LaunchPayload, T3Threads } from "../t3/threads.ts";
 import { isT3Refusal, type T3Target } from "../t3/connection.ts";

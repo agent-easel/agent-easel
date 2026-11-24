@@ -4,7 +4,7 @@ import type {
   Result,
   RunSettlementWorker,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { textResult } from "./authoring-tools.ts";
 import {
   UNTRUSTED_TEXT_NOTICE,

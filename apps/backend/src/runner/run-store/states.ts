@@ -1,4 +1,4 @@
-import type { RunBlock } from "@t3-factory/contracts";
+import type { RunBlock } from "@agent-easel/contracts";
 
 /** How a Block's state is stored: the six-value state of the shared contracts. */
 export type BlockState = RunBlock["state"];

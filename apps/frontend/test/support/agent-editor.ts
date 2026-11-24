@@ -1,5 +1,5 @@
 import { vi } from "vite-plus/test";
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition } from "@agent-easel/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 import { capabilities, savedAgent } from "./agent-draft.ts";

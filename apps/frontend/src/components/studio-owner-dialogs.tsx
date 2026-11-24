@@ -4,7 +4,7 @@ import type {
   FactoryProject,
   FlowDraft,
   FlowDuplicatePlanAgent,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Bot, ChevronRight, Copy, Link, Workflow } from "lucide-react";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";

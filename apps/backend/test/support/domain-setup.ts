@@ -11,8 +11,8 @@ import {
 import { runFactoryProcess } from "./factory-process.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { fileURLToPath } from "node:url";
-import type { AgentDefinition, FlowGraphInput } from "@t3-factory/contracts";
-import type { OwningProject } from "@t3-factory/domain-validation";
+import type { AgentDefinition, FlowGraphInput } from "@agent-easel/contracts";
+import type { OwningProject } from "@agent-easel/domain-validation";
 import { DatabaseSync } from "node:sqlite";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";

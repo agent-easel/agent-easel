@@ -5,7 +5,7 @@ import type {
   CapturedAgent,
   FlowBlock,
   FlowGraph,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { factoryHarness } from "./factory.ts";
 import {
   loadMigrationData,

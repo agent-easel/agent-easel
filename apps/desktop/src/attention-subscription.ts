@@ -1,8 +1,12 @@
 import { Layer } from "effect";
 import { Socket } from "effect/socket";
-import { LIVE_PATH, type RunNavigationEntry, type RunViewLiveMessage } from "@t3-factory/contracts";
-import { rpcSessions, type LiveSession } from "@t3-factory/contracts/live-session";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import {
+  LIVE_PATH,
+  type RunNavigationEntry,
+  type RunViewLiveMessage,
+} from "@agent-easel/contracts";
+import { rpcSessions, type LiveSession } from "@agent-easel/contracts/live-session";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import type { AttentionCoordinator, AttentionFeed } from "./attention-coordinator.ts";
 import { openLiveSocket } from "./live-relay.ts";
 import type { ApiTarget } from "./protocol.ts";

@@ -12,8 +12,8 @@ import {
   type T3Session,
 } from "./connection.ts";
 import { hasEnvironmentIdentity } from "./environment-identity.ts";
-import type { AgentEnvironment } from "@t3-factory/contracts";
-import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+import type { AgentEnvironment } from "@agent-easel/contracts";
+import { parseProjectFaviconPath, parseProjectIcon } from "@agent-easel/domain-validation";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { parseProviderCapabilities } from "./project-capabilities.ts";
 

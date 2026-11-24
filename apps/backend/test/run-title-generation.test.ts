@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { RunTitleSetting } from "@t3-factory/contracts";
+import type { RunTitleSetting } from "@agent-easel/contracts";
 import { prepared } from "./support/prepared-runner.ts";
 import { remotePrepared } from "./support/remote-clients.ts";
 import { imageRequest } from "./support/run-images.ts";

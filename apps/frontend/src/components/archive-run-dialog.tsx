@@ -1,4 +1,4 @@
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";

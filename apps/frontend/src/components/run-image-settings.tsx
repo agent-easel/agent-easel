@@ -14,12 +14,12 @@ import {
   type FactoryProject,
   type RunImageReference,
   type RunImageDeletion,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { ChoiceMenu } from "@/components/choice-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { RUN_IMAGE_DELETION_LIMIT } from "@t3-factory/domain-validation";
+import { RUN_IMAGE_DELETION_LIMIT } from "@agent-easel/domain-validation";
 import { api } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { revalidateRunImages, useRunImageSource } from "../run-images.ts";

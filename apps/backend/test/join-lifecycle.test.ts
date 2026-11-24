@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { JOIN_TIMELINE_ROUNDS, type RunDetail } from "@t3-factory/contracts";
+import { JOIN_TIMELINE_ROUNDS, type RunDetail } from "@agent-easel/contracts";
 import { assertOk } from "./support/domain-setup.ts";
 import {
   capturedJoinEndingMissing,

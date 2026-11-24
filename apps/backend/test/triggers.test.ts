@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { TriggerSave } from "@t3-factory/contracts";
+import type { TriggerSave } from "@agent-easel/contracts";
 import { remotePrepared } from "./support/remote-clients.ts";
 import { triggerSaved } from "./support/scenarios.ts";
 import {

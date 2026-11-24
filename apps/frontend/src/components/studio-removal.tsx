@@ -4,7 +4,7 @@ import type {
   FlowDraft,
   TriggerDefinition,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChevronRight, Trash2, Workflow, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";

@@ -1,4 +1,4 @@
-import type { DiscordSettings } from "@t3-factory/contracts";
+import type { DiscordSettings } from "@agent-easel/contracts";
 
 type BotSettings = Pick<
   DiscordSettings,

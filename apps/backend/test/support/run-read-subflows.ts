@@ -1,5 +1,5 @@
 import type { TestContext } from "@effect/vitest";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { assertOk } from "./domain-setup.ts";
 import { queuedJoinMessageLost } from "./join-storage.ts";
 import { prepared } from "./prepared-runner.ts";

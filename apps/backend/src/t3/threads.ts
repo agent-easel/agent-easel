@@ -1,4 +1,4 @@
-import type { RunPullRequest } from "@t3-factory/contracts";
+import type { RunPullRequest } from "@agent-easel/contracts";
 import type { DispatchFence, T3Endpoint, T3Target } from "./connection.ts";
 import type { DelegatedSettlement } from "./delegated-settlement.ts";
 

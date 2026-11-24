@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { Result, RunDetail } from "@t3-factory/contracts";
+import type { Result, RunDetail } from "@agent-easel/contracts";
 import { referenceOf, runOverview } from "../runner/run-overview.ts";
 import { RUN_SEARCH_MAX_WORDS, searchWords } from "../runner/run-search-words.ts";
 import type { ReadTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";

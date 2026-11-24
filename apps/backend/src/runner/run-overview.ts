@@ -1,5 +1,5 @@
-import { attentionPresentation, type FlowGraph, type RunDetail } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import { attentionPresentation, type FlowGraph, type RunDetail } from "@agent-easel/contracts";
+import { effectiveExits } from "@agent-easel/domain-validation";
 
 export function referenceOf(value: string): { id: string } | { number: number } {
   const number = /^#?(\d{1,15})$/.exec(value.trim())?.[1];

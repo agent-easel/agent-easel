@@ -1,4 +1,4 @@
-import { livePortMessage } from "@t3-factory/contracts/desktop-bridge";
+import { livePortMessage } from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "../desktop-bridge.ts";
 
 type LiveDelivery =

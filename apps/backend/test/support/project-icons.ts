@@ -1,7 +1,7 @@
 import { assert, expect, type TestContext } from "@effect/vitest";
 import { mkdir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ProjectIcon } from "@t3-factory/contracts";
+import type { ProjectIcon } from "@agent-easel/contracts";
 import { makeLiveT3 } from "../../src/index.ts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";

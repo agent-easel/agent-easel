@@ -7,7 +7,7 @@ import type {
   FactoryProject,
   FlowDraft,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { useStudioNavigation, type StudioSelection } from "../settings-navigation.ts";
 import {
   createAgentDraft,

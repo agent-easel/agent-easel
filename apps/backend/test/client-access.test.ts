@@ -5,7 +5,7 @@ import {
   type FactoryClient,
   type FlowDraft,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { remotePrepared, remoteServer } from "./support/remote-clients.ts";
 import { imageStart, screenshots, stageImages } from "./support/run-images.ts";
 import { sha256Hex } from "./support/scenarios.ts";

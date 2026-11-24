@@ -1,4 +1,4 @@
-import type { Result, RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
+import type { Result, RunSettlementOutcome, RunSettlementWorker } from "@agent-easel/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import type { T3Threads } from "../t3/threads.ts";

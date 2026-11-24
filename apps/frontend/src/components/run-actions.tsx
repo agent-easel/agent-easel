@@ -24,7 +24,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import { useMutationsAllowed } from "../client-gate.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";

@@ -1,7 +1,7 @@
-import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
+import { clientAccessServerOperations, operationPath } from "@agent-easel/contracts";
 import { MutationGate } from "@/client-gate";
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
+import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@agent-easel/contracts";
 import { CircleX, KeyRound, type LucideIcon } from "lucide-react";
 import { dayAndTime } from "../time-format.ts";
 import { Button } from "@/components/ui/button";

@@ -1,4 +1,4 @@
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 
 type RunEvent = RunDetail["events"][number];
 

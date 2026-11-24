@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { TextCursorInput } from "lucide-react";
-import type { ConditionRule, FlowBlock } from "@t3-factory/contracts";
+import type { ConditionRule, FlowBlock } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import { BLOCK_KINDS } from "../block-kind.ts";
 

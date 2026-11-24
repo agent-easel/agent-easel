@@ -5,7 +5,7 @@ import {
   type DesktopMenuCommandId,
   type DesktopMenuState,
   type FactoryDesktop,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { executeAppCommand } from "./app-keyboard-commands.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { shortcutDefinitions } from "./keyboard-shortcuts.ts";

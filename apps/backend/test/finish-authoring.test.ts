@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { FlowEnding } from "@t3-factory/contracts";
+import type { FlowEnding } from "@agent-easel/contracts";
 import { authoringMcpClient, toolReply } from "./support/factory-mcp.ts";
 import { assertOk, sampleAgentInput } from "./support/domain-setup.ts";
 import { prepared } from "./support/prepared-runner.ts";

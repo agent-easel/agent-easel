@@ -5,7 +5,7 @@ import {
   type FlowEnding,
   type RunDetail,
   type RunResult,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { blockedWorkers } from "../attention-copy.ts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";

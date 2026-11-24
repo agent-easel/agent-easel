@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { TriggerDefinition, ValidationIssue } from "@t3-factory/contracts";
+import type { TriggerDefinition, ValidationIssue } from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { TextLink } from "@/components/ui/text-link";
 import { api } from "../../api.ts";

@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerDefinition } from "@agent-easel/contracts";
 import { currentSettings, widensAdmission } from "../src/trigger-review.ts";
 
 const saved: TriggerDefinition = {

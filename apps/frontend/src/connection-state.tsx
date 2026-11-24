@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { ConnectionState, T3Connection } from "@t3-factory/contracts";
+import type { ConnectionState, T3Connection } from "@agent-easel/contracts";
 import { KeyRound, Unplug, type LucideIcon } from "lucide-react";
 import { StatusBadge, type SettingKind } from "./components/status-badge.tsx";
 import { cn } from "@/lib/utils";

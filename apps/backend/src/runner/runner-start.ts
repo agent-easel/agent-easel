@@ -16,7 +16,7 @@ import type {
   StartRunInput,
   T3Connection,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   executionForProject,
   flowReadiness,
@@ -30,7 +30,7 @@ import {
   TASK_TITLE_LIMIT,
   validateStartPrompt,
   type StartPrompt,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type { GitHubAdapter } from "../adapters/github.ts";
 import type { GitAdapter } from "../adapters/git.ts";

@@ -9,7 +9,7 @@ import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parse } from "smol-toml";
-import type { ReportingInstallation, Result, T3Connection } from "@t3-factory/contracts";
+import type { ReportingInstallation, Result, T3Connection } from "@agent-easel/contracts";
 import { FACTORY_BLOCK_SKILL } from "./factory-block-skill.ts";
 import { FACTORY_CONFIGURE_SKILL } from "./factory-configure-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "./factory-start-run-skill.ts";

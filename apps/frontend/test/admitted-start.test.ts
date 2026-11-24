@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { StartRunInput } from "@t3-factory/contracts";
+import type { StartRunInput } from "@agent-easel/contracts";
 import { admittedStart, api } from "../src/api.ts";
 import { OfflineError, transport } from "../src/transport.ts";
 

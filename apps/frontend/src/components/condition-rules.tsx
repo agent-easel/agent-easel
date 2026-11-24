@@ -12,8 +12,8 @@ import {
   type ConditionRule,
   type FlowBlock,
   type FlowGraph,
-} from "@t3-factory/contracts";
-import { CONDITION_OTHERWISE } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { CONDITION_OTHERWISE } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
