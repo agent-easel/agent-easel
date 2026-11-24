@@ -23,6 +23,7 @@ import {
   type LaunchOperations,
 } from "./launch-tools.ts";
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
+import { callRunActionTool, runActionTools, type RunActionOperations } from "./run-action-tools.ts";
 import {
   callRunTitleSettingTool,
   runTitleSettingTools,
@@ -258,6 +259,7 @@ export function runtimeMcpHandler(
   definitions: AuthoringOperations &
     LaunchOperations &
     RunReadOperations &
+    RunActionOperations &
     RunTitleSettingOperations &
     TriggerToolOperations,
 ): (request: Request) => Promise<Response> {
@@ -273,6 +275,7 @@ export function runtimeMcpHandler(
           ...authoringTools,
           ...launchTools,
           ...runReadTools,
+          ...runActionTools,
           ...runTitleSettingTools,
           ...triggerTools,
         ],
@@ -298,6 +301,7 @@ export function runtimeMcpHandler(
           (await callAuthoringTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
+          (await callRunActionTool(definitions, name, args)) ??
           (await callRunTitleSettingTool(definitions, name, args)) ??
           (await callTriggerTool(definitions, name, args)) ?? {
             isError: true,
