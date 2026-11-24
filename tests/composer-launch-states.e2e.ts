@@ -43,7 +43,7 @@ test("an empty prompt keeps Start disabled, and a ready prompt can start", async
   await app.screenshot("after-ready");
 });
 
-test("a lost T3 connection keeps the draft in one card and reconnects without it", async ({
+test("a lost T3 Code connection keeps the draft in one card and reconnects without it", async ({
   fixture,
   app,
   screen,
@@ -51,10 +51,10 @@ test("a lost T3 connection keeps the draft in one card and reconnects without it
   await openReadyComposer(app, screen, "Ship the picker");
 
   await fixture.remoteAccess.t3Unavailable();
-  await expect(screen.getByText("T3 is disconnected", { exact: true })).toBeVisible();
+  await expect(screen.getByText("T3 Code is disconnected", { exact: true })).toBeVisible();
   await expect(
     screen.getByText(
-      "Your draft is kept and Project and Flow show their last known values. Start is available again as soon as Factory reconnects to T3.",
+      "Your draft is kept and Project and Flow show their last known values. Start is available again as soon as AgentEasel reconnects to T3 Code.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -62,7 +62,7 @@ test("a lost T3 connection keeps the draft in one card and reconnects without it
   await app.screenshot("after-disconnected");
 
   await fixture.remoteAccess.t3Available();
-  await expect(screen.getByText("T3 is disconnected", { exact: true })).toHaveCount(0);
+  await expect(screen.getByText("T3 Code is disconnected", { exact: true })).toHaveCount(0);
   await expect(
     screen.getByRole("link", /^Settings, (Connected|Agent reporting needs attention)$/),
   ).toBeVisible();
@@ -88,7 +88,7 @@ for (const { mode, ring } of focusRings)
     await screen.getByRole("radio", mode, { exact: true }).tap();
     await app.open("/runs/new");
     await fixture.remoteAccess.t3Unavailable();
-    const link = screen.getByRole("link", "Open T3 connection settings", { exact: true });
+    const link = screen.getByRole("link", "Open T3 Code connection settings", { exact: true });
     await link.focus();
     await browser.keyboard.press("Shift+Tab");
 
@@ -109,7 +109,7 @@ test("an unconfirmed Start keeps an Idle row and does not call the outcome Unkno
   await openReadyComposer(app, screen, "Confirm this Start later");
   await startLosingResponse(screen, browser);
   await expect(screen.getByText(/Start outcome unknown/)).toBeVisible();
-  await expect(screen.getByText(/The row shows Unknown until T3 confirms/)).toHaveCount(0);
+  await expect(screen.getByText(/The row shows Unknown until T3 Code confirms/)).toHaveCount(0);
   await expect(screen.getByRole("link", "Confirm this Start later", { exact: true })).toBeVisible();
   await expect(
     screen.getByRole("link", "Confirm this Start later Idle", { exact: true }),
@@ -135,13 +135,13 @@ test("a rejected Start shows one row per cause and only says that no Run was cre
   await app.screenshot("after-start-rejected");
 });
 
-describe("Factory becomes unavailable", () => {
+describe("AgentEasel becomes unavailable", () => {
   afterEach(async ({ fixture, browser }) => {
     await fixture.remoteAccess.online();
     await browser.clearCookies({ name: "fixture_remote" });
   });
 
-  test("losing Factory shows Factory offline and does not send the owner to T3 settings", async ({
+  test("losing AgentEasel shows AgentEasel offline and does not send the owner to T3 Code settings", async ({
     fixture,
     app,
     screen,
@@ -153,18 +153,18 @@ describe("Factory becomes unavailable", () => {
     await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
     await screen
       .getByLabel("Initial prompt", { exact: false })
-      .fill("Stay while Factory is offline");
+      .fill("Stay while AgentEasel is offline");
 
     // Act
     await fixture.remoteAccess.offline();
 
     // Assert
-    await expect(screen.getByText("Factory offline", { exact: true })).toBeVisible({
+    await expect(screen.getByText("AgentEasel offline", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
     await expect(screen.getByText("Your draft is kept.", { exact: true })).toBeVisible();
     await expect(
-      screen.getByRole("link", "Open T3 connection settings", { exact: true }),
+      screen.getByRole("link", "Open T3 Code connection settings", { exact: true }),
     ).toHaveCount(0);
     await app.screenshot("after-factory-offline");
   });

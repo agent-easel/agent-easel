@@ -96,7 +96,7 @@ export function RunTitleView({
           <OpenInT3 href={threadLink} className="text-sm" />
         ) : (
           <p className="text-xs text-subtle-foreground">
-            {state === "skipped" ? "Nothing was launched" : "No T3 thread known"}
+            {state === "skipped" ? "Nothing was launched" : "No T3 Code thread known"}
           </p>
         )}
       </footer>

@@ -113,10 +113,10 @@ function loginResult(error: unknown): GatewayResult {
   if (typeof status === "number")
     return result(
       "failed",
-      `Discord answered HTTP ${status} when Factory asked for the Gateway.`,
+      `Discord answered HTTP ${status} when AgentEasel asked for the Gateway.`,
       status === 429 || status >= 500,
     );
-  return result("unreachable", "Factory could not reach Discord.");
+  return result("unreachable", "AgentEasel could not reach Discord.");
 }
 
 // Unknown User, Unknown Channel and Missing Access: the bot cannot know that ID.
@@ -327,7 +327,7 @@ export const makeDiscordGateway = (apiUrl: string) =>
             applicationId: readiness.applicationId,
             botName: readiness.botName,
             names: yield* lookupNames(client as Client<true>, ids),
-            message: `Discord accepted the token for application ${readiness.applicationId} and the Gateway session became ready. Factory disconnected after the check.`,
+            message: `Discord accepted the token for application ${readiness.applicationId} and the Gateway session became ready. AgentEasel disconnected after the check.`,
           };
         }),
       );

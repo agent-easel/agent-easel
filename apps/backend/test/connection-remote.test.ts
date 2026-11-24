@@ -61,7 +61,7 @@ it("a client still waiting for host approval cannot open authorization on the ho
   expect(t3.connection.authorizationStarts).toBe(0);
 });
 
-it("an approved client cannot change the host's saved T3 endpoint", async (c) => {
+it("an approved client cannot change the host's saved T3 Code endpoint", async (c) => {
   // Arrange
   const { server, laptop } = await remoteConnection(c);
 

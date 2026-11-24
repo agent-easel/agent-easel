@@ -41,7 +41,7 @@ function readyConnection(c: Result<T3Connection>) {
     blocked(
       "connection_unavailable",
       "connection",
-      "Connect and authorize T3; inspect its live contract.",
+      "Connect and authorize T3 Code; inspect its live contract.",
     );
   return { connection: c.value, context: c.value.authorizationContext };
 }
@@ -52,7 +52,7 @@ function sameContext(contextId: string, snapshot: T3ContractSnapshot) {
     blocked(
       "connection_unavailable",
       "connection",
-      "The T3 connection changed while readiness was checked. Recheck it.",
+      "The T3 Code connection changed while readiness was checked. Recheck it.",
     );
 }
 function availableProject(catalog: Result<ProjectCatalog>, projectId: string) {
@@ -70,7 +70,7 @@ function readyCapabilities(cap: Result<AgentCapabilities>) {
     blocked(
       "capabilities_unavailable",
       "agent.execution",
-      "T3 environment/provider/model capabilities are unavailable.",
+      "T3 Code environment/provider/model capabilities are unavailable.",
     );
   return cap.value;
 }
@@ -93,7 +93,7 @@ function validatedHarness(
     blocked(
       "harness_unsupported",
       "agent.execution.providerInstanceId",
-      `${provider?.reporting.explanation ?? "T3 no longer offers the selected provider."} Choose another provider for ${agent.name} in Studio → Agents.`,
+      `${provider?.reporting.explanation ?? "T3 Code no longer offers the selected provider."} Choose another provider for ${agent.name} in Studio → Agents.`,
     );
   const settingsStatus = agentSettingsStatus(agent.execution, capabilities);
   if (
@@ -261,7 +261,7 @@ const openRuntimeSetup = Effect.fn(function* (
         issues,
         checkedAt: yield* now,
         instructions:
-          "Install Factory MCP in Settings → Agent reporting for the selected harness home and start a fresh session. Native approvals remain in T3. Installed configuration is not live verification; no diagnostic workload is launched.",
+          "Install AgentEasel MCP in Settings → Agent reporting for the selected harness home and start a fresh session. Native approvals remain in T3 Code. Installed configuration is not live verification; no diagnostic workload is launched.",
       },
     };
   });

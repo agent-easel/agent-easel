@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-Factory keeps one shortcut **registry** for platform defaults, reserved-combination
+AgentEasel keeps one shortcut **registry** for platform defaults, reserved-combination
 checks, customization in Settings, the read-only cheat sheet and shortcut hints in the UI. **Mod** means Command on
 macOS and Control on Windows/Linux. The sidebar and canvas controls remain available for
 pointer navigation.
@@ -64,8 +64,8 @@ default. **Reset all** in the page header restores all defaults and is enabled w
 has changed or has a conflict. An Error card names the command occupying a conflicted default.
 The UI hints and active handlers update immediately.
 
-Preferences persist in browser storage on this client and Factory origin
-(`factory.keyboardShortcuts`, storage **version 2**). They do not sync to T3 or other
+Preferences persist in browser storage on this client and AgentEasel origin
+(`factory.keyboardShortcuts`, storage **version 2**). They do not sync to T3 Code or other
 devices. When storage is unavailable, changes apply for the current session only and
 Settings shows a Warning card.
 
@@ -83,7 +83,7 @@ zoom). On upgrade:
 
 Invalid per-command shapes are skipped; valid stored preferences are kept. Settings may
 show **Some stored shortcuts could not be restored. Valid preferences were kept.** If the
-whole blob is unreadable, Factory uses platform defaults and shows **Stored keyboard
+whole blob is unreadable, AgentEasel uses platform defaults and shows **Stored keyboard
 shortcuts could not be restored. Defaults are in use.**
 
 ## Discovery

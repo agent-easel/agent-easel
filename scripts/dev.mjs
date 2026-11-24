@@ -56,7 +56,7 @@ const host = config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? ":
 env.FACTORY_HOST = config.host;
 env.FACTORY_PORT = String(config.port);
 env.FACTORY_DEV_BACKEND_URL = `http://${host.includes(":") ? `[${host}]` : host}:${config.port}`;
-console.log(`Factory development data: ${config.home}`);
+console.log(`AgentEasel development data: ${config.home}`);
 
 // Replace the launcher: concurrently owns the tasks and their signal cleanup.
 const cli = fileURLToPath(

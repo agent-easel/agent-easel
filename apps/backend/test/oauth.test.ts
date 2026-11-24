@@ -180,7 +180,7 @@ it("token refresh restores ready without a second authorization when refresh suc
   expect(external.authorizations).toBe(1);
 });
 
-it("missing T3 contract surfaces incompatible until the contract returns", async (context) => {
+it("missing T3 Code contract surfaces incompatible until the contract returns", async (context) => {
   // Arrange
   const { factory, external, getAuthorizationUrl } = await openOAuthFactory(context);
   await approvePendingOAuth(factory, external, getAuthorizationUrl);
@@ -220,7 +220,7 @@ it("revoked OAuth requires explicit reauthorization with a new authorization con
   expect(await factory.getFlow(flow.value.id)).toStrictEqual(flow);
 });
 
-it("a T3 call's transient failure is not reported on a concurrent inspection whose grant is rejected", async (context) => {
+it("a T3 Code call's transient failure is not reported on a concurrent inspection whose grant is rejected", async (context) => {
   // Arrange
   let readReached!: () => void;
   let failRead!: () => void;

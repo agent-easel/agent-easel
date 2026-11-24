@@ -48,7 +48,7 @@ function activityPage(body: unknown, threadId: string) {
     !Array.isArray(page.items) ||
     !page.items.every(isActivityItem)
   )
-    throw new T3Failure("invalid-response", "T3 returned an invalid thread activity page.");
+    throw new T3Failure("invalid-response", "T3 Code returned an invalid thread activity page.");
   return {
     items: page.items,
     earlier: typeof page.earlierPosition === "number" ? page.earlierPosition : null,

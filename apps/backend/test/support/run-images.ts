@@ -1,6 +1,6 @@
 import { solidPng, sha256Hex } from "./scenarios.ts";
 import { assert } from "@effect/vitest";
-import type { Factory, FactoryService } from "../../src/index.ts";
+import type { AgentEasel, FactoryService } from "../../src/index.ts";
 import * as Effect from "effect/Effect";
 import type { PromptSegment, RunImage, StartRunInput } from "@agent-easel/contracts";
 
@@ -26,7 +26,7 @@ export function manifestEntry(
 
 /** Stages every image's bytes, as the composer does before Start. */
 export async function stageImages(
-  factory: Pick<Factory, "stageRunImage">,
+  factory: Pick<AgentEasel, "stageRunImage">,
   images: readonly { name: string; data: Uint8Array }[],
 ) {
   for (const image of images) {
@@ -90,7 +90,7 @@ export function imageStart(input: {
 
 /** Stages the fixture's images and returns its image Start for a prepared Flow. */
 export async function imageRequest(setup: {
-  f: Pick<Factory, "stageRunImage">;
+  f: Pick<AgentEasel, "stageRunImage">;
   input: Parameters<typeof imageStart>[0];
 }) {
   await stageImages(setup.f, Object.values(screenshots));

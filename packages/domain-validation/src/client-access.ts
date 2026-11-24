@@ -25,12 +25,12 @@ export function protocolCompatibility(
   if (client.protocol < server.minimumPeerProtocol)
     return {
       kind: "update-client",
-      message: `This client speaks Factory protocol ${client.protocol}; the server requires at least ${server.minimumPeerProtocol}. Update this client.`,
+      message: `This client speaks AgentEasel protocol ${client.protocol}; the server requires at least ${server.minimumPeerProtocol}. Update this client.`,
     };
   if (server.protocol < client.minimumPeerProtocol)
     return {
       kind: "update-server",
-      message: `The server speaks Factory protocol ${server.protocol}; this client requires at least ${client.minimumPeerProtocol}. Update the Factory server on its host.`,
+      message: `The server speaks AgentEasel protocol ${server.protocol}; this client requires at least ${client.minimumPeerProtocol}. Update the AgentEasel server on its host.`,
     };
   return { kind: "compatible" };
 }

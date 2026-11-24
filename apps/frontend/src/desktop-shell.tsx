@@ -35,7 +35,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
       <GateScreen
         label="Starting"
         icon={LoaderCircle}
-        title="Starting Factory…"
+        title="Starting AgentEasel…"
         description="Reading this installation’s role."
       />
     );
@@ -68,20 +68,20 @@ function RoleChooser({ desktop }: { desktop: FactoryDesktop }) {
     <GateScreen
       label="Choose this computer's role"
       icon={Server}
-      title="How will this computer use Factory?"
+      title="How will this computer use AgentEasel?"
       description="Each installation has one role. You can change it later in Settings → Desktop app; local data is kept and never copied to another server."
     >
       <div className="grid gap-3">
         <RoleOption
           icon={Server}
           title="Run a server"
-          description="Host Factory’s data, Runner and T3 connection here. Other approved devices connect to it."
+          description="Host AgentEasel’s data, Runner and T3 Code connection here. Other approved devices connect to it."
           onChoose={() => void choose("server")}
         />
         <RoleOption
           icon={Laptop}
           title="Connect to a server"
-          description="Operate a Factory running on another computer. No local backend, T3 or reporting setup."
+          description="Operate an AgentEasel running on another computer. No local backend, T3 Code or reporting setup."
           onChoose={() => void choose("client")}
         />
       </div>
@@ -134,13 +134,13 @@ function BackendStatus({
   const failed = backend.state === "failed";
   return (
     <GateScreen
-      label="Factory server status"
+      label="AgentEasel server status"
       icon={failed ? ServerCrash : LoaderCircle}
-      title={failed ? "The Factory server could not start" : "Starting the Factory server…"}
+      title={failed ? "The AgentEasel server could not start" : "Starting the AgentEasel server…"}
       description={
         failed
           ? (backend.message ??
-            "Check the data directory and port, then retry. Factory never removes another backend’s lock or creates a fresh data home to avoid a conflict.")
+            "Check the data directory and port, then retry. AgentEasel never removes another backend’s lock or creates a fresh data home to avoid a conflict.")
           : "Opening the data home, applying migrations and reconciling existing Runs before work resumes."
       }
     >
@@ -180,9 +180,9 @@ function ConnectScreen({ desktop }: { desktop: FactoryDesktop }) {
   };
   return (
     <GateScreen
-      label="Connect to a Factory server"
+      label="Connect to an AgentEasel server"
       icon={Laptop}
-      title="Connect to a Factory server"
+      title="Connect to an AgentEasel server"
       description="Enter the secure address shown on the server under Settings → Devices & access. The server application must already be running."
     >
       <form className="grid gap-3" onSubmit={(event) => void check(event)}>

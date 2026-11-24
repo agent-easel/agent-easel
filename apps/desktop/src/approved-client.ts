@@ -160,7 +160,7 @@ export class ApprovedClient {
   }
 
   private requireCurrent(selection: Selection) {
-    if (this.selection !== selection) throw new Error("The selected Factory server changed.");
+    if (this.selection !== selection) throw new Error("The selected AgentEasel server changed.");
   }
 
   private async rememberCredential(selection: Selection, issued: string) {

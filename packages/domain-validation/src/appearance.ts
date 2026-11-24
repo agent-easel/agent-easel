@@ -148,13 +148,13 @@ export function parseCustomThemeJson(rawJson: string): CustomThemeParseResult {
   if (!resolved)
     return {
       ok: false,
-      message: `Theme “${defined.definition.name}” has no seeds or readable colors Factory can use.`,
+      message: `Theme “${defined.definition.name}” has no seeds or readable colors AgentEasel can use.`,
     };
   const modes = presentThemeModes(resolved.theme);
   if (modes.light.kind === "baseline" && modes.dark.kind === "baseline")
     return {
       ok: false,
-      message: `Factory can’t use the “${resolved.theme.name}” theme.`,
+      message: `AgentEasel can’t use the “${resolved.theme.name}” theme.`,
       details: [modes.light.explanation, modes.dark.explanation].join("\n"),
     };
   return {

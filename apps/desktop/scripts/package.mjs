@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 if (process.platform !== "darwin" || process.arch !== "arm64")
-  throw new Error("The first Factory desktop release is built on macOS Apple Silicon only.");
+  throw new Error("The first AgentEasel desktop release is built on macOS Apple Silicon only.");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const run = (script, ...args) =>
   execFileSync(process.execPath, [script, ...args], { cwd: root, stdio: "inherit" });

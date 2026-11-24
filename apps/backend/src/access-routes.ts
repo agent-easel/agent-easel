@@ -12,7 +12,7 @@ import {
 import { credentialCookie, requestCredential, type RequestLimiter } from "./client-transport.ts";
 import { resultResponse, standardBody } from "./http-support.ts";
 import type { RouteEntries } from "./route-table.ts";
-import type { Factory } from "./open-factory.ts";
+import type { AgentEasel } from "./open-factory.ts";
 import type { LiveTransport } from "./live-transport.ts";
 import { failure } from "./result.ts";
 
@@ -56,7 +56,7 @@ function grantResponse(result: Result<ClientAccessGrant>) {
 
 /** Client-access and host-owner routes; product routes stay in `server.ts`. */
 export function accessRoutes(
-  factory: Factory,
+  factory: AgentEasel,
   protocol: ProtocolDescriptor,
   remote: RemoteAccessControl,
   limiter: RequestLimiter,

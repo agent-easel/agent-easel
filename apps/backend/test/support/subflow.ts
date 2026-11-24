@@ -7,7 +7,7 @@ import {
   type FlowGraphInput,
 } from "@agent-easel/contracts";
 import type { OwningProject } from "@agent-easel/domain-validation";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { assertOk, discoveredClones, sampleAgentInput } from "./domain-setup.ts";
 import { agentBlock, connection, flowInput, launchedWorkers } from "./scenarios.ts";
 import { prepared } from "./prepared-runner.ts";
@@ -151,7 +151,10 @@ export const placingGraph = (...flowIds: (string | null)[]): FlowGraphInput => (
   finish: { position: { x: 300 * flowIds.length, y: 0 }, endings: [ending("done", "Done")] },
 });
 
-export async function heavyWriters(factory: Factory, prompt: string): Promise<AgentDefinition[]> {
+export async function heavyWriters(
+  factory: AgentEasel,
+  prompt: string,
+): Promise<AgentDefinition[]> {
   const writers: AgentDefinition[] = [];
   for (let i = 0; i < 190; i++)
     writers.push(
@@ -165,11 +168,11 @@ export async function heavyWriters(factory: Factory, prompt: string): Promise<Ag
   return writers;
 }
 
-export async function savedFlow(factory: Pick<Factory, "createFlow">, input: CreateFlowInput) {
+export async function savedFlow(factory: Pick<AgentEasel, "createFlow">, input: CreateFlowInput) {
   return assertOk(await factory.createFlow(input));
 }
 
-export async function resave(factory: Factory, flowId: string, graph: FlowGraphInput) {
+export async function resave(factory: AgentEasel, flowId: string, graph: FlowGraphInput) {
   const flow = assertOk(await factory.getFlow(flowId));
   return factory.updateFlow(flowId, {
     name: flow.name,

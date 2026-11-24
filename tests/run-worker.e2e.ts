@@ -87,7 +87,7 @@ test("Start launches a top-level Block worker and no Run conversation", async ({
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open in T3", { exact: true }),
+      .getByRole("link", "Open in T3 Code", { exact: true }),
   ).toHaveAttribute("href", run.threadBindings[0]!.link!);
   await app.screenshot("direct-root-worker-after-reload");
 });
@@ -297,7 +297,7 @@ test("a Start whose response was lost is recovered after reload without a duplic
   await archiveJourneyRun(app.baseUrl, recovered[0]!.id);
 });
 
-test("a worker idle in its working report asks for review in T3 as Needs input after reload", async ({
+test("a worker idle in its working report asks for review in T3 Code as Needs input after reload", async ({
   app,
   screen,
   browser,
@@ -316,13 +316,13 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
   await expect(block).toContainText("Needs input");
   const review = screen
     .getByRole("region", "Needs input")
-    .getByRole("article", "Review Implement change in T3");
+    .getByRole("article", "Review Implement change in T3 Code");
   const report = review.getByRole("region", "Working report", { exact: true });
   await expect(report.getByRole("heading", "Options", { exact: true })).toBeVisible();
   await expect(report).toContainText("Neutral — “No results. Try fewer filters.”");
   await expect(report).not.toContainText("**Neutral**");
   await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
-  await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(review.getByRole("link", "Open in T3 Code", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   const after = await readHistoryRun(app.baseUrl, run.id);
   expect(after.activations).toEqual(run.activations);
@@ -340,7 +340,7 @@ async function openConversationRun(app: App, screen: Screen) {
   await app.open(`/runs/${found.id}`);
   const review = screen
     .getByRole("region", "Needs input")
-    .getByRole("article", "Review Implement change in T3");
+    .getByRole("article", "Review Implement change in T3 Code");
   await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
   return {
     review,
@@ -348,7 +348,7 @@ async function openConversationRun(app: App, screen: Screen) {
   };
 }
 
-test("Read full report opens the Agent's whole Working report with its visit and Open in T3", async ({
+test("Read full report opens the Agent's whole Working report with its visit and Open in T3 Code", async ({
   app,
   screen,
 }) => {
@@ -363,12 +363,12 @@ test("Read full report opens the Agent's whole Working report with its visit and
   await expect(reader.getByRole("heading", "Open questions", { exact: true })).toBeVisible();
   await expect(reader.getByRole("listitem")).toHaveCount(5);
   await expect(
-    reader.getByText("Reply in T3 with the option number and any wording changes.", {
+    reader.getByText("Reply in T3 Code with the option number and any wording changes.", {
       exact: true,
     }),
   ).toBeVisible();
   await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
-  await expect(reader.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("link", "Open in T3 Code", { exact: true })).toBeVisible();
   await app.screenshot("worker-conversation-working-report-reader");
 });
 
@@ -399,7 +399,7 @@ test("Working report footnotes describe each reference and link back to it", asy
   await app.open(`/runs/${id}`);
   const review = screen
     .getByRole("region", "Needs input")
-    .getByRole("article", "Review Implement change in T3");
+    .getByRole("article", "Review Implement change in T3 Code");
 
   // Act
   await review.getByRole("button", "Read full report", { exact: true }).tap();
@@ -428,7 +428,7 @@ test("at a 10 px browser font size, Tab skips the Working report links the clamp
   await app.open(`/runs/${id}`);
   const review = screen
     .getByRole("region", "Needs input")
-    .getByRole("article", "Review Implement change in T3");
+    .getByRole("article", "Review Implement change in T3 Code");
   await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
   // The preview re-measures on the resize the smaller root font causes, by the second frame.
   await browser.evaluate(
@@ -595,7 +595,7 @@ test("a worker's replaced report releases only its newest result to review work"
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open in T3", { exact: true }),
+      .getByRole("link", "Open in T3 Code", { exact: true }),
   ).toHaveCount(2);
   await app.screenshot("worker-report-released-to-reviewer");
 });
@@ -845,7 +845,7 @@ test("Settle confirmation cancels without changes, then stops workers and settle
   // Act
   await screen.getByRole("menuitem", "Settle", { exact: true }).tap();
   const dialog = screen.getByRole("alertdialog", `Settle “${title}”?`);
-  await expect(dialog).toContainText("Factory asks T3 to stop the working Agent");
+  await expect(dialog).toContainText("AgentEasel asks T3 Code to stop the working Agent");
   await expect(dialog.getByRole("button", "Cancel", { exact: true })).toBeFocused();
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
@@ -874,7 +874,7 @@ test("Settle confirmation cancels without changes, then stops workers and settle
   await app.screenshot("run-settled-from-row-menu");
 });
 
-test("an unresolved settlement is one Run card whose Retry settlement asks T3 to stop again", async ({
+test("an unresolved settlement is one Run card whose Retry settlement asks T3 Code to stop again", async ({
   app,
   screen,
 }) => {
@@ -883,8 +883,8 @@ test("an unresolved settlement is one Run card whose Retry settlement asks T3 to
   await app.open(`/runs/${found.id}`);
   const card = screen.getByRole("article", "Problem · Run");
   await expect(card).toContainText("Settle couldn’t stop Implement change");
-  await expect(card).toContainText("This T3 version can’t stop worker threads.");
-  await expect(card.getByRole("link", "Open in T3", { exact: false })).toBeVisible();
+  await expect(card).toContainText("This T3 Code version can’t stop worker threads.");
+  await expect(card.getByRole("link", "Open in T3 Code", { exact: false })).toBeVisible();
   await expect(screen.getByText("Settle requested", { exact: false })).toBeVisible();
   const row = screen
     .getByRole("navigation", "Open Runs")

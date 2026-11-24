@@ -37,13 +37,13 @@ const UNREADABLE: SettlementRead = {
   finished: false,
   latest: null,
   stoppable: false,
-  problem: "T3 could not show this worker thread in the Run's project and workspace.",
+  problem: "T3 Code could not show this worker thread in the Run's project and workspace.",
 };
 const CONTEXT_UNAVAILABLE: SettlementRead = {
   finished: false,
   latest: null,
   stoppable: false,
-  problem: "The T3 connection is unavailable or its authorization changed.",
+  problem: "The T3 Code connection is unavailable or its authorization changed.",
 };
 /** The snapshot of a pass with no worker thread to read, which asks T3 nothing. */
 const UNREAD_SNAPSHOT: T3ContractSnapshot = {
@@ -55,13 +55,14 @@ const UNREAD_SNAPSHOT: T3ContractSnapshot = {
 /** What still keeps an unfinished worker thread from counting as finished. */
 function blocker(worker: WorkerThread) {
   const { thread } = worker;
-  if (thread.activeRunId) return "T3 shows a run in progress.";
-  if (thread.pendingRequestCount > 0) return "A native request is waiting in T3.";
-  if (awaitingBackgroundWork(thread)) return "T3 shows this thread waiting on background work.";
+  if (thread.activeRunId) return "T3 Code shows a run in progress.";
+  if (thread.pendingRequestCount > 0) return "A native request is waiting in T3 Code.";
+  if (awaitingBackgroundWork(thread))
+    return "T3 Code shows this thread waiting on background work.";
   if (thread.recentRuns.some((run) => run.status === "queued"))
-    return "T3 holds a queued run for this thread; remove it in T3 or let it run.";
-  if (!worker.latest) return "T3 shows no run for this thread yet.";
-  return "T3 has not confirmed that its delegated or background work settled.";
+    return "T3 Code holds a queued run for this thread; remove it in T3 Code or let it run.";
+  if (!worker.latest) return "T3 Code shows no run for this thread yet.";
+  return "T3 Code has not confirmed that its delegated or background work settled.";
 }
 
 /** A worker's progress in the current attempt from its fresh read and its Stop record. */
@@ -71,13 +72,13 @@ function progress(read: SettlementRead, stop: SettlementWorkerRecord | undefined
     const waited = time - Date.parse(stop.stop_requested_at ?? "");
     return waited < STOP_CONFIRMATION_MS
       ? { state: "stopping" as const, problem: read.problem }
-      : { state: "unresolved" as const, problem: `T3 acknowledged Stop, but ${read.problem}` };
+      : { state: "unresolved" as const, problem: `T3 Code acknowledged Stop, but ${read.problem}` };
   }
   if (stop?.stop_outcome) return { state: "unresolved" as const, problem: stop.stop_problem };
   if (stop?.stop_key)
     return {
       state: "unresolved" as const,
-      problem: "Factory restarted while requesting Stop, so its outcome is unknown.",
+      problem: "AgentEasel restarted while requesting Stop, so its outcome is unknown.",
     };
   return { state: "unresolved" as const, problem: read.problem };
 }
@@ -273,7 +274,7 @@ export function openRunnerSettle(
             attempt,
             worker,
             "unsupported",
-            `T3 cannot stop worker threads: ${support.explanation}`,
+            `T3 Code cannot stop worker threads: ${support.explanation}`,
           );
           continue;
         }
@@ -285,7 +286,7 @@ export function openRunnerSettle(
             attempt,
             worker,
             "failed",
-            "The T3 connection is unavailable or its authorization changed, so Factory did not request Stop.",
+            "The T3 Code connection is unavailable or its authorization changed, so AgentEasel did not request Stop.",
           );
           continue;
         }
@@ -298,7 +299,7 @@ export function openRunnerSettle(
           attempt,
           worker,
           sent ? "acknowledged" : "failed",
-          sent ? null : "T3 did not accept the Stop request.",
+          sent ? null : "T3 Code did not accept the Stop request.",
         );
       }
     });
@@ -427,7 +428,7 @@ export function openRunnerSettle(
       const run = detail.value;
       if (run.lifecycle === "settled") return { ok: true, value: { outcome: "settled", run } };
       if (run.settlement) return { ok: true, value: { outcome: run.settlement.state, run } };
-      return failure("conflict", "The Run changed while Factory settled it. Settle again.");
+      return failure("conflict", "The Run changed while AgentEasel settled it. Settle again.");
     });
   }
 

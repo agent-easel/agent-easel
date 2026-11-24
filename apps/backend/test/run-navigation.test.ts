@@ -58,7 +58,7 @@ it("unchanged worker observations change neither navigation metadata nor the las
   expect(await f.listRunNavigation()).toStrictEqual({ ok: true, value: navigation });
 });
 
-it("worker branches and linked pull requests remain available after restarting Factory", async (c) => {
+it("worker branches and linked pull requests remain available after restarting AgentEasel", async (c) => {
   // Arrange
   const { h, f, t3, world, input } = await prepared(c);
   const launched = await workerLaunched(world, input);

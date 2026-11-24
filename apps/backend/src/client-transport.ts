@@ -35,7 +35,7 @@ export function declaredProtocolCompatibility(
   if (!/^\d{1,6}$/.test(protocol) || !/^\d{1,6}$/.test(minimum))
     return {
       kind: "update-client",
-      message: "This client sent an unreadable Factory protocol. Update this client.",
+      message: "This client sent an unreadable AgentEasel protocol. Update this client.",
     };
   return protocolCompatibility(
     { protocol: Number(protocol), minimumPeerProtocol: Number(minimum) },

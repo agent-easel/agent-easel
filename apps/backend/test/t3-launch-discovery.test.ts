@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { discoverLaunches, threadIdentityRead } from "../src/t3/launch-discovery.ts";
 
-const title = "Factory #1 · 1 Entry";
+const title = "AgentEasel #1 · 1 Entry";
 
 function execution() {
   return {

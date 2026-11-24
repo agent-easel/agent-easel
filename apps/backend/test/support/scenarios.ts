@@ -183,7 +183,7 @@ export function holdTitleThreadLaunch(t3: ControlledT3) {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
   t3.threads.beforeLaunch = async (payload) => {
-    if (payload.title.startsWith("Factory title · ")) await held;
+    if (payload.title.startsWith("AgentEasel title · ")) await held;
   };
   return release;
 }
@@ -210,13 +210,13 @@ export function holdWorkerLaunchReply(t3: ControlledT3, title: string) {
 }
 const titleThreadEntry = (t3: ControlledT3) =>
   [...t3.threads.launches.values()].find((launch) =>
-    launch.payload.title.startsWith("Factory title · "),
+    launch.payload.title.startsWith("AgentEasel title · "),
   );
 const titleThreadLaunch = (t3: ControlledT3) => titleThreadEntry(t3)?.payload;
 /** The title thread T3 launched. */
 export function titleThreadReference(t3: ControlledT3) {
   const launch = titleThreadEntry(t3);
-  if (!launch) stepFailed("find the title thread", "T3 recorded no title thread launch.");
+  if (!launch) stepFailed("find the title thread", "T3 Code recorded no title thread launch.");
   return launch.reference;
 }
 /** T3 accepts the title thread's launch but its reply is lost; Flow worker launches answer. */
@@ -224,7 +224,7 @@ export function loseTitleThreadLaunchReply(t3: ControlledT3) {
   const launch = t3.threads.launchThread.bind(t3.threads);
   t3.threads.launchThread = async (target, payload) => {
     const reference = await launch(target, payload);
-    if (payload.title.startsWith("Factory title · "))
+    if (payload.title.startsWith("AgentEasel title · "))
       throw Error("Lost response after remote acceptance");
     return reference;
   };
@@ -265,10 +265,13 @@ export function titleGenerationLaunched(world: ScenarioWorld, runId: string) {
       Boolean(current.titleGeneration?.threadLink),
     );
     const launch = [...world.t3.threads.launches.values()].find((entry) =>
-      entry.payload.title.startsWith(`Factory title · Run #${run.number} · `),
+      entry.payload.title.startsWith(`AgentEasel title · Run #${run.number} · `),
     );
     if (!launch)
-      stepFailed("find the title thread", `T3 recorded no title thread for Run #${run.number}.`);
+      stepFailed(
+        "find the title thread",
+        `T3 Code recorded no title thread for Run #${run.number}.`,
+      );
     return launch.payload;
   });
 }
@@ -298,7 +301,7 @@ export function generatedTitleApplied(world: ScenarioWorld, runId: string, title
       arguments: { titleGenerationId: capabilityFromLaunchPrompt(launch), title },
     });
     if (reply.code !== "TITLE_APPLIED")
-      stepFailed("submit the title", `Factory answered ${reply.code}.`);
+      stepFailed("submit the title", `AgentEasel answered ${reply.code}.`);
     return observeFor(
       "observe the applied title",
       world,
@@ -604,7 +607,7 @@ export function sentTurnBegins(world: ScenarioWorld, worker: WorkerHandle) {
   const send = [...world.t3.threads.sends.values()]
     .filter((item) => item.payload.threadId === worker.threadId)
     .at(-1);
-  if (!send) stepFailed("sent turn begins", `T3 received no send on ${worker.threadId}.`);
+  if (!send) stepFailed("sent turn begins", `T3 Code received no send on ${worker.threadId}.`);
   return turnBegins(world, worker, send.reference.runId);
 }
 

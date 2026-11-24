@@ -20,9 +20,9 @@ test("opening authorization from a remote browser starts approval in the host's 
   // Arrange
   await fixture.remoteAccess.t3Endpoint();
   await openApproved(app, "/settings/connection");
-  await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Managed on the AgentEasel host")).toBeVisible();
   await expect(screen.getByRole("link", "Devices & access")).toHaveCount(0);
-  await expect(screen.getByText("Authorize Factory in T3").first()).toBeVisible();
+  await expect(screen.getByText("Authorize AgentEasel in T3 Code").first()).toBeVisible();
   await expect(screen.getByRole("button", "Authorize")).toBeVisible();
   await expect(screen.getByRole("button", "Edit address")).toHaveCount(0);
   await expect(screen.getByLabel("Address", { exact: true })).toHaveCount(0);
@@ -34,7 +34,7 @@ test("opening authorization from a remote browser starts approval in the host's 
 
   // Assert
   await expect(
-    screen.getByText("Approve in the browser on the Factory host").first(),
+    screen.getByText("Approve in the browser on the AgentEasel host").first(),
   ).toBeVisible();
   await expect(screen.getByText("Waiting for approval", { exact: true })).toBeVisible();
   expect((await hostT3Observations(app)).authorizationStarts).toBe(1);
@@ -58,9 +58,9 @@ test("the waiting connection screen turns Connected from the live connection, wi
   await expect(screen.getByText("Connected", { exact: true }).first()).toBeVisible({
     timeout: 8_000,
   });
-  await expect(screen.getByText("Approve in the browser on the Factory host").first()).toHaveCount(
-    0,
-  );
+  await expect(
+    screen.getByText("Approve in the browser on the AgentEasel host").first(),
+  ).toHaveCount(0);
   await expect(screen.getByRole("button", "Authorize")).toHaveCount(0);
   await expect(screen.getByRole("button", /Reauthorize/)).toHaveCount(0);
   expect((await hostT3Observations(app)).connectionReads).toBe(0);

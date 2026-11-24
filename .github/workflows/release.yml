@@ -165,8 +165,9 @@ jobs:
       RELEASE_TAG: ${{ needs.source.outputs.tag }}
       RELEASE_SHA: ${{ needs.source.outputs.sha }}
       RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      PRODUCT_POSITIONING: AgentEasel plans, starts and tracks multi-agent Runs. The agent work runs in T3 Code, so AgentEasel requires T3 Code.
       PRODUCT_STATEMENT: >-
-        T3 Factory requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and T3 Factory does not work without a T3 Code installation. T3 Factory is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
+        AgentEasel requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and AgentEasel does not work without a T3 Code installation. AgentEasel is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -175,7 +176,7 @@ jobs:
       - name: Verify downloads
         working-directory: downloads
         run: |
-          base="T3.Factory-$RELEASE_VERSION-arm64"
+          base="AgentEasel-$RELEASE_VERSION-arm64"
           printf '%s\n' "$base.dmg" "$base.dmg.blockmap" "$base.zip" "$base.zip.blockmap" \
             SHA256SUMS.txt latest-mac.yml | sort > ../expected-files.txt
           ls -1 | sort > ../actual-files.txt
@@ -232,7 +233,7 @@ jobs:
           if grep -qF "$statement" <<<"$body"; then
             exit 0
           fi
-          printf '%s\n\n---\n\n%s\n' "$body" "$statement" > release-body.md
+          printf '%s\n\n---\n\n%s\n\n%s\n' "$body" "$PRODUCT_POSITIONING" "$statement" > release-body.md
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-body.md
       - name: Publish
         run: |
@@ -255,7 +256,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: landing-production
-      url: https://t3factory.app/
+      url: https://agenteasel.app/
     concurrency:
       group: landing-production
       queue: max
@@ -305,7 +306,7 @@ jobs:
             test "$(jq -er .version package.json)" = "$version"
           fi
 
-          for name in "T3.Factory-$version-arm64.dmg" SHA256SUMS.txt; do
+          for name in "AgentEasel-$version-arm64.dmg" SHA256SUMS.txt; do
             download="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
             jq -e --arg url "$download" 'any(.assets[]; .state == "uploaded" and .browser_download_url == $url)' <<<"$release" > /dev/null
             curl --fail --silent --show-error --head --location --retry 3 "$download" > /dev/null
@@ -331,8 +332,8 @@ jobs:
           npx --yes vercel@66.6.0 pull --yes --environment=production --token "$VERCEL_TOKEN"
           npx --yes vercel@66.6.0 build --prod --token "$VERCEL_TOKEN"
           index=.vercel/output/static/index.html
-          grep -Fq 'rel="canonical" href="https://t3factory.app/"' "$index"
-          grep -Fq "/releases/download/$RELEASE_TAG/T3.Factory-${RELEASE_TAG#v}-arm64.dmg" "$index"
+          grep -Fq 'rel="canonical" href="https://agenteasel.app/"' "$index"
+          grep -Fq "/releases/download/$RELEASE_TAG/AgentEasel-${RELEASE_TAG#v}-arm64.dmg" "$index"
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           if [[ "$latest" == "$RELEASE_TAG" ]]; then
             npx --yes vercel@66.6.0 deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"

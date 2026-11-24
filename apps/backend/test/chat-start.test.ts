@@ -47,21 +47,21 @@ import { PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
 const ANSWERS = {
   accepted: "✅ Confirmed",
   notYours:
-    "🔒 Only the person who asked for this review can confirm it. Ask Factory for your own.",
+    "🔒 Only the person who asked for this review can confirm it. Ask AgentEasel for your own.",
   notReply:
     "↪️ Nothing was done. To confirm, reply to the review's last message with its exact confirmation phrase.",
   wrongPhrase:
     "🔤 That is not this review's confirmation phrase, so nothing was done. Reply with the exact phrase before the review expires.",
-  invalid: "🚫 This confirmation is no longer valid. Ask Factory for a new review.",
-  expired: "⌛ This review expired, so nothing was done. Ask Factory for a new review.",
+  invalid: "🚫 This confirmation is no longer valid. Ask AgentEasel for a new review.",
+  expired: "⌛ This review expired, so nothing was done. Ask AgentEasel for a new review.",
   denied: "🚫 Chat control does not accept this confirmation from you here.",
   rejected: "🚫 No longer valid",
   notNow:
-    "⚠️ Factory could not act on this right now and did nothing. Try again before the review expires.",
+    "⚠️ AgentEasel could not act on this right now and did nothing. Try again before the review expires.",
 } as const;
 
 const PREPARATION_FAILED =
-  "⚠️ Factory could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
+  "⚠️ AgentEasel could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
 
 const CONFIRMATION_TEXT = new RegExp(
   `^🔒 <@${PARTICIPANT_ID}> To confirm, reply to this message with \`confirm [ACDEFHJKMNPQRTWXY34679]{4}\` · only the requester can confirm · expires <t:\\d+:R>$`,
@@ -69,7 +69,7 @@ const CONFIRMATION_TEXT = new RegExp(
 
 const MESSAGE_CREATES = /^\/api\/v10\/channels\/\d+\/messages$/;
 
-it("a Start proposal posts Factory's complete compact review with the requester's confirmation phrase last, and starts nothing", async (c) => {
+it("a Start proposal posts AgentEasel's complete compact review with the requester's confirmation phrase last, and starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
 
@@ -221,7 +221,7 @@ for (const attempt of REFUSED_ATTEMPTS)
     );
   });
 
-it("the phrase as a Reply to another of Factory's messages confirms nothing", async (c) => {
+it("the phrase as a Reply to another of AgentEasel's messages confirms nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const confirmation = await proposedStart(world, "600000000000000001", 2);
@@ -281,7 +281,7 @@ it("reusing a used phrase after acceptance starts no second Run and tells the re
 
   // Assert
   expect(await confirmationAnswered(world.discord, 1)).toBe(
-    "You already confirmed this review. Factory accepted Run #1 “Improve search”.",
+    "You already confirmed this review. AgentEasel accepted Run #1 “Improve search”.",
   );
   expect(await runsOf(world.factory)).toHaveLength(1);
   expect(besidesReports(world.discord)).toHaveLength(3);
@@ -463,7 +463,7 @@ it("a Discord denial after Start preflight leaves the same consent usable when m
   expect(confirmations(world.discord)).toHaveLength(1);
 });
 
-it("restoring Discord membership cannot revive a consent revoked by Factory during Start preflight", async (c) => {
+it("restoring Discord membership cannot revive a consent revoked by AgentEasel during Start preflight", async (c) => {
   // Arrange
   const world = await privateStartingWorld(c);
   const pending = await pendingStart(world, world.confirmation, world.replyOptions);
@@ -579,12 +579,12 @@ it("a prompt that is not exact text from the requester's message gets no review,
     {
       error: "prompt_not_exact",
       message:
-        "The prompt is not exact text from the requester's message. Copy it character for character, or mark it composed so Factory labels it.",
+        "The prompt is not exact text from the requester's message. Copy it character for character, or mark it composed so AgentEasel labels it.",
     },
   ]);
 });
 
-it("a composed prompt is reviewed in full and labelled as written by Factory's assistant", async (c) => {
+it("a composed prompt is reviewed in full and labelled as written by AgentEasel's assistant", async (c) => {
   // Arrange
   const world = await startingWorld(c);
 
@@ -599,7 +599,7 @@ it("a composed prompt is reviewed in full and labelled as written by Factory's a
 
   // Assert
   expect(world.discord.created[0]!.content).toContain(
-    "⚠️ Prompt **composed by Factory's assistant, not written by you** — read all of it:\n```\nFix the flaky login test\n```",
+    "⚠️ Prompt **composed by AgentEasel's assistant, not written by you** — read all of it:\n```\nFix the flaky login test\n```",
   );
 });
 
@@ -915,7 +915,7 @@ it("confirming a Start whose Agent lost its model after the review starts no Run
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
-it("a later turn reads the proposal's accepted outcome from Factory's facts instead of proposing again", async (c) => {
+it("a later turn reads the proposal's accepted outcome from AgentEasel's facts instead of proposing again", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const confirmation = await proposedStart(world, "600000000000000001", 2);
@@ -947,7 +947,7 @@ it("a UI-started Run gets no status card, while a chat-started Run in the same P
     requestId: "ui-start-1",
     projectId: world.project.id,
     flowId: world.flow.id,
-    input: "Started in Factory\nNot through chat.",
+    input: "Started in AgentEasel\nNot through chat.",
   });
   assert(uiStarted.ok, JSON.stringify(uiStarted));
   const confirmation = await proposedStart(world, "600000000000000001", 2);
@@ -1021,7 +1021,7 @@ it("a review's last message whose create failed without proof is asked again und
   expect(await runsOf(world.factory)).toHaveLength(1);
 });
 
-it("while the review's last message is still being posted, no reply with its phrase confirms, whichever Factory message it replies to", async (c) => {
+it("while the review's last message is still being posted, no reply with its phrase confirms, whichever AgentEasel message it replies to", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   world.discord.faultMessages("delivered", "paused-lost");
@@ -1079,7 +1079,7 @@ it("a receipt create still unproven after its re-attempts under the nonce is not
       threadId: THREAD,
       parentChannelId: ALLOWED_CHANNEL,
       message:
-        "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
+        "AgentEasel cannot tell whether Discord created the message. Retrying may post it twice.",
       nextAttemptAt: null,
     }),
   ]);

@@ -15,7 +15,7 @@ export async function acquireRunnerOwner(databasePath: string) {
   } catch {
     closeSync(descriptor);
     throw new Error(
-      "Another Factory backend owns this database, or exclusive local locking is unavailable.",
+      "Another AgentEasel backend owns this database, or exclusive local locking is unavailable.",
     );
   }
   let released = false;

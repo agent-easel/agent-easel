@@ -90,7 +90,7 @@ it.effect(
       yield* f.factory.awaitWorkerTitles();
       f.t3.threads.loseRenameReply = false;
       f.t3.threads.compactRenameKeys.add(sent.clientRequestId);
-      f.t3.threads.remoteTitles.set(worker.threadId, "Edited in T3");
+      f.t3.threads.remoteTitles.set(worker.threadId, "Edited in T3 Code");
       yield* TestClock.adjust(1000);
       yield* f.factory.reconcileRuns();
       yield* f.factory.awaitWorkerTitles();
@@ -98,7 +98,7 @@ it.effect(
       yield* f.factory.reconcileRuns();
       yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent, sent]);
-      expect(f.t3.threads.threadTitle(worker.threadId)).toBe("Edited in T3");
+      expect(f.t3.threads.threadTitle(worker.threadId)).toBe("Edited in T3 Code");
 
       // Act
       assert((yield* f.factory.renameRun(worker.runId, { title: f.input.title })).ok);

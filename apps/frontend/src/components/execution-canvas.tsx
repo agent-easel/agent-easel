@@ -189,10 +189,10 @@ function outcomeText(run: RunDetail, block: FlowBlock) {
 
 /** A Block's activity line for each pending matter kind that has one, from when it appeared. */
 const MATTER_LINES: Partial<Record<RunAttention["kind"], (at: string) => string>> = {
-  "execution-failed": (at) => `Failed in T3 · ${at}`,
+  "execution-failed": (at) => `Failed in T3 Code · ${at}`,
   "condition-integrity": (at) => `Can’t count arrivals · ${at}`,
   "join-integrity": (at) => `Can’t forward its round · ${at}`,
-  "native-request": (at) => `Waiting for permission in T3 · since ${at}`,
+  "native-request": (at) => `Waiting for permission in T3 Code · since ${at}`,
 };
 
 /** A missing or rejected report's activity line, from the earliest of its matters. */
@@ -231,7 +231,7 @@ export function attentionActivityText(
   if (report) return report;
   if (!run.settlement || recorded.state !== "working") return null;
   const start = blockVisits(run, block).at(-1)?.start ?? recorded.observedAt;
-  return `Still running in T3${start ? ` · since ${clockTime(start)}` : ""}`;
+  return `Still running in T3 Code${start ? ` · since ${clockTime(start)}` : ""}`;
 }
 
 function stoppedVisitText(run: RunDetail, visit: number, end: string | null) {

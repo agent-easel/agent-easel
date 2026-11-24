@@ -171,7 +171,7 @@ function RemovalBlocker({
       <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
       <span className="truncate text-sm leading-[normal] font-medium">{name}</span>
       <span className="shrink-0 text-2xs leading-[normal] text-subtle-foreground">{detail}</span>
-      {gone && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+      {gone && <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>}
       <span className="flex-1" />
     </>
   );

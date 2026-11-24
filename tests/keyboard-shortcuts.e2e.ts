@@ -142,9 +142,9 @@ test("Mod+, from dirty Studio opens Settings over it and Esc returns with the dr
   await browser.keyboard.press(`${shortcutMod}+,`);
 
   // Assert
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toBeVisible();
   await browser.keyboard.press("Escape");
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toHaveCount(0);
   await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow dirty");
 });
 
@@ -162,7 +162,7 @@ test("Mod+, opens connection Settings without losing the composer draft", async 
   await browser.keyboard.press(`${shortcutMod}+,`);
 
   // Assert
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toBeVisible();
   await expect(screen.getByLabel("Initial prompt", { exact: false })).toHaveText(
     "Keyboard settings draft",
   );

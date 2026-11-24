@@ -8,7 +8,7 @@ import {
 } from "@agent-easel/contracts";
 import { resultResponse, standardBody } from "./http-support.ts";
 import type { RouteEntries } from "./route-table.ts";
-import type { Factory } from "./open-factory.ts";
+import type { AgentEasel } from "./open-factory.ts";
 import { failure } from "./result.ts";
 
 /** The desktop installation's updater; source runs have none and report updates as unsupported. */
@@ -41,7 +41,7 @@ const sourceUpdates: ApplicationUpdates = {
  * restarts the server without Stopping Runs; the requesting client confirms first.
  */
 export function serverUpdateRoutes(
-  factory: Factory,
+  factory: AgentEasel,
   application: string,
   updates: ApplicationUpdates = sourceUpdates,
 ): RouteEntries<typeof serverUpdateOperations> {

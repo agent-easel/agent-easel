@@ -119,7 +119,7 @@ export function ConnectingScreen() {
     <GateScreen
       label="Connecting"
       icon={Hourglass}
-      title="Connecting to Factory…"
+      title="Connecting to AgentEasel…"
       description="Checking the server's protocol and this device's access."
     />
   );
@@ -129,10 +129,10 @@ function UnreachableScreen() {
   const desktop = desktopBridge();
   return (
     <GateScreen
-      label="Factory unreachable"
+      label="AgentEasel unreachable"
       icon={WifiOff}
-      title="Factory server unreachable"
-      description="This device can’t reach the selected Factory server. It retries automatically; check that the server application is running and the address is reachable on your LAN or tailnet."
+      title="AgentEasel server unreachable"
+      description="This device can’t reach the selected AgentEasel server. It retries automatically; check that the server application is running and the address is reachable on your LAN or tailnet."
     >
       {desktop && (
         <Button variant="secondary" onClick={() => void desktop.forgetServer()}>
@@ -146,13 +146,15 @@ function UnreachableScreen() {
 function IncompatibleScreen({ message }: { message: string }) {
   return (
     <GateScreen
-      label="Incompatible Factory versions"
+      label="Incompatible AgentEasel versions"
       icon={CircleAlert}
       title="This client and server can’t work together"
       description={
         <>
           <p>{message}</p>
-          <p className="mt-2">No Factory operation is available until the named side is updated.</p>
+          <p className="mt-2">
+            No AgentEasel operation is available until the named side is updated.
+          </p>
         </>
       }
     />
@@ -164,8 +166,8 @@ function PendingScreen({ client }: { client: FactoryClient }) {
     <GateScreen
       label="Waiting for approval"
       icon={Hourglass}
-      title="Waiting for approval on the Factory host"
-      description="Open Factory on the server computer, go to Settings → Devices & access, and approve this request only if its code matches."
+      title="Waiting for approval on the AgentEasel host"
+      description="Open AgentEasel on the server computer, go to Settings → Devices & access, and approve this request only if its code matches."
     >
       <Surface tone="inset" className="grid gap-1 p-4 text-center">
         <span className={fieldLabelClass}>Verification code</span>
@@ -180,25 +182,25 @@ function PendingScreen({ client }: { client: FactoryClient }) {
 
 function defaultLabel() {
   const platform = navigator.userAgent.includes("Mac") ? "Mac" : "computer";
-  return desktopBridge() ? `Factory desktop on ${platform}` : `Browser on ${platform}`;
+  return desktopBridge() ? `AgentEasel desktop on ${platform}` : `Browser on ${platform}`;
 }
 
 const previousCopy: Record<"none" | "denied" | "revoked", { title: string; description: string }> =
   {
     none: {
-      title: "Request access to this Factory",
+      title: "Request access to this AgentEasel",
       description:
         "Knowing the address is not enough: the server’s owner approves each device or browser profile on the host.",
     },
     denied: {
       title: "Access was denied",
       description:
-        "The Factory host denied this device. You can send a new request if this was a mistake.",
+        "The AgentEasel host denied this device. You can send a new request if this was a mistake.",
     },
     revoked: {
       title: "Access was revoked",
       description:
-        "The Factory host revoked this device. Nothing more can be read or changed from here unless the owner approves a new request.",
+        "The AgentEasel host revoked this device. Nothing more can be read or changed from here unless the owner approves a new request.",
     },
   };
 

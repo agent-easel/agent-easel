@@ -158,33 +158,33 @@ export class LiveT3Threads implements T3Threads {
         ),
       )
       .catch((error: T3Failure) => {
-        throw new T3Failure(error.kind, "T3 did not prepare the upload.");
+        throw new T3Failure(error.kind, "T3 Code did not prepare the upload.");
       });
     const { attachmentId, relativeUrl } = (prepared ?? {}) as Record<string, unknown>;
     const origin = new URL(target.endpoint).origin;
     const url = typeof relativeUrl === "string" ? URL.parse(relativeUrl, origin) : null;
     if (typeof attachmentId !== "string" || !attachmentId || !url || url.origin !== origin)
-      throw new T3Failure("invalid-response", "T3 returned an invalid upload address.");
+      throw new T3Failure("invalid-response", "T3 Code returned an invalid upload address.");
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": upload.mimeType },
       body: Buffer.from(data),
       signal: AbortSignal.timeout(60_000),
     }).catch(() => {
-      throw new T3Failure("unavailable", "T3 upload is temporarily unavailable.");
+      throw new T3Failure("unavailable", "T3 Code upload is temporarily unavailable.");
     });
     await response.body?.cancel().catch(() => {});
     if (!response.ok)
       throw new T3Failure(
         response.status >= 500 ? "unavailable" : "refused",
-        `T3 answered the upload with HTTP ${response.status}.`,
+        `T3 Code answered the upload with HTTP ${response.status}.`,
       );
     return attachmentId;
   }
   async launchThread(target: T3Endpoint, payload: LaunchPayload): Promise<LaunchReference> {
     return this.connection.authorized(target, async (session) => {
       const result = await session.call("t3_thread_launch", { ...payload }, 30_000);
-      if (result.isError) throw new T3Failure("refused", "T3 rejected the worker launch");
+      if (result.isError) throw new T3Failure("refused", "T3 Code rejected the worker launch");
       const body = structured(result) as LaunchReference | undefined;
       if (
         !body ||

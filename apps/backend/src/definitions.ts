@@ -542,7 +542,7 @@ export const makeDefinitions = (
         return emptyCapabilities(
           status.ok
             ? status.value.explanation
-            : "Connect to T3 before loading provider and model options.",
+            : "Connect to T3 Code before loading provider and model options.",
           yield* currentTime,
         );
       }
@@ -559,7 +559,7 @@ export const makeDefinitions = (
           currentTime.pipe(
             Effect.map((time) =>
               emptyCapabilities(
-                "T3 capabilities are unavailable right now. Your saved settings are kept.",
+                "T3 Code capabilities are unavailable right now. Your saved settings are kept.",
                 time,
               ),
             ),
@@ -1129,7 +1129,7 @@ export const makeDefinitions = (
                   );
                 const [used] = yield* sql`SELECT id FROM agents WHERE id = ${requestId}`;
                 if (used)
-                  return failure("conflict", "Factory already used this Agent Create request.");
+                  return failure("conflict", "AgentEasel already used this Agent Create request.");
               }
               const now = yield* currentTime;
               const agent: AgentDefinition = {

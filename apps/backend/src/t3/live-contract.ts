@@ -56,7 +56,7 @@ function inspection(probe: T3Probe<ContractRead>): Inspected {
         ...probe.server,
         environmentId: null,
         tools: [],
-        problems: ["T3 returned an unsupported MCP protocol or invalid connection contract."],
+        problems: ["T3 Code returned an unsupported MCP protocol or invalid connection contract."],
         executionVerified: false,
       },
     };

@@ -15,7 +15,7 @@ test("a worker with three hours of silence shows Needs input on its Run", async 
   await app.open(`/runs/${run.id}`);
 
   // Assert
-  await expect(screen.getByRole("article", "Review Implement change in T3")).toContainText(
+  await expect(screen.getByRole("article", "Review Implement change in T3 Code")).toContainText(
     "No progress report for at least three hours.",
   );
   await app.screenshot("overdue-worker");

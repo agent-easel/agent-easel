@@ -2,12 +2,12 @@ import * as Effect from "effect/Effect";
 import type { privacyOperations, Result, TelemetrySetting } from "@agent-easel/contracts";
 import type { configurationWriter } from "./config.ts";
 import { resultResponse, standardBody } from "./http-support.ts";
-import type { Factory } from "./open-factory.ts";
+import type { AgentEasel } from "./open-factory.ts";
 import { failure } from "./result.ts";
 import type { RouteEntries } from "./route-table.ts";
 
 export function privacyRoutes(
-  telemetry: Factory["telemetry"],
+  telemetry: AgentEasel["telemetry"],
   writeConfiguration: ReturnType<typeof configurationWriter>,
   preference: boolean,
 ): RouteEntries<typeof privacyOperations> {

@@ -8,8 +8,8 @@ function launchProblem(problem: string) {
   if (/authorization context/i.test(problem))
     return "The connection that accepted this Run is unavailable or has changed.";
   if (/payload|target/i.test(problem))
-    return "Factory could not verify the saved conversation launch details.";
-  return "Factory could not confirm the Run conversation launch.";
+    return "AgentEasel could not verify the saved conversation launch details.";
+  return "AgentEasel could not confirm the Run conversation launch.";
 }
 
 export function RunConversationNotice({
@@ -28,7 +28,7 @@ export function RunConversationNotice({
         title="Run coordination needs attention"
         className="w-140 max-w-full"
       >
-        Factory could not confirm some work in this Run. Check the block details and Run history.
+        AgentEasel could not confirm some work in this Run. Check the block details and Run history.
       </ProblemCard>
     );
   if (state === "cancelled")
@@ -52,8 +52,8 @@ export function RunConversationNotice({
         title="Run conversation launch uncertain"
         className="w-140 max-w-full"
       >
-        {launchProblem(problem ?? "")} It may already exist in T3. Check this Run’s history before
-        starting another Run.
+        {launchProblem(problem ?? "")} It may already exist in T3 Code. Check this Run’s history
+        before starting another Run.
       </ProblemCard>
     );
   if (problem)
@@ -64,8 +64,8 @@ export function RunConversationNotice({
         title="Run conversation unavailable"
         className="w-140 max-w-full"
       >
-        {launchProblem(problem)} The conversation link is not available. Check the T3 connection and
-        this Run’s history.
+        {launchProblem(problem)} The conversation link is not available. Check the T3 Code
+        connection and this Run’s history.
       </ProblemCard>
     );
   return (
@@ -76,7 +76,7 @@ export function RunConversationNotice({
       title="Opening Run conversation"
       className="w-140 max-w-full"
     >
-      The Run has been accepted. Its conversation link will appear once T3 confirms the launch.
+      The Run has been accepted. Its conversation link will appear once T3 Code confirms the launch.
     </ProblemCard>
   );
 }

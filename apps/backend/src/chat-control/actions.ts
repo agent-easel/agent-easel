@@ -169,21 +169,21 @@ export interface ConfirmationReply {
 
 const REPLIES = {
   notYours:
-    "🔒 Only the person who asked for this review can confirm it. Ask Factory for your own.",
+    "🔒 Only the person who asked for this review can confirm it. Ask AgentEasel for your own.",
   notReply:
     "↪️ Nothing was done. To confirm, reply to the review's last message with its exact confirmation phrase.",
   wrongPhrase:
     "🔤 That is not this review's confirmation phrase, so nothing was done. Reply with the exact phrase before the review expires.",
-  invalid: "🚫 This confirmation is no longer valid. Ask Factory for a new review.",
-  expired: "⌛ This review expired, so nothing was done. Ask Factory for a new review.",
+  invalid: "🚫 This confirmation is no longer valid. Ask AgentEasel for a new review.",
+  expired: "⌛ This review expired, so nothing was done. Ask AgentEasel for a new review.",
   denied: "🚫 Chat control does not accept this confirmation from you here.",
   unavailable:
-    "⚠️ Factory could not confirm your access to this thread, so nothing was done. Try again before the review expires.",
-  confirming: "⏳ Factory is already working on this confirmation.",
+    "⚠️ AgentEasel could not confirm your access to this thread, so nothing was done. Try again before the review expires.",
+  confirming: "⏳ AgentEasel is already working on this confirmation.",
   notNow:
-    "⚠️ Factory could not act on this right now and did nothing. Try again before the review expires.",
+    "⚠️ AgentEasel could not act on this right now and did nothing. Try again before the review expires.",
   unknown:
-    "❓ Factory cannot tell yet whether this was accepted. It will not perform it again; the result follows here once Factory knows.",
+    "❓ AgentEasel cannot tell yet whether this was accepted. It will not perform it again; the result follows here once AgentEasel knows.",
 } as const;
 
 type ConfirmationAnswer =
@@ -193,7 +193,7 @@ type ConfirmationAnswer =
 const replied = (text: string): ConfirmationAnswer => ({ kind: "reply", text });
 
 const PREPARATION_FAILED =
-  "⚠️ Factory could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
+  "⚠️ AgentEasel could not post the complete review, so it cannot be confirmed. Ask again for a new review.";
 
 const identityOf = (context: ProposalContext, proposed: Proposed) =>
   createHash("sha256")
@@ -507,7 +507,7 @@ export function makeChatActions(
       if (current.state !== "accepting")
         return failure("validation", "This confirmation is no longer valid.");
       if (yield* expired(current))
-        return failure("validation", "This review expired before Factory accepted the Start.");
+        return failure("validation", "This review expired before AgentEasel accepted the Start.");
       const [state] = yield* sql<{
         enabled: number;
         application_id: string | null;
@@ -517,7 +517,7 @@ export function makeChatActions(
       if (state!.application_id !== current.application_id)
         return failure(
           "validation",
-          "The Discord application changed before Factory accepted the Start.",
+          "The Discord application changed before AgentEasel accepted the Start.",
         );
       if (!(yield* scopeGranted(current)))
         return failure("validation", "Access no longer permits this Start.");
@@ -543,7 +543,7 @@ export function makeChatActions(
           if (!allowed.ok) return allowed;
           return reply.accessCurrent()
             ? allowed
-            : failure("conflict", "Discord access changed before Factory accepted the Start.");
+            : failure("conflict", "Discord access changed before AgentEasel accepted the Start.");
         }),
     };
   };

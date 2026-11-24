@@ -53,7 +53,7 @@ it("a Worker without a chosen effort reads the model's default effort, as its se
   expect(trigger).toStrictEqual({ state: "ok", label: "Primary · First model · Low" });
 });
 
-it("a saved Worker never exposes its provider or model identifier before T3 supplies display names", () => {
+it("a saved Worker never exposes its provider or model identifier before T3 Code supplies display names", () => {
   // Arrange
   const execution = {
     environmentId: "local",

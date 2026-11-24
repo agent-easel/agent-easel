@@ -239,11 +239,11 @@ test("a Trigger whose host gh is signed out shows Problem with the host step tha
   await runFromMenu(screen, name);
 
   // Assert
-  const guidance = "On the Factory host, run gh auth login --hostname github.com as the user";
-  await expect(screen.getByText(`${guidance} Factory runs as.`)).toBeVisible();
+  const guidance = "On the AgentEasel host, run gh auth login --hostname github.com as the user";
+  await expect(screen.getByText(`${guidance} AgentEasel runs as.`)).toBeVisible();
   await expect(studioNavigation(screen).getByText("1 Trigger in Error")).toBeAttached();
   const status = await openedInProblem(screen, name);
-  await expect(status).toContainText(`${guidance} Factory runs as.`);
+  await expect(status).toContainText(`${guidance} AgentEasel runs as.`);
   await app.screenshot("trigger-error-strip");
   await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
   await expect(

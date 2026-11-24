@@ -40,6 +40,7 @@ export default defineConfig({
         dependsOn: [
           "format:check",
           "check:e2e-configs",
+          "check:product-name",
           "check:scenarios",
           "gate:fallow",
           "lint:workspace",

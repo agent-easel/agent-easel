@@ -253,7 +253,7 @@ it("a Run that recovers an execution failure and settles without a named ending 
   ]);
 });
 
-it("connecting to T3 includes recognized Mistral Vibe instances without custom driver or model names", async (context) => {
+it("connecting to T3 Code includes recognized Mistral Vibe instances without custom driver or model names", async (context) => {
   // Arrange
   const ingest = await mockIngest(context);
   const fixture = await driverHomes(context, {

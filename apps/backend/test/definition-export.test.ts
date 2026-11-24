@@ -69,7 +69,7 @@ it("an Agent without a model exports with no model hint", async (context) => {
   expect(exported.value.driverKindOmitted).toStrictEqual([]);
 });
 
-it("an export without T3 capabilities keeps the model hint, omits only its driver kind and names the Agent", async (context) => {
+it("an export without T3 Code capabilities keeps the model hint, omits only its driver kind and names the Agent", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   const created = await factory.createAgent(sampleAgentInput("Coder"));

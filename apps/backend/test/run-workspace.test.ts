@@ -61,7 +61,7 @@ it("saving a different workspace after Start leaves the Run's captured project c
   expect(run.value.definitions.flow.workspace).toStrictEqual({ mode: "checkout" });
 });
 
-it("a worktree Start is rejected before any Run when T3 cannot launch into worktrees", async (c) => {
+it("a worktree Start is rejected before any Run when T3 Code cannot launch into worktrees", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },

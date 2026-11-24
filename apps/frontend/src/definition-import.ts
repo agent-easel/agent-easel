@@ -93,7 +93,7 @@ const idle: DefinitionImportSnapshot = {
 };
 
 const UNCERTAIN =
-  "Factory could not confirm whether the import finished. Confirm again: a retry returns the same result and never creates a copy.";
+  "AgentEasel could not confirm whether the import finished. Confirm again: a retry returns the same result and never creates a copy.";
 
 /** A whole-file issue that only repeats the headline adds nothing under it. */
 const repeatsHeadline = (issue: { path: string; message: string }, headline: string) =>
@@ -155,7 +155,7 @@ export function createDefinitionImport(
       set({ reviewing: false, review: { ...rest, rows } });
     } catch (cause) {
       if (snapshot.file !== file) return;
-      set({ reviewing: false, ...rejection(cause, "Factory could not read this file.") });
+      set({ reviewing: false, ...rejection(cause, "AgentEasel could not read this file.") });
     }
   }
   return {

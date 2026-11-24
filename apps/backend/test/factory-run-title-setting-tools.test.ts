@@ -21,7 +21,7 @@ it("a session reads the enabled state, model and diagnostic of the title setting
   });
 });
 
-it("a session changes the title setting to a model T3 offers and the saved setting reads back", async (c) => {
+it("a session changes the title setting to a model T3 Code offers and the saved setting reads back", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const [provider] = fixture.t3.projects.controlledProviders;
@@ -46,7 +46,7 @@ it("a session changes the title setting to a model T3 offers and the saved setti
   expect(saved.value).toMatchObject({ enabled: true, model: cheapTitleModel });
 });
 
-it("a session choice T3 does not offer returns the validation outcome and leaves the setting unchanged", async (c) => {
+it("a session choice T3 Code does not offer returns the validation outcome and leaves the setting unchanged", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
@@ -71,14 +71,14 @@ it("a session choice T3 does not offer returns the validation outcome and leaves
   expect(saved.value.model).toStrictEqual(controlledTitleModel);
 });
 
-it("an update while T3's catalog cannot be read tells the session to retry once T3 is reachable", async (c) => {
+it("an update while T3 Code's catalog cannot be read tells the session to retry once T3 Code is reachable", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, {
     ...fixture.f,
     updateRunTitleSetting: async () =>
-      failure("validation", "Choose a provider instance and model T3 offers.", [
-        { code: "capabilities_unavailable", path: "model", message: "T3 is offline." },
+      failure("validation", "Choose a provider instance and model T3 Code offers.", [
+        { code: "capabilities_unavailable", path: "model", message: "T3 Code is offline." },
       ]),
   });
 
@@ -90,7 +90,7 @@ it("an update while T3's catalog cannot be read tells the session to retry once 
 
   // Assert
   expect(result.isError).toBe(true);
-  expect(toolReply(result).next).toContain("once T3 is reachable");
+  expect(toolReply(result).next).toContain("once T3 Code is reachable");
 });
 
 it("the update tool schema accepts a null model so a session can turn titles off without one", async (c) => {

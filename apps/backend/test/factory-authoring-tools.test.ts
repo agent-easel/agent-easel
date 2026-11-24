@@ -144,7 +144,7 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
   });
 });
 
-it("an Agent save choosing a provider without Factory reporting support is refused and keeps the revision", async (c) => {
+it("an Agent save choosing a provider without AgentEasel reporting support is refused and keeps the revision", async (c) => {
   // Arrange
   const { factory, t3, client } = await authoringMcpClient(c);
   t3.projects.controlledProviders.push({
@@ -207,7 +207,7 @@ it("factory_create_agent with execution null creates an Agent that factory_get_a
   ).toMatchObject({ id: created.id, revision: 1, execution: null, settingsStatus: null });
 });
 
-it("factory_get_agent reports unknown settings and keeps the saved model while T3 capabilities are unavailable", async (c) => {
+it("factory_get_agent reports unknown settings and keeps the saved model while T3 Code capabilities are unavailable", async (c) => {
   // Arrange
   const { factory, t3, client } = await authoringMcpClient(c);
   const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
@@ -1162,7 +1162,7 @@ it("factory_save_flow renames a Join and keeps its sources and output wires", as
 const renamedJoin = (name: string) => (block: { readonly kind: string }) =>
   block.kind === "join" ? { ...block, name } : block;
 
-it("a compact Agent list gives each Agent's model and override Projects without reading the T3 catalog", async (c) => {
+it("a compact Agent list gives each Agent's model and override Projects without reading the T3 Code catalog", async (c) => {
   // Arrange
   const { factory, agent } = await savedAgentWhileCapabilitiesFail(c);
   const client = await factoryMcpClient(c, factory);

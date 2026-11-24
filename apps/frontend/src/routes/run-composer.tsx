@@ -416,7 +416,7 @@ function ComposerBox({ model }: { model: Composer }) {
                 presentation === "ready" &&
                 projects.catalog?.projects.every((item) => item.availability !== "available") &&
                 !draft.projectId
-                  ? "No projects in T3"
+                  ? "No projects in T3 Code"
                   : "No project selected"
               }
             />
@@ -465,7 +465,9 @@ function CauseLink({ cause }: { cause: StartCause }) {
   if (cause.destination === "connection")
     return (
       <TextLink asChild trailingIcon={ChevronRight}>
-        <SettingsLink selection={{ tab: "connection" }}>Open T3 connection settings</SettingsLink>
+        <SettingsLink selection={{ tab: "connection" }}>
+          Open T3 Code connection settings
+        </SettingsLink>
       </TextLink>
     );
   if (cause.destination === "flows")
@@ -510,7 +512,7 @@ function connectionLaunchNotice(model: Composer) {
   const { card } = model;
   if (card.kind === "factory-offline")
     return (
-      <ProblemCard density="compact" tone="error" icon={CloudOff} title="Factory offline">
+      <ProblemCard density="compact" tone="error" icon={CloudOff} title="AgentEasel offline">
         Your draft is kept.
       </ProblemCard>
     );
@@ -520,15 +522,15 @@ function connectionLaunchNotice(model: Composer) {
         density="compact"
         tone="neutral"
         icon={CircleHelp}
-        title="Checking T3 connection…"
+        title="Checking T3 Code connection…"
       >
-        Start is available once Factory confirms T3 is connected.
+        Start is available once AgentEasel confirms T3 Code is connected.
       </ProblemCard>
     );
   if (card.kind === "status-unknown")
     return (
-      <ProblemCard density="compact" tone="error" title="Could not load T3 connection status">
-        Your draft is kept. Check that Factory is running, then check the connection again.
+      <ProblemCard density="compact" tone="error" title="Could not load T3 Code connection status">
+        Your draft is kept. Check that AgentEasel is running, then check the connection again.
       </ProblemCard>
     );
   if (card.kind === "unconfigured")
@@ -537,10 +539,10 @@ function connectionLaunchNotice(model: Composer) {
         density="compact"
         tone="info"
         icon={Info}
-        title="Connect Factory to T3"
+        title="Connect AgentEasel to T3 Code"
         action={
           <TextLink asChild trailingIcon={ChevronRight}>
-            <SettingsLink selection={{ tab: "connection" }}>Open T3 connection</SettingsLink>
+            <SettingsLink selection={{ tab: "connection" }}>Open T3 Code connection</SettingsLink>
           </TextLink>
         }
       />
@@ -551,17 +553,17 @@ function connectionLaunchNotice(model: Composer) {
         density="compact"
         tone="error"
         icon={Unplug}
-        title="T3 is disconnected"
+        title="T3 Code is disconnected"
         action={
           <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
-              Open T3 connection settings
+              Open T3 Code connection settings
             </SettingsLink>
           </TextLink>
         }
       >
         Your draft is kept and Project and Flow show their last known values. Start is available
-        again as soon as Factory reconnects to T3.
+        again as soon as AgentEasel reconnects to T3 Code.
       </ProblemCard>
     );
   if (card.kind === "authorization")
@@ -569,17 +571,17 @@ function connectionLaunchNotice(model: Composer) {
       <ProblemCard
         density="compact"
         tone="attention"
-        title="Authorize Factory in T3"
+        title="Authorize AgentEasel in T3 Code"
         action={
           <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
-              Open T3 connection settings
+              Open T3 Code connection settings
             </SettingsLink>
           </TextLink>
         }
       >
-        T3 is running but hasn’t granted this Factory access. Approve it in T3 — your draft stays
-        here.
+        T3 Code is running but hasn’t granted this AgentEasel access. Approve it in T3 Code — your
+        draft stays here.
       </ProblemCard>
     );
   if (card.kind === "incompatible")
@@ -587,16 +589,16 @@ function connectionLaunchNotice(model: Composer) {
       <ProblemCard
         density="compact"
         tone="attention"
-        title="T3 version is incompatible"
+        title="T3 Code version is incompatible"
         action={
           <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
-              Open T3 connection settings
+              Open T3 Code connection settings
             </SettingsLink>
           </TextLink>
         }
       >
-        Update T3 and check again. Until then Factory can show history but can’t start Runs.
+        Update T3 Code and check again. Until then AgentEasel can show history but can’t start Runs.
       </ProblemCard>
     );
   return null;
@@ -675,18 +677,18 @@ function setupLaunchNotice(model: Composer) {
         density="compact"
         tone="info"
         icon={Info}
-        title="Add a project in T3 first"
+        title="Add a project in T3 Code first"
         action={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
             <RefreshProjects model={model} />
             <TextLink trailingIcon={ExternalLink} href={T3_APP_URL}>
-              Open T3
+              Open T3 Code
             </TextLink>
           </span>
         }
       >
-        Choose an available project once T3 reports one. Factory uses the projects T3 knows about:
-        add a repository in T3, then refresh — your prompt is kept.
+        Choose an available project once T3 Code reports one. AgentEasel uses the projects T3 Code
+        knows about: add a repository in T3 Code, then refresh — your prompt is kept.
       </ProblemCard>
     );
   if (card.kind === "choose-project")
@@ -779,7 +781,7 @@ function setupLaunchNotice(model: Composer) {
   if (card.kind === "draft-storage")
     return (
       <ProblemCard density="compact" tone="attention" title="This browser can’t save your draft">
-        Your prompt and choices stay while this window is open. Allow site storage for Factory in
+        Your prompt and choices stay while this window is open. Allow site storage for AgentEasel in
         your browser settings to keep drafts after a reload.
       </ProblemCard>
     );

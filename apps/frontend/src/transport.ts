@@ -81,8 +81,8 @@ export class OfflineError extends Error {
   constructor(readonly delivery: "not-sent" | "unknown" = "unknown") {
     super(
       delivery === "not-sent"
-        ? "Factory is offline. Nothing was sent; reconnect and check the current state first."
-        : "Factory lost the connection. The server may have accepted the request; reconnect and check its outcome before retrying.",
+        ? "AgentEasel is offline. Nothing was sent; reconnect and check the current state first."
+        : "AgentEasel lost the connection. The server may have accepted the request; reconnect and check its outcome before retrying.",
     );
   }
 }

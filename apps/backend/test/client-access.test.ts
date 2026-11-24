@@ -88,7 +88,7 @@ it("revoking one client ends its existing session while another approved client 
   expect((await browser.send("GET", "/api/flows")).status).toBe(200);
 });
 
-it("an approved client cannot change host T3 setup or submit runtime reports", async (c) => {
+it("an approved client cannot change host T3 Code setup or submit runtime reports", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const laptop = await server.approved("Laptop");
@@ -255,7 +255,7 @@ it("a deleted image's load answers not found even when revalidating a copy cache
   expect(image.status).toBe(404);
 });
 
-it("a revoked client cannot probe whether Factory holds a known image", async (c) => {
+it("a revoked client cannot probe whether AgentEasel holds a known image", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   await stageImages(server.factory, [screenshots.green]);
@@ -272,7 +272,7 @@ it("a revoked client cannot probe whether Factory holds a known image", async (c
   expect(probe.status).toBe(401);
 });
 
-it("a pending client cannot even probe whether Factory holds a known image", async (c) => {
+it("a pending client cannot even probe whether AgentEasel holds a known image", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   await stageImages(server.factory, [screenshots.green]);
@@ -289,7 +289,7 @@ it("a pending client cannot even probe whether Factory holds a known image", asy
   expect(probe.status).toBe(401);
 });
 
-it("an approved client is told the identity of the Factory server it reached", async (c) => {
+it("an approved client is told the identity of the AgentEasel server it reached", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const laptop = await server.approved("Laptop");
@@ -306,7 +306,7 @@ it("an approved client is told the identity of the Factory server it reached", a
   });
 });
 
-it("a client waiting for approval is not told the Factory server's identity", async (c) => {
+it("a client waiting for approval is not told the AgentEasel server's identity", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const pending = server.client();
@@ -321,7 +321,7 @@ it("a client waiting for approval is not told the Factory server's identity", as
   expect(reply.body.value.serverId).toBe(undefined);
 });
 
-it("two Factory data homes have different server identities", async (c) => {
+it("two AgentEasel data homes have different server identities", async (c) => {
   // Arrange
   const first = await remoteServer(c);
   const second = await remoteServer(c);

@@ -64,7 +64,7 @@ export function remoteAccessController(
     } catch (error) {
       problem =
         error instanceof Error && "code" in error && error.code === "EADDRINUSE"
-          ? `Port ${settings.port} is already in use. Free it or change remoteAccess.port in config.json, then restart Factory.`
+          ? `Port ${settings.port} is already in use. Free it or change remoteAccess.port in config.json, then restart AgentEasel.`
           : "Remote access could not start. Check the certificate files and bind address in config.json.";
       throw new Error(problem, { cause: error });
     }

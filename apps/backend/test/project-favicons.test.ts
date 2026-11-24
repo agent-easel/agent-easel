@@ -14,7 +14,7 @@ it("a saved local project favicon returns bounded PNG bytes and MIME", async (co
   expect(Buffer.from(favicon.value.data)).toStrictEqual(tinyPng);
 });
 
-it("unsafe favicon paths from T3 are not persisted or served", async (context) => {
+it("unsafe favicon paths from T3 Code are not persisted or served", async (context) => {
   // Arrange
   const { factory, project } = await faviconProject(context, { faviconPath: "../../etc/passwd" });
   const catalog = await factory.listProjects();
@@ -69,7 +69,7 @@ it("repository SVG content is not served as a project favicon", async (context) 
   expect(favicon.error.code).toBe("not_found");
 });
 
-it("a remote T3 project cannot expose a file from the backend host", async (context) => {
+it("a remote T3 Code project cannot expose a file from the backend host", async (context) => {
   // Arrange
   const { factory, project } = await faviconProject(context, {
     endpoint: "https://t3.example.invalid/mcp",

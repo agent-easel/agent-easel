@@ -9,9 +9,9 @@ function reportingSetupGuidance(
   profileProblem: boolean,
 ) {
   if (profileProblem) return target.message;
-  if (missing) return "Restore it on the Factory host, then check again.";
-  if (target.actions.repair) return "Repair the configuration, then start a fresh T3 session.";
-  return "Review Technical details and fix the configuration on the Factory host.";
+  if (missing) return "Restore it on the AgentEasel host, then check again.";
+  if (target.actions.repair) return "Repair the configuration, then start a fresh T3 Code session.";
+  return "Review Technical details and fix the configuration on the AgentEasel host.";
 }
 
 /** Why one harness's reporting needs attention, or why its install failed, with the next step. */

@@ -38,7 +38,7 @@ function endedText(run: RunDetail, result: RunResult) {
       ? `${reaching} is stopping ${listed(stopping)}.`
       : `${reaching} closed the Run to new work.`;
     const problem = unresolved.length
-      ? ` Factory couldn’t confirm the stop for ${listed(unresolved)}.`
+      ? ` AgentEasel couldn’t confirm the stop for ${listed(unresolved)}.`
       : "";
     return `${progress}${problem} Edits made in the workspace stay.`;
   }

@@ -342,7 +342,7 @@ it("reconnecting Discord delivers the completion owed during the Gateway outage"
   expectNoticePing(world.discord, await completionCreated(world.discord));
 });
 
-it("reopening Factory discovers a completion whose worker finished while the backend was stopped", async (c) => {
+it("reopening AgentEasel discovers a completion whose worker finished while the backend was stopped", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
@@ -528,7 +528,7 @@ it("a Needs input matter in a locked thread posts no notice there, even though t
       state: "failed",
       threadId: THREAD,
       message:
-        "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.",
+        "The thread is locked, and AgentEasel never unlocks threads. Unlock it in Discord, then retry.",
     }),
   );
   expect(world.discord.created.slice(messages)).toStrictEqual([]);
@@ -585,7 +585,7 @@ it("answering the Human step edits its notice in place to resolved, without a ne
   expectSilentEdit(world.discord, shown);
 });
 
-it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it in T3", async (c) => {
+it("a native T3 Code request of a Snoozed Run posts a Needs input notice to answer it in T3 Code", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
@@ -597,7 +597,7 @@ it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it
   const notice = await noticeCreated(world.discord);
   expect(prose(notice.content)).toMatch(
     new RegExp(
-      `^🙋 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 request — answer it in T3$`,
+      `^🙋 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 Code request — answer it in T3 Code$`,
     ),
   );
   expect(machineRecord(notice.content)).toMatchObject({
@@ -607,7 +607,7 @@ it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it
   expectNoticePing(world.discord, notice);
 });
 
-it("catch-up reports a recorded request without adding an idle worker's T3 review state", async (c) => {
+it("catch-up reports a recorded request without adding an idle worker's T3 Code review state", async (c) => {
   // Arrange
   const world = await startingWorld(c, fanOutFlow);
   const { runId, worker } = await chatStartedRun(world);
@@ -623,7 +623,7 @@ it("catch-up reports a recorded request without adding an idle worker's T3 revie
   // Assert
   const notice = await noticeCreated(world.discord);
   expect(notice.content.split("\n").slice(1, -1)).toStrictEqual([
-    "• Entry worker has a T3 request — answer it in T3",
+    "• Entry worker has a T3 Code request — answer it in T3 Code",
   ]);
   expect(noticesIn(world.discord)).toStrictEqual([notice]);
 });
@@ -641,7 +641,7 @@ it("a confirmed Settle that could not stop workers posts a Problem notice in the
   expect(notice.channelId).toBe(THREAD);
   expect(prose(notice.content)).toMatch(
     new RegExp(
-      `^⚠️ ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers — check it in Factory$`,
+      `^⚠️ ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers — check it in AgentEasel$`,
     ),
   );
   expect(machineRecord(notice.content)).toMatchObject({
@@ -692,7 +692,9 @@ it("a notice pings only the requester and leaves mention syntax in Run, Flow, an
     `**Run #1 · @\u200beveryone @\u200bhere <@\u200b&123456789012345678> <@\u200b${PARTICIPANT_ID}>**`,
   );
   expect(notice.content.split(REQUESTER_MENTION)).toHaveLength(2);
-  expect(notice.content).toContain(`• @\u200bhere <@\u200b${PARTICIPANT_ID}> has a T3 request`);
+  expect(notice.content).toContain(
+    `• @\u200bhere <@\u200b${PARTICIPANT_ID}> has a T3 Code request`,
+  );
   expect(card.content).toContain("🔀 @\u200beveryone Flow");
   expectNoticePing(world.discord, notice);
 });
@@ -710,7 +712,7 @@ it("after Chat control was Off, one catch-up lists each matter still pending on 
   const notice = await noticeCreated(world.discord);
   expect(prose(notice.content)).toMatch(
     new RegExp(
-      `^📬 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• Entry worker has a T3 request — answer it in T3\\n• Second entry: report missing — check it in Factory$`,
+      `^📬 ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* · while AgentEasel could not post in this thread:\\n• Entry worker has a T3 Code request — answer it in T3 Code\\n• Second entry: report missing — check it in AgentEasel$`,
     ),
   );
   expect(world.discord.created.slice(messages)).toStrictEqual([notice]);
@@ -731,7 +733,7 @@ it("resolving one matter of a catch-up edits only its own line in place", async 
   const shown = await messageShows(world.discord, notice, /~~/);
   expect(prose(shown.content)).toMatch(
     new RegExp(
-      "\\n• ~~Entry worker has a T3 request~~ ✅\\n• Second entry: report missing — check it in Factory$",
+      "\\n• ~~Entry worker has a T3 Code request~~ ✅\\n• Second entry: report missing — check it in AgentEasel$",
     ),
   );
   expect(noticesIn(world.discord)).toHaveLength(1);
@@ -751,14 +753,14 @@ it("resolving a hidden catch-up matter edits the existing message and removes th
       world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 1 }),
     );
   await observeFor(
-    "capture the earlier T3 requests",
+    "capture the earlier T3 Code requests",
     world.world,
     runId,
     (run) => run.attention.filter((matter) => matter.kind === "native-request").length === 11,
   );
   world.t3.threads.recordThreadFacts(hidden.threadId, { pendingRequestCount: 1 });
   await observeFor(
-    "capture the last T3 request",
+    "capture the last T3 Code request",
     world.world,
     runId,
     (run) => run.attention.filter((matter) => matter.kind === "native-request").length === 12,
@@ -820,7 +822,7 @@ it("Project revocation stops a catch-up nonce retry even after regrant", async (
   const posts = world.discord.requested("POST", MESSAGES);
   expect(posts).toHaveLength(ordinal);
   expect(posts.at(-1)?.body).toMatchObject({
-    content: expect.stringMatching(/^📬 .* · while Factory could not post in this thread:/),
+    content: expect.stringMatching(/^📬 .* · while AgentEasel could not post in this thread:/),
   });
   const settings = await world.factory.getDiscordSettings();
   assert(settings.ok);
@@ -894,7 +896,9 @@ it("a rate-limited catch-up survives a restart and pings the requester once when
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(prose(notice.content)).toMatch(/\n• Entry worker has a T3 request — answer it in T3$/);
+  expect(prose(notice.content)).toMatch(
+    /\n• Entry worker has a T3 Code request — answer it in T3 Code$/,
+  );
   expect(noticesIn(world.discord)).toHaveLength(1);
   expectNoticePing(world.discord, notice);
 });
@@ -919,7 +923,7 @@ it("Archive edits the pending matter's notice and the card, and posts one Archiv
   const notice = await archiveNoticeCreated(world.discord);
   expect(notice.channelId).toBe(THREAD);
   expect(prose(notice.content)).toBe(
-    `🗄️ ${REQUESTER_MENTION} **Run #1 · Improve search** was archived.\nArchive is final; its history stays readable in Factory.`,
+    `🗄️ ${REQUESTER_MENTION} **Run #1 · Improve search** was archived.\nArchive is final; its history stays readable in AgentEasel.`,
   );
   expect(machineRecord(notice.content)).toStrictEqual({
     v: 1,
@@ -931,7 +935,7 @@ it("Archive edits the pending matter's notice and the card, and posts one Archiv
   expectNoticePing(world.discord, notice);
 });
 
-it("an Archive notice is posted once, however often Factory restarts", async (c) => {
+it("an Archive notice is posted once, however often AgentEasel restarts", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { runId } = await chatStartedRun(world);
@@ -1180,7 +1184,9 @@ it("a reply identifies the Run when the attention notice's message ID arrived af
   expect(userEnvelopes(world.model, requests).at(-1)).toEqual(
     expect.objectContaining({ referencedRun: runId }),
   );
-  expect(JSON.stringify(requestMessages(world.model, requests))).not.toContain("has a T3 request");
+  expect(JSON.stringify(requestMessages(world.model, requests))).not.toContain(
+    "has a T3 Code request",
+  );
 });
 
 it("a reply to a catch-up identifies the Run but Read Run respects the current Project grant", async (c) => {

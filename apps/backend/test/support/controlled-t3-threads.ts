@@ -67,7 +67,7 @@ export class ControlledT3Threads implements T3Threads {
     await this.beforeUpload?.(upload);
     this.uploadCalls++;
     if (this.failUploads)
-      throw new T3Failure("unavailable", "T3 answered the upload with HTTP 500.");
+      throw new T3Failure("unavailable", "T3 Code answered the upload with HTTP 500.");
     const id = `pending-${this.uploads.size + 1}`;
     this.uploads.set(id, { upload, data: Uint8Array.from(data) });
     return id;
@@ -105,7 +105,7 @@ export class ControlledT3Threads implements T3Threads {
       this.launches.set(payload.clientRequestId, launch);
       for (const notify of this.launchWaiters.splice(0)) notify(payload);
     }
-    if (this.rejectLaunch) throw new T3Failure("refused", "T3 rejected the worker launch");
+    if (this.rejectLaunch) throw new T3Failure("refused", "T3 Code rejected the worker launch");
     if (this.loseLaunchReply)
       throw new T3Failure("unavailable", "Lost response after remote acceptance");
     return launch.reference;
@@ -370,7 +370,8 @@ export class ControlledT3Threads implements T3Threads {
 
   private statedThread(threadId: string, fact: string) {
     const thread = this.executionObservations.get(threadId);
-    if (!thread) throw Error(`T3 fact "${fact}": thread ${threadId} has no stated observation.`);
+    if (!thread)
+      throw Error(`T3 Code fact "${fact}": thread ${threadId} has no stated observation.`);
     return thread;
   }
 

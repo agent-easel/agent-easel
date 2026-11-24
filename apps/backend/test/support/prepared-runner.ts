@@ -9,7 +9,7 @@ import { assert, type TestContext } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { loadConfiguration } from "../../src/config.ts";
 import { startServer, type ServerOptions } from "../../src/server.ts";
 import { writeReportingState } from "./reporting-home.ts";
@@ -37,7 +37,7 @@ async function preparedHomes(processHome: string) {
 /** Connects T3, installs reporting, adds the project and saves the ready Flow: the single-worker
  * Flow in `shape`'s variant, or the one the ready Flow shape `shape` saves. */
 async function readyFlow(
-  f: Factory,
+  f: AgentEasel,
   t3: ControlledT3,
   root: string,
   shape: SingleWorkerVariant | ReadyFlowShape = {},
@@ -177,7 +177,7 @@ export function preparedService(
     const runtime = promisedAll(factory.runtime);
     const promised = new Proxy(operations, {
       get: (target, name: string) => (name === "runtime" ? runtime : target[name]),
-    }) as unknown as Factory;
+    }) as unknown as AgentEasel;
     const ready = yield* Effect.promise(() => readyFlow(promised, t3, root, shape));
     return {
       h,

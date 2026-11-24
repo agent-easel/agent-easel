@@ -29,6 +29,8 @@ import {
 import {
   clientAccessOperations,
   operationPath,
+  productPositioning,
+  productStatement,
   type Result as OperationResult,
   type ServerUpdateAction,
   type UpdateChannel,
@@ -50,7 +52,6 @@ import {
   handOffToAgentEasel,
   migratedToAgentEasel,
 } from "./agenteasel-handoff.ts";
-import { productStatement } from "./about.ts";
 import { AttentionCoordinator } from "./attention-coordinator.ts";
 import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
 import { BackendSupervisor } from "./backend.ts";
@@ -234,7 +235,7 @@ async function openRunCount(): Promise<number | null> {
 }
 
 const interruption = {
-  quit: { button: "Quit Factory", verb: "Quitting" },
+  quit: { button: "Quit AgentEasel", verb: "Quitting" },
   switch: { button: "Stop server and switch", verb: "Switching to client mode" },
 } as const;
 
@@ -249,7 +250,7 @@ async function confirmInterruption(action: keyof typeof interruption): Promise<b
   if (action === "quit" && open === 0) return true;
   const runs =
     open === null
-      ? "Factory could not count open Runs."
+      ? "AgentEasel could not count open Runs."
       : `${open} Run${open === 1 ? " is" : "s are"} still open.`;
   const { verb, button } = interruption[action];
   const options = {
@@ -257,8 +258,8 @@ async function confirmInterruption(action: keyof typeof interruption): Promise<b
     buttons: [button, "Cancel"],
     defaultId: 1,
     cancelId: 1,
-    message: `${verb} stops Factory control on this computer.`,
-    detail: `${runs} Reports, Human answers and transitions wait until Factory runs again, and work already started in T3 may continue meanwhile. Runs are not stopped: on restart Factory reconciles them before eligible work resumes.`,
+    message: `${verb} stops AgentEasel control on this computer.`,
+    detail: `${runs} Reports, Human answers and transitions wait until AgentEasel runs again, and work already started in T3 Code may continue meanwhile. Runs are not stopped: on restart AgentEasel reconciles them before eligible work resumes.`,
   };
   const { response } = window
     ? await dialog.showMessageBox(window, options)
@@ -305,7 +306,7 @@ function openWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: "T3 Factory",
+    title: "AgentEasel",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 17 },
     backgroundColor: windowBackground[effectiveAppearance()],
@@ -396,13 +397,13 @@ function refreshTray() {
       : settings.role === "client"
         ? `Client of ${settings.server?.url ?? "no server"}`
         : "Role not chosen";
-  tray.setToolTip(`T3 Factory — ${status}`);
+  tray.setToolTip(`AgentEasel — ${status}`);
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: status, enabled: false },
       { type: "separator" },
-      { label: "Open Factory", click: openWindow },
-      { label: "Quit Factory", click: () => app.quit() },
+      { label: "Open AgentEasel", click: openWindow },
+      { label: "Quit AgentEasel", click: () => app.quit() },
     ]),
   );
 }
@@ -433,7 +434,7 @@ async function chooseRole(role: DesktopRole): Promise<DesktopResult> {
   const current = store.get().role;
   if (role === current) return { ok: true };
   if (current === "server" && !(await stopBackendFor("switch")))
-    return failed("Factory kept running as a server.");
+    return failed("AgentEasel kept running as a server.");
   // Local data stays where it is; nothing is copied to or from another server.
   await approvedClient.chooseRole(role);
   if (role === "server") backend.start();
@@ -459,7 +460,7 @@ async function setLaunchAtLogin(enabled: boolean): Promise<DesktopResult> {
   broadcast();
   const status = app.getLoginItemSettings().status;
   if (enabled && status === "requires-approval")
-    return failed("Approve T3 Factory in System Settings → General → Login Items.");
+    return failed("Approve AgentEasel in System Settings → General → Login Items.");
   return { ok: true };
 }
 
@@ -605,7 +606,7 @@ function closeLive(reason: string) {
 /** Captures the current target: a later selection or backend change closes this channel. */
 function openLive(query: string, port: LivePort) {
   const socket = openLiveSocket(apiTarget(), query);
-  if (!socket) return refuseLive(port, "The Factory server is unreachable.");
+  if (!socket) return refuseLive(port, "The AgentEasel server is unreachable.");
   const channel = relayLive(socket, port, () => liveChannels.delete(channel));
   liveChannels.add(channel);
 }
@@ -645,7 +646,7 @@ const bridgeHandlers: BridgeHandlers = {
       return failed(
         error instanceof Error && error.message.startsWith("Enter")
           ? error.message
-          : "No Factory server answered securely at that address. Check that the server app is running with remote access enabled.",
+          : "No AgentEasel server answered securely at that address. Check that the server app is running with remote access enabled.",
       );
     }
   },
@@ -772,15 +773,18 @@ if (!app.requestSingleInstanceLock()) {
     .catch((error: unknown) => {
       // A startup failure must be visible; the app never lingers without a window.
       dialog.showErrorBox(
-        "T3 Factory could not start",
-        `Factory could not read its desktop settings or start its window. Your Factory data was not changed.\n\n${String(error)}`,
+        "AgentEasel could not start",
+        `AgentEasel could not read its desktop settings or start its window. Your AgentEasel data was not changed.\n\n${String(error)}`,
       );
       app.exit(1);
     });
 }
 
 async function start() {
-  app.setAboutPanelOptions({ applicationName: "T3 Factory", credits: productStatement });
+  app.setAboutPanelOptions({
+    applicationName: "AgentEasel",
+    credits: `${productPositioning}\n\n${productStatement}`,
+  });
   if (migratedToAgentEasel(app.getPath("userData"), factoryDataHome())) {
     quitting = true;
     return handOffToAgentEasel();
@@ -800,7 +804,7 @@ async function start() {
       FACTORY_DESKTOP_PACKAGED: String(app.isPackaged),
     },
     (state) => {
-      if (state.state !== "running") closeLive("The Factory server stopped.");
+      if (state.state !== "running") closeLive("The AgentEasel server stopped.");
       if (store.get().role === "server" && attentionHostBase() !== attentionHost) followAttention();
       broadcast();
     },

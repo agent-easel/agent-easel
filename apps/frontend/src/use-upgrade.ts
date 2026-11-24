@@ -38,7 +38,7 @@ const upToDateMs = 4000;
 const serverRestartMs = 10 * 60_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const describe = (cause: unknown) =>
-  cause instanceof Error ? cause.message : "Factory could not complete the update.";
+  cause instanceof Error ? cause.message : "AgentEasel could not complete the update.";
 
 /** The most urgent state across targets decides the single control the user sees. */
 function phaseOf(

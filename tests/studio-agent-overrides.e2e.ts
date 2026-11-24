@@ -87,7 +87,7 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   );
 });
 
-test("a saved Project override shows the model ID when T3 supplies no display name", async ({
+test("a saved Project override shows the model ID when T3 Code supplies no display name", async ({
   app,
   screen,
   browser,

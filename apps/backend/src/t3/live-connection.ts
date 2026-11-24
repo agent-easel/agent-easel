@@ -186,7 +186,7 @@ class ContractFailure extends T3Failure {
  * checks of T3's answers mean it answered outside the contract. */
 function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
   if (error instanceof T3Failure) return error;
-  const message = error instanceof Error && error.message ? error.message : "T3 call failed.";
+  const message = error instanceof Error && error.message ? error.message : "T3 Code call failed.";
   if (record.unavailable) return new T3Failure("unavailable", message);
   if (isAuthorizationRejection(error)) return new T3Failure("authorization-required", message);
   if (isContractFailure(error)) return new ContractFailure(message);
@@ -281,7 +281,9 @@ function marksLostBody(response: Response, record: CallRecord): Response {
         else controller.enqueue(chunk.value);
       } catch {
         record.unavailable = true;
-        controller.error(new T3Failure("unavailable", "T3 request is temporarily unavailable."));
+        controller.error(
+          new T3Failure("unavailable", "T3 Code request is temporarily unavailable."),
+        );
       }
     },
     cancel: (reason) => source.cancel(reason),
@@ -452,7 +454,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     } catch {
       markCallUnavailable();
       // SDK refresh warnings include error messages. Never let URLs/bodies reach them.
-      throw new T3Failure("unavailable", "T3 request is temporarily unavailable.");
+      throw new T3Failure("unavailable", "T3 Code request is temporarily unavailable.");
     }
   }
   private transport(endpoint: string, provider?: OAuthClientProvider) {
@@ -559,7 +561,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.expire(endpoint, "approval-expired");
       return {
         status: 400,
-        body: "Authorization was not granted. Return to Factory and authorize again.",
+        body: "Authorization was not granted. Return to AgentEasel and authorize again.",
       };
     }
     this.completing = true;
@@ -589,7 +591,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       await this.dropConnection(endpoint);
       return {
         status: 200,
-        body: "T3 authorization complete. Return to Factory; it will recheck automatically.",
+        body: "T3 Code authorization complete. Return to AgentEasel; it will recheck automatically.",
       };
     } catch {
       const failed = this.read(endpoint);
@@ -601,7 +603,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.save(failed);
       return {
         status: 400,
-        body: "Authorization could not complete. Return to Factory and authorize again.",
+        body: "Authorization could not complete. Return to AgentEasel and authorize again.",
       };
     } finally {
       this.completing = false;
@@ -806,7 +808,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     failure: T3Failure,
   ): T3Probe<never> {
     if (failure.kind === "unavailable")
-      throw new T3Failure("unavailable", "T3 is temporarily unavailable.");
+      throw new T3Failure("unavailable", "T3 Code is temporarily unavailable.");
     if (failure.kind === "authorization-required") {
       const revoked = this.read(endpoint);
       delete revoked.tokens;
@@ -897,7 +899,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       await this.completion;
       const latest = this.read(target.endpoint);
       if (!latest.tokens || (fence && latest.identity !== fence.authorizationIdentity))
-        throw new T3Failure("authorization-required", "T3 authorization is required.");
+        throw new T3Failure("authorization-required", "T3 Code authorization is required.");
       return this.onConnection(target.endpoint, (client) => action(authorizedSession(client)));
     });
   }

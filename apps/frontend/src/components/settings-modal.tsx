@@ -57,7 +57,7 @@ type ClientScope = ReturnType<typeof useClientScope>;
 
 /** Settings are grouped by whose settings they are: the whole Factory, its Runs or this device. */
 const settingsGroups = [
-  { id: "factory", label: "Factory" },
+  { id: "factory", label: "AgentEasel" },
   { id: "chat", label: "Chat control" },
   { id: "runs", label: "Runs" },
   { id: "device", label: "This device" },
@@ -80,8 +80,8 @@ type SettingsSection = {
 const settingsSections: readonly SettingsSection[] = [
   {
     tab: "connection",
-    rowLabels: ["Connection", "Address", "T3 version", "Authorization", "Last checked"],
-    label: "T3 connection",
+    rowLabels: ["Connection", "Address", "T3 Code version", "Authorization", "Last checked"],
+    label: "T3 Code connection",
     icon: Plug,
     group: "factory",
     content: () => <ConnectionSettingsPanel />,
@@ -309,7 +309,7 @@ export function SettingsModal() {
           title="Settings"
           className="h-12 bg-card"
           section={current.label}
-          description="Settings for the whole Factory, its Runs and this device."
+          description="Settings for the whole AgentEasel, its Runs and this device."
           onClose={close}
         />
         <div className="flex min-h-0 flex-1 max-sm:flex-col">
@@ -405,7 +405,7 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
   const locked = section.managedOnHost === true && scope === "remote";
   let marker = attention;
   if (section.tab === "connection") marker = status;
-  else if (!attention && locked) marker = "Managed on the Factory host";
+  else if (!attention && locked) marker = "Managed on the AgentEasel host";
   const Icon = section.icon;
   return (
     <NavRow asChild density="compact" selected={active}>

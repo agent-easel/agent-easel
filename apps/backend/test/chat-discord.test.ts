@@ -236,7 +236,7 @@ it("an application without the Message Content intent fails the check with setup
   await discord.disconnected();
 });
 
-it("a Discord Factory cannot reach is reported as unreachable", async (c) => {
+it("a Discord AgentEasel cannot reach is reported as unreachable", async (c) => {
   // Arrange
   const harness = await factoryHarness(c);
   const factory = await harness.open({
@@ -251,7 +251,7 @@ it("a Discord Factory cannot reach is reported as unreachable", async (c) => {
   assert(checked.ok);
   expect(checked.value.latestCheck).toMatchObject({
     outcome: "unreachable",
-    message: "Factory could not reach Discord.",
+    message: "AgentEasel could not reach Discord.",
   });
 });
 
@@ -320,7 +320,7 @@ it("the settings read reports a check while it runs", async (c) => {
   await check;
 });
 
-it("closing Factory during a check ends its Gateway session", async (c) => {
+it("closing AgentEasel during a check ends its Gateway session", async (c) => {
   // Arrange
   const { discord, factory } = await discordFactory(c);
   discord.holdReady();
@@ -416,7 +416,7 @@ it("saving a new configuration keeps the earlier check as dated evidence for its
   expect(changed.value.latestCheck).toMatchObject({ revision: 1, outcome: "verified" });
 });
 
-it("reopening Factory with a saved connection opens no Gateway session", async (c) => {
+it("reopening AgentEasel with a saved connection opens no Gateway session", async (c) => {
   // Arrange
   const { discord, factory, open } = await discordFactory(c);
   await savedDiscordConnection(factory);

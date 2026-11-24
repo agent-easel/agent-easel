@@ -1,9 +1,9 @@
 ---
-name: verify-t3-factory
-description: Validate T3 Factory web UI changes, explore features for bugs, and capture screenshots or video using the isolated e2e fixture.
+name: verify-agenteasel
+description: Validate AgentEasel web UI changes, explore features for bugs, and capture screenshots or video using the isolated e2e fixture.
 ---
 
-# Verify T3 Factory
+# Verify AgentEasel
 
 ## Read first
 
@@ -38,9 +38,9 @@ Run `pnpm install --frozen-lockfile`, then build and run the smoke check below.
 The runner starts an isolated fixture on an allocated loopback port, waits for HTTP readiness and stops it afterward. Run `pnpm e2e:prepare` before a direct journey or MCP session. It reuses a matching UI build and builds the frontend and its dependencies when the signature is stale or missing. `pnpm test:e2e` and `pnpm e2e:screenshots` prepare automatically.
 The fixture refuses to start (`APP_UNREACHABLE`, its log names the cause) when `apps/frontend/dist` is missing or its signature differs from the current inputs.
 The fixture serves the production frontend and real SQLite backend in a fresh
-OS temporary directory. It seeds development Runs plus authoring Agents and Flows against a controlled T3
-simulator. Host and remote browser journeys share this Factory; the remote helper
-selects its approved-client listener through a browser-profile cookie. No application login or live T3 is needed.
+OS temporary directory. It seeds development Runs plus authoring Agents and Flows against a controlled T3 Code
+simulator. Host and remote browser journeys share this AgentEasel; the remote helper
+selects its approved-client listener through a browser-profile cookie. No application login or live T3 Code is needed.
 Each CLI run has its own data home/port. Within a run tests share seeded state;
 keep `workers: 1` and use unique names for new records.
 
@@ -152,7 +152,7 @@ and public API reads (Flow graph/revision, Runs and Human settlement), as existi
 journeys do. SQLite files and temporary neutral repositories are removed on
 fixture shutdown; capture assertions before shutdown. Preserve action/result
 frames, trace and report, then return absolute clickable artifact paths.
-Screenshots alone do not prove persistence or real T3 execution.
+Screenshots alone do not prove persistence or real T3 Code execution.
 
 ## Bug bash
 
@@ -167,7 +167,7 @@ Credentials stay outside source control. No model auth is required for Doctor,
 regression tests, screenshots or live MCP actions.
 
 Explore only the disposable seeded projects and controlled connection. Each CLI
-exploration gets a fresh fixture; run charters separately. Real OAuth, native T3
+exploration gets a fresh fixture; run charters separately. Real OAuth, native T3 Code
 links, trust approvals and real workload execution require the separate
 [human live runbook](../../../docs/installation.md#bounded-live-verification).
 Read Findings and images; count a finding as a confirmed bug only after a

@@ -235,7 +235,7 @@ export async function remoteServer(
     readonly host?: string;
   } = {},
 ) {
-  const home = options.home ?? (await mkdtemp(join(tmpdir(), "t3-factory-remote-")));
+  const home = options.home ?? (await mkdtemp(join(tmpdir(), "agenteasel-remote-")));
   if (!options.home) context.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const { home: _home, remoteDisabled, certificate, host: bindHost, ...serverOptions } = options;
   const config = await loadConfiguration({

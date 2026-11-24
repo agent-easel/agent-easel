@@ -373,7 +373,7 @@ it("a reset in a forum post of an allowed forum channel is accepted", async (c) 
   );
 
   // Assert
-  expect(await resetReply(discord)).toMatch(/^Factory cleared this thread/);
+  expect(await resetReply(discord)).toMatch(/^AgentEasel cleared this thread/);
 });
 
 it("a reset in a private thread the requester belongs to is accepted after Discord confirms the membership", async (c) => {

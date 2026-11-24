@@ -1,6 +1,6 @@
 # Release
 
-A Release is one T3 Factory product version, identified by a `vX.Y.Z` tag on a fixed commit and published only by the controlled `publish` job. macOS Apple Silicon packaging, signing and qualification are part of that Release. [Beta builds](#beta-builds) are a second, unqualified track built from `main`. Application behavior is in [desktop and approved clients](desktop-and-clients.md).
+A Release is one AgentEasel product version, identified by a `vX.Y.Z` tag on a fixed commit and published only by the controlled `publish` job. macOS Apple Silicon packaging, signing and qualification are part of that Release. [Beta builds](#beta-builds) are a second, unqualified track built from `main`. Application behavior is in [desktop and approved clients](desktop-and-clients.md).
 
 ## Version ownership
 
@@ -23,7 +23,7 @@ pnpm --filter @agent-easel/desktop start   # stage, then run the shell from sour
 ```
 
 `pnpm build` (and the quality gate) bundles `apps/desktop/build/` without native rebuild or network. Packaging rebuilds the native `fs-ext` addon for Electron in isolation; the workspace's Node binary must remain untouched so source operation and tests still work. Packaging needs Xcode Command Line Tools and network access for Electron
-headers; output lands in `apps/desktop/release/` as `T3.Factory-<version>-arm64.dmg`, `-arm64.zip` (Squirrel.Mac input) and blockmaps. Filenames match GitHub's release download names so update metadata and checksums remain valid after upload.
+headers; output lands in `apps/desktop/release/` as `AgentEasel-<version>-arm64.dmg`, `-arm64.zip` (Squirrel.Mac input) and blockmaps. Filenames match GitHub's release download names so update metadata and checksums remain valid after upload.
 
 ## Build identity and assets
 
@@ -65,9 +65,9 @@ After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit 
 
 ### Landing page
 
-The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @agent-easel/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://t3factory.app/`.
+The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @agent-easel/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://agenteasel.app/`.
 
-GitHub Actions owns the production deployment at `https://t3factory.app/`. The `landing` job runs after a successful `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. Beta builds leave the site unchanged. Use **Re-run failed jobs** when only the landing job failed.
+GitHub Actions owns the production deployment at `https://agenteasel.app/`. The `landing` job runs after a successful `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. Beta builds leave the site unchanged. Use **Re-run failed jobs** when only the landing job failed.
 
 The same deployment proxies `/ingest/static/*` to PostHog Cloud EU's asset host and `/ingest/*` to its ingestion host. The website is static and the ingestion rules need no Vercel Functions.
 
@@ -76,10 +76,10 @@ The product screenshots in `apps/landing/public/screens/` are dark-mode captures
 #### Vercel setup
 
 1. Create a Vercel project with Root Directory `apps/landing`, the Vite preset, and access to source files outside the Root Directory for the pnpm workspace and root version manifest. Match the repository's Node.js major and let `vercel.json` supply the build command and output directory.
-2. In Production Environment Variables, set `FACTORY_SITE_URL=https://t3factory.app/`. Bind `t3factory.app` as the production domain and configure its DNS using the records shown by Vercel.
+2. In Production Environment Variables, set `FACTORY_SITE_URL=https://agenteasel.app/`. Bind `agenteasel.app` as the production domain and configure its DNS using the records shown by Vercel.
 3. Disconnect Git in the Vercel project so the Release workflow is the sole deployment trigger. If Git is connected during setup, set **Ignored Build Step** to a custom command of `exit 0` before enabling any deployment. Git-triggered builds must always be skipped, including on `main`, since Vercel's Git integration cannot verify Release publication. The branch rules in `vercel.json` allow only `main`; the workflow applies the landing path and version filter and uploads a prebuilt deployment. Disable the old GitHub Pages deployment source when switching over. See [Vercel's Git settings](https://vercel.com/docs/project-configuration/git-configuration), [Ignored Build Step](https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel), and [GitHub Actions guide](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel).
 4. Set up the GitHub Actions environment `landing-production` for `main`. Add `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as environment variables and `VERCEL_TOKEN` as an environment secret scoped to the Vercel project’s owning account or team. The workflow pulls production settings, builds locally in CI, and deploys the prebuilt output to production.
-5. Create a PostHog Cloud EU project and set its billing limit. In the GitHub repository's **Settings → Secrets and variables → Actions → Variables**, set `FACTORY_POSTHOG_PUBLIC_KEY` to the project's public ingestion token (`phc_…`). The shared desktop build embeds it in Release and Beta packages. A Factory host can override the packaged token with `FACTORY_POSTHOG_KEY`. The Vercel proxy needs no project token. See [PostHog's reverse proxy guide](https://posthog.com/docs/advanced/proxy).
+5. Create a PostHog Cloud EU project and set its billing limit. In the GitHub repository's **Settings → Secrets and variables → Actions → Variables**, set `FACTORY_POSTHOG_PUBLIC_KEY` to the project's public ingestion token (`phc_…`). The shared desktop build embeds it in Release and Beta packages. An AgentEasel host can override the packaged token with `FACTORY_POSTHOG_KEY`. The Vercel proxy needs no project token. See [PostHog's reverse proxy guide](https://posthog.com/docs/advanced/proxy).
 
 ### Retry and failed qualification
 
@@ -114,7 +114,7 @@ Also configure:
 
 A tag ruleset protecting `v*` from update and deletion is recommended so tags stay fixed while a Release is still a draft.
 
-The workflows require a public repository and use its GitHub Releases as the update feed. `latest-mac.yml`, `beta-mac.yml` and the `T3.Factory-<version>-arm64.dmg` / `T3.Factory-<version>-arm64.zip` filenames match GitHub download names so metadata remains valid after upload.
+The workflows require a public repository and use its GitHub Releases as the update feed. `latest-mac.yml`, `beta-mac.yml` and the `AgentEasel-<version>-arm64.dmg` / `AgentEasel-<version>-arm64.zip` filenames match GitHub download names so metadata remains valid after upload.
 
 ### Maintainer qualification
 
@@ -146,7 +146,7 @@ beta until a newer Release is published.
 ## Packaged verification and limits
 
 For a Release, `build-macos` runs the probe against the unpacked application it built and keeps the report in `release-evidence-<tag>`; it then checks that the application inside both the ZIP and the mounted DMG has an intact deep signature, a stapled ticket and the same code directory hash as the probed application, so the downloads ship the probed bundle. Locally, `pnpm desktop:probe /absolute/report.json` probes the package in `apps/desktop/release/mac-arm64/`, so run it right after packaging that checkout; it does not read a downloaded artifact. The probe uses disposable application data and a mock keychain and checks package startup, role selection, backend lifecycle and the
-Factory MCP endpoint. It checks that the packaged host shows First-run setup, records completion through the host API in the disposable data home, then reloads the window and checks that New Run opens.
+AgentEasel MCP endpoint. It checks that the packaged host shows First-run setup, records completion through the host API in the disposable data home, then reloads the window and checks that New Run opens.
 Keep its report with the release artifacts. Controlled browser journeys cover the setup interactions, approved-client transport and updater UI ([UI verification](testing.md)).
 
 Acceptance procedures use a disposable application copy, HOME, desktop profile and data home with a minimal PATH and a mock keychain unless real Keychain persistence is under test; never touch a production installation or
@@ -154,15 +154,15 @@ its login items, and keep raw captures in ignored `.e2e/` with a summary in the 
 
 - **Packaged authoring:** create and edit a Flow in the packaged Studio, quit, reopen in a fresh process and verify the same definition, graph and revision in the renderer and through public operations (source-API data
   does not prove renderer writes).
-- **Packaged reporting:** with `ControlledT3` and the packaged backend's Factory MCP, start a Run, submit an explicit report with the worker's Block id and verify acceptance, then successful source completion before
+- **Packaged reporting:** with `ControlledT3` and the packaged backend's AgentEasel MCP, start a Run, submit an explicit report with the worker's Block id and verify acceptance, then successful source completion before
   the handoff; record whether the backend was source or packaged (`UNKNOWN_BLOCK` proves transport only) and re-test registration after an actual app-version replacement.
 - **Native lifecycle:** with an open Run close the last window and verify API access, reopen, cancel native Quit and verify state, then confirm Quit and verify orderly shutdown and ownership release; after restart
-  compare Run, report and execution state and separately verify reconciliation after T3 reconnect.
+  compare Run, report and execution state and separately verify reconciliation after T3 Code reconnect.
 - **Role changes:** cancel and confirm server-to-client switching with an open Run, verify ownership release, return to server mode and compare definitions and history; exercise a configured remote endpoint and
   credentials across switches and client restart.
 - **Remote access and login:** record the network route and certificate trust path for desktop and browser clients, including approval, denial and revocation, and test login startup in an isolated macOS account
   (changing HOME alone does not isolate login items).
 
 These checks and controlled fixtures do not establish: Developer ID signing, notarization and Gatekeeper acceptance on a clean Mac; cross-device LAN/Tailscale routing, certificate SANs and browser CA trust;
-updates between consecutive signed releases (including failed downloads, data and reporting-registration preservation, and independent client/server updates); the integrated lifecycle with connected T3, retained remote credentials,
-launch at login and real Keychain prompts; or live T3 OAuth and workloads through the desktop. Record each as PASS, FAIL or UNVERIFIED; an ad-hoc package probe is insufficient for public distribution.
+updates between consecutive signed releases (including failed downloads, data and reporting-registration preservation, and independent client/server updates); the integrated lifecycle with connected T3 Code, retained remote credentials,
+launch at login and real Keychain prompts; or live T3 Code OAuth and workloads through the desktop. Record each as PASS, FAIL or UNVERIFIED; an ad-hoc package probe is insufficient for public distribution.

@@ -442,7 +442,7 @@ function AgentDuplicateFromList({
           })
           .catch((cause: unknown) => {
             setError(
-              cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+              cause instanceof Error ? cause.message : "AgentEasel could not duplicate this Agent.",
             );
             setDuplicating(false);
           });
@@ -513,7 +513,7 @@ function AgentRemoveFromList({
                       setError(
                         cause instanceof Error
                           ? cause.message
-                          : "Factory could not remove this Agent.",
+                          : "AgentEasel could not remove this Agent.",
                       );
                       setRemoving(false);
                     });
@@ -592,7 +592,7 @@ function SelectedAgentEditor({
     return (
       <div className="grid justify-items-start gap-3 p-8">
         <p role="alert" className="text-sm text-destructive">
-          {library.error ? "Factory could not load this Agent editor." : "Agent not found"}
+          {library.error ? "AgentEasel could not load this Agent editor." : "Agent not found"}
         </p>
         <Button variant="outline" onClick={() => void openStudio({ tab: "agents" })}>
           Back to list
@@ -724,7 +724,7 @@ function useAgentOwnerDialogs(
         })
         .catch((cause: unknown) => {
           setError(
-            cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+            cause instanceof Error ? cause.message : "AgentEasel could not duplicate this Agent.",
           );
         })
         .finally(() => setDuplicating(false));

@@ -98,7 +98,7 @@ it("a legacy Start records no title generation while Generate Run titles is on",
   expect(started.value.titleGeneration).toBeNull();
 });
 
-it("a title model T3 no longer offers skips generation with a diagnostic on the setting while the Run still starts", async (c) => {
+it("a title model T3 Code no longer offers skips generation with a diagnostic on the setting while the Run still starts", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const withdraw = await enableRunTitlesWithCheapModel(fixture.f, fixture.t3);
@@ -112,7 +112,7 @@ it("a title model T3 no longer offers skips generation with a diagnostic on the 
   assert(started.ok);
   expect(started.value.titleGeneration).toMatchObject({
     state: "skipped",
-    reason: "T3 does not offer gpt-6.1-luna for Codex.",
+    reason: "T3 Code does not offer gpt-6.1-luna for Codex.",
     modelLabel: "Codex · gpt-6.1-luna",
   });
   expect(titleEvents(started.value)).toStrictEqual([
@@ -127,7 +127,7 @@ it("a title model T3 no longer offers skips generation with a diagnostic on the 
         runId: started.value.id,
         runNumber: 1,
         outcome: "skipped",
-        message: "T3 does not offer gpt-6.1-luna for Codex.",
+        message: "T3 Code does not offer gpt-6.1-luna for Codex.",
         recordedAt: started.value.startedAt,
       },
     },
@@ -231,7 +231,7 @@ it("a derived issue title keeps the setting's diagnostic, because no title model
   expect(setting.value.diagnostic).toMatchObject({
     runId: failed.value.id,
     outcome: "skipped",
-    message: "T3 does not offer gpt-6.1-luna for Codex.",
+    message: "T3 Code does not offer gpt-6.1-luna for Codex.",
   });
 });
 
@@ -261,7 +261,7 @@ it("a replayed Start keeps its pending generation and decides nothing again afte
   expect(setting.value.diagnostic).toBeNull();
 });
 
-it("enabling Generate Run titles with a model T3 does not offer is rejected and leaves the setting off", async (c) => {
+it("enabling Generate Run titles with a model T3 Code does not offer is rejected and leaves the setting off", async (c) => {
   // Arrange
   const fixture = await prepared(c);
 
@@ -280,7 +280,7 @@ it("enabling Generate Run titles with a model T3 does not offer is rejected and 
   });
 });
 
-it("enabling Generate Run titles with a provider instance T3 does not offer is rejected", async (c) => {
+it("enabling Generate Run titles with a provider instance T3 Code does not offer is rejected", async (c) => {
   // Arrange
   const fixture = await prepared(c);
 
@@ -338,7 +338,7 @@ it("an approved client reads Generate Run titles with its latest diagnostic", as
       runId: started.value.id,
       runNumber: 1,
       outcome: "skipped",
-      message: "T3 does not offer gpt-6.1-luna for Codex.",
+      message: "T3 Code does not offer gpt-6.1-luna for Codex.",
       recordedAt: started.value.startedAt,
     },
   });
@@ -359,7 +359,7 @@ it("a pending generation launches one top-level title thread in the Project chec
     environmentId: fixture.t3.connection.environmentId,
     projectId: fixture.project.projectId,
     clientRequestId: `factory-title:${started.value.id}`,
-    title: `Factory title · Run #1 · ${started.value.id}`,
+    title: `AgentEasel title · Run #1 · ${started.value.id}`,
     workspaceStrategy: { type: "root" },
     interactionMode: "default",
     modelSelection: {
@@ -375,7 +375,7 @@ it("a pending generation launches one top-level title thread in the Project chec
   );
 });
 
-it("the title capability reaches only the title thread's prompt, never a Run read, the thread's T3 title or its request key", async (c) => {
+it("the title capability reaches only the title thread's prompt, never a Run read, the thread's T3 Code title or its request key", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
@@ -459,12 +459,12 @@ it("a worker at its first handoff launches with the generated title applied afte
     expect.arrayContaining([
       "F#1 Entry worker · Improve search",
       "F#1 Parallel work · Search ranking",
-      `Factory title · Run #1 · ${entry.runId}`,
+      `AgentEasel title · Run #1 · ${entry.runId}`,
     ]),
   );
 });
 
-it("a title model T3 withdrew after Start is skipped just before dispatch with a diagnostic and launches no title thread", async (c) => {
+it("a title model T3 Code withdrew after Start is skipped just before dispatch with a diagnostic and launches no title thread", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const withdraw = await enableRunTitlesWithCheapModel(fixture.f, fixture.t3);
@@ -479,7 +479,7 @@ it("a title model T3 withdrew after Start is skipped just before dispatch with a
   const run = await titleGenerationEnded(fixture.world, started.value.id);
   expect(run.titleGeneration).toMatchObject({
     state: "skipped",
-    reason: "T3 does not offer gpt-6.1-luna for Codex.",
+    reason: "T3 Code does not offer gpt-6.1-luna for Codex.",
     threadLink: null,
   });
   const setting = await fixture.f.getRunTitleSetting();
@@ -487,14 +487,14 @@ it("a title model T3 withdrew after Start is skipped just before dispatch with a
   expect(setting.value.diagnostic).toMatchObject({
     runId: started.value.id,
     outcome: "skipped",
-    message: "T3 does not offer gpt-6.1-luna for Codex.",
+    message: "T3 Code does not offer gpt-6.1-luna for Codex.",
   });
   expect(
     [...fixture.t3.threads.launches.values()].map((launch) => launch.payload.title),
   ).toStrictEqual(["F#1 Entry worker · Improve search"]);
 });
 
-it("a title thread launch T3 rejects records the generation failed with a diagnostic on the setting and keeps the automatic title", async (c) => {
+it("a title thread launch T3 Code rejects records the generation failed with a diagnostic on the setting and keeps the automatic title", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
@@ -509,7 +509,7 @@ it("a title thread launch T3 rejects records the generation failed with a diagno
   const run = await titleGenerationEnded(fixture.world, started.value.id);
   expect(run.titleGeneration).toMatchObject({
     state: "failed",
-    reason: "T3 rejected the title thread launch.",
+    reason: "T3 Code rejected the title thread launch.",
   });
   expect(run.title).toBe("Improve search");
   expect(run.titleProvenance).toBe("automatic");
@@ -519,7 +519,7 @@ it("a title thread launch T3 rejects records the generation failed with a diagno
   expect(setting.value.diagnostic).toMatchObject({
     runId: started.value.id,
     outcome: "failed",
-    message: "T3 rejected the title thread launch.",
+    message: "T3 Code rejected the title thread launch.",
   });
 });
 
@@ -763,7 +763,7 @@ it("a title launch recorded under an authorization context that reauthorization 
   expect(titleEvents(run.value)).toStrictEqual([]);
   expect(
     [...fixture.t3.threads.launches.values()].filter((launch) =>
-      launch.payload.title.startsWith("Factory title · "),
+      launch.payload.title.startsWith("AgentEasel title · "),
     ),
   ).toStrictEqual([]);
 });
@@ -783,7 +783,7 @@ it("a title launch is never sent when reauthorization replaces its authorization
   assert(started.ok);
   expect(
     [...fixture.t3.threads.launches.values()].filter((launch) =>
-      launch.payload.title.startsWith("Factory title · "),
+      launch.payload.title.startsWith("AgentEasel title · "),
     ),
   ).toStrictEqual([]);
 });
@@ -826,7 +826,7 @@ it("a title thread that finishes without a valid title records failed quietly wi
   expect(titleThreadStops(fixture.t3)).toStrictEqual([]);
 });
 
-it("after a title is applied, Factory requests one keyed Stop of the title thread that may still be running", async (c) => {
+it("after a title is applied, AgentEasel requests one keyed Stop of the title thread that may still be running", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);

@@ -1,20 +1,22 @@
 <p align="center">
-  <img src="apps/desktop/resources/icon.png" width="112" alt="T3 Factory icon" />
+  <img src="apps/desktop/resources/icon.png" width="112" alt="AgentEasel icon" />
 </p>
 
-# T3 Factory
+# AgentEasel
 
 **Compose AI development workflows. Keep human decisions in the loop.**
 
-> T3 Factory requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and T3 Factory does not work without a T3 Code installation. T3 Factory is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
+> AgentEasel requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and AgentEasel does not work without a T3 Code installation. AgentEasel is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
 
 [![Quality](https://github.com/alimek/t3-factory/actions/workflows/quality.yml/badge.svg)](https://github.com/alimek/t3-factory/actions/workflows/quality.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-T3 Factory is a local application for turning reusable AI Agents into visual software
+AgentEasel plans, starts and tracks multi-agent Runs. The agent work runs in
+[T3 Code](https://t3.codes/), so AgentEasel requires T3 Code.
+
+AgentEasel is a local application for turning reusable AI Agents into visual software
 development workflows. Connect implementation, review and Human steps, add correction
-loops or parallel branches, then follow each Run from one place. The agent work runs in
-[T3 Code](https://t3.codes/), so T3 Factory requires T3 Code; Factory stores your
+loops or parallel branches, then follow each Run from one place. AgentEasel stores your
 workflow, routes work and records its history.
 
 [Try the demo](#try-the-demo) · [Run with T3 Code](#run-with-t3-code) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
@@ -24,9 +26,9 @@ workflow, routes work and records its history.
 - **Design Flows visually.** Connect Agent and Human blocks with named exits,
   correction loops and independent parallel branches, and add Continuations that prompt an
   earlier Agent again in its own conversation. Save unfinished drafts and check readiness.
-- **Reuse Agents across projects.** Save prompts and worker settings once. Factory launches
+- **Reuse Agents across projects.** Save prompts and worker settings once. AgentEasel launches
   each Block with that Agent's provider and model.
-- **Keep decisions with people.** Answer Human steps in Factory and open T3 for native
+- **Keep decisions with people.** Answer Human steps in AgentEasel and open T3 Code for native
   agent questions or permissions. See which Runs need input or have a Problem.
 - **Follow durable execution.** Inspect the execution canvas, handoffs and timeline;
   keep each Run's captured definitions and history across backend restarts. Settle or archive a Run, or start a new one.
@@ -35,13 +37,13 @@ workflow, routes work and records its history.
 
 A typical Flow might send implementation work to an Agent, route it through review,
 return requested corrections, then ask a person for approval. You decide the blocks
-and exits; Factory does not impose a fixed development process.
+and exits; AgentEasel does not impose a fixed development process.
 
 ## Project status
 
 **Early development.** Source installation and the simulated demo are the best starting
-points. Controlled tests cover Factory behavior; live T3 compatibility depends on the
-specific build, harness and permissions. Factory-launched workers and the `$factory-block`
+points. Controlled tests cover AgentEasel behavior; live T3 Code compatibility depends on the
+specific build, harness and permissions. AgentEasel-launched workers and the `$factory-block`
 skill still need further live qualification. See the [support limits](docs/installation.md#compatibility-and-support-limits).
 
 The macOS Apple Silicon desktop app can be built from source. A developer package is
@@ -55,7 +57,7 @@ not a signed, notarized public release; see [Release](docs/release.md).
 | pnpm | Version pinned in [`package.json`](package.json) (`packageManager`) |
 | Native build tools | Python and a C/C++ toolchain for `fs-ext`; on macOS, Xcode Command Line Tools |
 | Storage | Local filesystem with working `flock` semantics; network filesystems are unsupported |
-| T3 | Needed for real agent work; the demo uses a simulator |
+| T3 Code | Needed for real agent work; the demo uses a simulator |
 
 macOS arm64 has been exercised. Linux is a backend implementation target with CI
 checks, but is not a verified release host. Windows, Intel Mac desktop and Linux
@@ -73,7 +75,7 @@ pnpm dev
 ```
 
 Open the frontend URL printed by Vite. A fresh demo home contains sample Agents,
-Flows and Runs backed by simulated T3. **No T3 connection, OAuth approval, model
+Flows and Runs backed by simulated T3 Code. **No T3 Code connection, OAuth approval, model
 credentials or paid model work is required.** The demo does not execute real agents.
 
 Demo edits persist in `~/.agenteasel-dev`, separately from production data. To use
@@ -101,12 +103,12 @@ pnpm start
 ```
 
 Open <http://127.0.0.1:4310>. The foreground backend serves the built UI and API;
-T3 runs separately. Factory data is stored in `~/.agenteasel`, outside the checkout.
+T3 Code runs separately. AgentEasel data is stored in `~/.agenteasel`, outside the checkout.
 
-1. Start T3 with access to the local repository you want to work on.
-2. In **Settings → T3 connection**, save T3's MCP endpoint and choose **Authorize on
+1. Start T3 Code with access to the local repository you want to work on.
+2. In **Settings → T3 Code connection**, save T3 Code's MCP endpoint and choose **Authorize on
    backend host**. Complete approval in the browser on that host.
-3. In **Settings → Agent reporting**, install Factory MCP for the supported local
+3. In **Settings → Agent reporting**, install AgentEasel MCP for the supported local
    harness homes you intend to use. Start fresh harness sessions when required.
 4. In **Studio → Agents**, create reusable prompts and choose each Agent's worker settings.
 5. In **Studio → Flows**, connect blocks and exits, save the Flow and check readiness.
@@ -116,11 +118,11 @@ Start checks connection, project, settings and reporting readiness. It preserves
 unavailable choices and explains what needs attention. Setup does not launch a test workload.
 Real Runs use your configured model providers and may incur their normal charges.
 
-Ctrl+C stops the Factory backend. **Backend exit is not Archive:** agent work in T3
+Ctrl+C stops the AgentEasel backend. **Backend exit is not Archive:** agent work in T3 Code
 may continue. Use **Archive…** in the Run's ··· menu to end a Run and interrupt its workers; Archive does not undo edits.
 
 For endpoint setup, configuration and client access, see
-[installation](docs/installation.md), [T3 integration](docs/t3-integration.md) and
+[installation](docs/installation.md), [T3 Code integration](docs/t3-integration.md) and
 [desktop and approved clients](docs/desktop-and-clients.md).
 
 ## Development
@@ -134,7 +136,7 @@ For endpoint setup, configuration and client access, see
 | `pnpm test:e2e` | Prepare the frontend and run controlled Chromium journeys |
 | `pnpm desktop:package` | Create a local macOS arm64 developer package |
 
-`pnpm dev:prod` provides source reload against **real production data and T3**.
+`pnpm dev:prod` provides source reload against **real production data and T3 Code**.
 Stop any other backend using that home first. See [development modes](docs/installation.md#development-and-production-commands).
 
 The workspace uses TypeScript, React, Vite+, Tailwind CSS, Effect, SQLite and Electron.

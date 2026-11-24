@@ -30,7 +30,7 @@ import {
   RUN_IMAGE_MAX_BYTES,
 } from "@agent-easel/domain-validation";
 import type { FactoryOptions } from "./factory-options.ts";
-import { openFactory, type Factory } from "./open-factory.ts";
+import { openFactory, type AgentEasel } from "./open-factory.ts";
 import { configurationWriter, type Configuration } from "./config.ts";
 import { failure } from "./result.ts";
 import { accessRoutes } from "./access-routes.ts";
@@ -122,7 +122,7 @@ function requestTarget(request: HttpServerRequestType): { url: URL; pathname: st
 const answer = (operation: () => Promise<Result<unknown>>, successStatus = 200) =>
   Effect.map(Effect.promise(operation), (result) => resultResponse(result, successStatus));
 
-function apiRoutes(factory: Factory) {
+function apiRoutes(factory: AgentEasel) {
   return {
     ...runRoutes(factory),
     ...connectionRoutes(factory),
@@ -136,7 +136,7 @@ function apiRoutes(factory: Factory) {
   };
 }
 
-function featureUsageRoutes(factory: Factory): RouteEntries<typeof featureUsageOperations> {
+function featureUsageRoutes(factory: AgentEasel): RouteEntries<typeof featureUsageOperations> {
   return {
     reportFeatureUsed: {
       body: standardBody,
@@ -151,7 +151,7 @@ function featureUsageRoutes(factory: Factory): RouteEntries<typeof featureUsageO
   };
 }
 
-function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
+function runRoutes(factory: AgentEasel): RouteEntries<typeof runOperations> {
   return {
     listRunNavigation: {
       handle: () => answer(() => factory.listRunNavigation()),
@@ -284,7 +284,7 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
   };
 }
 
-function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOperations> {
+function connectionRoutes(factory: AgentEasel): RouteEntries<typeof connectionOperations> {
   return {
     getReportingInstallations: { handle: () => answer(() => factory.getReportingInstallations()) },
     installReporting: {
@@ -326,7 +326,7 @@ function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOpera
  * credentials and access policy, its Test may be charged, and its check and On/Off switch connect
  * to Discord: approved clients can neither read nor change it.
  */
-function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOperations> {
+function chatControlRoutes(factory: AgentEasel): RouteEntries<typeof chatControlOperations> {
   return {
     getChatModelSettings: {
       hostOnly: true,
@@ -379,7 +379,7 @@ function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOpe
 }
 
 function projectRoutes(
-  factory: Factory,
+  factory: AgentEasel,
 ): RouteEntries<typeof projectOperations & typeof projectServerOperations> {
   return {
     listProjects: { handle: () => answer(() => factory.listProjects()) },
@@ -414,7 +414,7 @@ function projectRoutes(
   };
 }
 
-function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
+function flowRoutes(factory: AgentEasel): RouteEntries<typeof flowOperations> {
   return {
     listFlows: { handle: () => answer(() => factory.listFlows()) },
     createFlow: {
@@ -455,7 +455,7 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
   };
 }
 
-function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
+function agentRoutes(factory: AgentEasel): RouteEntries<typeof agentOperations> {
   return {
     getAgentCapabilities: { handle: () => answer(() => factory.getAgentCapabilities()) },
     listAgents: { handle: () => answer(() => factory.listAgents()) },
@@ -488,7 +488,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
 }
 
 /** Every approved client manages Triggers; their bodies carry typed settings only. */
-function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations> {
+function triggerRoutes(factory: AgentEasel): RouteEntries<typeof triggerOperations> {
   return {
     getTriggerReadiness: {
       handle: ({ parameters }) =>
@@ -533,7 +533,7 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
   };
 }
 
-function importRoutes(factory: Factory): RouteEntries<typeof definitionImportOperations> {
+function importRoutes(factory: AgentEasel): RouteEntries<typeof definitionImportOperations> {
   return {
     reviewImport: {
       body: importBody,
@@ -564,7 +564,10 @@ function admission(
       return failure("incompatible", compatibility.message);
     const required = binding.surface === "remote" || route.protocolRequired === true;
     if (required && !exempt && !route.protocolOptional && compatibility === undefined)
-      return failure("incompatible", "This client does not declare a Factory protocol. Update it.");
+      return failure(
+        "incompatible",
+        "This client does not declare an AgentEasel protocol. Update it.",
+      );
     if (binding.surface === "host" || route.public) return { ok: true, value: null };
     const client = yield* Effect.promise(() =>
       binding.factory.authenticateClient(credential ?? ""),
@@ -573,7 +576,7 @@ function admission(
     if (route.desktopOnly && client.value.kind !== "desktop")
       return failure("unauthorized", "An approved desktop is required.");
     if (route.hostOnly)
-      return failure("host_only", "This operation is available only on the Factory host.");
+      return failure("host_only", "This operation is available only on the AgentEasel host.");
     return { ok: true, value: client.value.id };
   });
 }
@@ -661,7 +664,7 @@ interface HttpBinding {
   readonly routes: RouteTable;
   readonly uiDirectory: string | null;
   readonly protocol: ProtocolDescriptor;
-  readonly factory: Factory;
+  readonly factory: AgentEasel;
   readonly mcp: (request: Request) => Promise<Response>;
   readonly live: LiveTransport;
 }
@@ -688,7 +691,7 @@ function serveLive(
     return Effect.succeed(
       writeJsonResponse(
         403,
-        failure("validation", "Live delivery requires the Origin of this Factory address."),
+        failure("validation", "Live delivery requires the Origin of this AgentEasel address."),
       ),
     );
   if (request.method !== "GET" || request.headers.upgrade?.toLowerCase() !== "websocket")
@@ -728,13 +731,16 @@ function serveMcp(
     return Effect.succeed(
       writeJsonResponse(
         403,
-        failure("host_only", "Harnesses reach Factory MCP only on the host's loopback address."),
+        failure("host_only", "Harnesses reach AgentEasel MCP only on the host's loopback address."),
       ),
     );
   const origin = request.headers.origin;
   if (origin !== undefined && origin !== `http://${request.headers.host}`)
     return Effect.succeed(
-      writeJsonResponse(403, failure("validation", "Factory MCP refuses cross-origin requests.")),
+      writeJsonResponse(
+        403,
+        failure("validation", "AgentEasel MCP refuses cross-origin requests."),
+      ),
     );
   return HttpServerRequest.toWeb(request).pipe(
     Effect.flatMap((web) => Effect.promise(() => binding.mcp(web))),
@@ -747,7 +753,9 @@ function handleHttpRequest(
   binding: HttpBinding,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.catchCause(handleHttpRequestInner(request, binding), () =>
-    Effect.succeed(resultResponse(failure("internal", "Factory could not complete the request."))),
+    Effect.succeed(
+      resultResponse(failure("internal", "AgentEasel could not complete the request.")),
+    ),
   );
 }
 
@@ -760,7 +768,7 @@ function handleHttpRequestInner(
     if (!isAllowedHost(request.headers.host, address, binding.allowedHosts)) {
       return writeJsonResponse(
         421,
-        failure("validation", "Host is not allowed for this Factory binding."),
+        failure("validation", "Host is not allowed for this AgentEasel binding."),
       );
     }
     const peer = toIncomingMessage(request).socket?.remoteAddress ?? "";
@@ -769,7 +777,7 @@ function handleHttpRequestInner(
         403,
         failure(
           "host_only",
-          "This Factory address serves only its own host. Connect other devices through secure remote access.",
+          "This AgentEasel address serves only its own host. Connect other devices through secure remote access.",
         ),
       );
     }

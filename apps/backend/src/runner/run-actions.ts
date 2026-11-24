@@ -31,7 +31,7 @@ const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> 
   ),
   closed: failure(
     "conflict",
-    "This Run is archived, stopping its workers to settle, or no longer run by this Factory, so it forwards no Wait arrival.",
+    "This Run is archived, stopping its workers to settle, or no longer run by this AgentEasel, so it forwards no Wait arrival.",
   ),
 };
 
@@ -82,7 +82,7 @@ export function openRunActions({
     action: Effect.Effect<Result<A>, unknown>,
   ): Effect.Effect<Result<A>, unknown> {
     return Effect.suspend(() =>
-      isClosed() ? Effect.succeed(failure("conflict", "Factory is shutting down.")) : action,
+      isClosed() ? Effect.succeed(failure("conflict", "AgentEasel is shutting down.")) : action,
     );
   }
 
@@ -345,7 +345,7 @@ export function openRunActions({
             )
               return failure(
                 "conflict",
-                "Request report needs the worker thread finished in T3 with no run newer than the one Factory observed.",
+                "Request report needs the worker thread finished in T3 Code with no run newer than the one AgentEasel observed.",
               );
             return { ok: true as const, value: undefined };
           }),
@@ -353,7 +353,7 @@ export function openRunActions({
             Effect.succeed(
               failure(
                 "conflict",
-                "The worker thread cannot be read from T3. Refresh before requesting a report.",
+                "The worker thread cannot be read from T3 Code. Refresh before requesting a report.",
               ),
             ),
         );

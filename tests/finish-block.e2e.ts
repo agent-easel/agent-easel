@@ -526,7 +526,7 @@ test("a Human answer routed to two endings keeps its author and worker and shows
   const run = await readHistoryRun(app.baseUrl, runId);
   const worker = run.threadBindings.find((binding) => binding.blockId === "worker");
   expect(worker?.link).toBeTruthy();
-  await expect(runResult(screen).getByRole("link", "Open in T3")).toHaveAttribute(
+  await expect(runResult(screen).getByRole("link", "Open in T3 Code")).toHaveAttribute(
     "href",
     worker!.link!,
   );
@@ -608,7 +608,7 @@ test("a prompted Continuation that reaches an ending identifies its own response
   await expect(runResult(screen)).toContainText("By Summarize the release");
   await expect(runResult(screen)).toContainText("Worker Implement the fix");
   await expect(runResult(screen).getByText("CHANGELOG.md", { exact: true })).toBeVisible();
-  await expect(runResult(screen).getByRole("link", "Open in T3")).toBeVisible();
+  await expect(runResult(screen).getByRole("link", "Open in T3 Code")).toBeVisible();
   await app.screenshot("finish-continuation-author");
 });
 
@@ -700,7 +700,7 @@ test("an unresolved Stop after reaching an ending names the blocked worker witho
 
   // Assert
   await expect(
-    screen.getByText(/Factory couldn’t confirm the stop for Explore an alternative/),
+    screen.getByText(/AgentEasel couldn’t confirm the stop for Explore an alternative/),
   ).toBeVisible();
   await expect(screen.getByText(/Reaching Shipped is stopping/)).toHaveCount(0);
   await app.screenshot("finish-run-unresolved-stop");

@@ -23,7 +23,7 @@ const entry = (
 const statusObserved = (sequence: number, blockId: string, engineStatus: string) =>
   entry(sequence, "execution-observed", blockId, engineStatus);
 
-it("consecutive T3 status observations of one Block become one Key events row with every observation", () => {
+it("consecutive T3 Code status observations of one Block become one Key events row with every observation", () => {
   // Arrange
   const events = [
     entry(1, "launch-acknowledged"),

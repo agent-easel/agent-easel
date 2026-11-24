@@ -59,7 +59,7 @@ function vibeMcpEntry(config: Record<string, unknown>) {
 
 const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/gm;
 const EDITED_REGISTRATION =
-  "The Factory registration was edited. Review the factory-runtime entry manually.";
+  "The AgentEasel registration was edited. Review the factory-runtime entry manually.";
 
 function* vibeInsertions(
   before: string,
@@ -111,7 +111,7 @@ function registeredVibe(
     }
   }
   throw Error(
-    "Factory could not update Vibe's mcp_servers without changing other settings. Review the factory-runtime entry manually.",
+    "AgentEasel could not update Vibe's mcp_servers without changing other settings. Review the factory-runtime entry manually.",
   );
 }
 
@@ -174,7 +174,7 @@ async function inspectOptionalSkillCopy({
     if (!info.isFile() || info.nlink !== 1)
       return {
         state: "outdated" as const,
-        problem: `The optional ${name} skill at ${path} is a symlink, special or hard-linked file, which Factory leaves unchanged. Replace or remove it manually, then Reinstall.`,
+        problem: `The optional ${name} skill at ${path} is a symlink, special or hard-linked file, which AgentEasel leaves unchanged. Replace or remove it manually, then Reinstall.`,
       };
     if ((await readFile(path, "utf8")) === text) return { state: "current" as const };
     return await unwritable("outdated");
@@ -290,12 +290,12 @@ function configChange(profile: HarnessProfile, before: string, url: string, repa
     !Object.entries(entry).every(([key, value]) => saved[key] === value)
   )
     throw Error(
-      "Conflicting factory-runtime MCP entry. Remove it from this file and install again; Factory does not overwrite another definition.",
+      "Conflicting factory-runtime MCP entry. Remove it from this file and install again; AgentEasel does not overwrite another definition.",
     );
   if (savedUrl === url) return before;
   if (!repair)
     throw new RepairableInstallationError(
-      "Factory MCP is registered for another backend address. Repair the installation.",
+      "AgentEasel MCP is registered for another backend address. Repair the installation.",
     );
   return registered(profile, before, config, url, savedUrl);
 }
@@ -359,7 +359,7 @@ const openReportingInstallation = Effect.fn(function* (
         !(yield* boundary(() => skillMatches(canonicalSkill)))
       )
         throw new RepairableInstallationError(
-          "Factory Block skill missing or outdated. Repair the installation from this backend.",
+          "AgentEasel Block skill missing or outdated. Repair the installation from this backend.",
         );
       return withReportingInstallationActions({
         ...target,
@@ -384,7 +384,7 @@ const openReportingInstallation = Effect.fn(function* (
               message:
                 error instanceof Error
                   ? error.message
-                  : "Recheck configuration permissions and the Factory MCP entry.",
+                  : "Recheck configuration permissions and the AgentEasel MCP entry.",
             },
             error instanceof RepairableInstallationError,
           ),
@@ -398,7 +398,7 @@ const openReportingInstallation = Effect.fn(function* (
       Result<readonly ReportingInstallation[]>,
       never
     > {
-      const manual = `Factory has no installer for this provider and cannot accept its reports yet. When support exists, add a Streamable HTTP MCP server named factory-runtime with URL ${mcpUrl()} in the file this harness reads for user MCP servers, then start a fresh session.`;
+      const manual = `AgentEasel has no installer for this provider and cannot accept its reports yet. When support exists, add a Streamable HTTP MCP server named factory-runtime with URL ${mcpUrl()} in the file this harness reads for user MCP servers, then start a fresh session.`;
       return {
         ok: true,
         value: yield* Effect.forEach(
@@ -426,7 +426,7 @@ const openReportingInstallation = Effect.fn(function* (
                 const target = (yield* targets()).find((target) => target.id === id);
                 if (!target?.path)
                   throw Error(
-                    "Target unavailable. Recheck the local T3 environment and configuration home.",
+                    "Target unavailable. Recheck the local T3 Code environment and configuration home.",
                   );
                 const profile = harnessProfile(target);
                 const before = yield* boundary(() => readConfig(target.path!));

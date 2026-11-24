@@ -87,11 +87,11 @@ test("a new browser profile waits for host approval, then operates the server's 
 }) => {
   // Arrange
   await app.open("/studio/flows");
-  await expect(screen.getByRole("heading", "Request access to this Factory")).toBeVisible();
+  await expect(screen.getByRole("heading", "Request access to this AgentEasel")).toBeVisible();
   await screen.getByLabel("Device name shown to the owner").fill("Review laptop browser");
   await screen.getByRole("button", "Request access").tap();
   await expect(
-    screen.getByRole("heading", "Waiting for approval on the Factory host"),
+    screen.getByRole("heading", "Waiting for approval on the AgentEasel host"),
   ).toBeVisible();
   await expect(screen.getByLabel("Verification code")).toContainText(/^\d{3} \d{3}$/);
   await app.screenshot("remote-pending-approval");
@@ -137,7 +137,7 @@ test("confirming revocation in Settings removes access from an approved browser 
   await app.screenshot("remote-revoked");
 });
 
-test("an approved browser installs Factory MCP on the server and retains it after reload", async ({
+test("an approved browser installs AgentEasel MCP on the server and retains it after reload", async ({
   fixture,
   app,
   screen,
@@ -163,7 +163,7 @@ test("an approved browser installs Factory MCP on the server and retains it afte
   await app.screenshot("remote-reporting-installed");
 });
 
-test("an approved browser repairs the server's Factory MCP installation", async ({
+test("an approved browser repairs the server's AgentEasel MCP installation", async ({
   fixture,
   app,
   screen,
@@ -365,7 +365,7 @@ test("the current composer requires an updated server before requesting access",
   await expect(
     screen.getByRole("heading", "This client and server can’t work together"),
   ).toBeVisible();
-  await expect(screen.getByText(/Update the Factory server/)).toBeVisible();
+  await expect(screen.getByText(/Update the AgentEasel server/)).toBeVisible();
   await expect(screen.getByRole("button", "Request access")).toHaveCount(0);
   await app.screenshot("older-server-rejected");
 });
@@ -389,6 +389,6 @@ test("an incompatible client recovers when the selected server becomes compatibl
   await fixture.remoteAccess.compatible();
 
   // Assert
-  await expect(screen.getByRole("heading", "Request access to this Factory")).toBeVisible();
+  await expect(screen.getByRole("heading", "Request access to this AgentEasel")).toBeVisible();
   await app.screenshot("compatible-server-recovered");
 });

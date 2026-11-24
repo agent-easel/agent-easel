@@ -11,7 +11,7 @@ import {
 } from "./scenarios.ts";
 import { assert } from "@effect/vitest";
 import type { DiscordSettings } from "@agent-easel/contracts";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import {
   besidesReports,
   confirmed,
@@ -66,7 +66,7 @@ export async function messageShows(
 
 /** The Discord settings once a status card delivery problem in `state` is listed. */
 export const cardProblem = (
-  factory: Pick<Factory, "getDiscordSettings">,
+  factory: Pick<AgentEasel, "getDiscordSettings">,
   state: DiscordSettings["delivery"]["problems"][number]["state"],
 ) =>
   discordSettingsWhen(factory, (settings) =>

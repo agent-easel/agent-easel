@@ -2,16 +2,16 @@
 
 ## Workspace boundaries
 
-Factory separates the browser UI, authoritative backend and desktop shell. Shared contracts
+AgentEasel separates the browser UI, authoritative backend and desktop shell. Shared contracts
 and validation have no application or I/O dependencies; clients may validate early, but the
 backend remains authoritative. Shared contracts also declare the desktop bridge between the
 renderer and the desktop shell. The desktop shell owns host lifecycle and client transport,
-not business rules. T3 owns external execution; Factory owns Flow routing and Run state.
+not business rules. T3 Code owns external execution; AgentEasel owns Flow routing and Run state.
 
 ## Persistence model
 
-Factory stores current definitions with revisions plus an execution log in SQLite. It is
-neither full event sourcing nor a mirror of T3 conversations. Configuration, the database
+AgentEasel stores current definitions with revisions plus an execution log in SQLite. It is
+neither full event sourcing nor a mirror of T3 Code conversations. Configuration, the database
 and restricted OAuth credentials live outside project repositories.
 
 - Agent and Flow definitions are editable. Saves compare revisions; stale writes conflict.
@@ -19,7 +19,7 @@ and restricted OAuth credentials live outside project repositories.
   Each Flow save appends an immutable relational revision and each Agent save an immutable
   Agent revision; removing either hides it from Studio and Start but keeps its revisions.
   The [owning Project](studio.md#ownership) is stored on the Flow and Agent identity, referencing
-  the never-deleted Factory Project row, and is not part of any revision. Migration `103` added it
+  the never-deleted AgentEasel Project row, and is not part of any revision. Migration `103` added it
   with every existing Flow and Agent global, keeping ids, revisions, references, Runs and import
   receipts unchanged and needing no user action. Migration `105` records when each identity's owner
   last changed (empty for existing rows), so a definition's update time is its latest save or owner change.
@@ -66,7 +66,7 @@ and restricted OAuth credentials live outside project repositories.
   connections. Existing rows stay unchanged and no Join is inferred. Migration `127` adds durable Join arrivals and rounds keyed by execution block, and links outgoing Handoffs to their round. Migration `128` adds Join round cancellations and the `join-integrity` chat matter kind, and indexes Join timeline events. Both preserve all existing data.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for bundled Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
+  the created root Flow id. Migration `122` adds ordered Flow identities by actual document key for bundled Flow files. The result includes `flows: [{key, id}]` for those receipts. Earlier receipts retain their root identity. A commit reads receipts before the T3 Code catalog and the target's availability, so a retry replays without T3 Code and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
   receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import
@@ -80,12 +80,12 @@ and restricted OAuth credentials live outside project repositories.
   the Start request and changed to manual by Rename; it is never derived from the title text. Manual provenance is part
   of the Start request identity; automatic and legacy keep the identity requests had before provenance existed.
   Migration `079` marks every existing Run legacy and changes no title.
-- The installation-wide **Generate Run titles** setting is one SQLite row holding its on/off state, the chosen T3 model
+- The installation-wide **Generate Run titles** setting is one SQLite row holding its on/off state, the chosen T3 Code model
   and options, a revision and the latest title generation diagnostic. Start acceptance records at most one title generation
   per Run in the same transaction as the Run, with its captured model, options, prompt version and deadline, and for a
   pending one the title thread's launch request, so the intent is durable before any dispatch. The generation later
-  records when that request was sent, the thread T3 launched, when it reached its outcome and the claims for its one
-  Stop and one T3 thread settlement. Migration `080` adds the setting off and gives existing Runs no generation. No
+  records when that request was sent, the thread T3 Code launched, when it reached its outcome and the claims for its one
+  Stop and one T3 Code thread settlement. Migration `080` adds the setting off and gives existing Runs no generation. No
   other data changes.
 - [Chat control](chat-control.md) keeps its state in SQLite: the On/Off switch and one row per Settings section
   (Language model, Discord connection, Access), each with its own revision so sections save independently, and
@@ -130,7 +130,7 @@ and restricted OAuth credentials live outside project repositories.
   Each delivery also records the [worker provenance](runner.md#worker-provenance) of its message,
   and each Wait arrival is a durable obligation with an absolute deadline. A Condition delivery is recorded pending in
   per-Condition order, then numbered and routed in the same transaction.
-- Reports name their Block by the Block id Factory issued; Run and Block identity never come
+- Reports name their Block by the Block id AgentEasel issued; Run and Block identity never come
   from other model-supplied references.
   Attention settlement and the Run's Settled and Archived states remain separate, with cancelled Human work never
   represented as an answer.
@@ -161,14 +161,14 @@ uncertain delivery or recovery, then are cleared while keys, fingerprints and re
 remain. Initial input, including its images, revision prompts and the [Run result](runner.md#reaching-an-ending), which
 keeps its text through Archive unless its ending's output is None, are intentional exceptions;
 staged images no Run references are deleted after 24 hours. The only other image removal is manual
-deletion from **Settings → Run images** of an image whose every Run is Settled or Archived. Factory
+deletion from **Settings → Run images** of an image whose every Run is Settled or Archived. AgentEasel
 rechecks that rule at deletion and removes only the bytes; manifest, staging row and history stay. A
 later Start naming the image gets the missing-images outcome, and uploading identical bytes restores
 it. There is no transcript archive, and neither payload clearing nor image deletion is secure erasure.
 
 ## Public operations
 
-The public Factory API is the behavioral boundary for HTTP clients and integration tests.
+The public AgentEasel API is the behavioral boundary for HTTP clients and integration tests.
 `openFactory({ databasePath })` acquires ownership, opens SQLite with foreign keys, WAL and
 full synchronous durability, and applies pending migrations before exposing operations.
 Always close it with `await factory.close()`.
@@ -194,11 +194,11 @@ Flow authoring events report the saved graph's structure, including whether it c
 
 The backend creates its random installation identity in `FACTORY_HOME/telemetry-id` with owner-only permissions when analytics is available. The UUID stays on disk and only its SHA-256 hash is sent. A damaged or inaccessible identity disables delivery. Events are held in memory, and retries keep the same event UUID and timestamp so PostHog can deduplicate them. Delivery uses a bounded background queue and a one-second best-effort flush at shutdown.
 
-Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://t3factory.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. Factory disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
+Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://t3factory.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. AgentEasel disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
 
 ## Live delivery
 
-Run detail, sidebar navigation, shared T3 connection status,
+Run detail, sidebar navigation, shared T3 Code connection status,
 the Run composer's launch choices and Studio's saved definitions use typed Effect RPC streams over WebSocket at `/api/live`;
 commands and other reads remain HTTP operations. A window holds one connection-status subscription,
 one view
@@ -228,7 +228,7 @@ project reconcile, whose own publications would otherwise leave that read not cu
 Committed Flow and Agent creates, saves, duplicates, removals and imports mark Studio through the
 same definition-change hook; refused writes change nothing. Each read of Studio covers both lists in
 one read transaction, so every Flow's readiness was resolved against exactly the Agents delivered
-with it. Studio reads come from SQL alone and never contact T3, so capability and connection
+with it. Studio reads come from SQL alone and never contact T3 Code, so capability and connection
 changes neither mark Studio nor change what it delivers.
 Subscription registration precedes the snapshot read. A relevant hint during that read
 triggers a fresh read, up to three reads. A delivery is current only when no relevant
@@ -311,7 +311,7 @@ Settings and Studio open over the current Run or composer. Closing them returns 
 screen with its draft intact; direct links fall back to `/runs/new` in a fresh session.
 Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`, `privacy`,
 `run-titles`, `run-images`, `appearance`, `keyboard` and `desktop`. A removed or unknown
-section path opens T3 connection; removed paths have no redirects.
+section path opens T3 Code connection; removed paths have no redirects.
 Studio destinations open at `/studio/flows`, `/studio/agents` and `/studio/triggers` with their nested editor routes.
 [Studio](studio.md#shell) and [Keyboard shortcuts](keyboard-shortcuts.md) document navigation and
 unsaved-change guards. Direct URLs must also work on reload; the server serves the UI for each of these paths.

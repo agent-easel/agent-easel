@@ -62,8 +62,8 @@ const count = (amount: number, one: string, many: string) =>
   `${amount} ${amount === 1 ? one : many}`;
 
 const CONSEQUENCES = [
-  "⚠️ Final: the Run can't be restored, reopened, settled or answered. Factory cancels the automatic work it still owes and its pending Human and Wait items, and asks T3 once to interrupt the workers without confirming they stop.",
-  "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in Factory.",
+  "⚠️ Final: the Run can't be restored, reopened, settled or answered. AgentEasel cancels the automatic work it still owes and its pending Human and Wait items, and asks T3 Code once to interrupt the workers without confirming they stop.",
+  "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in AgentEasel.",
 ];
 
 /** The complete review of an Archive, as ordered Discord messages. */
@@ -139,7 +139,7 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
       if (outcome.kind === "accepted")
         return [
           `✅ **Run ${facts.runNumber === null ? "" : `#${facts.runNumber} `}archived** — ${inert(clip(facts.title, 300))}`,
-          "Owed automatic work and pending Human/Wait items cancelled · T3 asked once to interrupt workers (not confirmed) · nothing rolled back",
+          "Owed automatic work and pending Human/Wait items cancelled · T3 Code asked once to interrupt workers (not confirmed) · nothing rolled back",
         ].join("\n");
       return [
         `❌ **Archive not accepted** — ${facts.title === "" ? "this Run" : run}`,
@@ -149,9 +149,9 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
     summary: (outcome) => {
       if (outcome.kind === "accepted") {
         const facts = outcome.facts as ArchiveFacts;
-        return `Factory archived ${runLine(facts.runNumber, facts.title)}.`;
+        return `AgentEasel archived ${runLine(facts.runNumber, facts.title)}.`;
       }
-      return `Factory did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
+      return `AgentEasel did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
     },
     target: (parameters) => (parameters as unknown as ArchiveParameters).runId,
   };
@@ -159,7 +159,7 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
   const tool: MutationTool = {
     name: "archive_run",
     description:
-      "Propose archiving one Run, which is also what a request to stop a Run means. Archive is final: it cancels owed automatic work and pending Human and Wait items and asks T3 once to interrupt the workers; it rolls nothing back. Nothing is archived now: Factory posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Run first; when several could match, ask.",
+      "Propose archiving one Run, which is also what a request to stop a Run means. Archive is final: it cancels owed automatic work and pending Human and Wait items and asks T3 Code once to interrupt the workers; it rolls nothing back. Nothing is archived now: AgentEasel posts a complete review with a confirmation phrase only the requester can reply with, and ends this reply. Resolve the Run first; when several could match, ask.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -174,12 +174,13 @@ export function archiveAction(sql: SqlClient.SqlClient, operations: ArchiveOpera
             "This Run is already Archived; there is nothing to archive. Say so.",
           );
         const detail = yield* operations.getRun(identity.id);
-        if (!detail.ok) return refused("unavailable", "Factory could not read this Run right now.");
+        if (!detail.ok)
+          return refused("unavailable", "AgentEasel could not read this Run right now.");
         const review = archiveReview(identity, detail.value);
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
-            "Factory's complete review of this Archive would exceed 32,000 characters, so it cannot be confirmed in chat. Suggest using Factory.",
+            "AgentEasel's complete review of this Archive would exceed 32,000 characters, so it cannot be confirmed in chat. Suggest using AgentEasel.",
           );
         return {
           operation: "archive",

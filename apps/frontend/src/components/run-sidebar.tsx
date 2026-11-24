@@ -722,7 +722,7 @@ function RunRowMeta({ run, ending }: { run: RunNavigationEntry; ending: RunEndin
       {ending && <EndingBadge name={ending.endingName} iconOnlyWhenNarrow={notInT3} />}
       {notInT3 && (
         <StatusBadge kind="neutral" aria-hidden>
-          Not in T3
+          Not in T3 Code
         </StatusBadge>
       )}
       <span
@@ -779,7 +779,9 @@ function RunRowAnnouncement({ run, ending }: { run: RunNavigationEntry; ending: 
     <span className="sr-only">
       , {execution(run).label}
       {ending && `, ended ${ending.endingName}`}
-      {run.lifecycle === "settled" && run.project.availability !== "available" && ", not in T3"}
+      {run.lifecycle === "settled" &&
+        run.project.availability !== "available" &&
+        ", not in T3 Code"}
     </span>
   );
 }
@@ -886,7 +888,7 @@ function RunRowIndicators({
       {run.attention.needsInput && <StatusBadge kind="needs-input" />}
       {run.attention.problem && <StatusBadge kind="problem" />}
       {availability && run.project.availability !== "available" && (
-        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+        <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>
       )}
     </>
   );

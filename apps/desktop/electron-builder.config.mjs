@@ -35,12 +35,12 @@ const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
 const notarized = signed && Boolean(process.env.APPLE_API_KEY);
 
 export default {
-  appId: "dev.t3factory.desktop",
-  productName: "T3 Factory",
+  appId: "app.agenteasel.desktop",
+  productName: "AgentEasel",
   // electron-builder's default ${version} drops SemVer build metadata.
   // Match GitHub's download names so update metadata and checksums use the same URLs.
-  artifactName: `T3.Factory-${factoryBuild.version}-\${arch}.\${ext}`,
-  copyright: "T3 Factory",
+  artifactName: `AgentEasel-${factoryBuild.version}-\${arch}.\${ext}`,
+  copyright: "AgentEasel",
   directories: { app: "stage", output: "release", buildResources: "resources" },
   files: ["build/**/*", "!build/**/*.map", "package.json"],
   asar: true,

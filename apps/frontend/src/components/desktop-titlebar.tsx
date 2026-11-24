@@ -6,11 +6,11 @@ export function DesktopTitlebar({ floating = false }: { floating?: boolean }) {
   return (
     <header
       className={floating ? "desktop-titlebar desktop-titlebar-floating" : "desktop-titlebar"}
-      aria-label="Factory window title bar"
+      aria-label="AgentEasel window title bar"
     >
       <div className="flex items-center gap-1">
-        <img src="/factory-mark.svg" width={24} height={24} alt="" draggable={false} />
-        <span className="text-base leading-6 font-semibold tracking-tight">Factory</span>
+        <img src="/agenteasel-mark.svg" width={24} height={24} alt="" draggable={false} />
+        <span className="text-base leading-6 font-semibold tracking-tight">AgentEasel</span>
       </div>
     </header>
   );

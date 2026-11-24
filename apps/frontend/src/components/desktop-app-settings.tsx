@@ -76,7 +76,7 @@ function DesktopAppControls({ local }: { local: boolean }) {
           label="Role"
           value={
             state.role === "server"
-              ? "Runs the Factory server"
+              ? "Runs the AgentEasel server"
               : state.role === "client"
                 ? "Connected to a server"
                 : "—"
@@ -206,7 +206,7 @@ function NotificationSettings({
       {denied && (
         <ProblemCard
           tone="attention"
-          title="macOS blocks Factory’s notifications"
+          title="macOS blocks AgentEasel’s notifications"
           action={
             <Button
               variant="outline"

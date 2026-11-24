@@ -60,7 +60,7 @@ export function useTriggerActions(
               message:
                 cause instanceof Error
                   ? cause.message
-                  : `Factory could not ${action} this Trigger.`,
+                  : `AgentEasel could not ${action} this Trigger.`,
             });
             return undefined;
           },

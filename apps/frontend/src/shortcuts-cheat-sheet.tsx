@@ -123,7 +123,7 @@ export function ShortcutsCheatSheet({
           <DialogDismiss label="Close keyboard shortcuts" />
         </header>
         <DialogDescription className="sr-only">
-          Factory commands and their current bindings.
+          AgentEasel commands and their current bindings.
         </DialogDescription>
         <div className="grid min-h-0 gap-8 overflow-y-auto p-5 sm:grid-cols-2">
           {columns.map((groups) => (

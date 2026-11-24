@@ -39,7 +39,7 @@ const unfinishedFlow = {
   issues: [] as readonly string[],
 };
 
-it("Factory offline wins over a lost T3 connection and an unconfirmed Start", () => {
+it("AgentEasel offline wins over a lost T3 Code connection and an unconfirmed Start", () => {
   // Arrange
   const state = ready({
     factoryOffline: true,
@@ -55,7 +55,7 @@ it("Factory offline wins over a lost T3 connection and an unconfirmed Start", ()
   expect(card).toEqual({ kind: "factory-offline" });
 });
 
-it("a connection that is still loading is not treated as T3 not set up", () => {
+it("a connection that is still loading is not treated as T3 Code not set up", () => {
   // Arrange
   const state = ready({ presentation: "loading", endpoint: null, projectId: "", flowId: "" });
 
@@ -66,7 +66,7 @@ it("a connection that is still loading is not treated as T3 not set up", () => {
   expect(card).toEqual({ kind: "checking" });
 });
 
-it("no saved T3 address is the not-set-up card", () => {
+it("no saved T3 Code address is the not-set-up card", () => {
   // Arrange
   const state = ready({ presentation: "unavailable", endpoint: null });
 
@@ -77,7 +77,7 @@ it("no saved T3 address is the not-set-up card", () => {
   expect(card).toEqual({ kind: "unconfigured" });
 });
 
-it("a saved T3 address that stopped answering is the disconnected card", () => {
+it("a saved T3 Code address that stopped answering is the disconnected card", () => {
   // Arrange
   const state = ready({ presentation: "unavailable" });
 
@@ -263,7 +263,7 @@ it("a discovery failure wins over the no-project card", () => {
     flowId: "",
     catalog: {
       problem:
-        "Project discovery failed. Recheck T3 and its project contract. Saved references are retained.",
+        "Project discovery failed. Recheck T3 Code and its project contract. Saved references are retained.",
       projects: [],
     },
   });
@@ -275,7 +275,7 @@ it("a discovery failure wins over the no-project card", () => {
   expect(card).toEqual({
     kind: "discovery",
     message:
-      "Project discovery failed. Recheck T3 and its project contract. Saved references are retained.",
+      "Project discovery failed. Recheck T3 Code and its project contract. Saved references are retained.",
   });
 });
 
@@ -295,7 +295,7 @@ it("a Project kept through a connection outage does not become the no-project ca
   expect(card).toEqual({ kind: "none" });
 });
 
-it("an unconfirmed Start is its own card once T3 is connected", () => {
+it("an unconfirmed Start is its own card once T3 Code is connected", () => {
   // Arrange
   const state = ready({ pending: true, startError: "Start outcome unknown." });
 
@@ -306,7 +306,7 @@ it("an unconfirmed Start is its own card once T3 is connected", () => {
   expect(card).toEqual({ kind: "start-unknown", message: "Start outcome unknown." });
 });
 
-it("an unconfirmed Start stays behind the disconnected card while T3 is down", () => {
+it("an unconfirmed Start stays behind the disconnected card while T3 Code is down", () => {
   // Arrange
   const state = ready({
     pending: true,

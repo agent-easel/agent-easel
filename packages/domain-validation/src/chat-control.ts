@@ -30,7 +30,7 @@ const invalid = (code: string, path: string, message: string): Result<never> => 
 const hasControlCharacter = (value: string) => /\p{Cc}/u.test(value);
 
 const ANTHROPIC_VERSION_SEGMENT =
-  "Anthropic base URLs include the API version segment, such as https://api.anthropic.com/v1; Factory sends requests to the base URL followed by /messages.";
+  "Anthropic base URLs include the API version segment, such as https://api.anthropic.com/v1; AgentEasel sends requests to the base URL followed by /messages.";
 
 /**
  * A literal absolute HTTP(S) base URL, kept exactly as entered apart from surrounding whitespace.
@@ -304,7 +304,11 @@ function parseProjectIds(value: unknown, path: string): Result<string[]> {
   for (const [index, item] of value.entries()) {
     const id = typeof item === "string" ? item.trim() : "";
     if (id.length === 0 || id.length > PROJECT_ID_LIMIT || hasControlCharacter(id))
-      return invalid("discord_access_project", `${path}[${index}]`, "Choose a Factory Project.");
+      return invalid(
+        "discord_access_project",
+        `${path}[${index}]`,
+        "Choose an AgentEasel Project.",
+      );
     if (ids.includes(id))
       return invalid(
         "discord_access_duplicate",

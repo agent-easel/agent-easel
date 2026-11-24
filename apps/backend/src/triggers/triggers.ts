@@ -291,14 +291,14 @@ export const makeTriggers = (
             "validation",
             "trigger_project_unavailable",
             "projectId",
-            `${project.title} is no longer in T3. Choose a Project that is still in T3.`,
+            `${project.title} is no longer in T3 Code. Choose a Project that is still in T3 Code.`,
           );
         if (!isLocalEndpoint(project.endpoint))
           return refusal(
             "validation",
             "trigger_project_remote",
             "projectId",
-            `${project.title} is on a remote T3 environment. Triggers read GitHub with the Factory host's gh login, so choose a Project on this computer.`,
+            `${project.title} is on a remote T3 Code environment. Triggers read GitHub with the AgentEasel host's gh login, so choose a Project on this computer.`,
           );
         return { ok: true, value: project };
       });

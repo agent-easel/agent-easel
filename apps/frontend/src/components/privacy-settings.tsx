@@ -10,10 +10,11 @@ import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./s
 import { StatusBadge } from "./status-badge.tsx";
 
 const descriptions = {
-  environment: "Turned off on the Factory host by FACTORY_TELEMETRY_ENABLED=false.",
-  unavailable: "Analytics is unavailable on this Factory host.",
+  environment: "Turned off on the AgentEasel host by FACTORY_TELEMETRY_ENABLED=false.",
+  unavailable: "Analytics is unavailable on this AgentEasel host.",
 };
-const description = "Helps improve Factory. Sent from the Factory host without your identity.";
+const description =
+  "Helps improve AgentEasel. Sent from the AgentEasel host without your identity.";
 
 export function PrivacySettings() {
   const host = useClientScope() === "host";
@@ -52,7 +53,7 @@ export function PrivacySettings() {
     <SettingsPage
       title="Privacy"
       hostManaged={!host}
-      badge={disabledByHost && <StatusBadge kind="neutral">Off on the Factory host</StatusBadge>}
+      badge={disabledByHost && <StatusBadge kind="neutral">Off on the AgentEasel host</StatusBadge>}
       action={readFailed && <Button onClick={retry}>Try again</Button>}
     >
       {readFailed && <ProblemCard tone="error" title="Couldn’t read product analytics" />}
@@ -96,7 +97,7 @@ export function PrivacySettings() {
       <SettingsGroup label="What’s sent">
         <SettingsDetailRow
           label="Sent"
-          value="Factory version, channel and OS, and counts of the features you use"
+          value="AgentEasel version, channel and OS, and counts of the features you use"
         />
         <SettingsDetailRow
           label="Never sent"

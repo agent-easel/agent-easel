@@ -143,7 +143,7 @@ function updateBody(trigger: TriggerDefinition, input: UpdateTriggerInput): Upda
 
 function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent): TriggerProposal {
   if (content.projectId && !content.repository)
-    return { error: "Wait until Factory detects the Project's GitHub repository." };
+    return { error: "Wait until AgentEasel detects the Project's GitHub repository." };
   const settings = settingsOf(content);
   if (trigger) {
     const input = { ...settings, expectedRevision: trigger.revision };
@@ -169,14 +169,14 @@ function saveRequest(
       submitted: content,
       send: () => source.updateTrigger(proposal.id, proposal.body).then((save) => save.trigger),
       unknownMessage:
-        "Save outcome unknown. Factory may have saved this Trigger; your edits are kept and nothing is retried.",
+        "Save outcome unknown. AgentEasel may have saved this Trigger; your edits are kept and nothing is retried.",
       fallback,
     };
   return {
     submitted: content,
     send: () => source.createTrigger(proposal.input).then((save) => save.trigger),
-    unknownMessage: "Factory may have created this Trigger. Your settings are still here.",
-    fallback: "Factory could not create this Trigger. Your settings are still here.",
+    unknownMessage: "AgentEasel may have created this Trigger. Your settings are still here.",
+    fallback: "AgentEasel could not create this Trigger. Your settings are still here.",
   };
 }
 

@@ -273,7 +273,7 @@ test("the Flows list in Light", async ({ app, screen, browser }) => {
   await shot(app, browser, "flows-light");
 });
 
-test("a Flow whose Project left T3 stays listed and its menu only moves or removes it", async ({
+test("a Flow whose Project left T3 Code stays listed and its menu only moves or removes it", async ({
   app,
   screen,
   browser,
@@ -282,7 +282,7 @@ test("a Flow whose Project left T3 stays listed and its menu only moves or remov
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await revealGroup(browser, "Docs site");
   const docs = screen.getByRole("region", "Docs site", { exact: true });
-  await expect(docs.getByText("Not in T3", { exact: true })).toBeVisible();
+  await expect(docs.getByText("Not in T3 Code", { exact: true })).toBeVisible();
   await expect(docs.getByText("Docs refresh", { exact: true })).toBeVisible();
   await expect(docs.getByRole("link")).toHaveCount(0);
   await shot(app, browser, "flows-not-in-t3");
@@ -396,11 +396,11 @@ test("Import reviews a Flow file whose Agent needs a model", async ({ app, scree
   await openFlowsForImport(app, screen);
 
   // Act
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([needsModel]);
+  await screen.getByLabel("Choose an AgentEasel export file").setInputFiles([needsModel]);
 
   // Assert
   const review = screen.getByRole("dialog", /^Import “/);
-  await expect(review).toContainText("Imported prompts run with your T3 permissions");
+  await expect(review).toContainText("Imported prompts run with your T3 Code permissions");
   await expect(review).toContainText("Read them in Studio before you start a Run.");
   const model = review.getByRole("combobox", /^Model for Northwind QA/);
   await expect(model).toHaveAttribute("aria-invalid", "true");
@@ -425,7 +425,7 @@ test("Import rejects a file it cannot read and offers another file", async ({
   await openFlowsForImport(app, screen);
 
   // Act
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([rejected]);
+  await screen.getByLabel("Choose an AgentEasel export file").setInputFiles([rejected]);
 
   // Assert
   const refused = screen.getByRole("dialog", /^Import “/);
@@ -453,7 +453,7 @@ test("Remove on a Flow a Trigger uses lists that Trigger and does not remove the
   await expect(screen.getByRole("button", "Remove Flow")).toHaveCount(0);
 });
 
-test("an Agent whose Project left T3 can be removed only after the Flow that places it is gone", async ({
+test("an Agent whose Project left T3 Code can be removed only after the Flow that places it is gone", async ({
   app,
   screen,
   browser,
@@ -463,7 +463,7 @@ test("an Agent whose Project left T3 can be removed only after the Flow that pla
   await revealGroup(browser, "Docs site");
   const docs = screen.getByRole("region", "Docs site", { exact: true });
   await expect(docs.getByText("Docs writer", { exact: true })).toBeVisible();
-  await expect(docs.getByText("Not in T3", { exact: true })).toBeVisible();
+  await expect(docs.getByText("Not in T3 Code", { exact: true })).toBeVisible();
   await shot(app, browser, "agents-not-in-t3");
   await docs.getByRole("button", "Docs writer actions", { exact: true }).tap();
   await screen.getByRole("menuitem", "Remove…", { exact: true }).tap();
@@ -731,7 +731,7 @@ test("a Trigger that cannot check shows Problem on the row and Error in the side
   await screen.getByRole("menu").press("Escape");
   const row = screen.getByRole("link", new RegExp(name));
   await expect(row).toContainText("Problem");
-  await expect(row).toContainText("Factory runs as.");
+  await expect(row).toContainText("AgentEasel runs as.");
   await expect(
     screen.getByRole("navigation", "Studio navigation").getByText("1 Trigger in Error"),
   ).toBeAttached();

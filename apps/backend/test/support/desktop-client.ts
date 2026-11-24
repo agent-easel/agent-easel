@@ -60,7 +60,7 @@ export async function desktopProfile(
   context: TestContext,
   protection = new ControlledProtection(),
 ) {
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-desktop-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const store = await SettingsStore.open(directory);
   await store.update({ role: "client" });
@@ -155,7 +155,7 @@ export async function readDesktopAccess(client: ApprovedClient) {
 
 /** Real TLS under a Factory authority: answers the handshake, hands other requests to `handle`. */
 export async function handshakeServer(context: TestContext, handle: RequestListener) {
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-tls-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-desktop-tls-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const certificate = await ensureRemoteCertificate(directory, { dns: [], ips: ["127.0.0.1"] });
   const server = createServer(certificate, (request, response) => {

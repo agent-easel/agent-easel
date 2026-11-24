@@ -92,7 +92,7 @@ it("a staged image whose file was corrupted reads as absent and an upload of its
   expect(Buffer.from(served.value.data).equals(Buffer.from(screenshots.red.data))).toBe(true);
 });
 
-it("an image Factory cannot write to disk is an explicit storage error and nothing is staged", async (c) => {
+it("an image AgentEasel cannot write to disk is an explicit storage error and nothing is staged", async (c) => {
   // Arrange
   const harness = await factoryHarness(c);
   await writeFile(join(harness.processHome, "images"), "not a directory");
@@ -219,7 +219,7 @@ it("images alone without prompt text are not a valid Start", async (c) => {
   expect(started.error.issues[0]?.code).toBe("start_input");
 });
 
-it("an image Start is rejected when T3 cannot receive attachments and creates no work", async (c) => {
+it("an image Start is rejected when T3 Code cannot receive attachments and creates no work", async (c) => {
   // Arrange
   const f = await prepared(c);
   await stageImages(f.f, allScreenshots);
@@ -232,7 +232,7 @@ it("an image Start is rejected when T3 cannot receive attachments and creates no
   assert(!started.ok);
   expect(started.error.code).toBe("validation");
   expect(started.error.issues[0]?.code).toBe("attachments_unsupported");
-  expect(started.error.issues[0]?.message).toContain("update T3 or remove the images");
+  expect(started.error.issues[0]?.message).toContain("update T3 Code or remove the images");
   expect(await f.f.listRuns(f.project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
@@ -251,7 +251,7 @@ it("an accepted image Start key reused with reordered images conflicts", async (
   expect(replayed.error.code).toBe("conflict");
 });
 
-it("replaying an accepted image Start returns its Run although T3 no longer accepts attachments", async (c) => {
+it("replaying an accepted image Start returns its Run although T3 Code no longer accepts attachments", async (c) => {
   // Arrange
   const f = await prepared(c);
   await stageImages(f.f, allScreenshots);

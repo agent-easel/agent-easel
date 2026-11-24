@@ -791,10 +791,12 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await screen.getByRole("button", "Discard changes", { exact: true }).tap();
 
   // Act: import the file through the review and confirm.
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
+  await screen
+    .getByLabel("Choose an AgentEasel export file")
+    .setInputFiles([download.absolutePath]);
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText(name);
-  await expect(review).toContainText("Imported prompts run with your T3 permissions");
+  await expect(review).toContainText("Imported prompts run with your T3 Code permissions");
   await expect(review).toContainText("Read them in Studio before you start a Run.");
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",

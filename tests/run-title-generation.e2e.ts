@@ -57,7 +57,7 @@ test("turning on Run title generation without a provider stays on this page, uns
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
 });
 
-test("with no provider in T3, the Provider list says so instead of showing an empty list", async ({
+test("with no provider in T3 Code, the Provider list says so instead of showing an empty list", async ({
   app,
   screen,
   fixture,
@@ -73,7 +73,7 @@ test("with no provider in T3, the Provider list says so instead of showing an em
 
   // Assert
   const list = screen.getByRole("dialog", "Provider", { exact: true });
-  await expect(list.getByRole("status")).toHaveText("T3 offers no providers");
+  await expect(list.getByRole("status")).toHaveText("T3 Code offers no providers");
   await expect(screen.getByRole("listbox")).toHaveCount(0);
   await expect(screen.getByRole("option")).toHaveCount(0);
   await app.screenshot("run-titles-no-providers");
@@ -177,7 +177,7 @@ test("pressing a Run's title line opens its title details with the title thread 
   const details = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("region", "Run title details");
-  await expect(details.getByRole("link", "Open in T3")).toHaveAttribute(
+  await expect(details.getByRole("link", "Open in T3 Code")).toHaveAttribute(
     "href",
     titleGeneration.threadLink,
   );
@@ -189,7 +189,7 @@ test("pressing a Run's title line opens its title details with the title thread 
   await app.screenshot("run-title-details");
 });
 
-test("an approved client sees Generate Run titles and its latest diagnostic read-only, managed on the Factory host", async ({
+test("an approved client sees Generate Run titles and its latest diagnostic read-only, managed on the AgentEasel host", async ({
   fixture,
   app,
   screen,
@@ -203,7 +203,7 @@ test("an approved client sees Generate Run titles and its latest diagnostic read
   await openApproved(app, "/settings/run-titles");
 
   // Assert
-  await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Managed on the AgentEasel host")).toBeVisible();
   const generation = screen.getByRole("region", "Generation");
   await expect(generation.getByText("On", { exact: true })).toBeVisible();
   await expect(generation.getByText("Codex · GPT 6.1 Sol · Low", { exact: true })).toBeVisible();
@@ -213,6 +213,6 @@ test("an approved client sees Generate Run titles and its latest diagnostic read
     .filter({ hasText: /Run #\d+ kept its first-line title/ });
   await expect(latest.getByText(/Title generation was skipped ·/)).toBeVisible();
   await latest.getByRole("button", "Technical details").tap();
-  await expect(latest.getByText(/T3 does not offer gpt-6\.1-luna for Codex\./)).toBeVisible();
+  await expect(latest.getByText(/T3 Code does not offer gpt-6\.1-luna for Codex\./)).toBeVisible();
   await app.screenshot("run-titles-approved-client");
 });

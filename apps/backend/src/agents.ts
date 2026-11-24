@@ -63,7 +63,7 @@ export function agentSettingsStatus(
       ? { state: "available" }
       : {
           state: "unavailable",
-          explanation: "This environment is not available from T3 right now.",
+          explanation: "This environment is not available from T3 Code right now.",
         },
     provider: provider
       ? { state: "available" }
@@ -102,7 +102,7 @@ export function readyCapabilities(
 ): AgentCapabilities {
   return {
     state: "ready",
-    explanation: "Provider, model and thinking options come from the live T3 catalog.",
+    explanation: "Provider, model and thinking options come from the live T3 Code catalog.",
     checkedAt,
     environments,
     providers: providers.map((provider) => ({

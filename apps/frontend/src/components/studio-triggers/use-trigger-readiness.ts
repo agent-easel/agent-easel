@@ -28,7 +28,7 @@ export function useTriggerReadiness(projectId: string, triggerId: string) {
             value: {
               status: "failed",
               message:
-                cause instanceof Error ? cause.message : "Factory could not check readiness.",
+                cause instanceof Error ? cause.message : "AgentEasel could not check readiness.",
             },
           });
       },

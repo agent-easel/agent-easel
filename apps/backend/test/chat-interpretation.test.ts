@@ -29,17 +29,17 @@ const HOUR_MS = 60 * 60 * 1000;
 const MENTION = `<@${discordBot.applicationId}>`;
 const NOTICES = {
   failed:
-    "Factory's language model could not answer a request in this thread. Nothing from it was kept; send it again later.",
+    "AgentEasel's language model could not answer a request in this thread. Nothing from it was kept; send it again later.",
   timedOut:
-    "Factory stopped a request in this thread because it took too long. Nothing from it was kept; send it again if you still need it.",
+    "AgentEasel stopped a request in this thread because it took too long. Nothing from it was kept; send it again if you still need it.",
   interrupted:
-    "Factory could not finish a request in this thread because it was interrupted. Nothing from it was kept; send it again if you still need it.",
-  cleared: "_Earlier conversation in this thread was cleared; Factory no longer has it._",
+    "AgentEasel could not finish a request in this thread because it was interrupted. Nothing from it was kept; send it again if you still need it.",
+  cleared: "_Earlier conversation in this thread was cleared; AgentEasel no longer has it._",
 };
 const BUSY =
-  "Factory is already working on four requests in this thread: one is being answered and three are waiting. This message was not taken; send it again after Factory replies.";
+  "AgentEasel is already working on four requests in this thread: one is being answered and three are waiting. This message was not taken; send it again after AgentEasel replies.";
 const STEPS =
-  "Factory stopped this request because answering it needed more than 8 model requests or 16 tool calls. Nothing from it was kept; ask a narrower question.";
+  "AgentEasel stopped this request because answering it needed more than 8 model requests or 16 tool calls. Nothing from it was kept; ask a narrower question.";
 const listProjects = { toolCalls: [{ name: "list_projects", input: {} }] };
 
 it("requester revocation stops the remaining parts of an in-flight reply", async (c) => {

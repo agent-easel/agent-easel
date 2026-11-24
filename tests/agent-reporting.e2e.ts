@@ -53,7 +53,7 @@ test("reporting problems are visible before Start and clear after repairing the 
   await expect(overriddenRow).toContainText("Reporting needs attention");
   await expect(overriddenRow).toContainText("+1 Project override");
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
-    "Factory Block skill missing or outdated",
+    "AgentEasel Block skill missing or outdated",
   );
   await screen.getByRole("button", "Back to Runs").tap();
   await expect(
@@ -188,7 +188,7 @@ test("installed reporting shows the file and manual remedy for a linked optional
   await expect(codex).toContainText("Replace or remove it manually, then Reinstall.");
 });
 
-test("a disconnected T3 connection takes precedence over reporting warnings", async ({
+test("a disconnected T3 Code connection takes precedence over reporting warnings", async ({
   fixture,
   app,
   screen,
@@ -206,7 +206,7 @@ test("a disconnected T3 connection takes precedence over reporting warnings", as
   // Assert
   await expect(screen.getByRole("link", "Settings, Disconnected", { exact: true })).toBeVisible();
   await screen.getByRole("link", "Settings, Disconnected", { exact: true }).tap();
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toBeVisible();
 });
 
 test("Install all continues after a failed home and leaves that home available to retry", async ({

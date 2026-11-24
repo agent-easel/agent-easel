@@ -57,7 +57,7 @@ async function resolvedDestination(path: string): Promise<string> {
 }
 
 const invalidHome = () =>
-  new Error("FACTORY_HOME must be an absolute path outside the Factory source checkout.");
+  new Error("FACTORY_HOME must be an absolute path outside the AgentEasel source checkout.");
 
 /** Factory data must never live inside the checkout it runs from, even through a symlink. */
 async function factoryHome(env: NodeJS.ProcessEnv): Promise<string> {
@@ -122,7 +122,7 @@ function binding(
     port < 0 ||
     port > 65535
   ) {
-    throw new Error("Factory needs a non-empty host and an integer port from 0 to 65535.");
+    throw new Error("AgentEasel needs a non-empty host and an integer port from 0 to 65535.");
   }
   return { host, port };
 }

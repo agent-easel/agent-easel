@@ -293,9 +293,9 @@ it("review reports an invalid Flow before the per-save size of another valid def
   expect(result.error.issues[0]?.path).toBe("flows.0.name");
 });
 
-type Factory = Awaited<ReturnType<typeof openFactoryWithApprovedT3>>["factory"];
+type AgentEasel = Awaited<ReturnType<typeof openFactoryWithApprovedT3>>["factory"];
 
-async function exportedDiamondWithRenamedEnding(factory: Factory) {
+async function exportedDiamondWithRenamedEnding(factory: AgentEasel) {
   const reviewer = assertOk(
     await factory.createAgent({
       name: "Reviewer",
@@ -360,7 +360,7 @@ function endingPlacement(id: string, source: string, exitId: string, target: str
   };
 }
 
-async function saveWideComposition(factory: Factory, count: number) {
+async function saveWideComposition(factory: AgentEasel, count: number) {
   const children = [];
   for (let index = 1; index < count; index++)
     children.push(await savedFlow(factory, { name: `Stage ${index}` }));
@@ -443,7 +443,7 @@ it("a second import gives a root cycle independent identities", async (context) 
   ]);
 });
 
-async function exportedBrokenDraft(factory: Factory) {
+async function exportedBrokenDraft(factory: AgentEasel) {
   const child = await savedFlow(factory, {
     name: "Checks",
     graph: {

@@ -59,7 +59,7 @@ export class ControlledT3Contract implements T3ContractReader {
       reason: this.compatible ? "connected" : "contract-missing",
       authorizationIdentity: this.connection.identity,
       contract: {
-        serverName: "Controlled T3",
+        serverName: "Controlled T3 Code",
         serverVersion: this.serverVersion,
         environmentId: this.connection.environmentId,
         tools: [
@@ -114,7 +114,7 @@ export class ControlledT3Contract implements T3ContractReader {
             retryScope: support.launchRetryScope,
             explanation: support.launch
               ? "Controlled durable replay lifetime"
-              : "T3 launch contract is unsupported. Recheck the T3 connection.",
+              : "T3 Code launch contract is unsupported. Recheck the T3 Code connection.",
           };
     return {
       launch: {
@@ -124,7 +124,7 @@ export class ControlledT3Contract implements T3ContractReader {
             ? {
                 ...launch,
                 supported: false,
-                explanation: "T3 launch schema cannot express worktree launches.",
+                explanation: "T3 Code launch schema cannot express worktree launches.",
               }
             : launch,
       },
@@ -145,7 +145,7 @@ export class ControlledT3Contract implements T3ContractReader {
         includeEnvironmentId: support.rename && support.renameEnvironmentId,
         explanation: support.rename
           ? "Controlled thread rename support"
-          : "T3 thread update schema does not advertise thread rename.",
+          : "T3 Code thread update schema does not advertise thread rename.",
       },
       reportReads: support.reportReads,
     };

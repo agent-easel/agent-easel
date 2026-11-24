@@ -18,7 +18,8 @@ import { scheduleText } from "./trigger-text.ts";
 
 /** Give repair guidance without exposing the host's search paths in the summary. */
 function splitGuidance(message: string) {
-  const paths = "Factory looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin;";
+  const paths =
+    "AgentEasel looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin;";
   if (message.includes(paths)) {
     return {
       message: message.replace(paths, "Then"),
@@ -29,7 +30,7 @@ function splitGuidance(message: string) {
   return privatePath.test(message)
     ? {
         message:
-          "Check that the Project folder and its GitHub remote are accessible on the Factory host.",
+          "Check that the Project folder and its GitHub remote are accessible on the AgentEasel host.",
         details: message,
       }
     : { message, details: undefined };
@@ -164,7 +165,7 @@ export function TriggerFieldNotices({
           tone="error"
           title={
             ghProblem.includes("gh auth login")
-              ? "gh isn’t signed in on the Factory host"
+              ? "gh isn’t signed in on the AgentEasel host"
               : "GitHub readiness needs attention"
           }
           details={gh.details}
@@ -316,7 +317,7 @@ function UnknownCreateNotice({
   return (
     <ProblemCard
       tone="attention"
-      title="Factory may have created this Trigger"
+      title="AgentEasel may have created this Trigger"
       action={result.action}
     >
       {result.message}
@@ -333,7 +334,7 @@ function recoveryMessage(
   if (lookedUp === null) return { message: "Checking the Trigger list…" };
   if (lookedUp === "failed")
     return {
-      message: "Factory couldn’t read the Trigger list. Your settings are still here.",
+      message: "AgentEasel couldn’t read the Trigger list. Your settings are still here.",
       action: <TextLink onClick={retryLookup}>Check again</TextLink>,
     };
   const { found } = lookedUp;

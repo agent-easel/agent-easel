@@ -24,7 +24,7 @@ test("nested import reviews repeated names, workspaces and instructions, then op
   await expect(screen.getByRole("button", "Import", { exact: true })).toBeEnabled();
 
   // Act
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
+  await screen.getByLabel("Choose an AgentEasel export file").setInputFiles([file]);
   const review = screen.getByRole("dialog", /Import “release-train.json”/);
   const flows = review.getByRole("region", "Flows · 6 · created in Global");
   await expect(flows).toContainText("Opens after import");

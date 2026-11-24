@@ -81,11 +81,11 @@ interface IngressSession {
 
 const RESET_REPLIES = {
   cleared:
-    "Factory cleared this thread's Chat control conversation. Later requests here start fresh; Discord messages and work Factory already accepted are unchanged.",
+    "AgentEasel cleared this thread's Chat control conversation. Later requests here start fresh; Discord messages and work AgentEasel already accepted are unchanged.",
   "not-thread": "Use /factory reset inside a Chat control thread.",
   denied: "Chat control does not accept this command from you here.",
   unavailable:
-    "Factory could not confirm your access to this thread, so nothing was cleared. Try again.",
+    "AgentEasel could not confirm your access to this thread, so nothing was cleared. Try again.",
 } as const;
 
 /**
@@ -94,7 +94,7 @@ const RESET_REPLIES = {
  */
 const FACTORY_COMMAND = {
   name: "factory",
-  description: "Factory Chat control",
+  description: "AgentEasel Chat control",
   type: ApplicationCommandType.ChatInput,
   contexts: [InteractionContextType.Guild],
   integration_types: [ApplicationIntegrationType.GuildInstall],
@@ -127,8 +127,8 @@ export const registerCommands = (client: Client<true>, applicationId: string) =>
       outcome: "failed",
       message:
         error instanceof DiscordAPIError
-          ? `Discord answered HTTP ${error.status} when Factory registered /factory reset.`
-          : "Factory could not reach Discord to register /factory reset.",
+          ? `Discord answered HTTP ${error.status} when AgentEasel registered /factory reset.`
+          : "AgentEasel could not reach Discord to register /factory reset.",
       occurredAt,
     } satisfies DiscordCommandSetup;
   });

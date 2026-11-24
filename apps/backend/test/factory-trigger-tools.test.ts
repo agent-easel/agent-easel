@@ -275,7 +275,7 @@ it("a new-draft preview stopped by a launch blocker answers that problem and sti
   });
 });
 
-it("a new-draft preview whose Project's remote moves after Factory detected the repository answers the move and offers no repository to create on", async (c) => {
+it("a new-draft preview whose Project's remote moves after AgentEasel detected the repository answers the move and offers no repository to create on", async (c) => {
   // Arrange
   const world = await triggerWorld(c);
   remoteMovesAfterFirstRead(world, { ...movedRepository, visibility: "public" });

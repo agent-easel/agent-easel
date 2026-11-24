@@ -11,7 +11,7 @@ import {
   worktreeReviewFlow,
 } from "./support/scenarios.ts";
 
-it("a default-base worktree Start asks T3 to fetch origin for its single creator", async (c) => {
+it("a default-base worktree Start asks T3 Code to fetch origin for its single creator", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
   t3.threads.worktreeMetadataPending = true;
@@ -33,7 +33,7 @@ it("a default-base worktree Start asks T3 to fetch origin for its single creator
   });
 });
 
-it("a custom local worktree base asks T3 to preserve the local ref", async (c) => {
+it("a custom local worktree base asks T3 Code to preserve the local ref", async (c) => {
   // Arrange
   const { f, t3, git, input } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "ref", ref: "main" } },
@@ -251,18 +251,18 @@ it("a rejected worktree-creating launch is a Block error and launches no other w
   assert(run.ok);
   expect(t3.threads.launchCalls).toBe(1);
   expect(run.value.blocks.map(({ state, problem }) => ({ state, problem }))).toStrictEqual([
-    { state: "error", problem: "T3 rejected the worker launch." },
+    { state: "error", problem: "T3 Code rejected the worker launch." },
     {
       state: "error",
       problem:
-        "T3 rejected the worker that creates the Run worktree. This worker was not launched.",
+        "T3 Code rejected the worker that creates the Run worktree. This worker was not launched.",
     },
   ]);
   expect(run.value.workspace).toMatchObject({
     state: "failed",
     path: null,
     problem:
-      "T3 rejected the worker that creates the Run worktree. No worker was launched into it.",
+      "T3 Code rejected the worker that creates the Run worktree. No worker was launched into it.",
   });
 });
 
@@ -361,7 +361,7 @@ it("a Flow that returns to an earlier Block revisits its thread in the same work
   });
 });
 
-it("a send that fails while the worker's worktree is missing stays unresolved and is delivered once T3 accepts it", async (c) => {
+it("a send that fails while the worker's worktree is missing stays unresolved and is delivered once T3 Code accepts it", async (c) => {
   // Arrange
   const setup = await prepared(c, worktreeReviewFlow);
   const entry = await worktreeBound(setup.world, setup.input);
@@ -424,7 +424,7 @@ it("a rejected launch for a later Block keeps the worktree Run from settling wit
   expect(run.value.blocks[2]).toMatchObject({
     threadId: null,
     state: "error",
-    problem: "T3 rejected the worker launch.",
+    problem: "T3 Code rejected the worker launch.",
   });
   expect(run.value.lifecycle).toBe("active");
 });

@@ -35,7 +35,7 @@ const duskJson = JSON.stringify(
   2,
 );
 
-test("pasting a dark color theme JSON colors Factory in Dark, persists on reload, and resets cleanly", async ({
+test("pasting a dark color theme JSON colors AgentEasel in Dark, persists on reload, and resets cleanly", async ({
   app,
   screen,
   browser,
@@ -43,7 +43,7 @@ test("pasting a dark color theme JSON colors Factory in Dark, persists on reload
   // Arrange
   await browser.emulateMedia({ colorScheme: "dark" });
   await app.open("/settings/appearance");
-  await expect(screen.getByText("Factory colors", { exact: true })).toBeVisible();
+  await expect(screen.getByText("AgentEasel colors", { exact: true })).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(factoryDark);
 
   // Act
@@ -61,12 +61,12 @@ test("pasting a dark color theme JSON colors Factory in Dark, persists on reload
   await app.open("/settings/appearance");
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(nightfallDark);
 
-  await screen.getByRole("button", "Reset to Factory").tap();
-  await expect(screen.getByText("Factory colors", { exact: true })).toBeVisible();
+  await screen.getByRole("button", "Reset to AgentEasel").tap();
+  await expect(screen.getByText("AgentEasel colors", { exact: true })).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(factoryDark);
 });
 
-test("a dark-only custom theme falls back to Factory Light in Light mode while a dual-mode theme colors both", async ({
+test("a dark-only custom theme falls back to AgentEasel Light in Light mode while a dual-mode theme colors both", async ({
   app,
   screen,
   browser,
@@ -82,7 +82,7 @@ test("a dark-only custom theme falls back to Factory Light in Light mode while a
   // Assert
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(factoryLight);
   await expect(
-    screen.getByRole("region", "Color theme").getByText("Factory colors", { exact: true }),
+    screen.getByRole("region", "Color theme").getByText("AgentEasel colors", { exact: true }),
   ).toBeVisible();
 
   await screen.getByLabel("Theme config JSON").fill(duskJson);

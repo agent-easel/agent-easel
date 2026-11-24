@@ -190,7 +190,7 @@ it("a completed reporting worker releases downstream work without a Run conversa
   expect(run.value.reports[0]?.completionEligibleAt).not.toBeNull();
   expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker", "parallel-block"]);
 });
-it("a downstream worker launch whose replay proof T3 cannot establish stays pending for Factory to retry", async (c) => {
+it("a downstream worker launch whose replay proof T3 Code cannot establish stays pending for AgentEasel to retry", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -212,7 +212,7 @@ it("a downstream worker launch whose replay proof T3 cannot establish stays pend
     [
       "launch",
       "pending",
-      "T3 launch capabilities are unavailable. Factory will retry this launch.",
+      "T3 Code launch capabilities are unavailable. AgentEasel will retry this launch.",
     ],
   ]);
   expect(f.t3.threads.launches.size).toBe(1);
@@ -232,7 +232,7 @@ it("a worker that fails after reporting cannot release downstream work", async (
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
   expect(f.t3.threads.sends.size).toBe(0);
 });
-it("an accepted result stays held while T3 has not settled the worker's delegated work", async (c) => {
+it("an accepted result stays held while T3 Code has not settled the worker's delegated work", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -250,7 +250,7 @@ it("an accepted result stays held while T3 has not settled the worker's delegate
   expect(f.t3.threads.launches.size).toBe(1);
 });
 
-it("a queued turn T3 cancels before it starts after the worker reported keeps the result releasing", async (c) => {
+it("a queued turn T3 Code cancels before it starts after the worker reported keeps the result releasing", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -270,7 +270,7 @@ it("a queued turn T3 cancels before it starts after the worker reported keeps th
   expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker", "parallel-block"]);
   expect(f.t3.threads.launches.size).toBe(2);
 });
-it("queued turns T3 cancels before they start stay in work history without a Problem once newer ones follow", async (c) => {
+it("queued turns T3 Code cancels before they start stay in work history without a Problem once newer ones follow", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -297,7 +297,7 @@ it("queued turns T3 cancels before they start stay in work history without a Pro
   expect(run.value.attention.filter((a) => a.kind === "execution-failed")).toStrictEqual([]);
   expect(f.t3.threads.launches.size).toBe(2);
 });
-it("a turn T3 cancels before it starts, before any finished report, keeps its Problem while a later turn runs", async (c) => {
+it("a turn T3 Code cancels before it starts, before any finished report, keeps its Problem while a later turn runs", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -321,7 +321,7 @@ it("a turn T3 cancels before it starts, before any finished report, keeps its Pr
     settledAt: null,
   });
 });
-it("a turn T3 cancels before it starts, first seen beside a running later turn before any finished report, shows a Problem in work history", async (c) => {
+it("a turn T3 Code cancels before it starts, first seen beside a running later turn before any finished report, shows a Problem in work history", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -340,7 +340,7 @@ it("a turn T3 cancels before it starts, first seen beside a running later turn b
     problem: "execution-failed",
   });
 });
-it("a queued turn T3 cancels before it starts, first seen beside a running later turn after the worker reported, shows no Problem in work history", async (c) => {
+it("a queued turn T3 Code cancels before it starts, first seen beside a running later turn after the worker reported, shows no Problem in work history", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -362,7 +362,7 @@ it("a queued turn T3 cancels before it starts, first seen beside a running later
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
   expect(f.t3.threads.launches.size).toBe(1);
 });
-it("a turn T3 cancels before it starts, ahead of the reporting turn, keeps its Problem when the report-time read fails", async (c) => {
+it("a turn T3 Code cancels before it starts, ahead of the reporting turn, keeps its Problem when the report-time read fails", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -385,7 +385,7 @@ it("a turn T3 cancels before it starts, ahead of the reporting turn, keeps its P
   expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
   expect(f.t3.threads.launches.size).toBe(2);
 });
-it("a queued turn T3 cancels before the reporting turn reports keeps its Problem and holds the result though it is newer", async (c) => {
+it("a queued turn T3 Code cancels before the reporting turn reports keeps its Problem and holds the result though it is newer", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -433,7 +433,7 @@ it("a turn queued after the report and cancelled before it starts releases the r
   expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
   expect(f.t3.threads.launches.size).toBe(2);
 });
-it("a turn T3 cancels before the report, first seen as the latest after a failed report-time read, holds the result", async (c) => {
+it("a turn T3 Code cancels before the report, first seen as the latest after a failed report-time read, holds the result", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -480,7 +480,7 @@ it("a turn queued and cancelled before it starts after a recovered read showed t
   expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
   expect(f.t3.threads.launches.size).toBe(2);
 });
-it("a queued turn T3 cancels after it started, after the worker reported, holds the result with a Problem", async (c) => {
+it("a queued turn T3 Code cancels after it started, after the worker reported, holds the result with a Problem", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -629,7 +629,7 @@ it("a worker idle after reporting working shows its message without a missing-re
   });
   expect(run.value.attention.filter((a) => !a.settledAt)).toStrictEqual([]);
 });
-it("a reportless turn resumed by a notification shows a missing report once T3 settles the thread", async (c) => {
+it("a reportless turn resumed by a notification shows a missing report once T3 Code settles the thread", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const worker = await workerAtWork(setup.world, setup.input);
@@ -797,14 +797,14 @@ it("Request report on a worker idle in working queues an assessment turn on its 
   expect(sent[0]?.payload.threadId).toBe("thread-1");
   expect(sent[0]?.payload.message).toContain(`Factory Block id: ${f.blockId}.`);
   expect(sent[0]?.payload.message).toContain(
-    "Factory Request report: assess the existing work without repeating the task.",
+    "AgentEasel Request report: assess the existing work without repeating the task.",
   );
   expect(result.value.recoveries).toMatchObject([
     { blockId: "worker", attentionId: null, sourceExecutionId: "execution-1" },
   ]);
   expect(f.t3.threads.launches.size).toBe(1);
 });
-it("Request report sends its assessment turn when T3 drops report support after its dispatch pass's snapshot", async (c) => {
+it("Request report sends its assessment turn when T3 Code drops report support after its dispatch pass's snapshot", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -820,7 +820,7 @@ it("Request report sends its assessment turn when T3 drops report support after 
     "thread-1",
   ]);
 });
-it("Request report leaves its assessment turn unsent as uncertain when T3's send replay proof cannot be established", async (c) => {
+it("Request report leaves its assessment turn unsent as uncertain when T3 Code's send replay proof cannot be established", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -864,7 +864,7 @@ it("Request report on a later visit asks for an assessment without the Revisit i
   assert(result.ok, JSON.stringify(result));
   const request = [...f.t3.threads.sends.values()].at(-1)?.payload.message;
   expect(f.t3.threads.sends.size).toBe(2);
-  expect(request).toContain("Factory Request report: assess the existing work");
+  expect(request).toContain("AgentEasel Request report: assess the existing work");
   expect(request).not.toContain("Revisit instruction");
   expect(request).not.toContain(REVISIT_INSTRUCTION);
 });

@@ -288,7 +288,7 @@ it("a replacement key that cannot be stored keeps the previous configuration and
   expect(await factory.getChatModelSettings()).toStrictEqual({ ok: true, value: saved });
 });
 
-it("a reachable-looking but unreachable configuration stays saved and its Test records Factory's own failure", async (c) => {
+it("a reachable-looking but unreachable configuration stays saved and its Test records AgentEasel's own failure", async (c) => {
   // Arrange
   const factory = await (await factoryHarness(c)).open();
   const saved = await savedChatModel(factory, { baseUrl: await unreachableBaseUrl() });
@@ -302,7 +302,7 @@ it("a reachable-looking but unreachable configuration stays saved and its Test r
   expect(tested.value.latestTest).toMatchObject({
     revision: 1,
     outcome: "failed",
-    message: "Factory could not reach the provider at the saved base URL.",
+    message: "AgentEasel could not reach the provider at the saved base URL.",
   });
 });
 
@@ -368,7 +368,7 @@ it("saving a new configuration keeps the earlier Test as dated evidence for its 
   expect(changed.value.latestTest).toMatchObject({ revision: 1, outcome: "succeeded" });
 });
 
-it("reopening Factory with a saved configuration sends no request to the provider", async (c) => {
+it("reopening AgentEasel with a saved configuration sends no request to the provider", async (c) => {
   // Arrange
   const provider = await controlledModelProvider(c);
   const harness = await factoryHarness(c);

@@ -121,7 +121,7 @@ export function failNextThreadRead(t3: ControlledT3) {
   const read = t3.threads.readExecution.bind(t3.threads);
   t3.threads.readExecution = async () => {
     t3.threads.readExecution = read;
-    throw new T3Failure("unavailable", "T3 is unreachable.");
+    throw new T3Failure("unavailable", "T3 Code is unreachable.");
   };
 }
 
@@ -158,7 +158,7 @@ export function failNextInspection(t3: ControlledT3) {
     t3.contract.beforeInspection = () => {
       delete t3.contract.beforeInspection;
       resolve();
-      throw new Error("T3 is unreachable");
+      throw new Error("T3 Code is unreachable");
     };
   });
 }

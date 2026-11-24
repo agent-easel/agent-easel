@@ -267,7 +267,7 @@ function useDiscordPage() {
       // Names the check looked up belong to the Access section too.
       access.setSettings(next);
     },
-    () => "Factory could not run the check.",
+    () => "AgentEasel could not run the check.",
   );
   const accessTest = useHostAction(
     () => api.sendDiscordAccessTest(),
@@ -275,12 +275,12 @@ function useDiscordPage() {
       answer(next);
       access.setSettings(next);
     },
-    () => "Factory could not send the access test.",
+    () => "AgentEasel could not send the access test.",
   );
   const turn = useHostAction(
     (on: boolean) => api.setChatControlEnabled({ enabled: on }),
     answer,
-    (on) => `Factory could not turn Chat control ${on ? "On" : "Off"}.`,
+    (on) => `AgentEasel could not turn Chat control ${on ? "On" : "Off"}.`,
   );
   return {
     ...oneSave,
@@ -297,7 +297,7 @@ function useDiscordPage() {
       ? ""
       : failure.cause instanceof ApiError
         ? chatControlError(failure.cause, "")
-        : "Factory could not refresh the connection state. It retries automatically.",
+        : "AgentEasel could not refresh the connection state. It retries automatically.",
     checking: check.busy,
     checkError: check.error,
     check: check.act,
@@ -493,7 +493,7 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
           title="Couldn’t refresh the connection state"
           details={page.refreshError}
         >
-          Factory retries automatically.
+          AgentEasel retries automatically.
         </ProblemCard>
       )}
     </>
@@ -548,7 +548,7 @@ const CHECK_PROBLEMS: Record<
     next: "Check the connection again in a moment.",
   },
   unreachable: {
-    title: "Factory can’t reach Discord",
+    title: "AgentEasel can’t reach Discord",
     next: "Check this computer’s network, then check the connection again.",
   },
   failed: {
@@ -732,7 +732,7 @@ function RunningConnectionProblems({ settings }: { settings: DiscordSettings }) 
   return (
     <>
       {connectionStatus === "reconnecting" && (
-        <ProblemCard tone="attention" title="Factory can’t reach Discord" details={details}>
+        <ProblemCard tone="attention" title="AgentEasel can’t reach Discord" details={details}>
           It keeps trying with increasing waits.
         </ProblemCard>
       )}

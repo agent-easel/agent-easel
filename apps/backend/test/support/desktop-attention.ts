@@ -70,7 +70,7 @@ export async function desktopAttention(
   selection: AttentionSelection,
   settings: Partial<DesktopAlertSettings> = {},
 ) {
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-attention-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-desktop-attention-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const alerts = recordingAlerts();
   const coordinator = await AttentionCoordinator.open(directory, alerts.port, {

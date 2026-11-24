@@ -662,7 +662,7 @@ export async function scenariosFixture(host: Host) {
 
   async function currentContext() {
     const { authorizationContext } = requireSuccess(await factory.getConnection());
-    assert(authorizationContext, "Run scenarios need an authorized T3 connection");
+    assert(authorizationContext, "Run scenarios need an authorized T3 Code connection");
     return authorizationContext.id;
   }
 

@@ -14,7 +14,7 @@ const version =
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Unexpected product version "${version}".`);
 
 const siteUrl = new URL(
-  process.env.FACTORY_SITE_URL?.trim() || "https://t3factory.app/",
+  process.env.FACTORY_SITE_URL?.trim() || "https://agenteasel.app/",
 ).href.replace(/\/?$/, "/");
 
 const placeholders: Record<string, string> = {

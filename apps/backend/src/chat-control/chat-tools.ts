@@ -112,14 +112,14 @@ function paged<T>(entries: readonly T[], page: number) {
 }
 
 const unavailable = (what: string): ChatToolOutcome => ({
-  output: { error: "unavailable", message: `Factory could not read its ${what} right now.` },
+  output: { error: "unavailable", message: `AgentEasel could not read its ${what} right now.` },
   fact: { error: "unavailable" },
 });
 
 const listProjects = (operations: DiscoveryOperations): ReadTool => ({
   name: "list_projects",
   description:
-    "List the Factory Projects this thread permits, with stable ID, name, repository path and availability. Independent clones can share a name; tell them apart by repository path.",
+    "List the AgentEasel Projects this thread permits, with stable ID, name, repository path and availability. Independent clones can share a name; tell them apart by repository path.",
   inputSchema: pageSchema,
   execute: (input, scope) =>
     Effect.gen(function* () {
