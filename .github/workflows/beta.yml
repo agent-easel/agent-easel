@@ -140,10 +140,15 @@ jobs:
       RELEASE_SHA: ${{ needs.source.outputs.sha }}
       RELEASE_VERSION: ${{ needs.build-macos.outputs.version }}
       PREVIOUS_TAG: ${{ needs.source.outputs.previous }}
+      FROZEN_BRIDGE: .github/release/bridge-mac.yml
       PRODUCT_POSITIONING: AgentEasel plans, starts and tracks multi-agent Runs. The agent work runs in T3 Code, so AgentEasel requires T3 Code.
       PRODUCT_STATEMENT: >-
         AgentEasel requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and AgentEasel does not work without a T3 Code installation. AgentEasel is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-${{ needs.build-macos.outputs.tag }}
@@ -186,6 +191,16 @@ jobs:
           fi
           echo "RELEASE_ID=$release_id" >> "$GITHUB_ENV"
           jq -r .html_url <<<"$release"
+      - name: Write update metadata
+        run: |
+          mv downloads/beta-mac.yml built-mac.yml
+          notes=$(gh api -H 'Accept: application/vnd.github.html+json' \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body_html)
+          DOWNLOAD_BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG" \
+            RELEASE_NAME="AgentEasel $RELEASE_VERSION" RELEASE_NOTES="$notes" \
+            node scripts/update-feed.mjs own built-mac.yml downloads/agenteasel-mac.yml
+          for name in latest-mac.yml beta-mac.yml; do cp "$FROZEN_BRIDGE" "downloads/$name"; done
+          (cd downloads && rm SHA256SUMS.txt && sha256sum -- * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt .)
       - name: Upload and verify assets
         run: |
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" downloads/*
@@ -195,6 +210,18 @@ jobs:
           (cd downloads && sha256sum -- *) > local.txt
           sort -k2 -o local.txt local.txt
           diff -u local.txt uploaded.txt
+      - name: Check frozen bridge metadata on the draft
+        run: |
+          mkdir draft-assets
+          for name in latest-mac.yml beta-mac.yml; do
+            id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")
+            if [[ -n "$id" ]]; then
+              gh api -H 'Accept: application/octet-stream' \
+                "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "draft-assets/$name"
+            fi
+          done
+          node scripts/update-feed.mjs check-bridge draft-assets
       - name: Publish
         run: |
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
@@ -210,3 +237,13 @@ jobs:
           if [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .draft)" = true ]]; then
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
           fi
+
+  landing:
+    name: Update feed
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/landing.yml
+    with:
+      feed-changed: true

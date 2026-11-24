@@ -357,13 +357,11 @@ menu bar is hidden until Alt is pressed.
 
 T3 Code AgentEasel is renamed AgentEasel. The current release is the last T3 Code AgentEasel build. A macOS update cannot change an app's bundle id, so users download AgentEasel once. Until they do, the Run sidebar shows a persistent, non-blocking **T3 Code AgentEasel is now AgentEasel** notice with a **Download AgentEasel** link above its footer, in the desktop app and in the browser alike. Everything else keeps working.
 
-This build never checks for updates of itself. Its own update state is unsupported, so the sidebar control and the release-channel setting describe only a remote server that still offers updates.
-
 When AgentEasel migrates an installation on its first launch, it writes `migrated-to-agenteasel.json` both into the old data home (`FACTORY_HOME`, by default `~/.t3-factory`) and into the old desktop profile. A client installation has no data home and gets only the profile tombstone. If either file exists, T3 Code AgentEasel starts no backend, window, attention or update check. It turns off its login item and shows one blocking dialog with **Open AgentEasel**, **Move T3 Code AgentEasel to Trash** and **Quit**. Each choice ends the process. **Open AgentEasel** opens the download page when AgentEasel is not installed. The old data stays untouched as AgentEasel's backup.
 
 ## Updates
 
-Desktop builds before the final T3 Code AgentEasel release check for updates automatically on launch and every hour, so a running app shows a new Release or beta build in the sidebar without a manual check. **Settings → Desktop app → Updates** (desktop only) chooses the installation's **release channel**: **Stable** (tagged Releases) or **Beta** (nightly and
+Release and beta builds check the AgentEasel update feed automatically on launch and every hour, so a running app shows a new Release or beta build in the sidebar without a manual check. **Settings → Desktop app → Updates** (desktop only) chooses the installation's **release channel**: **Stable** (tagged Releases) or **Beta** (nightly and
 on-demand [beta builds](release.md#beta-builds) of main, plus newer stable Releases). Until chosen, an installation follows the channel of the build it runs. Changing the channel discards an update found on the
 previous one and checks again; it is refused while a download is in progress. Leaving beta never downgrades: the installed beta stays until a newer Release exists, and Desktop app settings says so. The page header shows the update state and action. The Updates card shows the installed version, release channel and last check time when supported. The release-channel control is disabled during a download. Update failures keep their diagnostics under **Technical details**.
 
@@ -392,8 +390,7 @@ A server update keeps data, role, reporting registrations and T3 Code connection
 is chosen on its host. A server running from a source checkout, a development package or a release without the update API is not an upgrade target. Connection and startup gates without a sidebar keep a contextual
 **Application settings** entry with the channel and the same control for this app only, including in incompatible and offline states.
 
-The Available tooltip previews the changes of every release between the installed version and the update, newest first, from the feed's ten most recent entries; the stable channel leaves out beta builds, whose
-changes the Release notes already cover. Each change is one line without author, PR or commit references and without its Conventional Commit prefix; four are shown, then **+N more**. Notes are always read as
+The Available tooltip previews the changes in the offered version's notes. Each change is one line without author, PR or commit references and without its Conventional Commit prefix; four are shown, then **+N more**. Notes are always read as
 text, never feed markup; a release without notes says so and does not block download. If installation fails before
 replacement, AgentEasel clears the quitting state and reopens the same data home through normal reconciliation, keeping the error in the control.
 

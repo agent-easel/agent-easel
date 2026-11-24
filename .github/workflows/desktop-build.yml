@@ -140,7 +140,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           FACTORY_POSTHOG_PUBLIC_KEY: ${{ vars.FACTORY_POSTHOG_PUBLIC_KEY }}
-          FACTORY_UPDATE_GITHUB_OWNER: ${{ github.repository_owner }}
+          FACTORY_UPDATE_URL: https://agenteasel.app/updates
         run: |
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER; do
             if [[ -z "${!name}" ]]; then
@@ -148,8 +148,6 @@ jobs:
               exit 1
             fi
           done
-          # Scheduled runs carry no repository payload; derive the feed repository from the run.
-          export FACTORY_UPDATE_GITHUB_REPO="${GITHUB_REPOSITORY#*/}"
           export APPLE_API_KEY="$RUNNER_TEMP/factory-notary-key.p8"
           (umask 077; printf '%s' "$APPLE_API_KEY_CONTENT" > "$APPLE_API_KEY")
           if [[ "$BUILD_CHANNEL" = release ]]; then

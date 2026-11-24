@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing draft release tag to rebuild and publish (vX.Y.Z)
+        description: Existing draft release to rebuild and publish (vX.Y.Z)
         required: true
         type: string
 
@@ -78,10 +78,15 @@ jobs:
             echo "::error::$tag is already published; published releases are never rebuilt or replaced."
             exit 1
           fi
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
-          if [[ "$(jq -r '.[0].target' <<<"$releases")" != "$sha" ]]; then
-            echo "::error::The $tag draft does not target the tagged commit $sha."
-            exit 1
+          # Old beta installations update from the newest semver tag, so the tag appears only when
+          # publication attaches the frozen bridge metadata.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$(jq -r '.[0].target' <<<"$releases")" --jq .sha)
+          if tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha 2>/dev/null); then
+            echo "::warning::$tag exists before publication; old beta installations fail their update check until it is published."
+            if [[ "$tagged" != "$sha" ]]; then
+              echo "::error::The $tag draft targets $sha, but the tag points to $tagged."
+              exit 1
+            fi
           fi
           if [[ -n "$CUT_SHA" && "$CUT_SHA" != "$sha" ]]; then
             echo "::error::$tag points to $sha, not the release commit $CUT_SHA."
@@ -165,10 +170,15 @@ jobs:
       RELEASE_TAG: ${{ needs.source.outputs.tag }}
       RELEASE_SHA: ${{ needs.source.outputs.sha }}
       RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      FROZEN_BRIDGE: .github/release/bridge-mac.yml
       PRODUCT_POSITIONING: AgentEasel plans, starts and tracks multi-agent Runs. The agent work runs in T3 Code, so AgentEasel requires T3 Code.
       PRODUCT_STATEMENT: >-
         AgentEasel requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and AgentEasel does not work without a T3 Code installation. AgentEasel is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-${{ needs.source.outputs.tag }}
@@ -193,22 +203,8 @@ jobs:
             echo "::error::$RELEASE_TAG was published outside this job; its assets are not changed."
             exit 1
           fi
-          test "$(jq -r '.[0].target' <<<"$release")" = "$RELEASE_SHA"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)" = "$RELEASE_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$(jq -r '.[0].target' <<<"$release")" --jq .sha)" = "$RELEASE_SHA"
           echo "RELEASE_ID=$(jq -r '.[0].id' <<<"$release")" >> "$GITHUB_ENV"
-      - name: Upload the complete asset set
-        run: |
-          # Only assets of a still-draft release left by an earlier failed attempt are removed.
-          for asset in $(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --jq '.[].id'); do
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset"
-          done
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" downloads/*
-      - name: Verify uploaded assets
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" \
-            --jq '.[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' | sort -k2 > uploaded.txt
-          (cd downloads && sha256sum -- *) | sort -k2 > local.txt
-          diff -u local.txt uploaded.txt
       - name: Add GitHub contributor notes
         run: |
           body=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body)
@@ -235,106 +231,61 @@ jobs:
           fi
           printf '%s\n\n---\n\n%s\n\n%s\n' "$body" "$PRODUCT_POSITIONING" "$statement" > release-body.md
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-body.md
+      - name: Write update metadata
+        run: |
+          mv downloads/latest-mac.yml built-mac.yml
+          notes=$(gh api -H 'Accept: application/vnd.github.html+json' \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .body_html)
+          DOWNLOAD_BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG" \
+            RELEASE_NAME="AgentEasel $RELEASE_VERSION" RELEASE_NOTES="$notes" \
+            node scripts/update-feed.mjs own built-mac.yml downloads/agenteasel-mac.yml
+          for name in latest-mac.yml beta-mac.yml; do cp "$FROZEN_BRIDGE" "downloads/$name"; done
+          (cd downloads && rm SHA256SUMS.txt && sha256sum -- * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt .)
+      - name: Upload the complete asset set
+        run: |
+          # Only assets of a still-draft release left by an earlier failed attempt are removed.
+          for asset in $(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --jq '.[].id'); do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset"
+          done
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" downloads/*
+      - name: Verify uploaded assets
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" \
+            --jq '.[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' | sort -k2 > uploaded.txt
+          (cd downloads && sha256sum -- *) | sort -k2 > local.txt
+          diff -u local.txt uploaded.txt
+      - name: Check frozen bridge metadata on the draft
+        run: |
+          mkdir draft-assets
+          for name in latest-mac.yml beta-mac.yml; do
+            id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id")
+            if [[ -n "$id" ]]; then
+              gh api -H 'Accept: application/octet-stream' \
+                "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "draft-assets/$name"
+            fi
+          done
+          node scripts/update-feed.mjs check-bridge draft-assets
       - name: Publish
         run: |
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
           test "$(jq -r .draft <<<"$release")" = false
           test "$(jq -r .tag_name <<<"$release")" = "$RELEASE_TAG"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)" = "$RELEASE_SHA"
           jq -r '.assets[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' <<<"$release" | sort -k2 > published.txt
           diff -u local.txt published.txt
           jq -r '"Published release: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
 
   landing:
-    name: Deploy landing page to Vercel
+    name: Deploy landing page and update feed
     needs: [source, publish]
     if: >-
       !cancelled() && github.ref == 'refs/heads/main' &&
       (needs.publish.result == 'success' ||
       (github.event_name == 'push' && needs.publish.result == 'skipped' && needs.source.result == 'skipped'))
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment:
-      name: landing-production
-      url: https://agenteasel.app/
-    concurrency:
-      group: landing-production
-      queue: max
-    defaults:
-      run:
-        shell: bash
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Select a build with a public Release download
-        id: site
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
-          PUSH_SHA: ${{ github.sha }}
-          PUBLISHED_TAG: ${{ needs.source.outputs.tag }}
-        run: |
-          if [[ -z "$PUBLISHED_TAG" ]]; then
-            before_version=$(git show "$BEFORE:package.json" | jq -er .version)
-            push_version=$(git show "$PUSH_SHA:package.json" | jq -er .version)
-            changes=$(git diff --name-only "$BEFORE" "$PUSH_SHA" -- apps/landing)
-            if [[ "$before_version" == "$push_version" && -z "$changes" ]]; then
-              exit 0
-            fi
-          fi
-
-          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
-          tag=$(jq -er '.tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' <<<"$release")
-          if [[ -n "$PUBLISHED_TAG" && "$PUBLISHED_TAG" != "$tag" ]]; then
-            echo "Skipping $PUBLISHED_TAG because $tag is now the latest Release."
-            exit 0
-          fi
-
-          version=${tag#v}
-          if [[ "$(jq -er .version package.json)" != "$version" ]]; then
-            if [[ -z "$PUBLISHED_TAG" ]]; then
-              echo "Landing changes will deploy after the Release for the current main version is published."
-              exit 0
-            fi
-            git checkout --detach "$tag"
-            git merge-base --is-ancestor HEAD origin/main
-            test "$(jq -er .version package.json)" = "$version"
-          fi
-
-          for name in "AgentEasel-$version-arm64.dmg" SHA256SUMS.txt; do
-            download="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
-            jq -e --arg url "$download" 'any(.assets[]; .state == "uploaded" and .browser_download_url == $url)' <<<"$release" > /dev/null
-            curl --fail --silent --show-error --head --location --retry 3 "$download" > /dev/null
-          done
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - if: steps.site.outputs.tag != ''
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - if: steps.site.outputs.tag != ''
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - name: Build and deploy the verified landing page
-        if: steps.site.outputs.tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.site.outputs.tag }}
-          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          : "${VERCEL_ORG_ID:?}" "${VERCEL_PROJECT_ID:?}" "${VERCEL_TOKEN:?}"
-          npx --yes vercel@66.6.0 pull --yes --environment=production --token "$VERCEL_TOKEN"
-          npx --yes vercel@66.6.0 build --prod --token "$VERCEL_TOKEN"
-          index=.vercel/output/static/index.html
-          grep -Fq 'rel="canonical" href="https://agenteasel.app/"' "$index"
-          grep -Fq "/releases/download/$RELEASE_TAG/AgentEasel-${RELEASE_TAG#v}-arm64.dmg" "$index"
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          if [[ "$latest" == "$RELEASE_TAG" ]]; then
-            npx --yes vercel@66.6.0 deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
-          fi
+    uses: ./.github/workflows/landing.yml
+    with:
+      published-tag: ${{ needs.source.outputs.tag }}

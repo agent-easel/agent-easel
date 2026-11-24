@@ -9,8 +9,12 @@ const everywhere = [/alimek\/t3-factory/gi, /\/T3-Factory\b/g, /\bcd t3-factory\
 export const allowlist = [
   { path: /^CHANGELOG\.md$/, why: "release history" },
   { path: /^apps\/backend\/test\/fixtures\//, why: "captured data of old installations" },
-  { path: /^apps\/desktop\/src\/(agenteasel-handoff|updates)\.ts$/, why: "bridge release" },
-  { path: /^apps\/desktop\/test\/updates\.test\.ts$/, why: "bridge release" },
+  { path: /^apps\/desktop\/src\/agenteasel-handoff\.ts$/, why: "bridge release" },
+  {
+    path: /^(\.github\/release\/bridge-mac\.yml|scripts\/update-feed(\.test)?\.mjs)$/,
+    why: "frozen bridge update metadata",
+  },
+  { path: /^docs\/release\.md$/, why: "update path of old installations" },
   { path: /^apps\/frontend\/src\/components\/agenteasel-notice\.tsx$/, why: "bridge release" },
   { path: /^docs\/desktop-and-clients\.md$/, why: "bridge release and old data home" },
   { path: /^scripts\/check-product-name\.mjs$/, why: "this gate" },

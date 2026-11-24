@@ -870,7 +870,7 @@ async function start() {
   registerBridge();
   applyMenuState(null);
   if (store.get().role === "server") backend.start();
-  updates.start();
+  updates.start(updateChannel());
   applyMenuBarIcon();
   refreshTray();
   started = true;
