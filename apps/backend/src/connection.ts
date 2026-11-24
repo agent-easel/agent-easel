@@ -1,6 +1,3 @@
-import { readVibeReportingInstances } from "./reporting-discovery.ts";
-import { telemetryDriverKinds, type Telemetry } from "./telemetry.ts";
-import type { T3Projects } from "./t3/projects.ts";
 import { periodicWorker } from "./periodic.ts";
 import * as Semaphore from "effect/Semaphore";
 import { now } from "./time.ts";
@@ -84,9 +81,6 @@ export const makeConnection = (
   },
   intervalMs: number,
   changes: LiveChanges,
-  telemetry: Telemetry,
-  projects: T3Projects,
-  stateDirectory: string,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -136,39 +130,6 @@ export const makeConnection = (
         changes.connectionChecked();
       else changes.connectionChanged();
     };
-    const recordConnection = Effect.fn(function* (endpoint: string, before: T3Connection) {
-      if (
-        telemetry.enabled &&
-        status.readyGeneration !== before.readyGeneration &&
-        status.state === "ready"
-      ) {
-        const connected = status;
-        yield* Effect.tryPromise(() => projects.orchestratorCapabilities({ endpoint })).pipe(
-          Effect.orElseSucceed(() => []),
-          Effect.flatMap((providers) =>
-            Effect.gen(function* () {
-              const vibe = providers.some((p) => p.driverKind === "acpRegistry")
-                ? yield* readVibeReportingInstances(stateDirectory, connected)
-                : undefined;
-              return yield* telemetry.record("t3.connected", {
-                mode: isLocalEndpoint(endpoint) ? "local" : "remote",
-                driverKinds: telemetryDriverKinds.filter((kind) =>
-                  providers.some((provider) =>
-                    provider.driverKind === "acpRegistry"
-                      ? kind === "mistral-vibe" &&
-                        vibe &&
-                        "instances" in vibe &&
-                        vibe.instances?.has(provider.providerInstanceId)
-                      : provider.driverKind === kind,
-                  ),
-                ),
-              });
-            }),
-          ),
-          telemetry.recordLater,
-        );
-      }
-    });
     const check = Effect.fn("Connection.check")(function* () {
       if (!saved || closed) return value();
       const endpoint = saved.endpoint;
@@ -234,7 +195,6 @@ export const makeConnection = (
           };
           publishCheck(before);
         }
-        yield* recordConnection(endpoint, before);
         return value();
       }).pipe(
         Effect.catch(() =>

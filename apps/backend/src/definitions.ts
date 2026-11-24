@@ -68,7 +68,6 @@ import { emptyCapabilities, readyCapabilities, unsupportedReportingFailure } fro
 import { readVibeReportingInstances } from "./reporting-discovery.ts";
 import type { T3Projects } from "./t3/projects.ts";
 import type { EffectOperations } from "./effect-operations.ts";
-import { telemetryBuiltInDriver, telemetryCount, type Telemetry } from "./telemetry.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { failure } from "./result.ts";
 import { projectUnavailableIssue } from "./projects.ts";
@@ -309,7 +308,6 @@ export const makeDefinitions = (
   t3StateDirectory: string,
   /** Recorded in exported files for information only. */
   factoryVersion: string,
-  telemetry: Telemetry,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -700,49 +698,6 @@ export const makeDefinitions = (
       yield* appendFlowRevision(sql, { ...flow, savedAt: flow.updatedAt });
       return { ok: true as const, value: toDraft(flow, yield* readinessDefinitions) };
     });
-    const recordSuccess =
-      <A>(record: (value: A) => Effect.Effect<void>) =>
-      <E, R>(operation: Effect.Effect<Result<A>, E, R>) =>
-        operation.pipe(Effect.tap((result) => (result.ok ? record(result.value) : Effect.void)));
-    const recordFlow = (
-      event: "flow.created" | "flow.saved" | "flow.duplicated" | "flow.removed",
-      { projectId, graph }: Pick<FlowDraft, "projectId" | "graph">,
-    ) =>
-      telemetry.record(event, {
-        scope: projectId === null ? "global" : "project",
-        blockCount: telemetryCount(graph.blocks.length + 1),
-        blockTypes: [
-          ...new Set([...graph.blocks.map((block) => block.kind), "finish" as const]),
-        ].sort(),
-        usesSubflows: graph.blocks.some((block) => block.kind === "subflow"),
-      });
-    const recordAgent = (
-      event: "agent.created" | "agent.saved" | "agent.removed",
-      agent: AgentDefinition,
-      capabilities?: AgentCapabilities,
-    ) => {
-      const driverKind = telemetryBuiltInDriver(
-        capabilities?.environments.some(
-          ({ environmentId }) => environmentId === agent.execution?.environmentId,
-        )
-          ? capabilities.providers.find(
-              (provider) => provider.providerInstanceId === agent.execution?.providerInstanceId,
-            )?.driverKind
-          : undefined,
-      );
-      return telemetry.record(event, {
-        scope: agent.projectId === null ? "global" : "project",
-        ...(driverKind === undefined ? {} : { driverKind }),
-        hasProjectOverrides: agent.projectOverrides.length > 0,
-      });
-    };
-    const recordOwner = (kind: "flow" | "agent", expected: OwningProject, target: OwningProject) =>
-      expected === target
-        ? Effect.void
-        : telemetry.record("owner.changed", {
-            kind,
-            direction: target === null ? "to_global" : "to_project",
-          });
     const operations: DefinitionOperations = {
       createFlow(input) {
         const validated = validateCreateFlow(input);
@@ -784,7 +739,7 @@ export const makeDefinitions = (
               }),
             );
           }),
-        ).pipe(recordSuccess((flow) => recordFlow("flow.created", flow)));
+        );
       },
       validateFlow(id, input) {
         const validated = validateUpdateFlow(input);
@@ -846,7 +801,7 @@ export const makeDefinitions = (
               }),
             );
           }),
-        ).pipe(recordSuccess((flow) => recordFlow("flow.saved", flow)));
+        );
       },
       changeFlowOwner(id, input) {
         const validated = validateChangeOwner(input);
@@ -876,7 +831,7 @@ export const makeDefinitions = (
               value: toDraft({ ...flow, projectId, updatedAt }, yield* readinessDefinitions),
             };
           }),
-        ).pipe(recordSuccess(() => recordOwner("flow", expectedProjectId, projectId)));
+        );
       },
       removeFlow(id) {
         return transaction<CurrentFlow | undefined>(
@@ -900,10 +855,7 @@ export const makeDefinitions = (
             yield* sql`UPDATE flows SET removed_at=${yield* currentTime} WHERE id=${id} AND removed_at IS NULL`;
             return { ok: true as const, value: flow };
           }),
-        ).pipe(
-          recordSuccess((flow) => (flow ? recordFlow("flow.removed", flow) : Effect.void)),
-          Effect.map(clearRemovedValue),
-        );
+        ).pipe(Effect.map(clearRemovedValue));
       },
       previewFlowDuplicate(id, input) {
         const validated = validatePreviewFlowDuplicate(input);
@@ -1011,7 +963,7 @@ export const makeDefinitions = (
               };
             }),
           ),
-        ).pipe(recordSuccess((duplicate) => recordFlow("flow.duplicated", duplicate.flow)));
+        );
       },
       listFlows() {
         return provideSql(
@@ -1148,7 +1100,7 @@ export const makeDefinitions = (
               yield* appendAgentRevision(sql, agent);
               return { ok: true as const, value: agent };
             }),
-          ).pipe(recordSuccess((agent) => recordAgent("agent.created", agent, capabilities)));
+          );
         });
       },
       updateAgent(id, input) {
@@ -1189,7 +1141,7 @@ export const makeDefinitions = (
                 return { ok: true as const, value: agent };
               }),
             ),
-          ).pipe(recordSuccess((agent) => recordAgent("agent.saved", agent, capabilities)));
+          );
         });
       },
       changeAgentOwner(id, input) {
@@ -1234,7 +1186,7 @@ export const makeDefinitions = (
               return { ok: true as const, value: { ...agent, projectId, updatedAt } };
             }),
           ),
-        ).pipe(recordSuccess(() => recordOwner("agent", expectedProjectId, projectId)));
+        );
       },
       duplicateAgent(id, input) {
         const validated = validateDuplicateAgent(input);
@@ -1275,22 +1227,7 @@ export const makeDefinitions = (
             yield* sql`UPDATE agents SET removed_at=${yield* currentTime} WHERE id=${id}`;
             return { ok: true as const, value: agent };
           }),
-        ).pipe(
-          recordSuccess((agent) =>
-            agent && telemetry.enabled
-              ? Effect.gen(function* () {
-                  const capabilities = agent.execution
-                    ? yield* loadCapabilities().pipe(
-                        Effect.timeout("250 millis"),
-                        Effect.orElseSucceed(() => undefined),
-                      )
-                    : undefined;
-                  yield* recordAgent("agent.removed", agent, capabilities);
-                }).pipe(telemetry.recordLater)
-              : Effect.void,
-          ),
-          Effect.map(clearRemovedValue),
-        );
+        ).pipe(Effect.map(clearRemovedValue));
       },
       exportAgent: (id) =>
         Effect.gen(function* () {
@@ -1312,7 +1249,7 @@ export const makeDefinitions = (
               }),
             ),
           );
-        }).pipe(recordSuccess(() => telemetry.record("definition.exported", { kind: "agent" }))),
+        }),
       exportFlow: (id) =>
         Effect.gen(function* () {
           const capabilities = yield* loadCapabilities();
@@ -1347,7 +1284,7 @@ export const makeDefinitions = (
               );
             }),
           );
-        }).pipe(recordSuccess(() => telemetry.record("definition.exported", { kind: "flow" }))),
+        }),
       reviewImport(file) {
         const document = parsePortableFile(file.data);
         if (!document.ok) return Effect.succeed(document);
@@ -1372,8 +1309,7 @@ export const makeDefinitions = (
             const replayed = yield* replay;
             if (replayed) return replayed;
             const capabilities = yield* loadCapabilities();
-            let committed = false;
-            const result = yield* sql.withTransaction(
+            return yield* sql.withTransaction(
               Effect.gen(function* () {
                 // Checked again: a retry of the same request may have committed meanwhile.
                 const raced = yield* replay;
@@ -1386,13 +1322,9 @@ export const makeDefinitions = (
                 const now = yield* currentTime;
                 const result = yield* insertImportedDefinitions(commit, projectId, now);
                 yield* writeImportReceipt(sql, commit, now, result);
-                committed = true;
                 return { ok: true as const, value: result };
               }),
             );
-            if (committed)
-              yield* telemetry.record("definition.imported", { kind: commit.document.kind });
-            return result;
           }),
         );
       },

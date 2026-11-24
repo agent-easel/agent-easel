@@ -1,4 +1,3 @@
-import { reportFeature } from "./api.ts";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { CommandPalette } from "./components/command-palette.tsx";
@@ -195,10 +194,7 @@ function onAppKeyDown(event: KeyboardEvent) {
   if (recording || event.repeat || !shouldHandleShortcut(event)) return;
   const matched = matchShortcutCommand(event, bindings);
   if (!matched) return;
-  if (executeAppCommand(matched.id)) {
-    event.preventDefault();
-    reportFeature("keyboard_shortcut");
-  }
+  if (executeAppCommand(matched.id)) event.preventDefault();
 }
 
 function usePalette() {

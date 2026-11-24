@@ -32,7 +32,6 @@ export function remoteAccessController(
   config: Configuration,
   handlerFor: HandlerFor,
   writeConfiguration: ReturnType<typeof configurationWriter>,
-  toggled: (enabled: boolean, certificateMode: "factory_ca" | "custom_cert") => Promise<void>,
 ): RemoteAccessControl & {
   start(): Promise<void>;
   close(): Promise<void>;
@@ -98,7 +97,6 @@ export function remoteAccessController(
     status,
     setEnabled: (next) =>
       serialized(async (): Promise<Result<RemoteAccessStatus>> => {
-        const changed = enabled !== next;
         await writeConfiguration(
           (saved) => {
             const current = saved.remoteAccess;
@@ -109,7 +107,6 @@ export function remoteAccessController(
             enabled = next;
           },
         );
-        if (changed) await toggled(next, settings.certificate ? "custom_cert" : "factory_ca");
         if (!next) {
           await stopListener();
           problem = null;

@@ -26,7 +26,6 @@ inside its own source checkout (including through symlinks), though not merely b
 | `config.json` | Non-secret settings, initialized once with loopback host and port 4310 |
 | `factory.sqlite` (+ `-wal`, `-shm`) | Durable SQLite state and journal |
 | `factory.sqlite.runner.lock` | Permanent OS lock inode; never delete while a backend runs |
-| `telemetry-id` | Random installation UUID used to derive the anonymous analytics identifier (0600) |
 | `credentials/` | OAuth files (directory 0700, files 0600) |
 | `credentials/tls/` | Host certificate authority and server keys for secure remote access (0600); never shared |
 | `credentials/chat-control/` | [Chat control](chat-control.md#key) secrets (model key, Discord bot token) referenced by the committed configuration (0600); back up with `factory.sqlite` |
@@ -42,7 +41,6 @@ and the non-secret [Chat control](chat-control.md) configuration, live in `facto
 | `FACTORY_PORT` | `config.json` port | 0–65535; 0 picks a free port, printed at startup |
 | `FACTORY_REMOTE_ACCESS` | `remoteAccess.enabled` (off) | `1` starts the approved-client HTTPS listener for this process |
 | `FACTORY_REMOTE_HOST` / `FACTORY_REMOTE_PORT` | `0.0.0.0` / 4312 | Approved-client listener binding; port 0 picks one |
-| `FACTORY_TELEMETRY_ENABLED` | Release and Beta builds on, development, demo and tests off | `false` forces analytics off. `true` makes analytics available in source runs with an ingest token. A saved opt-out still applies. |
 | `FACTORY_T3_STATE_DIRECTORY` | `~/.t3/userdata` | T3 Code's state directory; steers both [agent reporting discovery](t3-integration.md#reporting-installation) and [T3 Code address detection](t3-integration.md#first-run-setup) |
 
 Every request, including UI assets, must use the bound port and an allowed Host: loopback bindings accept `localhost`, `127.0.0.1` and `[::1]`; other bindings accept IP literals and listed DNS names
@@ -55,28 +53,11 @@ A fresh data home opens on the [First-run setup](t3-integration.md#first-run-set
 This listener is the **host-local** surface: it answers only requests whose socket peer is loopback (others get 403 `host_only`), even when bound to `0.0.0.0`. Other devices use secure remote access
 (approved, revocable clients over TLS on a separate listener) enabled in **Settings → Devices & access** or `"remoteAccess": { "enabled": true }`; see [desktop and approved clients](desktop-and-clients.md) and [Release](release.md).
 
-## Product analytics and privacy
+## Product analytics
 
-In **Settings → Privacy**, use **Share anonymous usage data** to change the AgentEasel host’s
-`telemetryEnabled` preference in `config.json`. Turning it off discards queued events, cancels
-delivery in progress and stops future collection immediately. Turning it back on resumes
-collection for new events. Approved remote clients can read the effective setting. Operators
-can set `FACTORY_TELEMETRY_ENABLED=false` before starting the host to force sharing off while
-preserving the saved preference.
-
-The AgentEasel backend sends allowlisted product metrics to PostHog Cloud EU through
-`agenteasel.app/ingest`. The metadata includes AgentEasel version, release channel, operating system,
-architecture, runtime mode and bucketed feature counts. The event catalog limits what can be
-recorded about setup and connections, Runs and definitions, automation and Chat control, client
-access, updates and specific feature actions. Prompts, code, file paths, user-defined names,
-identities, credentials and chat messages are excluded. Events use a SHA-256 hash of the random
-installation UUID as their identifier, with PostHog person profiles and GeoIP enrichment disabled.
-
-An approved desktop verifies a downloaded update when the new version runs. It sends the installed
-version pair to the AgentEasel host it used for that update over its approved connection. The host
-applies its effective sharing preference and consumes each receipt once, including when sharing is
-off. The per-update receipt key stays between the desktop and its host. The analytics event uses
-the host installation identity and the installed binary’s release channel.
+AgentEasel collects no product analytics or usage data. The application sends no events to
+AgentEasel or a third-party analytics service. A `telemetryEnabled` key or `telemetry-id` file
+left in the data home by an earlier build is ignored.
 
 ## Development and production commands
 

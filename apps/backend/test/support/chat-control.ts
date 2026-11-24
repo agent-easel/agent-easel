@@ -1,4 +1,3 @@
-import type { ServerOptions } from "../../src/server.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -90,7 +89,7 @@ export const discordGuild = {
  * connection to the controlled Discord, and Access allowing the participant in the allowed channel
  * for that Project. Chat control is still Off.
  */
-export async function chatControlWorld(c: TestContext, telemetry?: ServerOptions["telemetry"]) {
+export async function chatControlWorld(c: TestContext) {
   const model = await controlledModelProvider(c);
   const discord = await controlledDiscord(c);
   discord.addBot(discordBot);
@@ -105,7 +104,6 @@ export async function chatControlWorld(c: TestContext, telemetry?: ServerOptions
       t3,
       discordApiUrl: discord.apiUrl,
       connectionRetryMs: 60_000,
-      ...(telemetry ? { telemetry } : {}),
     });
   const factory = await open();
   await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" });

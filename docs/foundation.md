@@ -186,16 +186,6 @@ issues. Storage failures are sanitized at this boundary. Validate untrusted inpu
 keep transports limited to translating requests and responses. Product routes are shared
 by host and approved clients, with explicit [host-only boundaries](desktop-and-clients.md#two-listeners-two-trust-domains).
 
-## Anonymous product analytics
-
-The backend validates each analytics event against a closed catalog before buffering it. The catalog accepts only the values declared for that event. The backend supplies the installation hash and build metadata itself. `app.started` records whether First-run setup is still pending and reports only the bucketed totals for Projects, active Flows and active Agents.
-
-Flow authoring events report the saved graph's structure, including whether it contains a Subflow block. Run Start reports the captured root Flow's structure. Run completion counts distinct executed Blocks across the root and all invocations, including activated Subflow placements and reached Finish blocks. Each invocation is part of the same Run. An import reports the definition kind once for a newly committed request, including when a Flow document creates multiple definitions.
-
-The backend creates its random installation identity in `FACTORY_HOME/telemetry-id` with owner-only permissions when analytics is available. The UUID stays on disk and only its SHA-256 hash is sent. A damaged or inaccessible identity disables delivery. Events are held in memory, and retries keep the same event UUID and timestamp so PostHog can deduplicate them. Delivery uses a bounded background queue and a one-second best-effort flush at shutdown.
-
-Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://agenteasel.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. AgentEasel disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
-
 ## Live delivery
 
 Run detail, sidebar navigation, shared T3 Code connection status,
@@ -309,7 +299,7 @@ public results; they never edit current data to fabricate an old contract. See t
 
 Settings and Studio open over the current Run or composer. Closing them returns to that
 screen with its draft intact; direct links fall back to `/runs/new` in a fresh session.
-Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`, `privacy`,
+Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`,
 `run-titles`, `run-images`, `appearance`, `keyboard` and `desktop`. A removed or unknown
 section path opens T3 Code connection; removed paths have no redirects.
 Studio destinations open at `/studio/flows`, `/studio/agents` and `/studio/triggers` with their nested editor routes.

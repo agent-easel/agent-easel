@@ -1,4 +1,3 @@
-import { reportFeature } from "./api.ts";
 import { buildElkGraph } from "@agent-easel/flow-layout";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentDefinition, FlowGraph } from "@agent-easel/contracts";
@@ -245,10 +244,7 @@ export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
         arrangedFlows: result.arrangedFlows,
         restored: restoreOnly,
       });
-      if (!restoreOnly) {
-        current.options.authoring?.change(acceptedGraph);
-        reportFeature("auto_arrange");
-      }
+      if (!restoreOnly) current.options.authoring?.change(acceptedGraph);
     },
     [compute],
   );

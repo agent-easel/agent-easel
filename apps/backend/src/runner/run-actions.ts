@@ -1,4 +1,3 @@
-import type { Telemetry } from "../telemetry.ts";
 import type {
   Result,
   RunDetail,
@@ -62,7 +61,6 @@ export function openRunActions({
   freshSnapshot,
   cancelWaitTimer,
   settlement,
-  telemetry,
   reconcileTitleGeneration,
 }: {
   store: RunStore;
@@ -72,7 +70,6 @@ export function openRunActions({
   freshSnapshot: ContractSnapshots["fresh"];
   cancelWaitTimer: (arrivalId: string) => Effect.Effect<void>;
   settlement: RunnerSettlement;
-  telemetry: Telemetry;
   reconcileTitleGeneration: (runId: string) => Effect.Effect<void, unknown>;
 }) {
   const { isClosed, drive, fork, getRun } = lifecycle;
@@ -124,7 +121,6 @@ export function openRunActions({
         if (!runId) return waitRefusals["not-found"];
         const outcome = yield* store.forwardWaitArrival(runId, id, "user");
         if (outcome !== "forwarded") return waitRefusals[outcome];
-        yield* telemetry.record("run.continued", {});
         yield* cancelWaitTimer(id);
         const detail = yield* getRun(runId);
         yield* fork(drive(runId, "dispatch"));
@@ -225,11 +221,6 @@ export function openRunActions({
         Effect.gen(function* () {
           const archived = yield* store.archive(id, requestId);
           if (!archived.ok) return archived;
-          if (archived.value === "active") {
-            yield* telemetry.record("run.cancelled", {});
-          }
-          if (archived.value === "active" || archived.value === "closing")
-            yield* settlement.recordFinished(id, "cancelled");
           if (archived.value !== "unchanged") yield* fork(interruptWorkerThreads(id));
           return yield* getRun(id);
         }),
@@ -276,10 +267,7 @@ export function openRunActions({
       const accepted = yield* store.acceptSettlement(id, request.reason);
       if (!accepted.ok) return accepted;
       const outcome = yield* settlement.currentOutcome(id);
-      if (accepted.value !== "unchanged") {
-        if (accepted.value === "manual") yield* telemetry.record("run.cancelled", {});
-        yield* fork(settlement.advanceSettlement(id));
-      }
+      if (accepted.value !== "unchanged") yield* fork(settlement.advanceSettlement(id));
       return outcome;
     });
   }

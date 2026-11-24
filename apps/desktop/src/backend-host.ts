@@ -2,7 +2,6 @@
  * The desktop server's backend: the same public Factory operations and listeners as
  * `pnpm start`, in an Electron utility process with the bundled runtime.
  */
-import { readFile } from "node:fs/promises";
 import type { Result, ServerUpdateAction } from "@agent-easel/contracts";
 import { loadConfiguration } from "@agent-easel/backend/config";
 import { startServer, type ApplicationUpdates } from "@agent-easel/backend/server";
@@ -66,31 +65,10 @@ let home: string | undefined;
 try {
   const config = await loadConfiguration();
   home = config.home;
-  const manifest = JSON.parse(
-    await readFile(new URL("../package.json", import.meta.url), "utf8"),
-  ) as {
-    readonly factoryBuild?: { readonly channel: "release" | "beta" | "development" };
-    readonly factoryPosthogPublicKey?: string;
-  };
-  const channel =
-    process.env.FACTORY_DESKTOP_PACKAGED === "true" ? manifest.factoryBuild?.channel : undefined;
-  const updateReceipt = process.env.FACTORY_UPDATE_RECEIPT;
   const server = await startServer(config, {
-    ...(updateReceipt && (channel === "release" || channel === "beta") ? { updateReceipt } : {}),
     uiDirectory: process.env.FACTORY_UI_DIRECTORY ?? null,
     applicationVersion: process.env.FACTORY_APPLICATION_VERSION ?? "desktop",
     applicationUpdates: hostUpdates(),
-    telemetry: {
-      serverMode: "desktop",
-      ...(channel === "release"
-        ? { packagedChannel: "stable" }
-        : channel === "beta"
-          ? { packagedChannel: "beta" }
-          : {}),
-      ...(channel && manifest.factoryPosthogPublicKey
-        ? { packagedKey: manifest.factoryPosthogPublicKey }
-        : {}),
-    },
   });
   parent.postMessage({ type: "ready", port: server.address.port, home: config.home });
   parent.on("message", (event: { data: Message }) => {
