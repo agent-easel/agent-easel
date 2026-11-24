@@ -14,9 +14,11 @@ import {
   disposableInstallation,
   exists,
   holdBackendLock,
+  leaveSingletonLock,
   mode,
   readJson,
   rows,
+  runUnrelatedElectronApp,
   seedDesktopProfile,
   seedServerHome,
   serverSettings,
@@ -105,6 +107,21 @@ it("migration waits while the T3 Factory backend owns its data home and changes 
   expect(await exists(paths.newUserData)).toBe(false);
   expect(await exists(join(paths.oldHome!, tombstoneName))).toBe(false);
   expect(await exists(join(paths.oldUserData, tombstoneName))).toBe(false);
+});
+
+it("a leftover T3 Factory singleton lock whose pid now belongs to another Electron app does not hold up migration", async (context) => {
+  // Arrange
+  const { root, paths } = await disposableInstallation(context.onTestFinished);
+  await seedDesktopProfile(paths.oldUserData, clientSettings);
+  const otherApp = await runUnrelatedElectronApp(root, context.onTestFinished);
+  await leaveSingletonLock(paths.oldUserData, otherApp);
+
+  // Act
+  const outcome = await migratePreviousInstallation(paths, vi.fn(), () => migratedAt);
+
+  // Assert
+  expect(outcome).toEqual({ kind: "migrated" });
+  expect(await exists(join(paths.oldUserData, tombstoneName))).toBe(true);
 });
 
 it("a copy that fails part way leaves T3 Factory untouched and a retry completes the migration", async (context) => {

@@ -1,6 +1,7 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -116,3 +117,19 @@ export const exists = (path: string) =>
   );
 
 export const mode = async (path: string) => (await stat(path)).mode & 0o777;
+
+export const leaveSingletonLock = (oldUserData: string, pid: number) =>
+  symlink(`old-host.local-${pid}`, join(oldUserData, "SingletonLock"));
+
+export async function runUnrelatedElectronApp(
+  root: string,
+  onFinished: (cleanup: () => void) => void,
+): Promise<number> {
+  const macOS = join(root, "Other.app", "Contents", "MacOS");
+  await mkdir(macOS, { recursive: true });
+  await symlink("/bin/sleep", join(macOS, "Electron"));
+  const child = spawn(join(macOS, "Electron"), ["30"], { stdio: "ignore" });
+  onFinished(() => child.kill());
+  await new Promise((resolve) => child.once("spawn", resolve));
+  return child.pid!;
+}

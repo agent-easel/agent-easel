@@ -16,6 +16,7 @@ const desktopFiles = ["desktop-attention.json"];
 const settingsName = "desktop-settings.json";
 const reminderDays = 30;
 const run = promisify(execFile);
+const oldAppExecutable = /\/T3 Factory\.app\/Contents\/MacOS\/T3 Factory$/;
 
 export interface PreviousInstallationPaths {
   readonly oldHome: string | null;
@@ -48,6 +49,7 @@ export const migrationText = {
   removeDetail:
     "AgentEasel already has a copy of everything. This moves the T3 Factory data home and desktop settings to the Trash; T3 Factory keeps refusing to start its server.",
   reminder: "Your previous T3 Factory data is still on this Mac",
+  removalFailed: "Your previous T3 Factory data was not moved to the Trash",
   reminderDetail:
     "AgentEasel brought it over more than 30 days ago and keeps it as a backup until you remove it. You can also do this later in Settings → Desktop app.",
 };
@@ -112,7 +114,7 @@ async function oldAppRunning(oldUserData: string): Promise<boolean> {
   const { stdout } = await run("/bin/ps", ["-o", "comm=", "-p", String(pid)]).catch(() => ({
     stdout: "",
   }));
-  return /T3 Factory|Electron/.test(stdout);
+  return oldAppExecutable.test(stdout.trim());
 }
 
 async function lockOldHome(oldHome: string): Promise<{ release(): void } | null> {

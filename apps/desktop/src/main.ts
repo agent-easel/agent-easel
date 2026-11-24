@@ -977,6 +977,14 @@ async function remindAboutPreviousInstallation() {
     message: migrationText.reminder,
     detail: migrationText.reminderDetail,
   });
-  await postponeRemovalReminder(paths, new Date());
-  if (response === 0) await confirmPreviousInstallationRemoval();
+  const result = response === 0 ? await confirmPreviousInstallationRemoval() : null;
+  if (result && !result.ok) {
+    await dialog.showMessageBox({
+      type: "warning",
+      message: migrationText.removalFailed,
+      detail: result.message,
+    });
+    return;
+  }
+  if (previous?.oldDataPresent) await postponeRemovalReminder(paths, new Date());
 }
