@@ -10,6 +10,7 @@ const PAGES = 3;
 const PAGE_ITEMS = 100;
 const ITEM_CHARS = 20_000;
 const MAX_ITEM_TEXT = 400_000;
+const CONTINUATION_READS = MAX_ITEM_TEXT / ITEM_CHARS;
 
 type ActivityItem = {
   itemId: string;
@@ -60,12 +61,19 @@ const advances = (offset: unknown, previous: number): offset is number =>
   offset > previous &&
   offset <= MAX_ITEM_TEXT;
 
-async function wholeText(read: ThreadRead, threadId: string, item: ActivityItem) {
+async function wholeText(
+  read: ThreadRead,
+  threadId: string,
+  item: ActivityItem,
+  budget: { reads: number },
+) {
   let text = item.text ?? "";
   let previous = 0;
   let offset = item.textTruncated ? item.nextTextOffset : null;
   while (offset !== null && offset !== undefined) {
-    if (!advances(offset, previous) || text.length > MAX_ITEM_TEXT) return null;
+    if (!advances(offset, previous) || text.length > MAX_ITEM_TEXT || budget.reads <= 0)
+      return null;
+    budget.reads--;
     previous = offset;
     const { items } = activityPage(
       await read({
@@ -78,8 +86,8 @@ async function wholeText(read: ThreadRead, threadId: string, item: ActivityItem)
       threadId,
     );
     const next = items.find((candidate) => candidate.itemId === item.itemId);
-    if (!next) return null;
-    text += next.text ?? "";
+    if (!next?.text) return null;
+    text += next.text;
     offset = next.textTruncated ? next.nextTextOffset : null;
   }
   return text.length > MAX_ITEM_TEXT ? null : text;
@@ -109,6 +117,7 @@ const earlierPage = (earlier: number | null, before: number | null) =>
 
 export async function findStartCall(read: ThreadRead, threadId: string, requestId: string) {
   let before: number | null = null;
+  const budget = { reads: CONTINUATION_READS };
   for (let page = 0; page < PAGES; page++) {
     const { items, earlier } = activityPage(
       await read({
@@ -122,7 +131,7 @@ export async function findStartCall(read: ThreadRead, threadId: string, requestI
       threadId,
     );
     for (const item of items.filter((candidate) => ownCompletedCall(candidate, threadId))) {
-      const text = await wholeText(read, threadId, item);
+      const text = await wholeText(read, threadId, item, budget);
       if (text !== null && startCallKey(text) === requestId) return true;
     }
     before = earlierPage(earlier, before);

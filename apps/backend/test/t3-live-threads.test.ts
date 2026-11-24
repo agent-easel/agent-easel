@@ -906,7 +906,10 @@ it("a Start call T3 shows only as inherited from another thread does not prove t
   expect(found).toBe(false);
 });
 
-const truncatedStartCall = (nextOffset: (offset: number) => number) => {
+const truncatedStartCall = (
+  nextOffset: (offset: number) => number,
+  continuation: (text: string) => string = (text) => text.slice(0, 10),
+) => {
   const text = startCallText("mcp__factory-runtime__factory_start_run", "request-1");
   const reads: Record<string, unknown>[] = [];
   const runtimeActivity = (args: Record<string, unknown>) => {
@@ -914,7 +917,7 @@ const truncatedStartCall = (nextOffset: (offset: number) => number) => {
     const offset = typeof args.textOffset === "number" ? args.textOffset : 0;
     return activityPage([
       {
-        text: text.slice(0, 10),
+        text: offset === 0 ? text.slice(0, 10) : continuation(text),
         textTruncated: true,
         nextTextOffset: offset === 0 ? 10 : nextOffset(offset),
       },
@@ -942,3 +945,43 @@ it.for([
     expect(reads.length).toBeLessThanOrEqual(3);
   },
 );
+
+it("a truncated Start call whose continuations return no text while creeping forward proves nothing within a few reads", async (c) => {
+  // Arrange
+  const { reads, runtimeActivity } = truncatedStartCall(
+    (offset) => offset + 1,
+    () => "",
+  );
+  const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(false);
+  expect(reads.length).toBeLessThanOrEqual(3);
+});
+
+it("many truncated Start-like calls in one conversation are followed only up to a fixed number of reads", async (c) => {
+  // Arrange
+  const reads: Record<string, unknown>[] = [];
+  const prefix = startCallText("mcp__factory-runtime__factory_start_run", "other").slice(0, 60);
+  const runtimeActivity = (args: Record<string, unknown>) => {
+    reads.push(args);
+    return activityPage(
+      Array.from({ length: 100 }, () => ({
+        text: prefix,
+        textTruncated: true,
+        nextTextOffset: 60,
+      })),
+    );
+  };
+  const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(false);
+  expect(reads.length).toBeLessThanOrEqual(25);
+});
