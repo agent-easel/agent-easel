@@ -4,7 +4,7 @@ import type {
   DiscordAccessConfiguration,
   Result,
   UpdateDiscordAccessInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { forgetRemovedFromTest, readAccessTest } from "./access-test.ts";

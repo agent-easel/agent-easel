@@ -1,4 +1,4 @@
-import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
+import type { InstalledUpdateReceipt } from "@agent-easel/contracts";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Cause from "effect/Cause";
@@ -6,7 +6,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { FactoryOperations, OperationError, Result, RunDetail } from "@t3-factory/contracts";
+import type { FactoryOperations, OperationError, Result, RunDetail } from "@agent-easel/contracts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";

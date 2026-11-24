@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
-import type { DefinitionExport } from "@t3-factory/contracts";
+import type { DefinitionExport } from "@agent-easel/contracts";
 import { createDefinitionExport } from "../src/definition-export.ts";
 
 const exported: DefinitionExport = {

@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isInstalledUpdateReceipt, serverUpdateOperations } from "@t3-factory/contracts";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { isInstalledUpdateReceipt, serverUpdateOperations } from "@agent-easel/contracts";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import type { ApprovedConnection } from "./approved-client.ts";
 
 export const hostReceiptPath = (profile: string) => join(profile, "pending-update.json");

@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import { FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { Badge } from "@/components/ui/badge";

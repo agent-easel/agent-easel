@@ -4,7 +4,7 @@ import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { createHash } from "node:crypto";
-import type { ReportingInstallation, T3Connection } from "@t3-factory/contracts";
+import type { ReportingInstallation, T3Connection } from "@agent-easel/contracts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 import { withReportingInstallationActions } from "./reporting-installation-actions.ts";
 import { isReportingDriver, providerReporting } from "./reporting-drivers.ts";

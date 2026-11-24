@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { mayPlaceAgent, mayPlaceFlow } from "@t3-factory/domain-validation";
+import { mayPlaceAgent, mayPlaceFlow } from "@agent-easel/domain-validation";
 import type {
   AgentDefinition,
   FactoryProject,
@@ -11,7 +11,7 @@ import type {
   OperationError,
   StudioDefinitions as SavedDefinitions,
   TriggerDefinition,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { api, ApiError } from "./api.ts";
 import type { LiveOwner, LiveScopeView } from "./live/owner.ts";
 import { launchChoicesScope } from "./live/launch-choices.ts";

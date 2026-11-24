@@ -2,7 +2,7 @@ import { openBlockTools } from "./runner-block-tools.ts";
 import { settleRecoveries } from "./runner-recovery-settlement.ts";
 import { releaseContinuationResults } from "./handoff-release.ts";
 import { openRunNavigation } from "./run-navigation.ts";
-import type { FactoryOperations, Result } from "@t3-factory/contracts";
+import type { FactoryOperations, Result } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";

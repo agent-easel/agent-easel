@@ -1,4 +1,4 @@
-import type { EffectiveExit } from "@t3-factory/domain-validation";
+import type { EffectiveExit } from "@agent-easel/domain-validation";
 import { isSingleOutput } from "./block-kind.ts";
 import type { CanvasBlock } from "./flow-graph.ts";
 

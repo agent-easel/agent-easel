@@ -3,7 +3,7 @@ import {
   mattersNeedingOwner,
   type FactoryProject,
   type RunNavigationEntry,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { byCreation, draftTitle, type SavedRunDraft } from "./run-draft.ts";
 import { runBranches } from "./components/run-repositories.tsx";
 

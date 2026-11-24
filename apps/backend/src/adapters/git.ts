@@ -1,4 +1,4 @@
-import type { FlowWorkspaceBase } from "@t3-factory/contracts";
+import type { FlowWorkspaceBase } from "@agent-easel/contracts";
 
 /**
  * Same-host Git on the Factory host. Each call names the T3 endpoint its repository belongs to;

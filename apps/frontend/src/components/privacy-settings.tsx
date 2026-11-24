@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { TelemetrySetting } from "@t3-factory/contracts";
+import type { TelemetrySetting } from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";

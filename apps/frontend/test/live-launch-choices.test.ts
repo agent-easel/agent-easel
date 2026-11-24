@@ -1,4 +1,4 @@
-import type { FlowDraft, LaunchChoices } from "@t3-factory/contracts";
+import type { FlowDraft, LaunchChoices } from "@agent-easel/contracts";
 import { expect, it } from "vite-plus/test";
 import { launchChoicesScope } from "../src/live/launch-choices.ts";
 

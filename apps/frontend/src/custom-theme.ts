@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
-import type { CustomThemePresentation } from "@t3-factory/contracts";
-import { parseCustomThemeJson, parseStoredCustomTheme } from "@t3-factory/domain-validation";
+import type { CustomThemePresentation } from "@agent-easel/contracts";
+import { parseCustomThemeJson, parseStoredCustomTheme } from "@agent-easel/domain-validation";
 import { applyCustomColors } from "./appearance.ts";
 
 const storageKey = "factory.custom-theme";

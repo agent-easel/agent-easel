@@ -6,14 +6,14 @@ import type {
   DiscordSettings,
   Result,
   UpdateDiscordConnectionInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   validateCheckDiscordConnection,
   validateRetryChatDelivery,
   validateSetChatControlEnabled,
   validateUpdateDiscordAccess,
   validateUpdateDiscordConnection,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { accessIds, readAccess, recordNames, updateAccess } from "./access.ts";

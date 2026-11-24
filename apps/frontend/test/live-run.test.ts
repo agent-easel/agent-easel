@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { ConditionSummary, RunDetail, RunHeader } from "@t3-factory/contracts";
+import type { ConditionSummary, RunDetail, RunHeader } from "@agent-easel/contracts";
 import { runScope } from "../src/live/run.ts";
 import { block, event, runDetail } from "./support/run.ts";
 

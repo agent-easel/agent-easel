@@ -7,7 +7,7 @@ import type {
   DiscordSettings,
   UpdateChatModelInput,
   UpdateDiscordConnectionInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { Factory } from "../../src/index.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import {

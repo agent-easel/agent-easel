@@ -4,8 +4,8 @@ import {
   handoffRecipients,
   joinSlots,
   type JoinSlot,
-} from "@t3-factory/domain-validation";
-import type { RunDefinitions } from "@t3-factory/contracts";
+} from "@agent-easel/domain-validation";
+import type { RunDefinitions } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { Fragment } from "effect/sql/Statement";

@@ -3,7 +3,7 @@ import {
   MAX_THEME_JSON_BYTES,
   parseCustomThemeJson,
   parseStoredCustomTheme,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { noticesForApply } from "../src/components/theme-color-settings.tsx";
 
 function hexLuminance(hex: string): number {

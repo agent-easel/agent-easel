@@ -1,4 +1,4 @@
-import type { BlockExit } from "@t3-factory/contracts";
+import type { BlockExit } from "@agent-easel/contracts";
 import { canonical } from "./revisioned-draft.ts";
 
 /** A display line can carry a hidden comparison key when two stored choices share a label. */

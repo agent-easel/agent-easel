@@ -1,4 +1,4 @@
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { MenuName } from "./menu-name.tsx";
 import { ProjectIcon } from "./project-icon.tsx";

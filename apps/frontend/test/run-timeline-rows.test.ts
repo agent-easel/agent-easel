@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { timelineRows } from "../src/run-timeline-rows.ts";
 
 type RunEvent = RunDetail["events"][number];

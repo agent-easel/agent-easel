@@ -8,7 +8,7 @@ import {
   type ProjectFavicon,
   type Result,
   type T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 import { failure as operationFailure } from "./result.ts";
 

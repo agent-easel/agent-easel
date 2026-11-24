@@ -1,13 +1,13 @@
 import { assert, type TestContext } from "@effect/vitest";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type { ClientScope, Result } from "@t3-factory/contracts";
+import type { ClientScope, Result } from "@agent-easel/contracts";
 import { mkdtemp, rm } from "node:fs/promises";
 import type { RequestListener } from "node:http";
 import { createServer } from "node:https";
 import { ensureRemoteCertificate } from "../../src/remote-certificates.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import { ApprovedClient, type CredentialProtection } from "../../../desktop/src/approved-client.ts";
 import { factoryProtocolHandler } from "../../../desktop/src/protocol.ts";
 import { SettingsStore } from "../../../desktop/src/settings-store.ts";

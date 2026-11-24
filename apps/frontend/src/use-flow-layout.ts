@@ -1,8 +1,8 @@
 import { reportFeature } from "./api.ts";
-import { buildElkGraph } from "@t3-factory/flow-layout";
+import { buildElkGraph } from "@agent-easel/flow-layout";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
-import type { ExitFlows } from "@t3-factory/domain-validation";
+import type { AgentDefinition, FlowGraph } from "@agent-easel/contracts";
+import type { ExitFlows } from "@agent-easel/domain-validation";
 import ELK from "elkjs/lib/elk-api.js";
 import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import {
@@ -12,7 +12,7 @@ import {
   type FlowLayoutResult,
 } from "./flow-layout-elk.ts";
 import { canvasGraph, type CanvasGraph } from "./flow-graph.ts";
-import type { CanvasDimensions } from "@t3-factory/flow-layout";
+import type { CanvasDimensions } from "@agent-easel/flow-layout";
 import { arrangeSubflowComposition, type CanvasFlow } from "./subflow-preview.ts";
 
 type Composition = {

@@ -1,4 +1,4 @@
-import { joinSlots } from "@t3-factory/domain-validation";
+import { joinSlots } from "@agent-easel/domain-validation";
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
@@ -7,7 +7,7 @@ import {
   FINISH_BLOCK_ID,
   type RunAttention,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   blockExitRecipients,
   capturedExits,

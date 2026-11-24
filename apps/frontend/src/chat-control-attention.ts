@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import type { ChatModelSettings, DiscordSettings } from "@t3-factory/contracts";
+import type { ChatModelSettings, DiscordSettings } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 
 /** The navigation indicator's tone: amber while Discord reconnects, red for every other failure. */

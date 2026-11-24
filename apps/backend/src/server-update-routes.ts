@@ -5,7 +5,7 @@ import {
   type Result,
   type ServerUpdate,
   type ServerUpdateAction,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { resultResponse, standardBody } from "./http-support.ts";
 import type { RouteEntries } from "./route-table.ts";
 import type { Factory } from "./open-factory.ts";

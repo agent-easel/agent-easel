@@ -1,8 +1,8 @@
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { HumanOccurrence, Result, RunDetail } from "@t3-factory/contracts";
-import { effectiveExits, HUMAN_EXITS } from "@t3-factory/domain-validation";
+import type { HumanOccurrence, Result, RunDetail } from "@agent-easel/contracts";
+import { effectiveExits, HUMAN_EXITS } from "@agent-easel/domain-validation";
 import {
   exceedsReviewLimit,
   type ActionOutcome,

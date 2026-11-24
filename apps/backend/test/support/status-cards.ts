@@ -10,7 +10,7 @@ import {
   type ReadyFlowShape,
 } from "./scenarios.ts";
 import { assert } from "@effect/vitest";
-import type { DiscordSettings } from "@t3-factory/contracts";
+import type { DiscordSettings } from "@agent-easel/contracts";
 import type { Factory } from "../../src/index.ts";
 import {
   besidesReports,
@@ -23,7 +23,7 @@ import {
 } from "./chat-actions.ts";
 import { discordSettingsWhen } from "./chat-control.ts";
 import { unproven, type ControlledDiscord, type CreatedMessage } from "./controlled-discord.ts";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
 

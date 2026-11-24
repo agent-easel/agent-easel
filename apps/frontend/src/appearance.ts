@@ -1,7 +1,7 @@
 import { reportFeature } from "./api.ts";
 import { useSyncExternalStore } from "react";
-import { APPEARANCE_COLOR_TOKENS, type CustomThemePresentation } from "@t3-factory/contracts";
-import type { AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
+import { APPEARANCE_COLOR_TOKENS, type CustomThemePresentation } from "@agent-easel/contracts";
+import type { AppearancePreference } from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 
 const storageKey = "factory.appearance";

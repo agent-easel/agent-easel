@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
-import type { AgentDefinition, FlowBlock, FlowConnection, FlowGraph } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import type { AgentDefinition, FlowBlock, FlowConnection, FlowGraph } from "@agent-easel/contracts";
+import { effectiveExits } from "@agent-easel/domain-validation";
 import { blockReference, isSingleOutput } from "../src/block-kind.ts";
 import { savedAgent } from "./support/agent-draft.ts";
 

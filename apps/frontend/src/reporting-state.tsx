@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { CircleDashed, type LucideIcon } from "lucide-react";
-import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
+import type { AgentDefinition, ReportingInstallation } from "@agent-easel/contracts";
 import type { SettingKind } from "./components/status-badge.tsx";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";

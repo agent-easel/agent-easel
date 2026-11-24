@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, generateText, type LanguageModel } from "ai";
-import type { ChatModelProviderKind } from "@t3-factory/contracts";
+import type { ChatModelProviderKind } from "@agent-easel/contracts";
 
 /** A complete saved connection with its resolved key; null means keyless. */
 export interface ChatModelConnection {

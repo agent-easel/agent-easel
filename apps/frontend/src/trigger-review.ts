@@ -1,4 +1,4 @@
-import type { TriggerDefinition, UpdateTriggerInput } from "@t3-factory/contracts";
+import type { TriggerDefinition, UpdateTriggerInput } from "@agent-easel/contracts";
 
 /**
  * Whether an edit of a saved Trigger widens what can start, so its author reviews the issues

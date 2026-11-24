@@ -1,4 +1,4 @@
-import type { JoinDetail, JoinSummary, RunDetail } from "@t3-factory/contracts";
+import type { JoinDetail, JoinSummary, RunDetail } from "@agent-easel/contracts";
 import { clockTime } from "./time-format.ts";
 
 export const joinSummaryOf = (run: RunDetail, blockId: string) =>

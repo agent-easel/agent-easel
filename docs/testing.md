@@ -93,7 +93,7 @@ Backend tests run through Vite+ (`vp test run`) and import `it`, `expect`, and
 assertion narrowing from `@effect/vitest`. `pnpm test` runs the backend, desktop and frontend rule suites, then
 repository script tests (`scripts/*.test.mjs`) with `node:test` through `pnpm test:scripts`; those
 scripts run in CI before dependencies install, so their tests need no workspace packages;
-`pnpm --filter @t3-factory/backend test test/flows.test.ts` selects a file.
+`pnpm --filter @agent-easel/backend test test/flows.test.ts` selects a file.
 Backend tests import backend source directly; the test runner and spawned Factory
 processes enable `factory-source` for shared packages. `pnpm test` needs no build output.
 

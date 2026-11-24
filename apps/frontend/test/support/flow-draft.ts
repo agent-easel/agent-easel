@@ -7,7 +7,7 @@ import type {
   FlowValidation,
   OperationError,
   StudioLiveMessage,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { api, ApiError } from "../../src/api.ts";
 import { createFlowDraft } from "../../src/flow-draft.ts";
 import { createStudioDefinitions } from "../../src/studio-definitions.ts";

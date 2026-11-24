@@ -7,7 +7,7 @@ import type {
   ProjectCatalog,
   StudioDefinitions as SavedDefinitions,
   StudioLiveMessage,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   createStudioDefinitions,
   type StudioDefinitionsOperations,

@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
-import type { DefinitionExport } from "@t3-factory/contracts";
-import { portableDocumentText } from "@t3-factory/domain-validation";
+import type { DefinitionExport } from "@agent-easel/contracts";
+import { portableDocumentText } from "@agent-easel/domain-validation";
 import { ApiError } from "./api.ts";
 
 /** Saves a file through the browser's download; the desktop app shows its own save dialog. */

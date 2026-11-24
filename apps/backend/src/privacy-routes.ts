@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { privacyOperations, Result, TelemetrySetting } from "@t3-factory/contracts";
+import type { privacyOperations, Result, TelemetrySetting } from "@agent-easel/contracts";
 import type { configurationWriter } from "./config.ts";
 import { resultResponse, standardBody } from "./http-support.ts";
 import type { Factory } from "./open-factory.ts";

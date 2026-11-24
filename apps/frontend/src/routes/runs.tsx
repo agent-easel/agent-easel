@@ -14,7 +14,7 @@ import type {
   RunDetail,
   RunNavigationEntry,
   SubflowInvocation,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChevronRight, Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";

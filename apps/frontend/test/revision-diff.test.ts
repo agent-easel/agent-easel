@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import type { FlowContent } from "../src/flow-draft.ts";
 import { comparedFlowLines } from "../src/flow-revision-content.ts";
-import type { FlowEnding } from "@t3-factory/contracts";
+import type { FlowEnding } from "@agent-easel/contracts";
 
 import { diffRevisionLines } from "../src/revision-diff.ts";
 

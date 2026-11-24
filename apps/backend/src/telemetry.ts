@@ -13,7 +13,7 @@ import {
   releaseVersionPattern as releaseVersion,
   type TelemetrySetting,
   type UpdateChannel,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 const bucket = Schema.Literals(["0", "1", "2-5", "6+"]);
 

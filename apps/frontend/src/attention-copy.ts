@@ -3,7 +3,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * Plain wording for each Attention card: one sentence that names the Block and what happened, and

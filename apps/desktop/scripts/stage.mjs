@@ -1,8 +1,3 @@
-// Prepares `stage/`, the Electron application directory: the bundle from `build/`, a
-// minimal package.json, the native lock module rebuilt for Electron's arm64 ABI and the
-// macOS notifications module.
-// Run `pnpm --filter @t3-factory/desktop build` first. Requires the Xcode Command Line
-// Tools and network access to Electron's header download.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

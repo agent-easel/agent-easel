@@ -5,8 +5,8 @@ import type {
   FlowDraft,
   FlowGraph,
   FlowReadiness,
-} from "@t3-factory/contracts";
-import { flowAgentRevisions } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { flowAgentRevisions } from "@agent-easel/domain-validation";
 import { api, ApiError } from "./api.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import { canonical, createRevisionedDraft, type RevisionedDraftState } from "./revisioned-draft.ts";

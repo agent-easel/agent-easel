@@ -1,11 +1,11 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunAttentionMatter, RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunAttentionMatter, RunNavigationEntry } from "@agent-easel/contracts";
 import type {
   DesktopAlertSettings,
   NotificationPermission,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { expect, it, vi, type TestContext } from "vite-plus/test";
 import {
   AttentionCoordinator,

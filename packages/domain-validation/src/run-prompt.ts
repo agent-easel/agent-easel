@@ -4,7 +4,7 @@ import type {
   RunImage,
   RunImageMimeType,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export const RUN_IMAGE_LIMIT = 8;
 export const RUN_IMAGE_MAX_BYTES = 10 * 1024 * 1024;

@@ -1,4 +1,4 @@
-import type { ValidationIssue } from "@t3-factory/contracts";
+import type { ValidationIssue } from "@agent-easel/contracts";
 import { ApiError } from "./api.ts";
 import type { StudioRead } from "./studio-definitions.ts";
 import { OfflineError } from "./transport.ts";

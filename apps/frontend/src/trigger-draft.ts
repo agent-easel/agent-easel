@@ -5,7 +5,7 @@ import type {
   TriggerDefinition,
   TriggerRepository,
   UpdateTriggerInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   mayStartFlow,
   parseTriggerQuery,
@@ -14,7 +14,7 @@ import {
   validateUpdateTrigger,
   validateTriggerSchedule,
   validateTriggerLimit,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import {
   createRevisionedDraft,

@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { AgentCapabilities, AgentDefinition, FlowDraft, Result } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, FlowDraft, Result } from "@agent-easel/contracts";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

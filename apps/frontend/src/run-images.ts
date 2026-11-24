@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { runImageUrl } from "@t3-factory/contracts";
+import { runImageUrl } from "@agent-easel/contracts";
 
 /** Binary units, like the 10 MiB image limit. */
 export function imageSize(bytes: number) {

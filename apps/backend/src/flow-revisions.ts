@@ -10,7 +10,7 @@ import {
   type FlowWorkspace,
   type RunDefinitions,
   type WaitUnit,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { newId } from "./ids.ts";
 import { laterTime } from "./time.ts";
 

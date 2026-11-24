@@ -1,6 +1,6 @@
 import { Fragment, useState, type KeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight, Image as ImageIcon, ImageOff } from "lucide-react";
-import type { RunDetail, RunImage } from "@t3-factory/contracts";
+import type { RunDetail, RunImage } from "@agent-easel/contracts";
 import { useRunImageSource } from "../run-images.ts";
 import { ImagePreviewDialog, previewImageClass } from "./prompt-images.tsx";
 import { Button } from "./ui/button.tsx";

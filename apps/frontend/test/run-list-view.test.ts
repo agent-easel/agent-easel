@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import type { SavedRunDraft } from "../src/run-draft.ts";
 import { runList, runListView, type RunListView } from "../src/run-list-view.ts";
 import { runEntry } from "./support/run.ts";

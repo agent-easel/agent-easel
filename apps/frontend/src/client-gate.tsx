@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CircleAlert, Hourglass, KeyRound, ShieldX, WifiOff } from "lucide-react";
-import type { ClientAccessState, FactoryClient } from "@t3-factory/contracts";
+import type { ClientAccessState, FactoryClient } from "@agent-easel/contracts";
 import {
   FACTORY_MINIMUM_SERVER_PROTOCOL,
   FACTORY_PROTOCOL,
   protocolCompatibility,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

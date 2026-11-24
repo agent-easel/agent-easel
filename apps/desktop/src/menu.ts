@@ -8,7 +8,7 @@ import {
   type DesktopMenuCommand,
   type DesktopMenuCommandId,
   type DesktopMenuState,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import type { KeyboardEvent, MenuItemConstructorOptions } from "electron";
 
 export interface MenuActions {

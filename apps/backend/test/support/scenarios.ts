@@ -1,4 +1,4 @@
-import type { OwningProject } from "@t3-factory/domain-validation";
+import type { OwningProject } from "@agent-easel/domain-validation";
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import type {
@@ -15,8 +15,8 @@ import type {
   FlowWorkspace,
   Result,
   RunDetail,
-} from "@t3-factory/contracts";
-import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
+import { FINISH_BLOCK_ID } from "@agent-easel/contracts";
 import type { ThreadFacts } from "./controlled-t3-threads.ts";
 import { START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 

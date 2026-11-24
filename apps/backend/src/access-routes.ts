@@ -8,7 +8,7 @@ import {
   type ProtocolDescriptor,
   type RemoteAccessStatus,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { credentialCookie, requestCredential, type RequestLimiter } from "./client-transport.ts";
 import { resultResponse, standardBody } from "./http-support.ts";
 import type { RouteEntries } from "./route-table.ts";

@@ -1,7 +1,7 @@
 import { assert, expect, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import type { Factory } from "../../src/index.ts";
 import {
   ALLOWED_CHANNEL,

@@ -6,7 +6,7 @@ import {
   type OperationDefinition,
   type OperationParameters,
   type RawBody,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { JsonBodyLimit, OperationCall, RouteTrust } from "./http-support.ts";
 import type { Surface } from "./listener.ts";
 

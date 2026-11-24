@@ -12,8 +12,8 @@ import type {
   Result,
   T3Connection,
   ValidationIssue,
-} from "@t3-factory/contracts";
-import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { parseProjectFaviconPath, parseProjectIcon } from "@agent-easel/domain-validation";
 import type { GitAdapter } from "./adapters/git.ts";
 import type { T3Projects, T3Project } from "./t3/projects.ts";
 import { loadProjectFavicon, projectFaviconUrl } from "./project-favicon.ts";

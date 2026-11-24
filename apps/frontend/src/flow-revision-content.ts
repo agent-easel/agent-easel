@@ -1,5 +1,5 @@
-import type { AgentDefinition, FlowBlock, FlowFinishBlock } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import type { AgentDefinition, FlowBlock, FlowFinishBlock } from "@agent-easel/contracts";
+import { effectiveExits } from "@agent-easel/domain-validation";
 import { BLOCK_KINDS } from "./block-kind.ts";
 import type { FlowContent } from "./flow-draft.ts";
 import { revisionExitLines, revisionLine, type RevisionLine } from "./revision-diff.ts";

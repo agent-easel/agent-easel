@@ -15,7 +15,7 @@ import {
   type SubflowBudgetContributor,
   type SubflowBudgetEvidence,
   type SubflowBudgetSubtotals,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   blockLabel,
   flowReadiness,

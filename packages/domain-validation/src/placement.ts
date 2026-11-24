@@ -3,7 +3,7 @@ import type {
   FlowDuplicatePlanAgent,
   Result,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * The owning Project of a Flow or Agent: the Factory Project id it belongs to, or null for a

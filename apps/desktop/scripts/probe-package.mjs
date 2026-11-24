@@ -19,7 +19,7 @@ import {
   FACTORY_MINIMUM_SERVER_PROTOCOL,
   FACTORY_PROTOCOL,
   protocolCompatibility,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { build } from "esbuild";
 import { WebSocketServer } from "ws";
 

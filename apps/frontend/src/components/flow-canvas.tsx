@@ -18,7 +18,7 @@ import {
   type FlowGraph,
   type FlowReadiness,
   type ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import {
   addWire,
@@ -33,7 +33,7 @@ import {
   type FlowWire,
   type WireTarget,
 } from "../flow-graph.ts";
-import { AUTHORING_DIMENSIONS, type WireSource } from "@t3-factory/flow-layout";
+import { AUTHORING_DIMENSIONS, type WireSource } from "@agent-easel/flow-layout";
 import {
   blockedSubflowReasons,
   computeSubflowPreviews,

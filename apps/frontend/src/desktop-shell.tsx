@@ -13,7 +13,7 @@ import type {
   DesktopState,
   FactoryDesktop,
   ServerProbe,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 
 /**

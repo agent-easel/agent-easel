@@ -1,6 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { remoteFavicon, tinyPng } from "./support/project-favicons.ts";
-import { FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 
 it("ordinary product API requests still require a protocol declaration", async (context) => {
   // Arrange

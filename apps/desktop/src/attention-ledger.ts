@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { NotificationPermission } from "@t3-factory/contracts/desktop-bridge";
+import type { NotificationPermission } from "@agent-easel/contracts/desktop-bridge";
 
 /** Why a pending appearance has not been notified yet; it stays eligible for catch-up. */
 export type DeferReason =

@@ -6,8 +6,8 @@ import {
   type JoinSummary,
   type Result,
   type RunDefinitions,
-} from "@t3-factory/contracts";
-import { effectiveExits, joinSlots } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { effectiveExits, joinSlots } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { failure } from "../../result.ts";

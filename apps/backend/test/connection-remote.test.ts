@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { T3Connection } from "@t3-factory/contracts";
+import type { T3Connection } from "@agent-easel/contracts";
 import { remoteConnection } from "./support/remote-clients.ts";
 
 const openAuthorization = "/api/connection/authorization/open";

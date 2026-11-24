@@ -1,4 +1,4 @@
-import type { ReportingInstallation, ReportingInstallationActions } from "@t3-factory/contracts";
+import type { ReportingInstallation, ReportingInstallationActions } from "@agent-easel/contracts";
 
 export class RepairableInstallationError extends Error {}
 

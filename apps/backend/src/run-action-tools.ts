@@ -5,7 +5,7 @@ import type {
   Result,
   RunAttention,
   RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { textResult } from "./authoring-tools.ts";
 import { referenceOf } from "./runner/run-overview.ts";
 import type { RunReadSource } from "./run-read-source.ts";

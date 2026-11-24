@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { FactoryClient, Result } from "@t3-factory/contracts";
+import type { FactoryClient, Result } from "@agent-easel/contracts";
 import { SettingsStore } from "../../desktop/src/settings-store.ts";
 import {
   ControlledProtection,

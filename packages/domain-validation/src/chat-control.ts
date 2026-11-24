@@ -11,7 +11,7 @@ import type {
   RetryChatDeliveryInput,
   TestChatModelInput,
   UpdateChatModelInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export const CHAT_MODEL_PROVIDER_KINDS: readonly ChatModelProviderKind[] = [
   "openai-compatible",

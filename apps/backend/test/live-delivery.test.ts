@@ -6,7 +6,7 @@ import type {
   ConnectionLiveMessage,
   NavigationLiveMessage,
   RunLiveMessage,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { prepared } from "./support/prepared-runner.ts";

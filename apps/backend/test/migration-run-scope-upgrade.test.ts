@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import type { ConditionArrivalPage } from "@t3-factory/contracts";
+import type { ConditionArrivalPage } from "@agent-easel/contracts";
 import { assertOk } from "./support/domain-setup.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { loadMigrationData, restoreCapturedAdapter } from "./support/migration-data.ts";

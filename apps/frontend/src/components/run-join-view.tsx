@@ -4,7 +4,7 @@ import type {
   JoinSourceDetail,
   JoinSummary,
   RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Surface } from "@/components/ui/surface";
 import { blockExitRecipients } from "../flow-graph.ts";
 import { joinSummaryOf } from "../join-display.ts";

@@ -1,5 +1,5 @@
 import type { TestContext } from "@effect/vitest";
-import type { DesktopAlertSettings } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopAlertSettings } from "@agent-easel/contracts/desktop-bridge";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { ChatActionOperation } from "@t3-factory/contracts";
+import type { ChatActionOperation } from "@agent-easel/contracts";
 import { now } from "../time.ts";
 import { ACTION_REQUESTERS } from "./requesters.ts";
 import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";

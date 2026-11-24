@@ -21,7 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { isSqlError } from "effect/sql/SqlError";
-import type { DiscordCommandSetup } from "@t3-factory/contracts";
+import type { DiscordCommandSetup } from "@agent-easel/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
 import type { RequesterKind } from "./requesters.ts";

@@ -16,14 +16,14 @@ import type {
   RunImageReference,
   StageRunImageInput,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   imageSignatureMime,
   isSha256Hex,
   RUN_IMAGE_DELETION_LIMIT,
   RUN_IMAGE_MAX_BYTES,
   RUN_IMAGE_MIME_TYPES,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { failure } from "./result.ts";
 import { now } from "./time.ts";
 

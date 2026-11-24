@@ -12,7 +12,7 @@ const ignorePatterns = [
 ];
 
 const privatePackageImports = {
-  regex: "(^|/)(contracts|domain-validation)/(src|dist)(/|$)|^@t3-factory/[^/]+/(src|dist)(/|$)",
+  regex: "(^|/)(contracts|domain-validation)/(src|dist)(/|$)|^@agent-easel/[^/]+/(src|dist)(/|$)",
   message: "Use the workspace package's public exports instead of its implementation files.",
 };
 const sharedImportRestrictions = [
@@ -56,14 +56,14 @@ export default defineConfig({
         command: "true",
         dependsOn: [
           "typecheck:root",
-          "@t3-factory/contracts#typecheck",
-          "@t3-factory/domain-validation#typecheck",
-          "@t3-factory/flow-layout#typecheck",
-          "@t3-factory/backend#typecheck:src",
-          "@t3-factory/backend#typecheck:test",
-          "@t3-factory/frontend#typecheck",
-          "@t3-factory/desktop#typecheck",
-          "@t3-factory/landing#typecheck",
+          "@agent-easel/contracts#typecheck",
+          "@agent-easel/domain-validation#typecheck",
+          "@agent-easel/flow-layout#typecheck",
+          "@agent-easel/backend#typecheck:src",
+          "@agent-easel/backend#typecheck:test",
+          "@agent-easel/frontend#typecheck",
+          "@agent-easel/desktop#typecheck",
+          "@agent-easel/landing#typecheck",
         ],
         cache: false,
       },
@@ -240,7 +240,7 @@ export default defineConfig({
             {
               patterns: [
                 {
-                  regex: "^@t3-factory/backend(/|$)|(^|/)dist(/|$)",
+                  regex: "^@agent-easel/backend(/|$)|(^|/)dist(/|$)",
                   message:
                     "Backend tests import backend modules by relative source path, so one copy of the backend loads.",
                 },

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { Result } from "@t3-factory/contracts";
+import type { Result } from "@agent-easel/contracts";
 import { now } from "../time.ts";
 import {
   readCredentialFile,

@@ -9,8 +9,8 @@ import type {
   FactoryClient,
   HostLifecycle,
   Result,
-} from "@t3-factory/contracts";
-import { validateClientAccessRequest } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateClientAccessRequest } from "@agent-easel/domain-validation";
 import { failure } from "./result.ts";
 import { now } from "./time.ts";
 

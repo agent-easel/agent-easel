@@ -6,7 +6,7 @@ import {
   type AgentDefinition,
   type FlowDraft,
   type LaunchChoices,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import {
   connectionIsConfigured,

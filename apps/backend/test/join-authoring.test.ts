@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { joinSlots } from "@t3-factory/domain-validation";
+import { joinSlots } from "@agent-easel/domain-validation";
 import { conditionDraft, readFlowAfterRestart } from "./support/domain-setup.ts";
 import {
   agentBlock,

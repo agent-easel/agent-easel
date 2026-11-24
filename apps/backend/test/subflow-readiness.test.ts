@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { continuationSources } from "@t3-factory/domain-validation";
+import { continuationSources } from "@agent-easel/domain-validation";
 import { assertOk } from "./support/domain-setup.ts";
 import { agentBlock, connection, continuationStep, flowInput } from "./support/scenarios.ts";
 import {

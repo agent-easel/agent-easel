@@ -4,7 +4,7 @@ import type {
   ReportingInstallation,
   Result,
   RuntimeReadiness,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * Why Factory MCP is not installed for this provider instance's harness, or undefined when it is.

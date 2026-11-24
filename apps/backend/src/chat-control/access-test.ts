@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import type * as Cause from "effect/Cause";
 import type * as Attempt from "effect/Result";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { DiscordAccessTest, DiscordAccessTestPost, Result } from "@t3-factory/contracts";
+import type { DiscordAccessTest, DiscordAccessTestPost, Result } from "@agent-easel/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 

@@ -204,6 +204,15 @@ importers:
 
   apps/backend:
     dependencies:
+      '@agent-easel/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@agent-easel/domain-validation':
+        specifier: workspace:*
+        version: link:../../packages/domain-validation
+      '@agent-easel/flow-layout':
+        specifier: workspace:*
+        version: link:../../packages/flow-layout
       '@ai-sdk/anthropic':
         specifier: 4.0.107
         version: 4.0.107(zod@4.6.7)
@@ -228,15 +237,6 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
-      '@t3-factory/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@t3-factory/domain-validation':
-        specifier: workspace:*
-        version: link:../../packages/domain-validation
-      '@t3-factory/flow-layout':
-        specifier: workspace:*
-        version: link:../../packages/flow-layout
       ai:
         specifier: 7.0.178
         version: 7.0.178(zod@4.6.7)
@@ -280,13 +280,13 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@t3-factory/backend':
+      '@agent-easel/backend':
         specifier: workspace:*
         version: link:../backend
-      '@t3-factory/contracts':
+      '@agent-easel/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@t3-factory/domain-validation':
+      '@agent-easel/domain-validation':
         specifier: workspace:*
         version: link:../../packages/domain-validation
       effect:
@@ -299,12 +299,12 @@ importers:
         specifier: 8.23.0
         version: 8.23.0
     devDependencies:
+      '@agent-easel/frontend':
+        specifier: workspace:*
+        version: link:../frontend
       '@electron/rebuild':
         specifier: 4.2.1
         version: 4.2.1(supports-color@10.2.2)
-      '@t3-factory/frontend':
-        specifier: workspace:*
-        version: link:../frontend
       '@types/ws':
         specifier: 8.18.2
         version: 8.18.2
@@ -323,6 +323,15 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@agent-easel/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@agent-easel/domain-validation':
+        specifier: workspace:*
+        version: link:../../packages/domain-validation
+      '@agent-easel/flow-layout':
+        specifier: workspace:*
+        version: link:../../packages/flow-layout
       '@fontsource-variable/geist-mono':
         specifier: 5.3.0
         version: 5.3.0
@@ -332,15 +341,6 @@ importers:
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
-      '@t3-factory/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@t3-factory/domain-validation':
-        specifier: workspace:*
-        version: link:../../packages/domain-validation
-      '@t3-factory/flow-layout':
-        specifier: workspace:*
-        version: link:../../packages/flow-layout
       '@tanstack/react-router':
         specifier: 1.170.46
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -441,16 +441,16 @@ importers:
 
   packages/domain-validation:
     dependencies:
-      '@t3-factory/contracts':
+      '@agent-easel/contracts':
         specifier: workspace:*
         version: link:../contracts
 
   packages/flow-layout:
     dependencies:
-      '@t3-factory/contracts':
+      '@agent-easel/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@t3-factory/domain-validation':
+      '@agent-easel/domain-validation':
         specifier: workspace:*
         version: link:../domain-validation
       elkjs:

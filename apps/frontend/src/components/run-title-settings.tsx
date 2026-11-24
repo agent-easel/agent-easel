@@ -10,8 +10,8 @@ import type {
   RunTitleModel,
   RunTitleSetting,
   UpdateRunTitleSettingInput,
-} from "@t3-factory/contracts";
-import { buildOptions, optionAvailability, optionValue } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { buildOptions, optionAvailability, optionValue } from "@agent-easel/domain-validation";
 import { ChoiceMenu } from "@/components/choice-menu";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";

@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { LiveGitAdapter } from "../../src/adapters/live-git.ts";
 import { makeLiveT3, type Factory, type FactoryOptions } from "../../src/index.ts";
 import type { LiveT3ContractOptions } from "../../src/t3/live-contract.ts";
-import type { T3Connection } from "@t3-factory/contracts";
+import type { T3Connection } from "@agent-easel/contracts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import { oauthT3 } from "./oauth-t3.ts";

@@ -15,7 +15,7 @@ import type {
   TriggerMissedIssue,
   TriggerPreviewIssue,
   TriggerStartedRun,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   gitHubRepairGuidance,
   type GitHubAdapter,
@@ -24,7 +24,7 @@ import {
   type GitHubLabelState,
   type GitHubRepository,
 } from "../adapters/github.ts";
-import { mayStartFlow } from "@t3-factory/domain-validation";
+import { mayStartFlow } from "@agent-easel/domain-validation";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";

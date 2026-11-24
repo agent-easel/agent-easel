@@ -10,7 +10,7 @@ import type {
   RunDefinitions,
   SubflowInvocationPage,
   SubflowPlacementSummary,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 type RuntimeImage = {
   readonly imageId: string;

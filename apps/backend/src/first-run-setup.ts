@@ -9,7 +9,7 @@ import type {
   ReportingInstallation,
   Result,
   T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { parseEndpoint } from "./connection.ts";
 import { reportingDriversOffInT3 } from "./reporting-discovery.ts";
 import { telemetryDuration, type Telemetry } from "./telemetry.ts";

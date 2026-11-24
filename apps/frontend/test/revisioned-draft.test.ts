@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
-import type { AgentDefinition } from "@t3-factory/contracts";
+import type { AgentDefinition } from "@agent-easel/contracts";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { savedAgent } from "./support/agent-draft.ts";

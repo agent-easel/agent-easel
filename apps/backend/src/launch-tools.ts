@@ -7,7 +7,7 @@ import {
   RUN_IMAGE_MAX_BYTES,
   RUN_IMAGE_MIME_TYPES,
   TASK_TITLE_LIMIT,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type {
   FactoryOperations,
   FactoryProject,
@@ -15,7 +15,7 @@ import type {
   Result,
   RunDetail,
   RunTitleSetting,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { RunUpdateSubscription } from "./run-updates.ts";
 
 /** What the launch tools call: the Project catalog, the Run title setting and the shared Start operation. */

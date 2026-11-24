@@ -2,7 +2,7 @@ import {
   createFlowLayoutDimensions,
   type CanvasDimensions,
   type WireSource,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import {
   useEffect,
   useImperativeHandle,
@@ -15,7 +15,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { type AgentDefinition, type FlowEnding, type FlowGraph } from "@t3-factory/contracts";
+import { type AgentDefinition, type FlowEnding, type FlowGraph } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import {
   authoringEntryView,

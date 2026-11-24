@@ -1,7 +1,7 @@
-import { clientAccessOperations, operationPath } from "@t3-factory/contracts";
+import { clientAccessOperations, operationPath } from "@agent-easel/contracts";
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
-import type { Appearance, AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
+import type { Appearance, AppearancePreference } from "@agent-easel/contracts/desktop-bridge";
 import type { ApprovedConnection } from "./approved-client.ts";
 
 /** Bundled UI origin. Remote servers supply data only; they never provide executable content. */

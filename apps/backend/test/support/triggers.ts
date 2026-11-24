@@ -10,7 +10,7 @@ import type {
   TriggerDefinition,
   TriggerSave,
   UpdateTriggerInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
 import type { ControlledGitHub, ControlledIssue, GitHubCall } from "./controlled-github.ts";

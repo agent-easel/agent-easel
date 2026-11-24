@@ -3,7 +3,7 @@ import type {
   ChatActionOperation,
   ChatDeliveryProblem,
   DiscordSettings,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../api.ts";

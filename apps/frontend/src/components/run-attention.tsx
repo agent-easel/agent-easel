@@ -9,7 +9,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChoiceMenu } from "./choice-menu.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";

@@ -5,7 +5,7 @@ import type {
   AgentModelOptionDescriptor,
   AgentModelOptionValue,
   AgentSettingAvailability,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /** Whether the catalog model offers this option with the selected value. */
 export function optionAvailability(

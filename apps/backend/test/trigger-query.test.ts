@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { parseTriggerQuery } from "@t3-factory/domain-validation";
+import { parseTriggerQuery } from "@agent-easel/domain-validation";
 
 it("a quoted label is the ready label without its quotes", () => {
   // Act

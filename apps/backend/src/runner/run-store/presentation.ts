@@ -1,4 +1,4 @@
-import type { Result, RunPresentation } from "@t3-factory/contracts";
+import type { Result, RunPresentation } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type { RunnerDatabase } from "./database.ts";
 import { withLifecycle } from "./lifecycle.ts";

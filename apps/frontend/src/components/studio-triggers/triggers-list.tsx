@@ -6,7 +6,7 @@ import type {
   TriggerCheckReply,
   TriggerDefinition,
   TriggerStartedRun,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";

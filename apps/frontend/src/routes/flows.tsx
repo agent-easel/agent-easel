@@ -5,7 +5,7 @@ import type {
   FlowDraft,
   TriggerDefinition,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChevronRight, FolderGit2, Trash2, Workflow } from "lucide-react";
 import { ApiError } from "../api.ts";
 import { StatusBadge } from "../components/status-badge.tsx";

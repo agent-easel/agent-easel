@@ -22,7 +22,7 @@ import {
   type StudioDefinitions,
   type StudioLiveMessage,
   type T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { LiveChanges, LiveScope } from "./live-changes.ts";
 
 /** Scoped live observation exposed by the public Factory seam. */

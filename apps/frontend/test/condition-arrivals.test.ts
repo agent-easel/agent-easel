@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { ConditionArrivalEvidence, ConditionArrivalPage } from "@t3-factory/contracts";
+import type { ConditionArrivalEvidence, ConditionArrivalPage } from "@agent-easel/contracts";
 import {
   arrivalsAfterWindow,
   arrivalWindowReducer,

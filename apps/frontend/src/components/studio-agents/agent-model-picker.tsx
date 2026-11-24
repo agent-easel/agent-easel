@@ -4,7 +4,7 @@ import type {
   AgentCapabilities,
   AgentProjectOverride,
   FactoryProject,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { workerTrigger } from "@/lib/agent-display";

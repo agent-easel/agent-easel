@@ -4,8 +4,8 @@ import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import { HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { FactoryLive } from "@t3-factory/contracts/live-rpc";
-import type { Result } from "@t3-factory/contracts";
+import { FactoryLive } from "@agent-easel/contracts/live-rpc";
+import type { Result } from "@agent-easel/contracts";
 import { resultResponse } from "./http-support.ts";
 import type { LiveStreams } from "./live-streams.ts";
 

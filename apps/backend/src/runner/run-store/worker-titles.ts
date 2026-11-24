@@ -1,4 +1,4 @@
-import type { FlowBlock } from "@t3-factory/contracts";
+import type { FlowBlock } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { now } from "../../time.ts";

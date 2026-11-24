@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { remotePrepared, remoteServer } from "./support/remote-clients.ts";
 
 it("a Start whose response was lost resolves to the original Run when the client retries it", async (c) => {

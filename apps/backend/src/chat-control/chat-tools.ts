@@ -1,6 +1,6 @@
 import { jsonSchema, tool, type JSONSchema7, type JSONValue, type ToolSet } from "ai";
 import * as Effect from "effect/Effect";
-import type { FactoryProject, FlowDraft, ProjectCatalog, Result } from "@t3-factory/contracts";
+import type { FactoryProject, FlowDraft, ProjectCatalog, Result } from "@agent-easel/contracts";
 import type { Proposed } from "./actions.ts";
 import type { ConversationKey } from "./conversations.ts";
 

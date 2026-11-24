@@ -1,5 +1,5 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
-import type { FactoryOperations } from "@t3-factory/contracts";
+import type { FactoryOperations } from "@agent-easel/contracts";
 import { answerDefinitionCall, toolArguments } from "./authoring-tools.ts";
 
 export type RunTitleSettingOperations = Pick<

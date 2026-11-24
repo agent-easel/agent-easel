@@ -1,4 +1,4 @@
-import type { AgentExecutionSettings } from "@t3-factory/contracts";
+import type { AgentExecutionSettings } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { threadHref } from "../../thread-link.ts";

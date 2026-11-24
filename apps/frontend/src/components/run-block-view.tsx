@@ -1,4 +1,4 @@
-import type { RunAttention } from "@t3-factory/contracts";
+import type { RunAttention } from "@agent-easel/contracts";
 import { targetsBlock } from "../run-evidence.ts";
 import { useEffect, useRef, type ReactNode } from "react";
 import {
@@ -8,8 +8,8 @@ import {
   type FlowBlock,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
-import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { CONTINUATION_EXIT } from "@agent-easel/domain-validation";
 import { ChevronLeft, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";

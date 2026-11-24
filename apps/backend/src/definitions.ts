@@ -6,7 +6,7 @@ import {
   canvasGraph,
   createFlowLayoutDimensions,
   FlowLayoutLimitError,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -36,7 +36,7 @@ import {
   type Result,
   type StudioDefinitions,
   type UpdateFlowInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CANVAS_COORD_MESSAGE,
   bindPortableBlocks,
@@ -63,7 +63,7 @@ import {
   validatePreviewFlowDuplicate,
   validateUpdateAgent,
   validateUpdateFlow,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { emptyCapabilities, readyCapabilities, unsupportedReportingFailure } from "./agents.ts";
 import { readVibeReportingInstances } from "./reporting-discovery.ts";
 import type { T3Projects } from "./t3/projects.ts";

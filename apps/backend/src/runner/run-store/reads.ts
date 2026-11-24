@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { RunImageMimeType } from "@t3-factory/contracts";
+import type { RunImageMimeType } from "@agent-easel/contracts";
 import { definitionsAtBlock } from "./run-definitions.ts";
 import type { BlockRow } from "../runner-types.ts";
 import type { RunnerDatabase } from "./database.ts";

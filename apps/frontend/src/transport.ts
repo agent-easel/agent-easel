@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import type { LiveDelivery } from "./live/owner.ts";
 
 /**

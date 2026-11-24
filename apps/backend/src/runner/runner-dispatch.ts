@@ -8,7 +8,7 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
-import type { FactoryOperations } from "@t3-factory/contracts";
+import type { FactoryOperations } from "@agent-easel/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Threads } from "../t3/threads.ts";

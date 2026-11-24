@@ -1,6 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import * as Exit from "effect/Exit";
-import { FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import { liveClient, refusedUpgrade, subscribe } from "./support/live.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 

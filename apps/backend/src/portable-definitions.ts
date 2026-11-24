@@ -15,7 +15,7 @@ import type {
   PortableFlowDocument,
   PortableModelHint,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   definitionSaveFits,
   hintedSelection,
@@ -23,7 +23,7 @@ import {
   portableDocumentText,
   validatePortableDocument,
   resolveAgentModel,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { AgentRevision } from "./agent-revisions.ts";
 import { unsupportedReportingFailure } from "./agents.ts";
 import type { FlowRevision } from "./flow-revisions.ts";

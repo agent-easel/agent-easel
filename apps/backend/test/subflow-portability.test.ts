@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { DEFINITION_REQUEST_LIMIT_BYTES, saveRequestBound } from "@t3-factory/domain-validation";
+import { DEFINITION_REQUEST_LIMIT_BYTES, saveRequestBound } from "@agent-easel/domain-validation";
 import { discoveredClones, assertOk, openFactoryWithApprovedT3 } from "./support/domain-setup.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {

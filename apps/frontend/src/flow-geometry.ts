@@ -3,7 +3,7 @@ import {
   exitRows,
   type CanvasDimensions,
   type GeometryFacts,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import {
   FINISH_SELECTION,
   type CanvasBlockSelection,

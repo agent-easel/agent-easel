@@ -1,5 +1,5 @@
-import type { RunDefinitions } from "@t3-factory/contracts";
-import { HUMAN_EXITS } from "@t3-factory/domain-validation";
+import type { RunDefinitions } from "@agent-easel/contracts";
+import { HUMAN_EXITS } from "@agent-easel/domain-validation";
 import type { LaunchPayload, SendPayload } from "../t3/threads.ts";
 import type { T3Target } from "../t3/connection.ts";
 import { attachmentName } from "../run-images.ts";

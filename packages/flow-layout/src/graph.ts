@@ -1,11 +1,11 @@
-import { type AgentDefinition, type FlowBlock, type FlowGraph } from "@t3-factory/contracts";
+import { type AgentDefinition, type FlowBlock, type FlowGraph } from "@agent-easel/contracts";
 import {
   effectiveExits,
   inheritedExits,
   joinSlots,
   type EffectiveExit,
   type ExitFlows,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 
 type CanvasExit = EffectiveExit & { readonly unavailable?: "hidden" | "removed" };
 

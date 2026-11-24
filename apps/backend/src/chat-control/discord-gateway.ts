@@ -16,7 +16,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import type { DiscordCheckOutcome } from "@t3-factory/contracts";
+import type { DiscordCheckOutcome } from "@agent-easel/contracts";
 import { releasableShardingStrategy } from "./discord-shards.ts";
 
 /** Discord's public REST API; the Gateway address comes from its answer. */

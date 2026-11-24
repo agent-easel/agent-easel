@@ -14,7 +14,7 @@ import type {
   FirstRunSetup,
   ReportingInstallation,
   T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";

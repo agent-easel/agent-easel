@@ -3,7 +3,7 @@ import type {
   RunNavigationEntry,
   RunPullRequest,
   RunWorkerRepository,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ExternalLink, GitBranch, GitPullRequest } from "lucide-react";
 import { TextLink } from "@/components/ui/text-link";
 

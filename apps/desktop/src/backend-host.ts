@@ -3,9 +3,9 @@
  * `pnpm start`, in an Electron utility process with the bundled runtime.
  */
 import { readFile } from "node:fs/promises";
-import type { Result, ServerUpdateAction } from "@t3-factory/contracts";
-import { loadConfiguration } from "@t3-factory/backend/config";
-import { startServer, type ApplicationUpdates } from "@t3-factory/backend/server";
+import type { Result, ServerUpdateAction } from "@agent-easel/contracts";
+import { loadConfiguration } from "@agent-easel/backend/config";
+import { startServer, type ApplicationUpdates } from "@agent-easel/backend/server";
 
 type Message =
   | { readonly type: "shutdown" }

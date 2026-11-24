@@ -8,7 +8,7 @@ import {
   type RunNavigationEntry,
   type RunOrigin,
   type SubflowInvocation,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { textResult } from "./authoring-tools.ts";
 import { actionTarget, isRootBlock, problemTarget, waitTarget } from "./run-action-tools.ts";
 import { RUN_SEARCH_MAX_WORDS, searchWords } from "./runner/run-search-words.ts";

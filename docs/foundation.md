@@ -277,7 +277,7 @@ transaction. An unknown migration ledger fails closed.
 
 The current-schema snapshot at `apps/backend/src/schema.sql` is generated and
 test-asserted. After adding a migration, regenerate it with
-`pnpm --filter @t3-factory/backend schema:update`. It is never an input to the
+`pnpm --filter @agent-easel/backend schema:update`. It is never an input to the
 build or runtime and is not shipped; migrations remain the only schema source.
 
 Persisted JSON (operational payloads, evidence and Agent model options) is versioned like

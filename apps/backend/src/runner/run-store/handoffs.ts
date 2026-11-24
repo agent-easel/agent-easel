@@ -1,5 +1,5 @@
-import { FINISH_BLOCK_ID, type WorkerProvenance } from "@t3-factory/contracts";
-import { handoffEndings } from "@t3-factory/domain-validation";
+import { FINISH_BLOCK_ID, type WorkerProvenance } from "@agent-easel/contracts";
+import { handoffEndings } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { Fragment } from "effect/sql/Statement";

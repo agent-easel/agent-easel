@@ -6,7 +6,7 @@ import {
   type ConditionArrivalPage,
   type ConditionRecipientDisposition,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { decodeCursor, encodeCursor } from "./read-cursor.ts";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";

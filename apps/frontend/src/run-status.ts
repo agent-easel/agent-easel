@@ -1,4 +1,4 @@
-import type { RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunDetail, RunNavigationEntry } from "@agent-easel/contracts";
 
 /** Null for history that predates the corresponding lifecycle event. */
 export function lifecycleAt(run: RunDetail, kind: "run-settled" | "run-archived") {

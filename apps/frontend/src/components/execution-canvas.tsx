@@ -1,7 +1,7 @@
 import { connectionLabel, exitDisplayName } from "../connection-label.ts";
 import { placementKey } from "../subflow-preview.ts";
 import { selectComposedExecutionTargets, type RunSubflows } from "../run-subflows.ts";
-import type { SubflowInvocation } from "@t3-factory/contracts";
+import type { SubflowInvocation } from "@agent-easel/contracts";
 import { SubflowInvocationHeader, invocationOutcome } from "./run-subflow.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { runResultState, stoppedVisitAt } from "../run-status.ts";
@@ -11,7 +11,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";

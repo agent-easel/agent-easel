@@ -8,7 +8,7 @@ import {
   type ValidationIssue,
   type WaitDuration,
   type WaitUnit,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CONDITION_OTHERWISE,
   effectiveExits,

@@ -7,8 +7,8 @@ import {
   type ReadinessIssue,
   type UpdateFlowInput,
   type ValidationIssue,
-} from "@t3-factory/contracts";
-import { JOIN_OUTPUT } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { JOIN_OUTPUT } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";

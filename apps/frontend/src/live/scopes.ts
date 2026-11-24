@@ -1,4 +1,4 @@
-import type { ConnectionLiveMessage, T3Connection } from "@t3-factory/contracts";
+import type { ConnectionLiveMessage, T3Connection } from "@agent-easel/contracts";
 import type { LiveScope } from "./owner.ts";
 
 export const connectionScope: LiveScope<ConnectionLiveMessage, T3Connection> = {

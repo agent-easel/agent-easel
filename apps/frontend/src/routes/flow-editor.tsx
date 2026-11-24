@@ -22,7 +22,7 @@ import type {
   FlowDraft,
   FlowEnding,
   FlowGraph,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CircleAlert,
   Copy,

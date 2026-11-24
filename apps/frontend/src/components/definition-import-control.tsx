@@ -1,6 +1,6 @@
 import { useId, useRef } from "react";
 import { Bot } from "lucide-react";
-import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
+import type { AgentCapabilities, FactoryProject, ImportResult } from "@agent-easel/contracts";
 import { MutationGate, useMutationsAllowed, useOfflineReason } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

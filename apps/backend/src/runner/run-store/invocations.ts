@@ -1,6 +1,6 @@
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Effect from "effect/Effect";
-import { handoffRecipients } from "@t3-factory/domain-validation";
+import { handoffRecipients } from "@agent-easel/domain-validation";
 import { fingerprint } from "../../fingerprint.ts";
 import { failure } from "../../result.ts";
 import { now } from "../../time.ts";

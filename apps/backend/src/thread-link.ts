@@ -1,4 +1,4 @@
-import { T3_APP_URL } from "@t3-factory/contracts";
+import { T3_APP_URL } from "@agent-easel/contracts";
 
 /** Native v2 pointers become browser links; stored receipts remain unchanged. */
 export function threadHref(link: string | null) {

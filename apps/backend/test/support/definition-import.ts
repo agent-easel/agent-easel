@@ -7,8 +7,8 @@ import type {
   PortableFlowBlock,
   PortableFlowEntry,
   RawBody,
-} from "@t3-factory/contracts";
-import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { DEFINITION_REQUEST_LIMIT_BYTES } from "@agent-easel/domain-validation";
 import type { FactoryOptions } from "../../src/index.ts";
 import historicalFlowImport from "../fixtures/historical-flow-import-receipts.json" with { type: "json" };
 import { ControlledT3 } from "./controlled-t3.ts";

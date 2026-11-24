@@ -1,4 +1,4 @@
-import { CONTINUATION_EXIT, handoffRecipients } from "@t3-factory/domain-validation";
+import { CONTINUATION_EXIT, handoffRecipients } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";

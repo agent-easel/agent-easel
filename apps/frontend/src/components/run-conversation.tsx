@@ -1,4 +1,4 @@
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { CircleHelp, MessageCircle } from "lucide-react";
 import { ProblemCard } from "./problem-card.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";

@@ -1,7 +1,7 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { Result, RunNavigationEntry, ValidationIssue } from "@t3-factory/contracts";
+import type { Result, RunNavigationEntry, ValidationIssue } from "@agent-easel/contracts";
 import type { ContractSnapshots } from "./connection.ts";
 import { newId } from "./ids.ts";
 import { periodicWorker } from "./periodic.ts";

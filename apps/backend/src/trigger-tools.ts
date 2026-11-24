@@ -8,7 +8,7 @@ import type {
   TriggerReadiness,
   TriggerRepository,
   TriggerRepositoryChoice,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   answerDefinitionCall,
   fixIssuesNext,

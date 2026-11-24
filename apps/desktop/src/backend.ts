@@ -1,6 +1,6 @@
 import { utilityProcess, type UtilityProcess } from "electron";
-import type { ServerUpdateAction } from "@t3-factory/contracts";
-import type { ApplicationUpdates } from "@t3-factory/backend/server";
+import type { ServerUpdateAction } from "@agent-easel/contracts";
+import type { ApplicationUpdates } from "@agent-easel/backend/server";
 
 export type BackendState = {
   readonly state: "stopped" | "starting" | "running" | "failed";

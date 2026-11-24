@@ -1,5 +1,5 @@
 import { threadHref } from "../../thread-link.ts";
-import type { RunAttention } from "@t3-factory/contracts";
+import type { RunAttention } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 /** Every attention matter, newest first. A Run-level matter has no Block, link or observation:

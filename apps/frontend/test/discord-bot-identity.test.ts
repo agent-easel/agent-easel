@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { DiscordSettings } from "@t3-factory/contracts";
+import type { DiscordSettings } from "@agent-easel/contracts";
 import { checkedBot } from "../src/discord-bot-identity.ts";
 
 /**

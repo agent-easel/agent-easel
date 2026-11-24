@@ -1,9 +1,9 @@
-import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
+import type { InstalledUpdateReceipt } from "@agent-easel/contracts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type { FactoryOperations, Result, RunDetail } from "@t3-factory/contracts";
+import type { FactoryOperations, Result, RunDetail } from "@agent-easel/contracts";
 import { factoryLayer } from "./factory-layer.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { FactoryService } from "./factory-service.ts";

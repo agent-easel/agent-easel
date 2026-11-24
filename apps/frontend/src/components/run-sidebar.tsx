@@ -12,7 +12,7 @@ import {
   type RunListProject,
   type RunListProjectSelection,
 } from "../run-list-view.ts";
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import { runActivity } from "../run-status.ts";
 import {
   ChevronDown,

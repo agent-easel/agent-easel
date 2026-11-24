@@ -1,5 +1,5 @@
-import type { Result, RunDetail } from "@t3-factory/contracts";
-import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
+import type { Result, RunDetail } from "@agent-easel/contracts";
+import { TASK_TITLE_LIMIT } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type { RunStore } from "./run-store/run-store.ts";
 import { failure } from "../result.ts";

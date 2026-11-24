@@ -9,8 +9,8 @@ import type {
   ImportResult,
   ImportReview,
   ImportReviewAgent,
-} from "@t3-factory/contracts";
-import { hintedSelection } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { hintedSelection } from "@agent-easel/domain-validation";
 import { api, ApiError } from "./api.ts";
 import { randomId } from "./lib/ids.ts";
 

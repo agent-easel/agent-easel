@@ -8,8 +8,8 @@ import type {
   FlowBlock,
   FlowDraft,
   FlowGraph,
-} from "@t3-factory/contracts";
-import { reachesEnding, subflowCyclePath } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { reachesEnding, subflowCyclePath } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TextLink } from "@/components/ui/text-link";

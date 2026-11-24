@@ -1,4 +1,4 @@
-import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
+import type { RunActivation, RunDetail, RunThreadBinding } from "@agent-easel/contracts";
 import { Surface } from "@/components/ui/surface";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";

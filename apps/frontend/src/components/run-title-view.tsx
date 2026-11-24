@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { clockTimeWithSeconds } from "../time-format.ts";
 import { OpenInT3 } from "./open-in-t3.tsx";
-import type { RunTitleGeneration } from "@t3-factory/contracts";
+import type { RunTitleGeneration } from "@agent-easel/contracts";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";

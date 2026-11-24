@@ -4,7 +4,7 @@ import {
   type RunDetail,
   type RunViewLiveMessage,
   type T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { navigationScope } from "../../src/live/navigation.ts";
 import { runScope } from "../../src/live/run.ts";
 import {

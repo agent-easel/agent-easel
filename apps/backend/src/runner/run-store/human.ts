@@ -1,6 +1,6 @@
 import { definitionsAtBlock } from "./run-definitions.ts";
-import type { Result } from "@t3-factory/contracts";
-import { handoffRecipients, HUMAN_EXITS } from "@t3-factory/domain-validation";
+import type { Result } from "@agent-easel/contracts";
+import { handoffRecipients, HUMAN_EXITS } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { HumanRow } from "../runner-types.ts";

@@ -4,7 +4,7 @@ import type {
   ImportReviewAgent,
   ImportReviewFlow,
   ImportReviewInstruction,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { StatusBadge } from "./status-badge.tsx";
 import { workspaceSummary } from "./flow-workspace-control.tsx";
 
