@@ -10,6 +10,7 @@ import { FactoryService } from "./factory-service.ts";
 import type { RuntimeReports } from "./runtime.ts";
 import type { RuntimeReply } from "./runtime-types.ts";
 import type { RunListSource, RunReadSource } from "./run-read-source.ts";
+import type { RunUpdateSubscription } from "./run-updates.ts";
 import type { LiveStreams } from "./live-streams.ts";
 import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
@@ -18,6 +19,7 @@ export interface Factory extends FactoryOperations {
   /** Factory MCP's text-only Start through the same Start operation as `startRun`. */
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
   checkStart(projectId: string, flowId: string): Promise<Result<undefined>>;
+  subscribeRunUpdates(input: unknown): Promise<Result<RunUpdateSubscription>>;
   listRunReadSnapshot(words: readonly string[]): Promise<Result<RunListSource>>;
   readRunByReference(
     reference: { id: string } | { number: number },
@@ -78,6 +80,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     runtime: reports,
     startTextRun,
     checkStart,
+    subscribeRunUpdates,
     listRunReadSnapshot,
     readRunByReference,
     setRuntimeBackendUrl,
@@ -92,6 +95,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     runtime: promiseOperations(runtime, reports),
     startTextRun: (input) => runtime.runPromise(startTextRun(input)),
     checkStart: (projectId, flowId) => runtime.runPromise(checkStart(projectId, flowId)),
+    subscribeRunUpdates: (input) => runtime.runPromise(subscribeRunUpdates(input)),
     listRunReadSnapshot: (words) => runtime.runPromise(listRunReadSnapshot(words)),
     readRunByReference: (reference) => runtime.runPromise(readRunByReference(reference)),
     setRuntimeBackendUrl,

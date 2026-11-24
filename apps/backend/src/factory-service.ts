@@ -51,6 +51,7 @@ import { makeLiveChanges } from "./live-changes.ts";
 import { makeLiveStreams, type LiveStreams } from "./live-streams.ts";
 import { makeTriggers } from "./triggers/triggers.ts";
 import { makeTelemetry, telemetryCount, type Telemetry } from "./telemetry.ts";
+import { makeRunUpdates, type RunUpdateSubscription } from "./run-updates.ts";
 
 /** Public Effect service shared by HTTP, background workers and controlled-clock tests. */
 export class FactoryService extends Context.Service<
@@ -61,6 +62,7 @@ export class FactoryService extends Context.Service<
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
     readonly checkStart: (projectId: string, flowId: string) => Effect.Effect<Result<undefined>>;
+    readonly subscribeRunUpdates: (input: unknown) => Effect.Effect<Result<RunUpdateSubscription>>;
     readonly listRunReadSnapshot: (
       words: readonly string[],
     ) => Effect.Effect<Result<RunListSource>>;
@@ -229,6 +231,14 @@ export const makeFactoryService = (
       chatDeliveries.wake,
     );
     yield* changes.onRunChanged(reportCapture.changed);
+    const runUpdates = yield* makeRunUpdates(
+      sql,
+      () => runner.listRunNavigation(),
+      connection.snapshots,
+      t3.threads,
+      intervalMs,
+    );
+    yield* changes.onRunChanged(runUpdates.changed);
     const botGuards = makeBotGuards();
     const chatActions = makeChatActions(
       sql,
@@ -400,6 +410,7 @@ export const makeFactoryService = (
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
       checkStart: (projectId, flowId) => guard(runner.startPreflight(projectId, flowId)),
+      subscribeRunUpdates: (input) => guard(runUpdates.subscribe(input)),
       listRunReadSnapshot: (words) =>
         inspectRun(runListSource(runner.listRunNavigation(), runner.listRunListExtras(words))),
       readRunByReference: (reference) =>
@@ -452,6 +463,7 @@ export const makeFactoryService = (
     yield* chatActions.recover;
     // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
     yield* Effect.forkScoped(reportCapture.run);
+    yield* Effect.forkScoped(runUpdates.run);
     if (telemetry.enabled) {
       yield* Effect.gen(function* () {
         const [usage] = yield* sql<{
