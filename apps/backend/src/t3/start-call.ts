@@ -104,7 +104,8 @@ function startCallKey(text: string): unknown {
   }
 }
 
-const namedTool = (text: string | null) => /^\{"toolName":"([^"]*)"/.exec(text ?? "")?.[1];
+const NAMED_TOOL = /^[ \t\n\r]*\{[ \t\n\r]*"toolName"[ \t\n\r]*:[ \t\n\r]*"([^"\\]*)"/;
+const namedTool = (text: string | null) => NAMED_TOOL.exec(text ?? "")?.[1];
 
 const ownStartCall = (item: ActivityItem, threadId: string) =>
   item.type === "dynamic_tool" &&

@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { workerActivity } from "./fixtures/t3-worker-activity.ts";
 import { dirname, join } from "node:path";
 import { makeLiveT3, type T3Modules } from "../src/index.ts";
 import { T3Failure } from "../src/t3/connection.ts";
@@ -845,7 +846,10 @@ it("an interrupted HTTP reply keeps the rename dispatch uncertain without reconn
   ).toHaveLength(1);
 });
 
-const activityPage = (items: readonly Record<string, unknown>[]) => ({
+const activityPage = (
+  items: readonly Record<string, unknown>[],
+  earlierPosition: number | null = null,
+) => ({
   thread: { threadId: "conversation" },
   recentRuns: [],
   items: items.map((item, position) => ({
@@ -864,19 +868,51 @@ const activityPage = (items: readonly Record<string, unknown>[]) => ({
   })),
   nextPosition: null,
   hasMore: false,
-  earlierPosition: null,
+  earlierPosition,
 });
 
-const startCallText = (toolName: string, requestId: string) =>
-  JSON.stringify({ toolName, input: { requestId, projectId: "p", flowId: "f", input: "x" } });
+const CLAUDE_START = "mcp__factory-runtime__factory_start_run";
+const CODEX_START = "factory-runtime.factory_start_run";
 
-it("a conversation's own recorded factory_start_run call with the Run's request key proves it started the Run", async (c) => {
+const toolText = (toolName: string, input: Record<string, unknown>) =>
+  JSON.stringify({ toolName, input, output: {} }, null, 2);
+
+const startCallText = (toolName: string, requestId: string, prompt = "x") =>
+  toolText(toolName, { requestId, projectId: "p", flowId: "f", input: prompt });
+
+const compact = (text: string) => JSON.stringify(JSON.parse(text));
+
+const continuationReads = (reads: readonly Record<string, unknown>[]) =>
+  reads.filter((args) => typeof args.textOffset === "number");
+
+it.for([
+  { layout: "T3's pretty-printed Claude", text: startCallText(CLAUDE_START, "request-1") },
+  { layout: "T3's pretty-printed Codex", text: startCallText(CODEX_START, "request-1") },
+  { layout: "compact", text: compact(startCallText(CLAUDE_START, "request-1")) },
+])(
+  "a conversation's own recorded factory_start_run call in $layout JSON proves it started the Run",
+  async ({ text }, c) => {
+    // Arrange
+    const { threads, endpoint } = await authorizedLiveOAuth(c, {
+      runtimeActivity: () => activityPage([{ text }]),
+    });
+
+    // Act
+    const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+    // Assert
+    expect(found).toBe(true);
+  },
+);
+
+it("a live-captured T3 tool record carrying the Run's Start call proves the origin", async (c) => {
   // Arrange
+  const captured = workerActivity.items.find((item) => item.type === "dynamic_tool")!;
+  const text = captured.text
+    .replace("factory-runtime.factory_get_block", CODEX_START)
+    .replace('"input": {}', '"input": {\n    "requestId": "request-1"\n  }');
   const { threads, endpoint } = await authorizedLiveOAuth(c, {
-    runtimeActivity: () =>
-      activityPage([
-        { text: startCallText("mcp__factory-runtime__factory_start_run", "request-1") },
-      ]),
+    runtimeActivity: () => activityPage([{ text }]),
   });
 
   // Act
@@ -886,52 +922,105 @@ it("a conversation's own recorded factory_start_run call with the Run's request 
   expect(found).toBe(true);
 });
 
-it("a Start call T3 shows only as inherited from another thread does not prove the conversation started the Run", async (c) => {
-  // Arrange
-  const { threads, endpoint } = await authorizedLiveOAuth(c, {
-    runtimeActivity: () =>
-      activityPage([
-        {
-          visibility: "inherited",
-          sourceThreadId: "parent",
-          text: startCallText("factory-runtime.factory_start_run", "request-1"),
-        },
-      ]),
-  });
+it.for([
+  { record: "is inherited from another thread", fields: { visibility: "inherited" } },
+  { record: "comes from another thread", fields: { sourceThreadId: "parent" } },
+  { record: "failed", fields: { status: "failed" } },
+  { record: "is not a tool call", fields: { type: "command_execution" } },
+])(
+  "a Start call whose activity record $record does not prove the conversation started the Run",
+  async ({ fields }, c) => {
+    // Arrange
+    const { threads, endpoint } = await authorizedLiveOAuth(c, {
+      runtimeActivity: () =>
+        activityPage([{ text: startCallText(CODEX_START, "request-1"), ...fields }]),
+    });
 
-  // Act
-  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+    // Act
+    const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
 
-  // Assert
-  expect(found).toBe(false);
-});
+    // Assert
+    expect(found).toBe(false);
+  },
+);
 
-const truncatedStartCall = (
-  nextOffset: (offset: number) => number,
-  continuation: (text: string) => string = (text) => text.slice(0, 10),
-) => {
-  const text = startCallText("mcp__factory-runtime__factory_start_run", "request-1");
+type Continuation = (offset: number, text: string) => { text: string; next: number | null };
+
+const truncatedStartCall = (continuation: Continuation) => {
+  const text = startCallText(CLAUDE_START, "request-1", "x".repeat(200));
+  const first = text.indexOf('"input"');
   const reads: Record<string, unknown>[] = [];
   const runtimeActivity = (args: Record<string, unknown>) => {
     reads.push(args);
-    const offset = typeof args.textOffset === "number" ? args.textOffset : 0;
+    const chunk =
+      typeof args.textOffset === "number"
+        ? continuation(args.textOffset, text)
+        : { text: text.slice(0, first), next: first };
     return activityPage([
-      {
-        text: offset === 0 ? text.slice(0, 10) : continuation(text),
-        textTruncated: true,
-        nextTextOffset: offset === 0 ? 10 : nextOffset(offset),
-      },
+      { text: chunk.text, textTruncated: chunk.next !== null, nextTextOffset: chunk.next },
     ]);
   };
   return { reads, runtimeActivity };
 };
 
+const step = 60;
+const validContinuation: Continuation = (offset, text) => ({
+  text: text.slice(offset, offset + step),
+  next: offset + step < text.length ? offset + step : null,
+});
+
+it("a truncated Start call read through valid continuations proves the origin", async (c) => {
+  // Arrange
+  const { reads, runtimeActivity } = truncatedStartCall(validContinuation);
+  const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(true);
+  expect(continuationReads(reads).length).toBeGreaterThan(1);
+});
+
 it.for([
-  { offset: "does not advance", next: (offset: number) => offset },
-  { offset: "moves backwards", next: () => 1 },
-  { offset: "is not an integer", next: (offset: number) => offset + 0.5 },
+  {
+    continuation: "a next offset that does not advance",
+    next: ((offset, text) => ({
+      text: text.slice(offset, offset + step),
+      next: offset,
+    })) as Continuation,
+  },
+  {
+    continuation: "a next offset that moves backwards",
+    next: ((offset, text) => ({
+      text: text.slice(offset, offset + step),
+      next: 1,
+    })) as Continuation,
+  },
+  {
+    continuation: "a next offset that is not an integer",
+    next: ((offset, text) => ({
+      text: text.slice(offset, offset + step),
+      next: offset + 0.5,
+    })) as Continuation,
+  },
+  {
+    continuation: "a next offset beyond the size bound",
+    next: ((offset, text) => ({
+      text: text.slice(offset, offset + step),
+      next: 500_000,
+    })) as Continuation,
+  },
+  {
+    continuation: "no text while creeping forward",
+    next: ((offset) => ({ text: "", next: offset + 1 })) as Continuation,
+  },
+  {
+    continuation: "one text chunk beyond the size bound",
+    next: ((offset) => ({ text: "x".repeat(400_001), next: offset + 1 })) as Continuation,
+  },
 ])(
-  "a truncated Start call whose next text offset $offset proves nothing and stops reading",
+  "a truncated Start call whose continuation returns $continuation proves nothing after that one read",
   async ({ next }, c) => {
     // Arrange
     const { reads, runtimeActivity } = truncatedStartCall(next);
@@ -942,37 +1031,22 @@ it.for([
 
     // Assert
     expect(found).toBe(false);
-    expect(reads.length).toBeLessThanOrEqual(3);
+    expect(continuationReads(reads)).toHaveLength(1);
   },
 );
 
-it("a truncated Start call whose continuations return no text while creeping forward proves nothing within a few reads", async (c) => {
-  // Arrange
-  const { reads, runtimeActivity } = truncatedStartCall(
-    (offset) => offset + 1,
-    () => "",
-  );
-  const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
-
-  // Act
-  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
-
-  // Assert
-  expect(found).toBe(false);
-  expect(reads.length).toBeLessThanOrEqual(3);
-});
-
-it("many truncated Start-like calls in one conversation are followed only up to a fixed number of reads", async (c) => {
+it("many truncated Start calls of other Runs spend at most 20 continuation reads in one check", async (c) => {
   // Arrange
   const reads: Record<string, unknown>[] = [];
-  const prefix = startCallText("mcp__factory-runtime__factory_start_run", "other").slice(0, 60);
+  const other = startCallText(CLAUDE_START, "other", "x".repeat(200));
+  const first = other.indexOf('"input"');
   const runtimeActivity = (args: Record<string, unknown>) => {
     reads.push(args);
     return activityPage(
       Array.from({ length: 100 }, () => ({
-        text: prefix,
+        text: other.slice(0, first),
         textTruncated: true,
-        nextTextOffset: 60,
+        nextTextOffset: first,
       })),
     );
   };
@@ -983,11 +1057,27 @@ it("many truncated Start-like calls in one conversation are followed only up to 
 
   // Assert
   expect(found).toBe(false);
-  expect(reads.length).toBeLessThanOrEqual(25);
+  expect(continuationReads(reads)).toHaveLength(20);
 });
 
-const servedActivity = (items: readonly { itemId: string; text: string }[]) => {
-  const chunk = 20_000;
+it("an earlier-page position that does not move back ends the scan", async (c) => {
+  // Arrange
+  const reads: Record<string, unknown>[] = [];
+  const runtimeActivity = (args: Record<string, unknown>) => {
+    reads.push(args);
+    return activityPage([{ text: toolText("mcp__factory-runtime__factory_get_block", {}) }], 5);
+  };
+  const { threads, endpoint } = await authorizedLiveOAuth(c, { runtimeActivity });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(false);
+  expect(reads).toHaveLength(2);
+});
+
+const servedActivity = (items: readonly { itemId: string; text: string }[], chunk = 20_000) => {
   const view = (item: { itemId: string; text: string }, offset: number) => ({
     itemId: item.itemId,
     text: item.text.slice(offset, offset + chunk),
@@ -1007,19 +1097,14 @@ const servedActivity = (items: readonly { itemId: string; text: string }[]) => {
 
 const largeStagedImage = {
   itemId: "stage-image",
-  text: JSON.stringify({
-    toolName: "mcp__factory-runtime__factory_stage_run_image",
-    input: { mimeType: "image/png", dataBase64: "A".repeat(400_000) },
-    output: {},
+  text: toolText("mcp__factory-runtime__factory_stage_run_image", {
+    mimeType: "image/png",
+    dataBase64: "A".repeat(400_000),
   }),
 };
 const longStart = {
   itemId: "start-run",
-  text: JSON.stringify({
-    toolName: "mcp__factory-runtime__factory_start_run",
-    input: { requestId: "request-1", projectId: "p", flowId: "f", input: "x".repeat(25_000) },
-    output: {},
-  }),
+  text: startCallText(CLAUDE_START, "request-1", "x".repeat(25_000)),
 };
 
 it.for([
@@ -1045,11 +1130,7 @@ it("the newest Start call proves the origin although an older huge Start call of
   // Arrange
   const olderStart = {
     itemId: "older-start",
-    text: JSON.stringify({
-      toolName: "mcp__factory-runtime__factory_start_run",
-      input: { requestId: "request-0", projectId: "p", flowId: "f", input: "y".repeat(400_000) },
-      output: {},
-    }),
+    text: startCallText(CLAUDE_START, "request-0", "y".repeat(400_000)),
   };
   const { threads, endpoint } = await authorizedLiveOAuth(c, {
     runtimeActivity: servedActivity([olderStart, longStart]),
@@ -1060,4 +1141,21 @@ it("the newest Start call proves the origin although an older huge Start call of
 
   // Assert
   expect(found).toBe(true);
+});
+
+it("a Start call whose whole text exceeds the size bound proves nothing", async (c) => {
+  // Arrange
+  const huge = {
+    itemId: "huge-start",
+    text: startCallText(CLAUDE_START, "request-1", "x".repeat(400_001)),
+  };
+  const { threads, endpoint } = await authorizedLiveOAuth(c, {
+    runtimeActivity: servedActivity([huge], 100_000),
+  });
+
+  // Act
+  const found = await threads.findStartCall({ endpoint }, "conversation", "request-1");
+
+  // Assert
+  expect(found).toBe(false);
 });
