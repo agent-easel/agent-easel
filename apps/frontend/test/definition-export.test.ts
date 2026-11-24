@@ -4,7 +4,7 @@ import { createDefinitionExport } from "../src/definition-export.ts";
 
 const exported: DefinitionExport = {
   document: {
-    format: "t3-factory/definitions",
+    format: "agenteasel/definitions",
     formatVersion: 7,
     kind: "agent",
     factoryVersion: "source",

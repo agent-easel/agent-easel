@@ -18,7 +18,7 @@ Archive: the Runner reconciles on restart because T3 work may continue, and unce
 
 ## Configuration and storage
 
-The default data home is `~/.t3-factory`; source upgrades and rebuilds never touch it. Choose an absolute override outside application and project checkouts: Factory rejects a home that resolves
+The default data home is `~/.agenteasel`; source upgrades and rebuilds never touch it. Choose an absolute override outside application and project checkouts: Factory rejects a home that resolves
 inside its own source checkout (including through symlinks), though not merely because an ancestor is a Git repository. See [T3 connection](t3-integration.md) for OAuth and credentials.
 
 | Path within data home | Purpose |
@@ -36,7 +36,7 @@ and the non-secret [Chat control](chat-control.md) configuration, live in `facto
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `FACTORY_HOME` | `~/.t3-factory` | Absolute data-home override |
+| `FACTORY_HOME` | `~/.agenteasel` | Absolute data-home override |
 | `FACTORY_HOST` | `config.json` host | Loopback by default; a LAN/Tailnet IP or `0.0.0.0` is supported |
 | `FACTORY_ALLOWED_HOSTS` | `config.json` `allowedHosts` | Comma-separated DNS names (no ports) for non-loopback bindings; replaces the saved list |
 | `FACTORY_PORT` | `config.json` port | 0–65535; 0 picks a free port, printed at startup |
@@ -82,9 +82,9 @@ the host installation identity and the installed binary’s release channel.
 
 | Command | Runtime | Data home |
 | --- | --- | --- |
-| `pnpm dev` | Seeded demo backend, simulated T3 and Vite with source reload | `~/.t3-factory-dev`, or `FACTORY_DEV_HOME` |
-| `pnpm dev:prod` | Live T3 backend and Vite with source reload | `~/.t3-factory`, or `FACTORY_HOME` |
-| `pnpm start` | Built backend serving API and built UI | `~/.t3-factory`, or `FACTORY_HOME` |
+| `pnpm dev` | Seeded demo backend, simulated T3 and Vite with source reload | `~/.agenteasel-dev`, or `FACTORY_DEV_HOME` |
+| `pnpm dev:prod` | Live T3 backend and Vite with source reload | `~/.agenteasel`, or `FACTORY_HOME` |
+| `pnpm start` | Built backend serving API and built UI | `~/.agenteasel`, or `FACTORY_HOME` |
 
 Development runs from source with no build and never writes production `dist`. Every mode serves Factory MCP from its own listener, so reporting registrations need no repair when switching between modes on the same port.
 Production needs `pnpm build` before `pnpm start`, also after source updates; `start` does not watch or rebuild. Demo storage persists across restarts: a fresh home gets sample Agents, Flows and Runs plus
@@ -101,8 +101,8 @@ Stop the dev command, then `pnpm db:reset` (and `pnpm dev`, or use the same expl
 (ownership and seed completion), `demo-engine.json` (simulated external state), `demo-github.json` (the GitHub stand-in Triggers read), `demo-process` with its permanent `.runner.lock`, and `demo-repositories/`. A missing or damaged engine or GitHub snapshot needs a reset, and a damaged or mismatched ownership marker needs a new empty home.
 
 Reset recreates the demo database and simulated state and seeds the baseline, preserving `config.json`, credentials, unrelated files, demo repositories and lock files; user edits and Run history are
-discarded and no production data is copied. It refuses an active owner and any home that is inside the checkout or aliases `~/.t3-factory` or `FACTORY_HOME` (including parents, children and resolved
-links), and rejects linked database, state or lock files. If an older development mode populated `~/.t3-factory-dev`, startup asks for `pnpm db:reset` first; to keep it use a new empty
+discarded and no production data is copied. It refuses an active owner and any home that is inside the checkout or aliases `~/.agenteasel` or `FACTORY_HOME` (including parents, children and resolved
+links), and rejects linked database, state or lock files. If an older development mode populated `~/.agenteasel-dev`, startup asks for `pnpm db:reset` first; to keep it use a new empty
 `FACTORY_DEV_HOME`. Seed-code changes take effect after reset.
 
 ### Live production data

@@ -76,7 +76,7 @@ Open the frontend URL printed by Vite. A fresh demo home contains sample Agents,
 Flows and Runs backed by simulated T3. **No T3 connection, OAuth approval, model
 credentials or paid model work is required.** The demo does not execute real agents.
 
-Demo edits persist in `~/.t3-factory-dev`, separately from production data. To use
+Demo edits persist in `~/.agenteasel-dev`, separately from production data. To use
 another location, set `FACTORY_DEV_HOME` to an absolute path outside the checkout.
 If an older development database prevents seeding, startup asks for `pnpm db:reset`.
 To keep the old data, set `FACTORY_DEV_HOME` to a new empty location.
@@ -101,7 +101,7 @@ pnpm start
 ```
 
 Open <http://127.0.0.1:4310>. The foreground backend serves the built UI and API;
-T3 runs separately. Factory data is stored in `~/.t3-factory`, outside the checkout.
+T3 runs separately. Factory data is stored in `~/.agenteasel`, outside the checkout.
 
 1. Start T3 with access to the local repository you want to work on.
 2. In **Settings → T3 connection**, save T3's MCP endpoint and choose **Authorize on

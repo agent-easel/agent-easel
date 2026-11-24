@@ -29,7 +29,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
     ok: true,
     value: {
       document: {
-        format: "t3-factory/definitions",
+        format: "agenteasel/definitions",
         formatVersion: 7,
         kind: "agent",
         factoryVersion: "source",
@@ -124,7 +124,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     ok: true,
     value: {
       document: {
-        format: "t3-factory/definitions",
+        format: "agenteasel/definitions",
         formatVersion: 7,
         kind: "flow",
         factoryVersion: "source",

@@ -69,7 +69,7 @@ async function createAuthority(directory: string, work: string) {
       "3650",
       "-sha256",
       "-subj",
-      "/CN=T3 Factory host authority",
+      "/CN=AgentEasel host authority",
       "-addext",
       "basicConstraints=critical,CA:TRUE,pathlen:0",
       "-addext",
@@ -105,7 +105,7 @@ async function issueLeaf(
       "-out",
       "server.csr",
       "-subj",
-      "/CN=T3 Factory",
+      "/CN=AgentEasel",
     ],
     work,
   );

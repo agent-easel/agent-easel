@@ -718,7 +718,7 @@ Every export writes portable document format version 7, whatever the definition 
 
 ```json
 {
-  "format": "t3-factory/definitions",
+  "format": "agenteasel/definitions",
   "formatVersion": 7,
   "kind": "agent",
   "factoryVersion": "0.42.0",
@@ -754,7 +754,7 @@ A draft Flow without Finish can be exported as follows.
 
 ```json
 {
-  "format": "t3-factory/definitions",
+  "format": "agenteasel/definitions",
   "formatVersion": 6,
   "kind": "flow",
   "factoryVersion": "source",
@@ -814,7 +814,7 @@ Factory validates the document again and applies the ordinary Agent save rules t
 Factory checks the format and version, then Agent count and Flow count, then unknown or missing fields. It checks well-formed, unique keys in each namespace, verifies that every key resolves, and requires a known root, reachability of every bundled Flow and use of every bundled Agent. Ordinary definition validators run next, followed by the 2,000,000-byte prospective save limit. Rejections distinguish these cases.
 
 - not JSON (the file is not UTF-8 JSON);
-- not a Factory export (no `t3-factory/definitions` marker);
+- not a Factory export (no `agenteasel/definitions` marker; files marked `t3-factory/definitions` from earlier releases are still read);
 - unsupported format version N, which asks to update Factory when N is newer;
 - an invalid definition, field-addressed (for example `agents.0.prompt` or `flows.1.graph.blocks.2.position`) and naming the Agent or block;
 - over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents or Flows, or a definition save over 2,000,000 bytes.

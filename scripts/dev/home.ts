@@ -54,11 +54,11 @@ async function assertPlain(path: string) {
 
 /** Validate before loadConfiguration creates or chmods anything. */
 export async function developmentHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  const requested = env.FACTORY_DEV_HOME ?? join(homedir(), ".t3-factory-dev");
+  const requested = env.FACTORY_DEV_HOME ?? join(homedir(), ".agenteasel-dev");
   if (!isAbsolute(requested)) throw new Error("FACTORY_DEV_HOME must be an absolute path.");
   await assertPlain(requested);
   const home = await canonical(resolve(requested));
-  const productionHomes = [join(homedir(), ".t3-factory"), env.FACTORY_HOME].filter(
+  const productionHomes = [join(homedir(), ".agenteasel"), env.FACTORY_HOME].filter(
     (path): path is string => Boolean(path),
   );
   for (const path of productionHomes) {
@@ -82,13 +82,13 @@ export async function developmentHome(env: NodeJS.ProcessEnv = process.env): Pro
   return home;
 }
 
-type Ownership = { kind: "t3-factory-demo"; version: 1; home: string; prepared: boolean };
+type Ownership = { kind: "agenteasel-demo"; version: 1; home: string; prepared: boolean };
 
 async function ownership(home: string): Promise<Ownership | null> {
   try {
     const marker = JSON.parse(await readFile(join(home, markerName), "utf8")) as Ownership;
     if (
-      marker.kind !== "t3-factory-demo" ||
+      marker.kind !== "agenteasel-demo" ||
       marker.version !== 1 ||
       marker.home !== home ||
       typeof marker.prepared !== "boolean"
@@ -107,7 +107,7 @@ async function ownership(home: string): Promise<Ownership | null> {
 }
 
 export function markPrepared(home: string, prepared: boolean) {
-  const marker: Ownership = { kind: "t3-factory-demo", version: 1, home, prepared };
+  const marker: Ownership = { kind: "agenteasel-demo", version: 1, home, prepared };
   writeState(join(home, markerName), marker);
 }
 
@@ -117,10 +117,10 @@ export async function claimDevelopmentHome(home: string, reset: boolean) {
   const marker = await ownership(home);
   if (!marker) {
     const entries = await readdir(home);
-    const defaultHome = await canonical(join(homedir(), ".t3-factory-dev"));
+    const defaultHome = await canonical(join(homedir(), ".agenteasel-dev"));
     if (entries.length && !(reset && home === defaultHome)) {
       throw new Error(
-        "This development home contains unmarked data. Preserve it by choosing a new empty FACTORY_DEV_HOME. For the legacy ~/.t3-factory-dev only, pnpm db:reset explicitly replaces its database with demo scenarios.",
+        "This development home contains unmarked data. Preserve it by choosing a new empty FACTORY_DEV_HOME. For the default ~/.agenteasel-dev only, pnpm db:reset explicitly replaces its database with demo scenarios.",
       );
     }
   }

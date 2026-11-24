@@ -10,7 +10,7 @@ Each installation has exactly one role, chosen on first launch and changeable in
 
 | Role | What runs on this computer | Data |
 | --- | --- | --- |
-| **Run a server** | The single authoritative backend (Runner, SQLite, reporting acceptance, T3 OAuth context) and its local panel | The existing user-level home `~/.t3-factory` (or `FACTORY_HOME`) |
+| **Run a server** | The single authoritative backend (Runner, SQLite, reporting acceptance, T3 OAuth context) and its local panel | The existing user-level home `~/.agenteasel` (or `FACTORY_HOME`) |
 | **Connect to a server** | Bundled UI only; no backend, Runner, T3 or reporting tooling | Desktop settings, the pinned server certificate and a Keychain-encrypted client credential |
 
 An installation never hosts one Factory and operates another at the same time. Switching

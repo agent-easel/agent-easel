@@ -32,7 +32,7 @@ const work = await mkdtemp(join(tmpdir(), "factory-desktop-probe-"));
 const app = join(work, "Applications", "T3 Factory.app");
 const executable = join(app, "Contents", "MacOS", "T3 Factory");
 const home = join(work, "home");
-const factoryHome = join(home, ".t3-factory");
+const factoryHome = join(home, ".agenteasel");
 const port = 4395;
 const results = [];
 const clean = { HOME: home, PATH: "/usr/bin:/bin", TMPDIR: join(work, "tmp") };
@@ -438,7 +438,7 @@ try {
         ),
       60_000,
     );
-    const backendStarted = existsSync(join(clientHome, ".t3-factory"));
+    const backendStarted = existsSync(join(clientHome, ".agenteasel"));
     const answered = await api("/api/protocol").then(
       () => true,
       () => false,

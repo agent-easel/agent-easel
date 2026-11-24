@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { FlowGraph, Result } from "@agent-easel/contracts";
+import {
+  LEGACY_PORTABLE_DOCUMENT_FORMAT,
+  PORTABLE_DOCUMENT_FORMAT,
+  type FlowGraph,
+  type Result,
+} from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import { HttpServerResponse } from "effect/http";
 import { loadConfiguration } from "../src/config.ts";
@@ -90,6 +95,24 @@ it("JSON without the Factory marker is rejected as not a Factory export", async 
   assert(!review.ok);
   expect(review.error.issues.map((issue) => issue.code)).toStrictEqual(["not_factory_export"]);
 });
+
+it.for([PORTABLE_DOCUMENT_FORMAT, LEGACY_PORTABLE_DOCUMENT_FORMAT])(
+  "a file marked %s is reviewed and imported",
+  async (format, context) => {
+    // Arrange
+    const { factory } = await openFactoryWithApprovedT3(context);
+    const document = agentFile(exportedAgent(), { format });
+
+    // Act
+    const review = await factory.reviewImport(fileBody(document));
+    const committed = await factory.commitImport(reviewedCommit("import-1", undefined, document));
+
+    // Assert
+    assert(review.ok);
+    assert(committed.ok);
+    expect(assertOk(await factory.listAgents())).toHaveLength(1);
+  },
+);
 
 it("a newer format version is rejected before its definitions are read and asks to update Factory", async (context) => {
   // Arrange

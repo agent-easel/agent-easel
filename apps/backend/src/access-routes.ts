@@ -32,7 +32,7 @@ const pemResponse = (pem: string | null) =>
         contentType: "application/x-pem-file",
         headers: {
           "cache-control": "no-store",
-          "content-disposition": 'attachment; filename="t3-factory-host.pem"',
+          "content-disposition": 'attachment; filename="agenteasel-host.pem"',
         },
       });
 
