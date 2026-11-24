@@ -6,7 +6,7 @@ const files = {
   "docs/a.md": "Use T3 Factory today.\nAgentEasel only.",
   "docs/b.md": "See https://github.com/alimek/t3-factory/issues/1 and agenteasel.",
   "CHANGELOG.md": "t3factory.app was the old domain",
-  "apps/desktop/src/updates.ts": "T3 Factory receives no more updates.",
+  "apps/desktop/src/agenteasel-handoff.ts": "T3 Factory has moved to AgentEasel",
   "docs/c.md": "Download from t3factory.app or T3.Factory-1.dmg.",
 };
 

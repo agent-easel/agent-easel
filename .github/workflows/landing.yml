@@ -1,0 +1,129 @@
+name: Landing
+
+# Deploys agenteasel.app with the AgentEasel update feed. Called after a Release or beta build is
+# published, and on pushes to main that change the landing page.
+on:
+  workflow_call:
+    inputs:
+      published-tag:
+        description: Release published in the calling run, if any
+        type: string
+        default: ""
+      feed-changed:
+        description: A beta build was published, so the site deploys even without landing changes
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: landing-production
+      url: https://agenteasel.app/
+    concurrency:
+      group: landing-production
+      queue: max
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select a build with a public Release download
+        id: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+          PUBLISHED_TAG: ${{ inputs.published-tag }}
+          FEED_CHANGED: ${{ inputs.feed-changed }}
+        run: |
+          if [[ -z "$PUBLISHED_TAG" && "$FEED_CHANGED" != true ]]; then
+            before_version=$(git show "$BEFORE:package.json" | jq -er .version)
+            push_version=$(git show "$PUSH_SHA:package.json" | jq -er .version)
+            changes=$(git diff --name-only "$BEFORE" "$PUSH_SHA" -- apps/landing)
+            if [[ "$before_version" == "$push_version" && -z "$changes" ]]; then
+              exit 0
+            fi
+          fi
+
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
+          tag=$(jq -er '.tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' <<<"$release")
+          if [[ -n "$PUBLISHED_TAG" && "$PUBLISHED_TAG" != "$tag" ]]; then
+            echo "Skipping $PUBLISHED_TAG because $tag is now the latest Release."
+            exit 0
+          fi
+
+          version=${tag#v}
+          if [[ "$(jq -er .version package.json)" != "$version" ]]; then
+            if [[ -z "$PUBLISHED_TAG" ]]; then
+              echo "Landing changes will deploy after the Release for the current main version is published."
+              exit 0
+            fi
+            git checkout --detach "$tag"
+            git merge-base --is-ancestor HEAD origin/main
+            test "$(jq -er .version package.json)" = "$version"
+          fi
+
+          for name in "AgentEasel-$version-arm64.dmg" SHA256SUMS.txt; do
+            download="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
+            jq -e --arg url "$download" 'any(.assets[]; .state == "uploaded" and .browser_download_url == $url)' <<<"$release" > /dev/null
+            curl --fail --silent --show-error --head --location --retry 3 "$download" > /dev/null
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - if: steps.site.outputs.tag != ''
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: steps.site.outputs.tag != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Write the update feed
+        if: steps.site.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[]' | jq -s . > "$RUNNER_TEMP/releases.json"
+          node scripts/update-feed.mjs tags "$RUNNER_TEMP/releases.json" | tee "$RUNNER_TEMP/feed-tags"
+          feed=apps/landing/public/updates
+          mkdir -p "$feed"
+          while IFS='=' read -r channel tag; do
+            if [[ -n "$tag" ]]; then
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern agenteasel-mac.yml \
+                --output "$feed/$channel-mac.yml"
+            fi
+          done < "$RUNNER_TEMP/feed-tags"
+          echo "Update feed: $(paste -sd ' ' "$RUNNER_TEMP/feed-tags")" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build and deploy the verified landing page
+        if: steps.site.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.site.outputs.tag }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          : "${VERCEL_ORG_ID:?}" "${VERCEL_PROJECT_ID:?}" "${VERCEL_TOKEN:?}"
+          npx --yes vercel@66.6.0 pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx --yes vercel@66.6.0 build --prod --token "$VERCEL_TOKEN"
+          index=.vercel/output/static/index.html
+          grep -Fq 'rel="canonical" href="https://agenteasel.app/"' "$index"
+          grep -Fq "/releases/download/$RELEASE_TAG/AgentEasel-${RELEASE_TAG#v}-arm64.dmg" "$index"
+          for file in apps/landing/public/updates/*.yml; do
+            if [[ -e "$file" ]]; then
+              cmp "$file" ".vercel/output/static/updates/${file##*/}"
+            fi
+          done
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          if [[ "$latest" == "$RELEASE_TAG" ]]; then
+            npx --yes vercel@66.6.0 deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
+          fi

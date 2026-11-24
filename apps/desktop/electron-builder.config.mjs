@@ -1,36 +1,19 @@
-// electron-builder configuration for the macOS Apple Silicon release. Signing, notarization
-// and the release feed are deployment prerequisites supplied by the environment:
-//   CSC_LINK / CSC_KEY_PASSWORD (Developer ID Application certificate),
-//   APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER (notarization),
-//   FACTORY_UPDATE_URL (generic feed reachable by approved recipients) or
-//   FACTORY_UPDATE_GITHUB_OWNER / FACTORY_UPDATE_GITHUB_REPO (public GitHub Releases).
-// Without a feed the package reports updates as unsupported instead of pointing at the
-// private source repository with a shared token.
 import { readFileSync } from "node:fs";
 import notarize from "./scripts/notarize.mjs";
 
 const { factoryBuild } = JSON.parse(
   readFileSync(new URL("stage/package.json", import.meta.url), "utf8"),
 );
-const beta = factoryBuild.channel === "beta";
-const generic = process.env.FACTORY_UPDATE_URL;
-const owner = process.env.FACTORY_UPDATE_GITHUB_OWNER;
-const repo = process.env.FACTORY_UPDATE_GITHUB_REPO;
-// Beta builds write `beta-mac.yml` and are GitHub prereleases; stable builds write `latest-mac.yml`.
-const channel = beta ? { channel: "beta" } : {};
-const publish = generic
-  ? [{ provider: "generic", url: generic, ...channel }]
-  : owner && repo
-    ? [
-        {
-          provider: "github",
-          owner,
-          repo,
-          releaseType: beta ? "prerelease" : "release",
-          ...channel,
-        },
-      ]
-    : null;
+const feed = process.env.FACTORY_UPDATE_URL;
+const publish = feed
+  ? [
+      {
+        provider: "generic",
+        url: feed,
+        ...(factoryBuild.channel === "beta" ? { channel: "beta" } : {}),
+      },
+    ]
+  : null;
 const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
 const notarized = signed && Boolean(process.env.APPLE_API_KEY);
 
@@ -82,9 +65,6 @@ export default {
   },
   afterSign: notarized ? notarize : undefined,
   dmg: { sign: false },
-  // A generic feed is one directory for both tracks: stable builds also refresh `beta-mac.yml`
-  // so beta installations receive a stable Release newer than the last beta.
-  generateUpdatesFilesForAllChannels: true,
   // Local builds never attach to a release feed, even if release credentials are in the shell.
   publish: factoryBuild.channel === "development" ? null : publish,
 };

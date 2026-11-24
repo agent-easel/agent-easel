@@ -40,8 +40,7 @@ These are deployment prerequisites, not repository content:
 | --- | --- |
 | `CSC_LINK`, `CSC_KEY_PASSWORD` | Developer ID Application certificate; enables the hardened runtime and `resources/entitlements.mac.plist` (JIT only) |
 | `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Notarization (only with signing): `notarytool` in electron-builder's `afterSign` hook, then stapling with retries, because Apple's ticket service intermittently drops the connection from CI runners. The workflow's `stapler validate` checks retry the same way |
-| `FACTORY_UPDATE_URL` | Generic update feed (`latest-mac.yml`, `beta-mac.yml`, zip, blockmap) readable without credentials; a Release also rewrites `beta-mac.yml` so beta installations receive it |
-| `FACTORY_UPDATE_GITHUB_OWNER`, `FACTORY_UPDATE_GITHUB_REPO` | GitHub Releases feed, only for a repository whose releases are public |
+| `FACTORY_UPDATE_URL` | Generic update feed the package checks, readable without credentials; Release and beta builds use `https://agenteasel.app/updates` ([update feed](#update-feed-and-bridge-metadata)) |
 
 Local packaging without signing credentials is **ad-hoc signed** without the hardened runtime (Apple Silicon kills unsigned binaries and Electron's fuse changes void its linker signature): it runs locally for probes but
 is not a release and Gatekeeper rejects it on another Mac. The update location must be anonymously readable (a public release-assets repository or generic HTTPS feed) and no maintainer token may reach clients; the
@@ -53,21 +52,34 @@ encryption and embedded asar integrity are on, and the app loads only from asar.
 
 The **Release** workflow (`.github/workflows/release.yml`) chains `release-please` → `source` → `build-macos` → `publish` → `landing` through job dependencies (`needs`). On every push to `main`, release-please opens or updates the Release PR, titled like `chore(main): release X.Y.Z`. It passes normal checks and main branch protection like any other PR. Merging that PR is the human decision to cut a Release.
 
-After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit and an empty draft GitHub release with generated notes. It uses `draft: true`, `force-tag-creation` and no component in the tag. Job dependencies start the build in the same workflow run: GitHub does not deliver draft-creation events to Actions, and events caused by `GITHUB_TOKEN` do not start workflows.
+After the merge, release-please creates an empty draft GitHub release for tag `vX.Y.Z` that targets that exact merge commit, with generated notes. It uses `draft: true` and no component in the tag. The tag itself is created only when `publish` publishes the draft, because old T3 Factory beta installations update from the newest semver tag ([update feed](#update-feed-and-bridge-metadata)). Job dependencies start the build in the same workflow run: GitHub does not deliver draft-creation events to Actions, and events caused by `GITHUB_TOKEN` do not start workflows.
 
-`source` resolves the tag and requires exactly one release with that tag, still a draft. The tag commit must equal the release target and, when cut in this run, the release-please commit. Published releases are refused.
+`source` requires exactly one release named by the tag, still a draft, and takes its target commit, which must equal the release-please commit when cut in this run. A tag that already exists must point to that commit and produces a warning. Published releases are refused.
 
 `source` also decides whether the build repeats the quality gate and browser journeys. It skips them only when the release commit has the same tree as the head of the merged Release PR and that head's latest **Quality gate** and **Controlled UI journeys** checks succeeded. The main ruleset does not require PRs to be up to date, so a Release PR merged behind `main`, a release commit without a merged PR or a missing or failed check makes the build run both. The run summary states which case applied.
 
 `build-macos` calls the reusable **Desktop build** workflow (`.github/workflows/desktop-build.yml`), which beta builds share. It runs only on a macOS arm64 runner and checks out that exact commit. It verifies that root and desktop package versions equal the tag version, then runs `pnpm check` and controlled e2e browser journeys unless `source` reused them, followed by Developer ID signing and notarization, `codesign`, `stapler` and `spctl` validation, the isolated packaged probe, DMG/ZIP checks and SHA-256 checksums. Missing Apple credentials fail the build; there is no silent unsigned release. This job writes only Actions artifacts: `release-<tag>` holds downloads and `release-evidence-<tag>` holds evidence retained even on failure. It never writes release assets.
 
-`publish` starts as soon as `build-macos` succeeds, without a second approval: merging the Release PR is the only human gate. `publish` alone writes release assets: it re-checks the draft and tag commit, verifies the complete artifact file set (DMG, ZIP, their blockmaps, `latest-mac.yml` and `SHA256SUMS.txt`) and checksums, removes any assets left on the still-draft release by an earlier failed attempt, and uploads the complete set. It verifies asset names and SHA-256 digests on GitHub before setting `draft=false` and marking the Release latest.
+`publish` starts as soon as `build-macos` succeeds, without a second approval: merging the Release PR is the only human gate. `publish` alone writes release assets: it re-checks the draft and its target commit, verifies the complete artifact file set (DMG, ZIP, their blockmaps, `latest-mac.yml` and `SHA256SUMS.txt`) and checksums, and completes the notes. It then writes the update metadata: AgentEasel's own `agenteasel-mac.yml` and the frozen bridge copies `latest-mac.yml` and `beta-mac.yml`, and recomputes `SHA256SUMS.txt` over the final set. It removes any assets left on the still-draft release by an earlier failed attempt and uploads the complete set. It verifies asset names and SHA-256 digests on GitHub and the frozen bridge metadata on the draft before setting `draft=false`, which creates the tag, and marking the Release latest.
+
+### Update feed and bridge metadata
+
+AgentEasel installations update from the generic feed `https://agenteasel.app/updates`: the stable channel reads `latest-mac.yml`, the beta channel `beta-mac.yml`. Every Release and beta build carries its own metadata as the `agenteasel-mac.yml` asset, with absolute download URLs of its ZIP and DMG and the release's name and notes. The [landing deployment](#landing-page) writes the feed from those assets: `latest-mac.yml` from the newest Release, `beta-mac.yml` from the newest Release or beta build. A Release or beta build therefore reaches installations only after the landing deployment that follows its publication.
+
+Old T3 Factory installations keep electron-updater's GitHub provider on the transferred repository. Stable installations read `latest-mac.yml` of the release marked latest; beta installations read `beta-mac.yml`, then `latest-mac.yml`, of the newest semver entry in the repository's release feed, which includes bare tags. Every AgentEasel release, stable or prerelease, therefore carries `.github/release/bridge-mac.yml` as both `latest-mac.yml` and `beta-mac.yml`. That frozen copy of the bridge release's metadata points at the bridge ZIP by a relative path (`../v<bridge>/T3.Factory-<bridge>-arm64.zip`), because the GitHub provider resolves every file under the selected tag, and sets its own `releaseName` and `releaseNotes`, so an old installation does not show AgentEasel notes for the bridge. The `publish` jobs fail when the committed copy is unusable or when either release asset is missing or differs from it (`node scripts/update-feed.mjs check-bridge <asset-dir>`).
+
+These rules keep every old installation on the bridge:
+
+- No semver tag exists without the frozen metadata attached. Releases are created as drafts without a tag and get their tag on publication; any other repository tag must not be valid semver.
+- A frozen file is never corrected by overwriting a published asset: GitHub keeps serving the old asset to the updater for minutes. Fix the committed copy before publication.
+- GitHub release assets named `latest-mac.yml` and `beta-mac.yml` are reserved for the frozen copy.
+- The transferred repository is never recreated under its old name, which would break the redirect old installations depend on.
 
 ### Landing page
 
 The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @agent-easel/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to `https://agenteasel.app/`.
 
-GitHub Actions owns the production deployment at `https://agenteasel.app/`. The `landing` job runs after a successful `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. Beta builds leave the site unchanged. Use **Re-run failed jobs** when only the landing job failed.
+GitHub Actions owns the production deployment at `https://agenteasel.app/`. The reusable **Landing** workflow (`.github/workflows/landing.yml`) runs after a successful Release or beta `publish`, or on a push to `main` that changes `apps/landing` or the product version without cutting a Release. It uses the current `main` landing source when its root version matches the latest published Release. Landing-only changes wait if that version is still pending. After publication, if `main` has already advanced to a pending version, the job uses the published Release commit. It checks that the advertised DMG and checksums are publicly reachable before building, and verifies the built canonical and download links before deployment. Each deployment writes the [update feed](#update-feed-and-bridge-metadata) into `/updates/`. Serialized production jobs recheck the latest Release before uploading the prebuilt output to Vercel. A beta build redeploys the same site with a refreshed feed. Use **Re-run failed jobs** when only the landing job failed.
 
 The same deployment proxies `/ingest/static/*` to PostHog Cloud EU's asset host and `/ingest/*` to its ingestion host. The website is static and the ingestion rules need no Vercel Functions.
 
@@ -112,9 +124,9 @@ Also configure:
 - **PR title** as a required check in the main ruleset, alongside the normal required checks.
 - **Immutable releases**, required for the guarantee that published files are never overwritten; see the [publication boundary](#publication-boundary).
 
-A tag ruleset protecting `v*` from update and deletion is recommended so tags stay fixed while a Release is still a draft.
+A tag ruleset protecting `v*` from update and deletion is recommended so published tags stay fixed.
 
-The workflows require a public repository and use its GitHub Releases as the update feed. `latest-mac.yml`, `beta-mac.yml` and the `AgentEasel-<version>-arm64.dmg` / `AgentEasel-<version>-arm64.zip` filenames match GitHub download names so metadata remains valid after upload.
+The workflows require a public repository: the update feed points at its release downloads, and old T3 Factory installations read its releases directly. The `AgentEasel-<version>-arm64.dmg` / `AgentEasel-<version>-arm64.zip` filenames match GitHub download names so metadata remains valid after upload.
 
 ### Maintainer qualification
 
@@ -135,12 +147,11 @@ last published beta; a manual dispatch from `main` always builds. Its build numb
 Before packaging, Beta reuses a successful **Quality** push run for the exact commit on `main` (or a passing PR **Quality gate** whose tested tree matches the Beta tree) and a successful full Chromium suite from the merged PR when the tree tested by the shards matches the Beta tree. A PR check that skipped the suite cannot certify the tree. For any missing result, Beta runs the corresponding gate on Ubuntu, using the same eight isolated shards as PRs for browser journeys.
 
 The **Desktop build** job runs the Chromium keyboard shortcut journeys on macOS and verifies the signed, notarized package with Gatekeeper and the packaged probe. It writes `beta-mac.yml` for the Beta update feed. The
-`publish` job of the Beta workflow then creates a draft prerelease targeting the built commit with notes generated since the previous beta, uploads the complete asset set, compares SHA-256 digests and publishes it
-as a prerelease that is never marked latest. A failed attempt deletes its own still-draft prerelease, which has no tag yet; the next run uses a new number.
+`publish` job of the Beta workflow then creates a draft prerelease targeting the built commit with notes generated since the previous beta, writes the same update metadata as a Release, uploads the complete asset set, compares SHA-256 digests, checks the frozen bridge metadata and publishes it
+as a prerelease that is never marked latest. The landing deployment then refreshes the feed. A failed attempt deletes its own still-draft prerelease, which has no tag yet; the next run uses a new number.
 
 Beta builds deliberately skip the release PR and maintainer qualification: they reach beta installations without a human gate. Choose the beta channel only for installations
-that accept that risk. Stable installations never see prereleases because the updater asks GitHub only for the latest Release. Beta installations take the newest entry in the repository's release feed that is a
-Release or a beta build; a Release has no `beta-mac.yml`, so the updater falls back to its `latest-mac.yml`. The updater never installs an older version: an installation that leaves the beta channel keeps its
+that accept that risk. Stable installations never see prereleases because the feed's `latest-mac.yml` names only the newest Release. The feed's `beta-mac.yml` names the newer of the latest beta build and Release. The updater never installs an older version: an installation that leaves the beta channel keeps its
 beta until a newer Release is published.
 
 ## Packaged verification and limits
