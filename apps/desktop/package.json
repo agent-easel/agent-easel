@@ -18,11 +18,13 @@
     "@agent-easel/domain-validation": "workspace:*",
     "effect": "4.1.2",
     "electron-updater": "6.8.11",
+    "fs-ext": "2.1.1",
     "ws": "8.23.0"
   },
   "devDependencies": {
     "@agent-easel/frontend": "workspace:*",
     "@electron/rebuild": "4.2.1",
+    "@types/fs-ext": "2.0.3",
     "@types/ws": "8.18.2",
     "electron": "45.4.1",
     "electron-builder": "26.18.0",
