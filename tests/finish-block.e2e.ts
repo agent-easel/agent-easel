@@ -700,7 +700,7 @@ test("an unresolved Stop after reaching an ending names the blocked worker witho
 
   // Assert
   await expect(
-    screen.getByText(/Factory couldn’t confirm the stop for Explore an alternative/),
+    screen.getByText(/AgentEasel couldn’t confirm the stop for Explore an alternative/),
   ).toBeVisible();
   await expect(screen.getByText(/Reaching Shipped is stopping/)).toHaveCount(0);
   await app.screenshot("finish-run-unresolved-stop");

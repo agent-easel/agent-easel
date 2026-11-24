@@ -109,7 +109,7 @@ const savedEndpoint = async (baseUrl: string | undefined) =>
 const hostAction = <T>(baseUrl: string | undefined, path: string) =>
   hostCall<T>(baseUrl, path, { method: "POST", headers: { "X-Factory-Request": "1" } });
 
-const failedReopen = /Factory could not open the backend-host browser\. The pending approval/;
+const failedReopen = /AgentEasel could not open the backend-host browser\. The pending approval/;
 const approvalPageOpen = /T3 Code’s approval page is open in the browser on this computer/;
 const continueWithoutReporting =
   /Open AgentEasel to continue without reporting\. Once this is fixed, install it from Settings → Agent reporting, or set it up by hand\./;
@@ -245,7 +245,7 @@ test("a fresh host connects to the detected T3 Code, installs in its harnesses a
   await expect(screen.getByRole("group", "Cursor", { exact: true })).toHaveCount(0);
   await app.screenshot("first-run-setup-install");
   await screen.getByRole("button", "What gets installed").tap();
-  await expect(screen.getByText(/Factory MCP/)).toBeVisible();
+  await expect(screen.getByText(/AgentEasel MCP/)).toBeVisible();
   await expect(screen.getByText(/factory-start-run/)).toBeVisible();
   await screen.getByRole("button", "What gets installed").tap();
 

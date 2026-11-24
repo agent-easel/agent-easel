@@ -8,7 +8,6 @@ const everywhere = [/alimek\/t3-factory/gi, /\/T3-Factory\b/g, /\bcd t3-factory\
 
 export const allowlist = [
   { path: /^CHANGELOG\.md$/, why: "release history" },
-  { path: /^pnpm-lock\.yaml$/, why: "generated" },
   { path: /^apps\/backend\/test\/fixtures\//, why: "captured data of old installations" },
   { path: /^apps\/desktop\/src\/(agenteasel-handoff|updates)\.ts$/, why: "bridge release" },
   { path: /^apps\/desktop\/test\/updates\.test\.ts$/, why: "bridge release" },
@@ -18,20 +17,13 @@ export const allowlist = [
   { path: /^scripts\/check-product-name\.test\.mjs$/, why: "this gate" },
   { path: /^GLOSSARY\.md$/, why: "lists the names to avoid" },
   { path: /^\.gitignore$/, why: "old data home" },
-  { path: /^apps\/backend\/src\/config\.ts$/, why: "data home, migrated on first launch" },
-  { path: /^scripts\/(dev\.mjs|dev\/home\.ts)$/, why: "development data home" },
-  { path: /^apps\/desktop\/scripts\/probe-package\.mjs$/, why: "data home" },
-  { path: /^docs\/installation\.md$/, why: "data home and telemetry host" },
-  { path: /^README\.md$/, why: "data home" },
+  { path: /^apps\/desktop\/scripts\/probe-package\.mjs$/, why: "comment about the old data home" },
+  { path: /^docs\/installation\.md$/, why: "telemetry host" },
   { path: /^(apps\/frontend\/src\/styles\.css|docs\/design-system\.md)$/, why: "Figma file title" },
   { path: /^docs\/quality-gates\.md$/, why: "describes this gate" },
   {
-    path: /^apps\/backend\/src\/(t3\/live-connection|access-routes|telemetry|remote-certificates)\.ts$/,
-    why: "backend identifiers",
-  },
-  {
-    path: /^apps\/frontend\/src\/components\/access-settings\.tsx$/,
-    why: "certificate download name",
+    path: /^apps\/backend\/src\/telemetry\.ts$/,
+    why: "telemetry host until the release",
   },
   { path: /^docs\/foundation\.md$/, why: "telemetry host" },
   {
