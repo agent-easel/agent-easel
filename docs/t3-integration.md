@@ -277,7 +277,7 @@ and needs the separate [qualification procedure](installation.md#bounded-live-ve
 
 ### Launch provenance
 
-Factory-launched workers are top-level threads. A title is not ownership: recovery binds
+AgentEasel-launched workers are top-level threads. A title is not ownership: recovery binds
 only when parentage, project, interaction mode, provider, model, options and one
 execution are all present. A missing or non-string parent or workspace withholds the search.
 A null workspace is the project checkout and matches a root-strategy launch; any other path
@@ -593,7 +593,7 @@ returns guidance only. No rejection retries work.
 
 ### Worker reporting
 
-Factory-launched Block workers report for their Block from any turn of their thread. There is no Run conversation. Questions and reply turns use the same worker, and a notification turn after delegated or background work may report too. Release waits only for the worker thread to be
+AgentEasel-launched Block workers report for their Block from any turn of their thread. There is no Run conversation. Questions and reply turns use the same worker, and a notification turn after delegated or background work may report too. Release waits only for the worker thread to be
 [finished](runner.md#worker-thread-completion); AgentEasel does not inspect the commands, subtasks or model selection of the turns that produced the result.
 
 ### Block and Run reads

@@ -621,9 +621,8 @@ function ConnectStep({
     return <WaitingForApproval connection={connection} detected={detected} />;
   return (
     <div className="grid gap-3 pl-8.5">
-      <p className="text-2xs font-medium text-subtle-foreground">
-        {productPositioning} {productStatement}
-      </p>
+      <p className="text-2xs font-medium text-subtle-foreground">{productPositioning}</p>
+      <p className="text-2xs font-medium text-subtle-foreground">{productStatement}</p>
       {!busy && <AttemptProblem connection={connection} presentation={presentation} />}
       {errorCard}
       {detected ? (

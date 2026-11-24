@@ -426,7 +426,7 @@ const openReportingInstallation = Effect.fn(function* (
                 const target = (yield* targets()).find((target) => target.id === id);
                 if (!target?.path)
                   throw Error(
-                    "Target unavailable. Recheck the local T3 environment and configuration home.",
+                    "Target unavailable. Recheck the local T3 Code environment and configuration home.",
                   );
                 const profile = harnessProfile(target);
                 const before = yield* boundary(() => readConfig(target.path!));

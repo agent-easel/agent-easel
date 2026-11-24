@@ -43,7 +43,7 @@ and exits; AgentEasel does not impose a fixed development process.
 
 **Early development.** Source installation and the simulated demo are the best starting
 points. Controlled tests cover AgentEasel behavior; live T3 Code compatibility depends on the
-specific build, harness and permissions. Factory-launched workers and the `$factory-block`
+specific build, harness and permissions. AgentEasel-launched workers and the `$factory-block`
 skill still need further live qualification. See the [support limits](docs/installation.md#compatibility-and-support-limits).
 
 The macOS Apple Silicon desktop app can be built from source. A developer package is
