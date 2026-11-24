@@ -17,7 +17,7 @@ loops or parallel branches, then follow each Run from one place. The agent work 
 [T3 Code](https://t3.codes/), so T3 Factory requires T3 Code; Factory stores your
 workflow, routes work and records its history.
 
-[Try the demo](#try-the-demo) · [Run with T3](#run-with-t3) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Try the demo](#try-the-demo) · [Run with T3 Code](#run-with-t3-code) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 ## What you can do
 
@@ -91,7 +91,7 @@ pnpm dev
 Reset discards demo database edits and Run history. See the [scenario catalog](docs/dev-scenarios.md)
 and [storage/reset behavior](docs/installation.md#reset-and-seed).
 
-## Run with T3
+## Run with T3 Code
 
 From the installed checkout:
 
