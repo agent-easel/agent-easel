@@ -60,6 +60,7 @@ export class FactoryService extends Context.Service<
     readonly runtime: RuntimeReports;
     /** Factory MCP's text-only Start; the Start form uses `startRun`. */
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
+    readonly checkStart: (projectId: string, flowId: string) => Effect.Effect<Result<undefined>>;
     readonly listRunReadSnapshot: (
       words: readonly string[],
     ) => Effect.Effect<Result<RunListSource>>;
@@ -398,6 +399,7 @@ export const makeFactoryService = (
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
+      checkStart: (projectId, flowId) => guard(runner.startPreflight(projectId, flowId)),
       listRunReadSnapshot: (words) =>
         inspectRun(runListSource(runner.listRunNavigation(), runner.listRunListExtras(words))),
       readRunByReference: (reference) =>

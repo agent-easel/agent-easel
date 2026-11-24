@@ -89,7 +89,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     images,
     waitTimers.schedule,
   );
-  const { start, startText, startBlockers } = openRunnerStart(
+  const { start, startText, startBlockers, startPreflight } = openRunnerStart(
     store,
     ops,
     freshSnapshot,
@@ -307,6 +307,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     startTextRun: (input: unknown, authorization?: StartAuthorization) =>
       starts.withPermit(startText(input, authorization)).pipe(Effect.uninterruptible),
     startBlockers,
+    startPreflight,
     /** The Run a Start request ID was accepted as; undefined when it was never accepted. */
     acceptedStart: (requestId: string) =>
       Effect.gen(function* () {

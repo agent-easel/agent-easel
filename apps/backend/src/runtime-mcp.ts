@@ -25,6 +25,11 @@ import {
 import { callRunReadTool, runReadTools, type RunReadOperations } from "./run-read-tools.ts";
 import { callRunActionTool, runActionTools, type RunActionOperations } from "./run-action-tools.ts";
 import {
+  callStartDiagnosisTool,
+  startDiagnosisTools,
+  type StartDiagnosisOperations,
+} from "./start-diagnosis-tools.ts";
+import {
   callRunTitleSettingTool,
   runTitleSettingTools,
   type RunTitleSettingOperations,
@@ -259,6 +264,7 @@ export function runtimeMcpHandler(
   definitions: AuthoringOperations &
     LaunchOperations &
     RunReadOperations &
+    StartDiagnosisOperations &
     RunActionOperations &
     RunTitleSettingOperations &
     TriggerToolOperations,
@@ -274,6 +280,7 @@ export function runtimeMcpHandler(
           ...tools,
           ...authoringTools,
           ...launchTools,
+          ...startDiagnosisTools,
           ...runReadTools,
           ...runActionTools,
           ...runTitleSettingTools,
@@ -300,6 +307,7 @@ export function runtimeMcpHandler(
         return (
           (await callAuthoringTool(definitions, name, args)) ??
           (await callLaunchTool(definitions, name, args)) ??
+          (await callStartDiagnosisTool(definitions, name, args)) ??
           (await callRunReadTool(definitions, name, args)) ??
           (await callRunActionTool(definitions, name, args)) ??
           (await callRunTitleSettingTool(definitions, name, args)) ??

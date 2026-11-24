@@ -388,6 +388,23 @@ worker receives. The starting conversation follows the Run with [`factory_read_r
 
 **Direct Start authority.** `factory_start_run` starts a Run as soon as it is called. The user-invoked [`factory-start-run` skill](installation.md#optional-skills) asks for review and explicit confirmation first, showing the exact prompt (labelled agent-composed when it composed the text from the conversation), Project, Flow, title and ordered images, but that gate exists only in the skill's instructions: any local caller of Factory MCP can start Runs, launch workers and spend provider budget without it. The host-local boundary [above](#factory-mcp-and-block-ids) is unchanged; reaching Factory from a phone works by driving a T3 conversation on the Factory host, never by exposing Factory MCP remotely.
 
+## Start diagnosis tools
+
+Any harness session with Factory MCP registered can ask why a Flow will not start and repair Agent reporting, without a Block id. Diagnose first, install or repair the chosen target on the user's instruction, then check again. Every reply is a point-in-time read: it describes the state when Factory looked, and [Start](runs.md) revalidates every blocker when it runs, so a ready answer never promises that a later `factory_start_run` is accepted.
+
+| Tool | Effect |
+| --- | --- |
+| `factory_check_start({projectId, flowId})` | Inspect only. Preflight of a saved Flow in an explicit Project. |
+| `factory_get_t3_connection({recheck?})` | Inspect only. Reads the connection Factory last saw; `recheck` inspects T3 now. |
+| `factory_list_reporting_installations` | Inspect only. Reads harness configuration, writes nothing. |
+| `factory_install_reporting({targetId})` | Writes harness configuration for one listed target. |
+
+`factory_check_start` returns the blockers Start's preflight returns for every prompt to that Project and Flow, through the same evaluation Trigger checks use: Project and Flow ownership, the T3 connection and its launch capabilities, Flow readiness, each Agent's resolved settings and reporting installation, and the worktree prerequisites of a worktree Flow. Like Start, it rechecks the T3 connection and refreshes the Project catalog first. It creates no Run, Task, worktree or worker and checks nothing that depends on the prompt (images, completed GitHub issues, first-message length). A blocker is `{code, path, message}`; the reply also carries the connection state and a next step.
+
+`factory_get_t3_connection` returns the connection's state, explanation, endpoint, last check time, whether an approval is pending, T3's version and contract problems. A recheck never opens a browser or starts authorization. Endpoint credentials, OAuth authorization and approved-client management stay on [Settings and the host-only operations](#authorizing); no tool here changes them, and the reply carries no authorization context.
+
+`factory_list_reporting_installations` lists the same targets as [Settings → Agent reporting](#installation-actions), each with its status and the action this server offers: `install` for a target that is not installed, `repair` for one Factory can repair, otherwise `none`. `factory_install_reporting` runs the existing installation for one target from that listing, with its validation, and refuses an unknown id, an installed target or a target needing a manual fix before writing anything. Reinstall, conflicts and unsupported providers stay in Settings. An agent session keeps the tools and skills it loaded at start, so a fresh session is needed after an install or repair.
+
 ## Run read tools
 
 Any harness session with Factory MCP registered can find and follow Runs without a Block id. The tools are host-local and inspect-only: a call changes nothing about a Run, creates no attention, clears no Woke mark, does not move a Run's activity time and never contacts T3, so it works while T3 is offline. Each reply is a one-shot snapshot of what Factory stored; there is no wait, poll or subscription tool, and an agent does not call a tool in a loop to follow a Run. Workers keep reading their own Run with `factory_get_run({blockId})`.
