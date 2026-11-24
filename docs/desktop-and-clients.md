@@ -409,7 +409,7 @@ Test packages show the release base plus `+dev.<HEAD>` (and `.dirty` for uncommi
 changes). Building locally does not increment the release version. Local packages
 are updated by installing another local package; only release packages use the
 release update feed. The macOS icon, menu-bar glyph and browser favicons use the
-Factory Pipeline F artwork shipped with the application.
+AgentEasel easel-flow mark shipped with the application.
 
 ## Two listeners, two trust domains
 
