@@ -158,7 +158,7 @@ it("a bare GitHub issue URL is titled Issue #<number> at Start without launching
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
-  const url = "https://github.com/alimek/t3-factory/issues/663";
+  const url = "https://github.com/agent-easel/agent-easel/issues/663";
   const workerLaunch = fixture.t3.threads.nextLaunch();
 
   // Act
@@ -187,7 +187,7 @@ it.for([
   ["beyond GitHub's issue numbers", "#2147483648"],
   [
     "a URL beyond GitHub's issue numbers",
-    `https://github.com/alimek/t3-factory/issues/${"9".repeat(114)}`,
+    `https://github.com/agent-easel/agent-easel/issues/${"9".repeat(114)}`,
   ],
 ] as const)(
   "a bare issue reference with %s is left to the title thread instead of a derived title",

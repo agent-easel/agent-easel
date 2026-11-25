@@ -5,7 +5,7 @@ documentation, issues and pull requests are written in English.
 
 ## Before you start
 
-Search [existing issues](https://github.com/alimek/t3-factory/issues) and pull requests
+Search [existing issues](https://github.com/agent-easel/agent-easel/issues) and pull requests
 first. For a substantial feature or contract change, open an issue to agree on the
 problem and scope before implementing it. Small fixes can go straight to a pull
 request. Report vulnerabilities through [the security policy](SECURITY.md).

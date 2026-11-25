@@ -19,7 +19,7 @@ Choose migration or an intentional compatibility break before implementing a con
 
 ### Issue tracker and domain
 
-Before claiming an issue, choosing a tool fallback or resuming long work, read [tracker and work-state conventions](docs/agents/issue-tracker.md). Issues are in GitHub Issues for alimek/t3-factory; use the [triage labels](docs/agents/triage-labels.md). For feature exploration or domain design, follow [domain documentation](docs/agents/domain.md).
+Before claiming an issue, choosing a tool fallback or resuming long work, read [tracker and work-state conventions](docs/agents/issue-tracker.md). Issues are in GitHub Issues for agent-easel/agent-easel; use the [triage labels](docs/agents/triage-labels.md). For feature exploration or domain design, follow [domain documentation](docs/agents/domain.md).
 
 ### Documentation
 

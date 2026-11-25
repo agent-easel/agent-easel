@@ -83,7 +83,7 @@ protocol.registerSchemesAsPrivileged([
 const here = dirname(fileURLToPath(import.meta.url));
 const uiDirectory = join(here, "ui");
 const uiPartition = "persist:factory-ui";
-const documentationUrl = "https://github.com/alimek/t3-factory/tree/main/docs#readme";
+const documentationUrl = "https://github.com/agent-easel/agent-easel/tree/main/docs#readme";
 
 /** Each mode's `--background` in the frontend's styles.css, painted while the page loads. */
 const windowBackground: Record<Appearance, string> = { light: "#ffffff", dark: "#09090b" };

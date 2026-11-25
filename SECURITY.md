@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report suspected vulnerabilities privately through GitHub's
-[Report a vulnerability](https://github.com/alimek/t3-factory/security/advisories/new)
+[Report a vulnerability](https://github.com/agent-easel/agent-easel/security/advisories/new)
 form. Do not include exploit details, secrets or user data in public issues or PRs.
 
 If private reporting is unavailable, open a minimal issue asking the maintainer to

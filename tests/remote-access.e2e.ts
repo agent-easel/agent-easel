@@ -323,7 +323,7 @@ test("an available update previews its changes as short lines in the footer tool
 }) => {
   // Arrange
   const change = (title: string, pr: number) =>
-    `<li>${title} by @ali in https://github.com/alimek/t3-factory/pull/${pr}</li>`;
+    `<li>${title} by @ali in https://github.com/agent-easel/agent-easel/pull/${pr}</li>`;
   const notes = `<h2>What's Changed</h2><ul>${[
     change("feat(desktop): faster startup", 30),
     change("fix: more reliable reconnects", 31),
@@ -332,7 +332,7 @@ test("an available update previews its changes as short lines in the footer tool
     change("chore: refresh dependencies", 34),
   ].join(
     "",
-  )}</ul><p><strong>Full Changelog</strong>: https://github.com/alimek/t3-factory/compare/v0.1.0...v0.2.0</p>`;
+  )}</ul><p><strong>Full Changelog</strong>: https://github.com/agent-easel/agent-easel/compare/v0.1.0...v0.2.0</p>`;
   await browser.addInitScript(
     desktopBridgeScript,
     desktopBridgeOptions("client", "available", notes),

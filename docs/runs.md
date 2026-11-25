@@ -333,7 +333,7 @@ assignee. Run detail and navigation carry the origin as `origin` (`null` for eve
   writes that claim), and adding the label again is the only restart action. A labeller-permission check was considered
   and rejected; the query's author filter (`author:@me` by default) is the control on public repositories, where issue
   templates can add labels for anyone.
-- **A narrow Run–issue association.** [#269](https://github.com/alimek/t3-factory/issues/269), which introduced the worker's
+- **A narrow Run–issue association.** [#269](https://github.com/agent-easel/agent-easel/issues/269), which introduced the worker's
   tracker claim, decided that Runs carry no issue association. Trigger-started Runs reverse that narrowly: the Run origin records which Trigger and issue caused
   the Run, because the Trigger chose the issue rather than the user. It is an immutable record, not a claim: it has no
   marking state, is never updated from GitHub and is absent from every other Run. Ownership of an issue is still decided
@@ -659,7 +659,7 @@ menu items never opens a row preview.
   A Settle still stopping workers focuses the row; when the Run settles later, focus moves to the destination only if it is
   still on that row or was lost because the row left; focus the user moved elsewhere, including to the page, stays.
 - **Rename** changes the selected title (trimmed, non-empty, ≤500 characters) and makes its title provenance
-  manual, dropping a pending [title generation](#run-title-generation); renaming never moves a row. Draft Rename stays local to the draft. For Runs, this revises [#310](https://github.com/alimek/t3-factory/issues/310): a changed title also reaches bound T3 Code workers through [worker title synchronization](runner.md#worker-title-synchronization).
+  manual, dropping a pending [title generation](#run-title-generation); renaming never moves a row. Draft Rename stays local to the draft. For Runs, this revises [#310](https://github.com/agent-easel/agent-easel/issues/310): a changed title also reaches bound T3 Code workers through [worker title synchronization](runner.md#worker-title-synchronization).
   The same shadcn/Radix row menu serves desktop and browser clients. Right click opens it at the pointer;
   Shift+F10 and the context-menu key anchor it below the focused row. Touch devices retain a ⋯ button;
   mouse layouts omit it. Closing the menu or Rename/Archive dialogs returns focus to the row when it remains visible. Rename

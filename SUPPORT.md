@@ -7,11 +7,11 @@ response time or production support commitment.
 
 - **Setup and usage:** start with the [README](README.md),
   [installation guide](docs/installation.md) and [T3 Code integration](docs/t3-integration.md).
-- **Bugs:** search [existing issues](https://github.com/alimek/t3-factory/issues), then
-  use the [bug report form](https://github.com/alimek/t3-factory/issues/new?template=bug_report.yml).
-- **Ideas:** use the [feature request form](https://github.com/alimek/t3-factory/issues/new?template=feature_request.yml)
+- **Bugs:** search [existing issues](https://github.com/agent-easel/agent-easel/issues), then
+  use the [bug report form](https://github.com/agent-easel/agent-easel/issues/new?template=bug_report.yml).
+- **Ideas:** use the [feature request form](https://github.com/agent-easel/agent-easel/issues/new?template=feature_request.yml)
   and explain the workflow you want to improve.
-- **Questions:** open an [issue](https://github.com/alimek/t3-factory/issues/new)
+- **Questions:** open an [issue](https://github.com/agent-easel/agent-easel/issues/new)
   with your question and what you have already tried.
 - **Vulnerabilities:** follow [SECURITY.md](SECURITY.md); do not post exploit details publicly.
 

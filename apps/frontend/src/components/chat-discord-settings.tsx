@@ -54,7 +54,7 @@ import { checkedBot, currentCheck } from "../discord-bot-identity.ts";
 
 /** The setup steps live in the documentation; the page links them until the first passing check. */
 const SETUP_GUIDE_URL =
-  "https://github.com/alimek/t3-factory/blob/main/docs/chat-control.md#setting-up-the-application";
+  "https://github.com/agent-easel/agent-easel/blob/main/docs/chat-control.md#setting-up-the-application";
 
 interface ConnectionDraft {
   readonly publicKey: string;

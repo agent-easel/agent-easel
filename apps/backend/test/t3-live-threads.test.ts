@@ -173,7 +173,7 @@ it.for([
       status: "waiting",
       pendingBackgroundTasks: [
         {
-          taskId: "pull-request-watch:github.com/alimek/t3-factory#678",
+          taskId: "pull-request-watch:github.com/agent-easel/agent-easel#678",
           kind: "monitor",
           description: "Watching pull request #678",
           awaited: true,
@@ -203,7 +203,7 @@ it.for([
     thread: {
       status: "completed",
       pendingBackgroundTasks: [
-        { taskId: "pull-request-watch:github.com/alimek/t3-factory#678", kind: "monitor" },
+        { taskId: "pull-request-watch:github.com/agent-easel/agent-easel#678", kind: "monitor" },
       ],
     },
     workerFinished: true,
@@ -252,7 +252,7 @@ it("a waiting worker with a pending native request still marks its Run Needs inp
     status: "waiting",
     pendingBackgroundTasks: [
       {
-        taskId: "pull-request-watch:github.com/alimek/t3-factory#678",
+        taskId: "pull-request-watch:github.com/agent-easel/agent-easel#678",
         kind: "monitor",
         awaited: true,
       },

@@ -438,7 +438,7 @@ test("when discovery cannot read the connected T3 Code's harnesses, the install 
   );
   await expect(screen.getByRole("link", "set it up by hand")).toHaveAttribute(
     "href",
-    "https://github.com/alimek/t3-factory/blob/main/docs/t3-integration.md#reporting-installation",
+    "https://github.com/agent-easel/agent-easel/blob/main/docs/t3-integration.md#reporting-installation",
   );
   await expect(screen.getByText("Turn on a harness in T3 Code")).toHaveCount(0);
   await expect(screen.getByText(/are off in T3 Code/)).toHaveCount(0);
