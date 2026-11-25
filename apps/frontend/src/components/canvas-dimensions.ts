@@ -1,4 +1,4 @@
-import { AUTHORING_DIMENSIONS, type CanvasDimensions } from "@t3-factory/flow-layout";
+import { AUTHORING_DIMENSIONS, type CanvasDimensions } from "@agent-easel/flow-layout";
 
 export const EXECUTION_DIMENSIONS: CanvasDimensions = {
   block: {

@@ -3,7 +3,7 @@ import type {
   ChatActionOperation,
   ChatDeliveryProblem,
   DiscordSettings,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../api.ts";
@@ -75,7 +75,7 @@ export function DeliveryCard({
       })
       .then(onSettings)
       .catch((cause: unknown) => {
-        setError(chatControlError(cause, "Factory could not retry the message."));
+        setError(chatControlError(cause, "AgentEasel could not retry the message."));
       })
       .finally(() => {
         setBusy(null);

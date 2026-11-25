@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { AgentCapabilities, AgentDefinition, FlowDraft, Result } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, FlowDraft, Result } from "@agent-easel/contracts";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ import { sampleAgentInput } from "./support/domain-setup.ts";
 
 it("foreground server binds to the configured host and serves the UI", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({
     FACTORY_HOME: directory,
@@ -18,7 +18,7 @@ it("foreground server binds to the configured host and serves the UI", async (c)
   });
   const uiDirectory = join(directory, "ui");
   await mkdir(uiDirectory);
-  await writeFile(join(uiDirectory, "index.html"), "<!doctype html><title>T3 Factory</title>");
+  await writeFile(join(uiDirectory, "index.html"), "<!doctype html><title>AgentEasel</title>");
   const server = await startServer(config, { uiDirectory });
   c.onTestFinished(() => server.close());
   const base = `http://127.0.0.1:${server.address.port}`;
@@ -29,12 +29,12 @@ it("foreground server binds to the configured host and serves the UI", async (c)
   // Assert
   expect(server.address.address).toBe("0.0.0.0");
   expect(page.status).toBe(200);
-  expect(await page.text()).toMatch(/T3 Factory/);
+  expect(await page.text()).toMatch(/AgentEasel/);
 });
 
 it("a saved Flow draft survives server restart", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({ FACTORY_HOME: directory, FACTORY_PORT: "0" });
   let server = await startServer(config, { uiDirectory: null });
@@ -63,7 +63,7 @@ it("a saved Flow draft survives server restart", async (c) => {
 
 it("first server start persists loopback host in config and creates restricted credentials directory", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({
     FACTORY_HOME: directory,
@@ -85,7 +85,7 @@ it("first server start persists loopback host in config and creates restricted c
 
 it("reading Agent capabilities answers the capabilities, not an Agent with that id", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({ FACTORY_HOME: directory, FACTORY_PORT: "0" });
   const server = await startServer(config, { uiDirectory: null });
@@ -104,7 +104,7 @@ it("reading Agent capabilities answers the capabilities, not an Agent with that 
 
 it("an Agent with a 120,000-character prompt can be created over HTTP", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({ FACTORY_HOME: directory, FACTORY_PORT: "0" });
   const server = await startServer(config, { uiDirectory: null });

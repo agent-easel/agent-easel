@@ -12,7 +12,7 @@ in Error while any Trigger is ([Trigger attention](#trigger-attention)). The Stu
 
 While Studio is open, its Flow, Agent and Trigger lists, the Agents' runtime summaries and saved-Flow usage
 counts, the sidebar counts and the Flow editor's Agent library follow every committed create, save,
-duplicate, removal and import live, whichever client or Factory MCP made it, and each Trigger's checks, with no navigation or
+duplicate, removal and import live, whichever client or AgentEasel MCP made it, and each Trigger's checks, with no navigation or
 retry. A failed subscription shows the list's error until the automatic retry succeeds. Both editors read their definition from these lists and follow its
 saved revisions ([Following saved revisions](#following-saved-revisions)).
 
@@ -60,13 +60,13 @@ rules; each editor's differences are listed with it ([Agent definitions](#agent-
 [Saving and readiness](#saving-and-readiness)). Unsaved changes are the difference from the saved
 revision's content, so editing back to it leaves none.
 
-**Saved elsewhere.** When another client, tab or Factory MCP saves a newer revision, an editor
+**Saved elsewhere.** When another client, tab or AgentEasel MCP saves a newer revision, an editor
 without unsaved changes switches to it and briefly shows **Updated to revision N**, which an edit
 ends at once. An editor with unsaved changes keeps them and the revision they are based on,
 and shows **Revision N was saved elsewhere**, naming the newest revision, until it is resolved; a
 later revision replaces N and Save stays disabled meanwhile. The editor follows only Studio's
 synchronized lists.
-A save refused because Factory already holds a newer revision that Studio had not delivered yet
+A save refused because AgentEasel already holds a newer revision that Studio had not delivered yet
 appends nothing, keeps the local work and raises the same notice.
 
 **Compare, load or keep.** **Compare latest revision** clears the error shown and places the local
@@ -84,7 +84,7 @@ revision does nothing, and a removal dismisses the comparison.
 its delivery arrives first. Deliveries during a pending save wait for its reply, and a higher
 revision than the reply's is then treated as saved elsewhere. A rejected save keeps the draft and
 its baseline and shows its error beside any newer-revision notice. A save refused before sending
-because Factory is offline says that nothing was sent; when the connection is lost after sending,
+because AgentEasel is offline says that nothing was sent; when the connection is lost after sending,
 the editor shows **Save outcome unknown**. Either way the draft is kept and nothing is retried. An
 unknown save whose content later arrives as a new revision is recognised as the editor's own: a
 draft still holding that content becomes clean at it, and later edits stay unsaved against it.
@@ -99,17 +99,17 @@ notice and recovery are described with it.
 ## Ownership
 
 Every Flow and Agent is a [global Flow or global Agent](../GLOSSARY.md#global-flow--global-agent) or is owned by one
-Project, referenced by its Factory Project identity, so two clones of one repository are distinct owners and a rename or move
-in T3 keeps ownership. The owning Project belongs to the definition, not to its revisions: a save appends a revision and never
+Project, referenced by its AgentEasel Project identity, so two clones of one repository are distinct owners and a rename or move
+in T3 Code keeps ownership. The owning Project belongs to the definition, not to its revisions: a save appends a revision and never
 changes it, and Runs capture revisions without an owner. The [ADR](adr/0001-project-ownership-instead-of-per-project-flow-overlays.md)
 records why a per-project variant is an independent copy rather than an override of a shared Flow.
 
-- **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
-  for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
+- **Create.** Flow and Agent create take an optional `projectId`: an AgentEasel Project id, or `null` (the default when omitted)
+  for a global definition. A Project AgentEasel never discovered is refused (`project_not_found`), and so is one unavailable for
   new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
   names it). Studio's **New Flow** and **New Agent** choose the owner, and Import and Duplicate a target
   ([Owners in Studio](#owners-in-studio)).
-- **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming a Factory
+- **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming an AgentEasel
   Project available for new Runs, or `null` for Global. Flow Duplicate preview and Agent Duplicate default to the source's
   owning Project, Import to Global; a Flow Duplicate commit names the plan's resolved target explicitly.
   A target unavailable when the copy is committed is refused with its availability reason, as for create, so an unavailable
@@ -134,9 +134,9 @@ records why a per-project variant is an independent copy rather than an override
 - **Placement rule.** Any Flow may place a global Agent or global Flow, and a Project Flow may also place Agents and Flows
   of its own Project, never another Project's. A create or save whose graph breaks the rule is refused with an
   `agent_scope_mismatch` or `flow_scope_mismatch` issue per block, naming the block and definition, and stores nothing;
-  readiness reports the same issue, which blocks Start. Factory MCP and every other client go through the same check.
+  readiness reports the same issue, which blocks Start. AgentEasel MCP and every other client go through the same check.
 - **Change owner.** `PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner` take `{expectedProjectId, projectId}`: the
-  owning Project the client last saw and the new one, each a Factory Project id or `null` for global. The move appends no
+  owning Project the client last saw and the new one, each an AgentEasel Project id or `null` for global. The move appends no
   revision and changes nothing else: no other definition is edited, copied or made global, and Runs keep what they captured.
   It does advance the definition's `updatedAt`, always strictly, because live updates send only differences: a move away and
   back between two reads still reaches every open Studio, whose editors then follow the owner it shows.
@@ -155,7 +155,7 @@ records why a per-project variant is an independent copy rather than an override
 - **Saves expect the owner.** Flow and Agent saves carry `expectedProjectId` beside `expectedRevision`. A save after Change
   owner moved the definition is refused (conflict, `stale_owner`), appends nothing and keeps the editor's draft. Studio's
   editors follow owner changes live ([Owners in Studio](#owners-in-studio)).
-- **Unavailable owner.** Definitions of a Project no longer in T3 (removed, or belonging to another environment) stay listed only to be moved with **Change owner…** or removed. They sit at the bottom of each list under the Project name and a neutral **Not in T3** tag, with no path. They are not opened from the list, run or used, and a Trigger there offers only **Remove…**. A missing repository folder is not this state: that Project stays a normal group and its Flows read **Not ready** with the reason. A lost T3 connection is the ordinary offline state and marks no row. Owner pickers, the Owner filter and the composer never offer a Project gone from T3. An Agent already open when its Project leaves T3 becomes read-only like the Flow editor: the Worker picker and Save are disabled, the form is inert, and one Warning card, **“*Project* is no longer in T3”**, offers **Change owner…**. Removing an Agent is still refused while the
+- **Unavailable owner.** Definitions of a Project no longer in T3 Code (removed, or belonging to another environment) stay listed only to be moved with **Change owner…** or removed. They sit at the bottom of each list under the Project name and a neutral **Not in T3 Code** tag, with no path. They are not opened from the list, run or used, and a Trigger there offers only **Remove…**. A missing repository folder is not this state: that Project stays a normal group and its Flows read **Not ready** with the reason. A lost T3 Code connection is the ordinary offline state and marks no row. Owner pickers, the Owner filter and the composer never offer a Project gone from T3 Code. An Agent already open when its Project leaves T3 Code becomes read-only like the Flow editor: the Worker picker and Save are disabled, the form is inert, and one Warning card, **“*Project* is no longer in T3 Code”**, offers **Change owner…**. Removing an Agent is still refused while the
   latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability. Removing a Flow is refused while a Trigger starts it (`flow_in_use`).
 - **Export** carries no Project. **Import** creates every bundled Agent new in the single import target, never matching an
   existing Agent by name, so an imported Flow can always place its Agents.
@@ -167,15 +167,15 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
 
 ### Owners in Studio
 
-- **Grouped lists.** Flows, Agents and Triggers share one list. The header is the title, the total loaded count (hidden while loading), **Import** on Flows and Agents, and **New Flow**, **New Agent** or **New Trigger**. Search sits at the left of the toolbar (**Search Flows**, **Search Agents**, **Search Triggers**); Flows and Agents add the Owner filter, and Triggers do not, so the search field stays put. Switching lists does not move the title, the buttons, the toolbar or the first group heading. Groups are **Global** first (Flows and Agents; a Trigger always belongs to a Project), then Projects still in T3 by title, then Projects gone from T3. Each present Project group shows its title and repository path; when two Projects still read
-  alike, its environment and endpoint are added, then an id suffix. A Project whose folder is missing stays in that order, and its Flows read **Not ready** with **Repository unavailable** even when the graph is ready. A lost T3 connection does not mark a row or make a Not-in-T3 group. Every row has an always-visible ⋯ menu: Flows and Agents offer **Change owner…** and **Remove…** (Duplicate stays in the editor), and Triggers offer **Check now**, **Edit** and **Remove…**. Flows and Triggers also show › and open their page; Agent rows do not, because the editor opens beside the list. A Flow row's meta is its block count and revision, and the first readiness reason wraps in full under it beside **Ready** or **Not ready**. The Agent editor shows no owner of its own: the group heading in the list beside it names the owner, and on
+- **Grouped lists.** Flows, Agents and Triggers share one list. The header is the title, the total loaded count (hidden while loading), **Import** on Flows and Agents, and **New Flow**, **New Agent** or **New Trigger**. Search sits at the left of the toolbar (**Search Flows**, **Search Agents**, **Search Triggers**); Flows and Agents add the Owner filter, and Triggers do not, so the search field stays put. Switching lists does not move the title, the buttons, the toolbar or the first group heading. Groups are **Global** first (Flows and Agents; a Trigger always belongs to a Project), then Projects still in T3 Code by title, then Projects gone from T3 Code. Each present Project group shows its title and repository path; when two Projects still read
+  alike, its environment and endpoint are added, then an id suffix. A Project whose folder is missing stays in that order, and its Flows read **Not ready** with **Repository unavailable** even when the graph is ready. A lost T3 Code connection does not mark a row or make a Not-in-T3 group. Every row has an always-visible ⋯ menu: Flows and Agents offer **Change owner…** and **Remove…** (Duplicate stays in the editor), and Triggers offer **Check now**, **Edit** and **Remove…**. Flows and Triggers also show › and open their page; Agent rows do not, because the editor opens beside the list. A Flow row's meta is its block count and revision, and the first readiness reason wraps in full under it beside **Ready** or **Not ready**. The Agent editor shows no owner of its own: the group heading in the list beside it names the owner, and on
   the Agents list a Project group's name carries the placement rule as its tooltip (**Only *Project* Flows can place this
   Agent.**, or **these Agents** for several). The open Agent stays listed under its owner while the search or the Owner
   filter would hide it. The Flow editor's toolbar shows an owner badge for a Project-owned Flow only (none for a
   Global Flow).
   The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
 - **Owner menus.** Like the Run composer's picker, the Owner filter and every owner menu below offer Global and the available
-  Projects only, so they never offer a Project T3 has removed. The catalog keeps references to Projects T3 no longer
+  Projects only, so they never offer a Project T3 Code has removed. The catalog keeps references to Projects T3 Code no longer
   lists, or that belong to another environment, for history; such a Project appears in a menu only while it is the chosen value,
   disabled with its reason, and its definitions stay reachable through their **All** group.
 - **Owner filter.** **Owner: All**, **Global** or one Project filters both lists together. It starts at All whenever Studio
@@ -188,7 +188,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
 - **Flow editor.** The block library offers only the Agents this Flow may place under the placement rule, grouped under
   **Global** and the owning Project's name with a count; blocks already on the canvas keep resolving every saved Agent. A
   Project Flow whose folder is missing on this machine shows **Not ready** with that reason and no Block marker. When the
-  owning Project leaves T3 while the editor is open, the editor becomes read-only: the owner badge carries a **Not in T3**
+  owning Project leaves T3 Code while the editor is open, the editor becomes read-only: the owner badge carries a **Not in T3 Code**
   tag, the library and canvas are inert, Save and the Workspace control are disabled, and one Warning card under the toolbar
   offers **Change owner…**.
 - **Change owner….** The Agent editor's **More actions** menu and the Flow editor's **More Flow actions** menu open **Change owner of
@@ -226,15 +226,15 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
 ## Agent definitions
 
 Open **Studio → Agents** (`/studio/agents`) to create, edit or duplicate reusable definitions; an existing one opens at `/studio/agents/:agentId` and a new one at `/studio/agents/new`. A
-definition stores a name, plain-text prompt, optional execution settings (T3 environment, provider, model and thinking options) and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
+definition stores a name, plain-text prompt, optional execution settings (T3 Code environment, provider, model and thinking options) and its exits. There is no runtime-mode, permission or tools field: T3 Code chooses launch
 defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs supply project context.
 
 **Exits.** An Agent declares the exits its worker can finish with, managed in a compact table under the Prompt with the columns **Name**, **Description (optional)** and **Message required**: exit names use the sans font, **Message required** is a switch and each row's remove control is an icon button named **Remove exit *name***. **+ Add exit** adds a row; **Save** stores the edited exits in a new Agent revision. Each exit has a stable ID; names
 are distinct and non-empty. The editor checks this live: a duplicate or empty name shows the Error border and a **Duplicate** or **Required** tag in its field, one Error card explains it (**Two exits are named “…”**) and **Save** stays disabled; the server check remains the backstop. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready, marked in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-Under the shared Studio header, a 300 px list sits beside the editor ([Owners in Studio](#owners-in-studio)). Entering Agents with no Agent in the URL selects the first listed Agent, skipping a Project gone from T3. Returning to the list from an open Agent (Esc, the **Agents** crumb, **Back to list**, or removing the open Agent) leaves no Agent open. An empty list shows **No Agents yet** and no editor, unless the URL is a new-Agent draft or already names an Agent. **Import** is its own button ([Import](#import)); **New Agent** in the header is outline while that draft is open, because **Create Agent** is the primary. Each row shows the Agent's name, a runtime summary such as **Codex · GPT 6.1 Sol · High**, and **1 Flow** or **Unused** (distinct saved Flows, excluding Runs and unsaved
-drafts); the name and summary wrap, and narrow screens stack list and editor. The Studio breadcrumb ends with the opened Agent: **Studio / Agents / *Agent name***, or **Studio / Agents / New Agent**; a new Agent opened from a Flow editor's **New Agent** reads **Studio / Flows / *Flow* / New Agent**, and **Create Agent** or Esc returns to that Flow. The editor header is the shared header's Stacked layout: the name with the Worker picker (see **Worker settings** below), a ⋯ **More actions** menu and **Save** (**Create Agent** for a new one), then one status line: **✓ Saved · Revision *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · Revision *N* · …** while the draft is dirty, **Not saved yet** for a new Agent, or **Removed elsewhere**, the last three with the attention dot. It has no owner line ([Owners in Studio](#owners-in-studio)). **Save** follows the [one Save rule](design-system.md#components-and-interaction); **Create Agent** stays neutral and disabled while the name is blank, with no error text. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)), **Remove worker** while a Worker is saved, and **Remove…**; focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header, one card per problem (saving, a revision or removal elsewhere, an owner change, exit names, Project overrides, Needs a model, reporting, a Project gone from T3) sits above the form: the name, the owner choice for a new Agent as the **Global** and **Project** cards, the
+Under the shared Studio header, a 300 px list sits beside the editor ([Owners in Studio](#owners-in-studio)). Entering Agents with no Agent in the URL selects the first listed Agent, skipping a Project gone from T3 Code. Returning to the list from an open Agent (Esc, the **Agents** crumb, **Back to list**, or removing the open Agent) leaves no Agent open. An empty list shows **No Agents yet** and no editor, unless the URL is a new-Agent draft or already names an Agent. **Import** is its own button ([Import](#import)); **New Agent** in the header is outline while that draft is open, because **Create Agent** is the primary. Each row shows the Agent's name, a runtime summary such as **Codex · GPT 6.1 Sol · High**, and **1 Flow** or **Unused** (distinct saved Flows, excluding Runs and unsaved
+drafts); the name and summary wrap, and narrow screens stack list and editor. The Studio breadcrumb ends with the opened Agent: **Studio / Agents / *Agent name***, or **Studio / Agents / New Agent**; a new Agent opened from a Flow editor's **New Agent** reads **Studio / Flows / *Flow* / New Agent**, and **Create Agent** or Esc returns to that Flow. The editor header is the shared header's Stacked layout: the name with the Worker picker (see **Worker settings** below), a ⋯ **More actions** menu and **Save** (**Create Agent** for a new one), then one status line: **✓ Saved · Revision *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · Revision *N* · …** while the draft is dirty, **Not saved yet** for a new Agent, or **Removed elsewhere**, the last three with the attention dot. It has no owner line ([Owners in Studio](#owners-in-studio)). **Save** follows the [one Save rule](design-system.md#components-and-interaction); **Create Agent** stays neutral and disabled while the name is blank, with no error text. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)), **Remove worker** while a Worker is saved, and **Remove…**; focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header, one card per problem (saving, a revision or removal elsewhere, an owner change, exit names, Project overrides, Needs a model, reporting, a Project gone from T3 Code) sits above the form: the name, the owner choice for a new Agent as the **Global** and **Project** cards, the
 Prompt, which starts short enough to keep the exits visible and keeps its resize, and the exits. Leaving an edited Agent asks **Discard unsaved changes?** with **Keep
 editing** or **Discard changes**.
 
@@ -244,22 +244,22 @@ with a chevron and an accessible name such as **Worker: Codex · GPT 6.1 Sol · 
 picker opens a popover with focus inside; Escape closes only the popover and returns focus to the picker, and every change in
 it is a draft edit (Unsaved changes, **Save**, the leave guard). The popover's **Worker** is one bordered group of rows, each a
 label and its control: **Environment**, **Provider**, **Model**, then the model's options (**Reasoning effort**, …), with
-**Fast mode** and every other on/off option as a switch. The choices come from live T3 capabilities (`orchestrator_capabilities`)
-for the chosen environment, never a Factory allowlist. When T3 offers a model without a display name, Studio shows its model ID
+**Fast mode** and every other on/off option as a switch. The choices come from live T3 Code capabilities (`orchestrator_capabilities`)
+for the chosen environment, never an AgentEasel allowlist. When T3 Code offers a model without a display name, Studio shows its model ID
 in the picker, Worker summaries and revision comparisons. A field stays disabled until its parent is chosen, and with no model no
 option rows are shown. There are no step numbers or helper lines.
 
-A saved environment, provider, model or option T3 no longer offers is cleared from the draft when the editor opens (a gone
+A saved environment, provider, model or option T3 Code no longer offers is cleared from the draft when the editor opens (a gone
 environment clears the whole selection, a gone provider or model clears it from there, and options the model no longer offers
 are dropped), so the editor reads **Needs a model** until a model is chosen; pickers never list a gone choice. The stored Agent
-changes only when the user saves. While T3's capabilities are unavailable nothing is known to be gone and the saved settings
+changes only when the user saves. While T3 Code's capabilities are unavailable nothing is known to be gone and the saved settings
 stay as they are.
-Availability is separate from verified execution support. A provider without Factory reporting support ([Reporting installation](t3-integration.md#reporting-installation) lists the drivers that have it) sits at the bottom of the provider menu
-as a disabled row tagged **No Factory reporting**, so it cannot be chosen. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
-([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings. Agent reads return the saved settings without contacting T3; Studio judges their availability against the capabilities it loads.
+Availability is separate from verified execution support. A provider without AgentEasel reporting support ([Reporting installation](t3-integration.md#reporting-installation) lists the drivers that have it) sits at the bottom of the provider menu
+as a disabled row tagged **No AgentEasel reporting**, so it cannot be chosen. New Agents default to the first provider with reporting support; when T3 Code offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. AgentEasel launches each Block worker with these saved settings
+([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings. Agent reads return the saved settings without contacting T3 Code; Studio judges their availability against the capabilities it loads.
 
 The Worker is optional. **Remove worker** in **More actions** is the deliberate way back to Needs a model. When the draft has Project overrides, the action asks to remove them with the Worker. Confirming removes both from the draft, and **Save** stores those changes in the next revision. A save whose environment, provider or model is not chosen stores
-no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
+no execution settings rather than a partial one, so an Agent can be saved before T3 Code offers a supported provider. Such an
 Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
 inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
 execution state; its Worker picker reads **Needs a model** in the attention color with the attention border, one Warning card
@@ -311,10 +311,10 @@ tinted. **Keep my edits** keeps the draft against revision N; **Load revision *N
 arriving meanwhile moves the comparison to it, and a removal dismisses it.
 
 **Create outcome unknown.** Repeating a Create whose reply was lost could make a second Agent, so the new-Agent form keeps its
-draft and disables Create while Factory looks up the original request by the Agent ID that request would have created.
+draft and disables Create while AgentEasel looks up the original request by the Agent ID that request would have created.
 The lookup finds the Agent even if its revision or owner changed. **Open Agent** opens its current revision.
-Factory reserves the request ID before the browser sends Create and bounds its write window using the host's monotonic clock. **Create again** is offered only when Factory confirms that no Agent was created and the original request can no longer write. A restart ends unused reservations and the lookup still finds committed Agents.
-If Factory cannot confirm the result, **Check again** repeats the lookup. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
+AgentEasel reserves the request ID before the browser sends Create and bounds its write window using the host's monotonic clock. **Create again** is offered only when AgentEasel confirms that no Agent was created and the original request can no longer write. A restart ends unused reservations and the lookup still finds committed Agents.
+If AgentEasel cannot confirm the result, **Check again** repeats the lookup. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
 **Duplicate…**, the opened Agent follows these rules even before Studio has delivered it.
 
 A Create or Duplicate answer bridges only the wait for its first appearance in Studio's current
@@ -323,9 +323,9 @@ a definition removed elsewhere.
 
 **Removing.** **Remove…** in the list and in **More actions** confirms by name (**Remove “*name*”?** — "Runs that used it keep
 the revision they started with.", **Cancel** / **Remove Agent**) and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
-rejects Agents placed in the latest revision of any current Flow. The dialog then lists those Flows with their owner and a **Not in T3** tag where it applies, and each entry opens that Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
+rejects Agents placed in the latest revision of any current Flow. The dialog then lists those Flows with their owner and a **Not in T3 Code** tag where it applies, and each entry opens that Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
 removal. An unsaved Flow draft may still reference a removed Agent and needs repair before running. Runs keep the Agent revision they started with, and removing an absent or removed Agent succeeds.
-Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
+AgentEasel MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
 
 
 **Removed elsewhere.** If an Agent already open in Studio is removed by another client, its URL and
@@ -344,14 +344,14 @@ draft?** with **Keep editing** and **Discard**, even for a clean draft. Ordinary
 stay unchanged; browser close and reload use only the browser's standard warning. A fresh link to
 an absent Agent shows **Agent not found** and **Back to list**; a failed read instead offers Retry.
 
-See [T3 integration](t3-integration.md) for authorization and capability reads.
+See [T3 Code integration](t3-integration.md) for authorization and capability reads.
 
 ## Flow authoring
 
 Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. **Create Flow** stays neutral and disabled while the name is blank, with no error on the field. Any other cause, such as an owner that cannot be used, shows its reason beside the action. A failed create shows one error card, **Couldn’t create the Flow**, and leaves the name as typed. A Flow is global or a Project Flow
 ([Ownership](#ownership)); the composer's project selection never assigns one, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
-Factory installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
+AgentEasel installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
 whole process. For example, a bounded review loop wires a reviewer Agent's changes-requested exit to a Condition whose
 rule **From arrival 3 onward** leads to a Human step and whose Otherwise returns to the implementing Agent, so the third
 request for changes escalates to you instead of looping again ([Condition](#canvas-and-block-configuration)).
@@ -554,19 +554,19 @@ availability, project and reporting installation are separate Start gates ([Runs
 
 Page-level problems are one card each under the toolbar: **Couldn’t save** (Error, the edits kept and the refusal's issues each selecting its block), **Save
 outcome unknown** (Warning), **Revision N was saved elsewhere** (Warning, Save disabled), removed elsewhere (Warning), owner changed elsewhere (Info, with
-**Acknowledge new owner**) and the owning Project leaving T3 (Warning, with **Change owner…**).
+**Acknowledge new owner**) and the owning Project leaving T3 Code (Warning, with **Change owner…**).
 
-When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions). A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
+When another client, tab or AgentEasel MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions). A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
 composition, and happens afterwards only if the draft is still clean; a draft with unsaved changes names the newer revision at once. **Compare latest revision**
 opens a wide dialog with **Your draft** beside **Revision N** as name, workspace, block and connection lines, the changed lines tinted. **Keep my edits** keeps the
 draft against revision N (Save is enabled again) and **Load revision N** replaces the draft at once, without a second confirmation.
 
 ### Removing a Flow
 
-**Remove…** in the Flow list and in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. A Flow a Trigger still starts cannot be removed: the dialog lists those Triggers, and one whose Project is still in T3 opens that Trigger. The same refusal answers `DELETE` and [`factory_remove_flow`](t3-integration.md#authoring-tools) (`flow_in_use`). Success returns to
-the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
+**Remove…** in the Flow list and in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. A Flow a Trigger still starts cannot be removed: the dialog lists those Triggers, and one whose Project is still in T3 Code opens that Trigger. The same refusal answers `DELETE` and [`factory_remove_flow`](t3-integration.md#authoring-tools) (`flow_in_use`). Success returns to
+the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 Code threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
-Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
+Flow. AgentEasel MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
 
 
 **Removed elsewhere.** A Flow already opened in Studio keeps its URL and editable draft when another
@@ -594,7 +594,7 @@ browser close and reload use the standard browser warning. A fresh link to a mis
 **Studio → Triggers** (`/studio/triggers`) manages the [Triggers](../GLOSSARY.md#trigger) that start Flows for a
 Project's GitHub issues. What a check reads, admits and starts, and the decisions behind it, are described in
 [Starting from a Trigger](runs.md#starting-from-a-trigger). Approved clients have the same full management as the
-host; readiness, review and checks always run on the Factory host with its `gh` login.
+host; readiness, review and checks always run on the AgentEasel host with its `gh` login.
 
 The header breadcrumb identifies the form as **Studio / Triggers / New GitHub Issues Trigger** or
 **Studio / Triggers / *name***. Select **Triggers** in the breadcrumb to return to the list.
@@ -606,17 +606,17 @@ Turning a switch on opens the [review](#reviewing-what-starts); turning it off s
 `/studio/triggers/new/github-issues`. The form has:
 
 - **Name**, unique among current Triggers regardless of case. Studio checks the name as you type. A removed Trigger's name can be reused.
-- **Project**, chosen from the Projects available in T3. The Project must be local to the Factory host. Save refuses a Project that has left T3 or belongs to a different T3 environment. Factory detects the Project's GitHub repository through `gh`
+- **Project**, chosen from the Projects available in T3 Code. The Project must be local to the AgentEasel host. Save refuses a Project that has left T3 Code or belongs to a different T3 Code environment. AgentEasel detects the Project's GitHub repository through `gh`
   and shows it as **Detected**; saving confirms it. A Trigger never reads another repository. When an opened
   Trigger's Project folder later names a different repository, its checks stop with a repository mismatch and the
   form shows that repository as **Detected now** with **Confirm**. Confirming changes the draft's
-  repository, which widens what can start, so saving it goes through the review and **Apply and check**. Factory
+  repository, which widens what can start, so saving it goes through the review and **Apply and check**. AgentEasel
   accepts a changed repository only while it is the one the Project's folder names at save time.
 - **GitHub issue query**, prefilled `label:factory:ready author:@me`. It must contain exactly one positive `label:`
   qualifier, shown below the field as the [ready label](../GLOSSARY.md#ready-label) that the worker removes when it
   claims the issue, together with the login `@me` resolves to right now. Save refuses a query without exactly one
   usable label, with a comma list, negation or `no:label` as the ready label, with OR or parentheses around it, or with a
-  scope qualifier (`repo:`, `org:`, `user:`, `is:`, `state:`, `type:`, `project:`); Factory always adds the
+  scope qualifier (`repo:`, `org:`, `user:`, `is:`, `state:`, `type:`, `project:`); AgentEasel always adds the
   repository, issue type and open state. A query GitHub rejects also blocks saving. Removing the author filter on a
   public repository warns rather than refuses.
 - **Flow**, a global Flow or a Flow of the chosen Project, as New Run offers them; save refuses another Project's Flow
@@ -636,7 +636,7 @@ form warns before saving, from the warning the backend's readiness answer carrie
 check, its health, started Runs, issues waiting for a slot, and the next scheduled check, or the
 current problem and its repair guidance. **Check now** is available for an enabled Trigger with
 no unsaved edits. Runs started by that action can be opened from the strip. A failing Trigger
-keeps checking. Factory keeps the latest check and problem.
+keeps checking. AgentEasel keeps the latest check and problem.
 
 The pinned footer has **Save** only. Saved-revision and removal notices appear as cards above it.
 
@@ -651,7 +651,7 @@ Trigger's revision; disabling, enabling an already enabled Trigger and checks do
 Enabling a Trigger, and saving an edit that widens what an enabled Trigger can start, first opens a review: the matching
 issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
 already started left out, a warning when another Trigger watches the repository, and any problem
-a check would hit. The backend preview raises that warning for any Project, disabled Triggers included and the edited Trigger excluded, so Studio and [Factory MCP's preview](t3-integration.md#trigger-tools) warn identically. The warnings come from the previewed repository, so they also show when a problem stops the check before it reads issues. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
+a check would hit. The backend preview raises that warning for any Project, disabled Triggers included and the edited Trigger excluded, so Studio and [AgentEasel MCP's preview](t3-integration.md#trigger-tools) warn identically. The warnings come from the previewed repository, so they also show when a problem stops the check before it reads issues. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
 its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
 showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
@@ -686,7 +686,7 @@ an issue that failed to start appears only in the status strip and leaves the Tr
 
 The Trigger screens use these routes, available to the host and every approved client with the protocol and mutation
 headers described in [Run HTTP API](runs.md#run-http-api). Bodies carry typed Trigger fields only; unknown fields are
-refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, read, preview, create, save, enable, disable, check and remove Triggers through the same operations.
+refused. AgentEasel MCP's [Trigger tools](t3-integration.md#trigger-tools) list, read, preview, create, save, enable, disable, check and remove Triggers through the same operations.
 
 | HTTP | Purpose |
 | --- | --- |
@@ -703,12 +703,12 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 
 A save body may leave out `github.repositoryNodeId` to keep the Trigger's saved repository; with the same Project and query it then saves without calling GitHub. A save that names a repository, even the saved one, is refused with the repository-mismatch issue unless the Project's folder names that repository at save time, and a node id that is not a string, `null` included, is a validation refusal.
 
-A preview body may leave out `github.repositoryNodeId` to evaluate the repository the Project's folder names now. The reply carries the evaluated repository as `repository`. It returns `null` when GitHub could not identify it or when the folder names a different repository from the one requested. A preview of a saved Trigger or edit reports the first blocker in check order, so a Flow or T3 launch blocker takes precedence over a repository mismatch. For a new draft that names a repository, a mismatch takes precedence so the preview cannot offer a repository the user did not review.
+A preview body may leave out `github.repositoryNodeId` to evaluate the repository the Project's folder names now. The reply carries the evaluated repository as `repository`. It returns `null` when GitHub could not identify it or when the folder names a different repository from the one requested. A preview of a saved Trigger or edit reports the first blocker in check order, so a Flow or T3 Code launch blocker takes precedence over a repository mismatch. For a new draft that names a repository, a mismatch takes precedence so the preview cannot offer a repository the user did not review.
 
 ## Definition export
 
 **Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export JSON** in the Flow editor's **More Flow actions** menu downloads the
-Flow’s latest saved revision and its complete composition. Factory reads the latest saved revision of the root, every placed Flow and every placed Agent in one transaction, including definitions referenced from unwired blocks and branches a Run may never visit. Source Project availability does not affect the export. The JSON file is named after the definition (for
+Flow’s latest saved revision and its complete composition. AgentEasel reads the latest saved revision of the root, every placed Flow and every placed Agent in one transaction, including definitions referenced from unwired blocks and branches a Run may never visit. Source Project availability does not affect the export. The JSON file is named after the definition (for
 example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
 a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
@@ -718,7 +718,7 @@ Every export writes portable document format version 7, whatever the definition 
 
 ```json
 {
-  "format": "t3-factory/definitions",
+  "format": "agenteasel/definitions",
   "formatVersion": 7,
   "kind": "agent",
   "factoryVersion": "0.42.0",
@@ -744,7 +744,7 @@ Every export writes portable document format version 7, whatever the definition 
 - `agents` holds the bundled Agents; an Agent document holds exactly one. Each has a document-local `key` (`[A-Za-z][A-Za-z0-9_-]{0,63}`,
   unique in the document), so Agent and Flow documents share one Agent entry.
 - `model` is the model hint: present exactly when the Agent has execution settings, otherwise `null`. It keeps the provider instance, model and
-  thinking options whatever their availability, and never the environment. `driverKind` comes from the live T3 catalog; when T3 is disconnected
+  thinking options whatever their availability, and never the environment. `driverKind` comes from the live T3 Code catalog; when T3 Code is disconnected
   or no longer lists the provider it is omitted, and Studio names the affected Agents.
 - The file never contains environment ids, server or definition ids, revisions, definition timestamps or Runs. Exit ids are kept.
 
@@ -754,7 +754,7 @@ A draft Flow without Finish can be exported as follows.
 
 ```json
 {
-  "format": "t3-factory/definitions",
+  "format": "agenteasel/definitions",
   "formatVersion": 6,
   "kind": "flow",
   "factoryVersion": "source",
@@ -780,7 +780,7 @@ An Agent block uses `agentKey` and a Subflow block uses `flowKey`. The key names
 
 The file and import request each have a 16 MiB UTF-8 limit. A file can bundle up to 500 unique Flows (including the root) and 500 unique Agents. Each prospective definition save can use up to 2,000,000 bytes, measured with new IDs substituted for keys. A Flow can hold 500 ordinary blocks with no Finish or with an empty Finish or 499 with a nonempty Finish, and up to 5,000 connections. For an existing Flow at the former block limit, Studio still allows edits at that size. Export names the limit and affected definitions if it cannot produce a complete file. These limits apply to portability. Start has its own capture and expansion budgets.
 
-**Format versions.** Import reads versions 1–7 with strict rules for each version. Flow files from versions 1–4 hold a single `flow` and reject Subflow blocks and version-5 fields. Version 2 added Conditions. Version 3 added Finish and its ending connections. Flows from versions 1–2 arrive without Finish. Version 4 added `revisitContext`. In versions 1–3 it defaults to `"keep"`. Version 5 added bundled Subflows and requires Finish on every Flow. Version 6 makes Finish optional in the bundle. Version 7 adds Join blocks, which versions 1–6 reject as an unknown block kind. New exports require a Factory that reads version 7. A newer version asks the importer to update Factory before retrying. The file retains its decoded format version for matching existing receipts.
+**Format versions.** Import reads versions 1–7 with strict rules for each version. Flow files from versions 1–4 hold a single `flow` and reject Subflow blocks and version-5 fields. Version 2 added Conditions. Version 3 added Finish and its ending connections. Flows from versions 1–2 arrive without Finish. Version 4 added `revisitContext`. In versions 1–3 it defaults to `"keep"`. Version 5 added bundled Subflows and requires Finish on every Flow. Version 6 makes Finish optional in the bundle. Version 7 adds Join blocks, which versions 1–6 reject as an unknown block kind. New exports require an AgentEasel that reads version 7. A newer version asks the importer to update AgentEasel before retrying. The file retains its decoded format version for matching existing receipts.
 
 ### Import
 
@@ -788,7 +788,7 @@ The file and import request each have a 16 MiB UTF-8 limit. A file can bundle up
 what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows **Import “*file*”**:
 
 - **Global** or **Project**, and an **Owning Project** when Project is chosen. No helper line. An owner that cannot be used disables **Import** and shows its reason beside the action;
-- A warning that imported prompts run with the user's T3 permissions, followed by an inventory of Agent prompts, Continuation prompts and Revisit instructions by Flow and placing block, with character counts.
+- A warning that imported prompts run with the user's T3 Code permissions, followed by an inventory of Agent prompts, Continuation prompts and Revisit instructions by Flow and placing block, with character counts.
 - **Flows** lists each definition once, with the root first and marked **Opens after import**. Each row gives the block count and every parent Flow and block that places it. Repeated Flow names are numbered in file order throughout the review.
 - **Workspace** shows the root workspace used by the Run, including for its Subflows, and each child’s workspace when started on its own.
 - **Agents** shows one row per definition with its model select and thinking options. An Agent without a selection shows **Needs a model** and can still be imported.
@@ -798,24 +798,24 @@ While the file is read, the dialog shows **Reading the file…**. A file that ca
 The review matches each hint against the connected environment's live catalog. Candidates are reporting-capable provider instances of the
 hint's `driverKind` that offer its exact `modelId`. The candidate with the hint's `providerInstanceId` wins; otherwise a single candidate wins;
 several candidates leave the Agent Ambiguous and none leaves it Unmatched. A hint without `driverKind` matches only a reporting-capable instance
-with the same `providerInstanceId` and `modelId`, with no single-candidate fallback. Factory never matches across driver kinds or takes the
+with the same `providerInstanceId` and `modelId`, with no single-candidate fallback. AgentEasel never matches across driver kinds or takes the
 first listed candidate, and matches nothing while the catalog is unavailable. A match uses the connected environment's id and keeps the hint's
 options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
 review applies the same option rule.
 
-Names, prompts, exits, graphs and workspaces arrive as exported. The review lets the importer choose an owner and models. **Cancel** writes nothing. **Import** remains enabled with missing models or when T3 is disconnected. It sends `POST /api/imports` with the document, a reviewed selection per Agent key (complete settings or `null`), a request id and an optional target `projectId` (Global when omitted).
+Names, prompts, exits, graphs and workspaces arrive as exported. The review lets the importer choose an owner and models. **Cancel** writes nothing. **Import** remains enabled with missing models or when T3 Code is disconnected. It sends `POST /api/imports` with the document, a reviewed selection per Agent key (complete settings or `null`), a request id and an optional target `projectId` (Global when omitted).
 
-Factory validates the document again and applies the ordinary Agent save rules to the selections. It allocates fresh identities for all definitions before writing graphs and saves every copy at revision 1 in a single transaction. All copies have the chosen owner. Project overrides are dropped. The graph uses IDs from those copies, including shared children and back-references to the imported root. Studio opens the new root or the imported Agent once its live lists hold it. Factory MCP exports, reviews and commits through the same operations ([authoring tools](t3-integration.md#authoring-tools)). An unrelated unsaved Flow draft still asks **Keep editing** or **Discard changes** first.
+AgentEasel validates the document again and applies the ordinary Agent save rules to the selections. It allocates fresh identities for all definitions before writing graphs and saves every copy at revision 1 in a single transaction. All copies have the chosen owner. Project overrides are dropped. The graph uses IDs from those copies, including shared children and back-references to the imported root. Studio opens the new root or the imported Agent once its live lists hold it. AgentEasel MCP exports, reviews and commits through the same operations ([authoring tools](t3-integration.md#authoring-tools)). An unrelated unsaved Flow draft still asks **Keep editing** or **Discard changes** first.
 
-- If the chosen provider is listed by T3 but has lost Factory reporting support, Factory refuses the commit and names the affected Agents. A provider T3 does not list, including while the catalog is unavailable, never refuses a commit.
+- If the chosen provider is listed by T3 Code but has lost AgentEasel reporting support, AgentEasel refuses the commit and names the affected Agents. A provider T3 Code does not list, including while the catalog is unavailable, never refuses a commit.
 - Every Import in one dialog reuses its request id. Retrying after a lost answer returns the original result, including IDs of definitions removed since. The same id with different content or another owner conflicts. A replay still works after the target Project becomes unavailable. Choosing a file again starts a new import, so two deliberate imports create two
   independent copies. See [import receipts](foundation.md#persistence-model).
 
-Factory checks the format and version, then Agent count and Flow count, then unknown or missing fields. It checks well-formed, unique keys in each namespace, verifies that every key resolves, and requires a known root, reachability of every bundled Flow and use of every bundled Agent. Ordinary definition validators run next, followed by the 2,000,000-byte prospective save limit. Rejections distinguish these cases.
+AgentEasel checks the format and version, then Agent count and Flow count, then unknown or missing fields. It checks well-formed, unique keys in each namespace, verifies that every key resolves, and requires a known root, reachability of every bundled Flow and use of every bundled Agent. Ordinary definition validators run next, followed by the 2,000,000-byte prospective save limit. Rejections distinguish these cases.
 
 - not JSON (the file is not UTF-8 JSON);
-- not a Factory export (no `t3-factory/definitions` marker);
-- unsupported format version N, which asks to update Factory when N is newer;
+- not an AgentEasel export (no `agenteasel/definitions` marker; files marked `t3-factory/definitions` from earlier releases are still read);
+- unsupported format version N, which asks to update AgentEasel when N is newer;
 - an invalid definition, field-addressed (for example `agents.0.prompt` or `flows.1.graph.blocks.2.position`) and naming the Agent or block;
 - over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents or Flows, or a definition save over 2,000,000 bytes.
 - not received completely (`document_unreadable`): the upload broke off before its body arrived. Only a body over the limit is reported as too large.
@@ -832,7 +832,7 @@ is always judged under the owner the client sent. `workspace` is `{mode: "checko
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
 issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.
 
-`POST /api/flows` accepts a name and optional `graph`, `workspace` and `projectId` ([Ownership](#ownership)). Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [Factory MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
+`POST /api/flows` accepts a name and optional `graph`, `workspace` and `projectId` ([Ownership](#ownership)). Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [AgentEasel MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
 
 ### Graph shape
 
@@ -899,7 +899,7 @@ is followed separately by whether the message that reaches it came from an Agent
 local exit names) and at least one incoming wire (`ending_unconnected`), each at its ending row. A ready Condition's thresholds therefore
 strictly descend and are at least 2, and each of its outputs is wired; one with only a wired Otherwise is ready. Readiness resolves each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
 they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. An
-Agent or Human step exit, a Wait output and a Continuation output need no edge: unconnected, they stop the branch without warning; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
+Agent or Human step exit, a Wait output and a Continuation output need no edge: unconnected, they stop the branch without warning; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 Code capability or live execution readiness.
 
 Readiness depends only on the graph, the Flow's owning Project and the saved revision and owning Project of each Agent it places, because an Agent's exits and former exit names
 are fixed per revision while its owner is not part of a revision. Validating unsaved content (`POST /api/flows/:id/validate`, Studio's live readiness check and the [`factory_check_flow_draft`](t3-integration.md#authoring-tools) tool) resolves it under the saved

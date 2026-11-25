@@ -1,4 +1,4 @@
-# T3 Factory documentation
+# AgentEasel documentation
 
 Use the [glossary](../GLOSSARY.md) for domain terms. Each topic describes user behavior, durable contracts and current limits. Controlled tests do not establish live provider compatibility; [issues](https://github.com/alimek/t3-factory/issues) track proposed work.
 
@@ -6,10 +6,10 @@ New here? Start with the [project overview and demo](../README.md),
 [contribution guide](../CONTRIBUTING.md), [support](../SUPPORT.md) and
 [security policy](../SECURITY.md).
 
-## Using Factory
+## Using AgentEasel
 
 - [Installation, support limits and bounded live verification](installation.md)
-- [T3 connection, authorization and Agent reporting](t3-integration.md)
+- [T3 Code connection, authorization and Agent reporting](t3-integration.md)
 - [Projects and existing repositories](projects.md)
 - [Studio: Agent definitions, Flow authoring and validation](studio.md)
 - [Starting and observing Runs](runs.md)

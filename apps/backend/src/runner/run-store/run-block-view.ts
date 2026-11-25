@@ -1,5 +1,5 @@
 import { threadHref } from "../../thread-link.ts";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import type { BlockRow } from "../runner-types.ts";
 import type { DeliveryRecord } from "./records.ts";
 

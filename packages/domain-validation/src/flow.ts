@@ -16,7 +16,7 @@ import {
   type UpdateFlowInput,
   type ValidationIssue,
   type WaitUnit,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CONTINUATION_EXIT,
   checkExits,

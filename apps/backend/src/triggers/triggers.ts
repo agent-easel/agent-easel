@@ -12,7 +12,7 @@ import type {
   TriggerRepository,
   TriggerSave,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   mayStartFlow,
   validateCreateTrigger,
@@ -24,7 +24,7 @@ import {
   type TriggerPreviewSettings,
   type TriggerSettings,
   type TriggerUpdateSettings,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import {
   gitHubRepairGuidance,
   type GitHubAdapter,
@@ -35,7 +35,6 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { newId } from "../ids.ts";
-import type { Telemetry } from "../telemetry.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
@@ -267,7 +266,6 @@ export const makeTriggers = (
   deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow"> &
     Pick<TriggerCheckDeps, "startTextRun" | "startBlockers">,
   changes: LiveChanges,
-  telemetry: Telemetry,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -291,14 +289,14 @@ export const makeTriggers = (
             "validation",
             "trigger_project_unavailable",
             "projectId",
-            `${project.title} is no longer in T3. Choose a Project that is still in T3.`,
+            `${project.title} is no longer in T3 Code. Choose a Project that is still in T3 Code.`,
           );
         if (!isLocalEndpoint(project.endpoint))
           return refusal(
             "validation",
             "trigger_project_remote",
             "projectId",
-            `${project.title} is on a remote T3 environment. Triggers read GitHub with the Factory host's gh login, so choose a Project on this computer.`,
+            `${project.title} is on a remote T3 Code environment. Triggers read GitHub with the AgentEasel host's gh login, so choose a Project on this computer.`,
           );
         return { ok: true, value: project };
       });
@@ -448,17 +446,7 @@ export const makeTriggers = (
         ),
       );
 
-    const saved = (write: Effect.Effect<Result<TriggerSave>, unknown>) =>
-      published(write).pipe(
-        Effect.tap((result) =>
-          result.ok
-            ? telemetry.record("trigger.saved", { kind: result.value.trigger.kind })
-            : Effect.void,
-        ),
-      );
-
     const triggerCheck = makeTriggerCheck({
-      telemetry,
       sql,
       github,
       getFlow: deps.getFlow,
@@ -544,13 +532,13 @@ export const makeTriggers = (
           ),
       createTrigger(input) {
         const validated = validateCreateTrigger(input);
-        return validated.ok ? saved(save(validated.value, null)) : Effect.succeed(validated);
+        return validated.ok ? published(save(validated.value, null)) : Effect.succeed(validated);
       },
       updateTrigger(id, input) {
         const validated = validateUpdateTrigger(input);
         if (!validated.ok) return Effect.succeed(validated);
         const { expectedRevision, ...settings } = validated.value;
-        return saved(save(settings, { id, expectedRevision })).pipe(
+        return published(save(settings, { id, expectedRevision })).pipe(
           Effect.tap((result) =>
             result.ok ? schedule.follow(id, result.value.trigger) : Effect.void,
           ),

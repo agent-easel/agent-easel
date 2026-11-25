@@ -67,7 +67,7 @@ it.for([
     skills: ".grok/skills",
   },
 ] as const)(
-  "installing $driver reporting adds Factory MCP to its user config beside unrelated settings and installs the Factory skills in its skill folder",
+  "installing $driver reporting adds AgentEasel MCP to its user config beside unrelated settings and installs the AgentEasel skills in its skill folder",
   async ({ driver, config, before, after, skills }, context) => {
     // Arrange
     const { factory, home, harness } = await driverHomes(context, {
@@ -153,7 +153,7 @@ it("a configured Claude config directory keeps its config and skills directly in
   expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
 });
 
-it("installing Antigravity reporting registers MCP and skills in the selected T3 profile", async (context) => {
+it("installing Antigravity reporting registers MCP and skills in the selected T3 Code profile", async (context) => {
   // Arrange
   const { factory, state, home } = await driverHomes(context, {
     "agy-work": { driver: "antigravity", config: {} },
@@ -196,7 +196,7 @@ it("installing Antigravity reporting registers MCP and skills in the selected T3
   expect(existsSync(join(home, ".gemini", "config", "mcp_config.json"))).toBe(false);
 });
 
-it("Antigravity with no T3 profile points the user to provider setup", async (context) => {
+it("Antigravity with no T3 Code profile points the user to provider setup", async (context) => {
   // Arrange
   const { factory } = await driverHomes(context, {
     antigravity: { driver: "antigravity", config: {} },
@@ -237,7 +237,7 @@ it("Antigravity identifies the runtime folder when a file occupies its path", as
   expect(result.value).toMatchObject([
     {
       status: "needs-attention",
-      message: "The antigravity-acp folder inside the T3 profile must be a local directory.",
+      message: "The antigravity-acp folder inside the T3 Code profile must be a local directory.",
       actions: { install: false, repair: false, reinstall: false },
     },
   ]);
@@ -378,7 +378,7 @@ it.for([
   },
 );
 
-it("Agent capabilities explain why unreadable T3 settings block ACP reporting", async (context) => {
+it("Agent capabilities explain why unreadable T3 Code settings block ACP reporting", async (context) => {
   // Arrange
   const { factory, state, t3 } = await driverHomes(context, {
     "vibe-work": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
@@ -401,7 +401,9 @@ it("Agent capabilities explain why unreadable T3 settings block ACP reporting", 
       providerInstanceId: "vibe-work",
       reporting: {
         supported: false,
-        explanation: expect.stringContaining("Check the T3 state directory on the Factory host"),
+        explanation: expect.stringContaining(
+          "Check the T3 Code state directory on the AgentEasel host",
+        ),
       },
     },
   ]);
@@ -457,7 +459,7 @@ it("Vibe repair identifies an edited MCP entry and preserves its formatting", as
   // Assert
   assert(!result.ok);
   expect(result.error.message).toBe(
-    "The Factory registration was edited. Review the factory-runtime entry manually.",
+    "The AgentEasel registration was edited. Review the factory-runtime entry manually.",
   );
   expect(await readFile(config, "utf8")).toBe(edited);
 });
@@ -485,7 +487,7 @@ it("repeating a Codex installation after backend restart leaves its config uncha
   expect(await readFile(config, "utf8")).toBe(before);
 });
 
-it("a provider without Factory reporting is listed as unsupported with nothing to install", async (context) => {
+it("a provider without AgentEasel reporting is listed as unsupported with nothing to install", async (context) => {
   // Arrange
   const { factory } = await driverHomes(context, { "test-provider": { driver: "pi", config: {} } });
 
@@ -520,7 +522,7 @@ it("a provider instance whose key matches a discovery result's id is still a per
   ]);
 });
 
-it("an unreadable T3 settings file refuses discovery and names where Factory reads T3's state", async (context) => {
+it("an unreadable T3 Code settings file refuses discovery and names where AgentEasel reads T3 Code's state", async (context) => {
   // Arrange
   await isolatedUserHome(context);
   const { factory, state } = await reportingFixture(context);
@@ -534,7 +536,7 @@ it("an unreadable T3 settings file refuses discovery and names where Factory rea
   expect(targets.value).toHaveLength(1);
   expect(targets.value[0]).toMatchObject({ kind: "discovery-refused", instances: [] });
   expect(targets.value[0]!.message).toMatch(
-    /^Cannot discover local T3 configuration: .+\. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory\.$/,
+    /^Cannot discover local T3 Code configuration: .+\. Check that T3 Code has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 Code state directory\.$/,
   );
 });
 
@@ -556,7 +558,7 @@ it("a conflicting configuration target exposes no repair action", async (context
   });
 });
 
-it("a Factory entry for another backend address offers repair", async (context) => {
+it("an AgentEasel entry for another backend address offers repair", async (context) => {
   // Arrange
   const { factory, config } = await installedReportingFixture(context);
   await writeFile(
@@ -579,7 +581,7 @@ it("a Factory entry for another backend address offers repair", async (context) 
   });
 });
 
-it("a conflicting Factory namespace is never overwritten", async (context) => {
+it("a conflicting AgentEasel namespace is never overwritten", async (context) => {
   // Arrange
   const { factory, config } = await reportingFixture(context);
   const before = '{"mcpServers":{"factory-runtime":{"command":"someone-else"}}}';
@@ -627,7 +629,7 @@ it("default provider homes resolve from the user home without explicit homePath"
   );
 });
 
-it("provider instances disabled in T3 are neither listed nor inspected", async (context) => {
+it("provider instances disabled in T3 Code are neither listed nor inspected", async (context) => {
   // Arrange
   await isolatedUserHome(context);
   const { factory, state } = await reportingFixture(context);
@@ -653,7 +655,7 @@ it("provider instances disabled in T3 are neither listed nor inspected", async (
   ]);
 });
 
-it("a provider instance a T3 project enables stays listed while the machine has it disabled", async (context) => {
+it("a provider instance a T3 Code project enables stays listed while the machine has it disabled", async (context) => {
   // Arrange
   await isolatedUserHome(context);
   const { factory, state } = await reportingFixture(context);
@@ -757,7 +759,7 @@ it("symbolic link configuration is not overwritten", async (context) => {
   expect(await readFile(other, "utf8")).toBe("{}");
 });
 
-it("an installed Claude entry reaches the Factory tools on the listening backend", async (context) => {
+it("an installed Claude entry reaches the AgentEasel tools on the listening backend", async (context) => {
   // Arrange
   const { config } = await installedReportingServer(context);
   const entry = JSON.parse(await readFile(config, "utf8")).mcpServers["factory-runtime"];
@@ -913,7 +915,7 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
   });
 });
 
-it("repairing a Codex entry for another backend address replaces only Factory's entry", async (context) => {
+it("repairing a Codex entry for another backend address replaces only AgentEasel's entry", async (context) => {
   // Arrange
   const { factory, harness, options, config } = await reportingFixture(context, "codex");
   await writeFile(config, '# keep this comment\nmodel = "sample"\n');
@@ -938,7 +940,7 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   );
 });
 
-it("the installed Factory Block skill names its trigger, the Factory tools and both reports", async (context) => {
+it("the installed AgentEasel Block skill names its trigger, the AgentEasel tools and both reports", async (context) => {
   // Arrange
   const { factory, home } = await reportingFixture(context);
   const targets = await factory.getReportingInstallations();
@@ -960,7 +962,7 @@ it("the installed Factory Block skill names its trigger, the Factory tools and b
   expect(installed).toContain("$factory-block");
 });
 
-it("a missing Factory Block skill stays repairable and Repair rewrites it", async (context) => {
+it("a missing AgentEasel Block skill stays repairable and Repair rewrites it", async (context) => {
   // Arrange
   const fixture = await installedReportingFixture(context);
   const skill = join(fixture.home, "skills", "factory-block", "SKILL.md");
@@ -969,7 +971,7 @@ it("a missing Factory Block skill stays repairable and Repair rewrites it", asyn
   assert(before.ok);
   expect(before.value[0]!.status).toBe("needs-attention");
   expect(before.value[0]!.actions.repair).toBe(true);
-  expect(before.value[0]!.message).toMatch(/Factory Block skill/);
+  expect(before.value[0]!.message).toMatch(/AgentEasel Block skill/);
 
   // Act
   const result = await fixture.factory.installReporting({ targetId: fixture.targetId });
@@ -983,12 +985,12 @@ it("a missing Factory Block skill stays repairable and Repair rewrites it", asyn
 /** The skill current releases install: it passes a Factory tool ref and has no working report. */
 const RELEASED_SKILL = `---
 name: factory-block
-description: Work one Factory Block with the factory-runtime tools. Use when the thread's first message starts with $factory-block.
+description: Work one AgentEasel Block with the factory-runtime tools. Use when the thread's first message starts with $factory-block.
 ---
 
-# Factory Block
+# AgentEasel Block
 
-This thread is one Block in a Factory Run. Factory takes the Block's result only from its tools, never from chat.
+This thread is one Block in an AgentEasel Run. AgentEasel takes the Block's result only from its tools, never from chat.
 
 1. Call \`factory_get_block\` before any other work. Done when it returns your Block with its inputs and exits.
 2. Work from this Agent's prompt and those inputs. Call \`factory_get_run\` when you need the rest of the Run as context.
@@ -996,12 +998,12 @@ This thread is one Block in a Factory Run. Factory takes the Block's result only
    - \`to: "waiting"\` when you need the user's reply, then end the turn.
    - \`to: "finished"\` with one of the Block's exits when the work is done.
 
-When the message gives a Factory tool ref, pass it as \`ref\` on every Factory tool call. Factory tools belong to this thread's own agent; subagents work without them.
+When the message gives an AgentEasel tool ref, pass it as \`ref\` on every AgentEasel tool call. AgentEasel tools belong to this thread's own agent; subagents work without them.
 
 Every later turn in this thread, including feedback and user replies, starts again at step 1.
 `;
 
-it("a Factory Block skill installed by an earlier release needs attention until Repair replaces it", async (context) => {
+it("an AgentEasel Block skill installed by an earlier release needs attention until Repair replaces it", async (context) => {
   // Arrange
   const fixture = await installedReportingFixture(context);
   const skill = join(fixture.home, "skills", "factory-block", "SKILL.md");

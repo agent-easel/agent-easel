@@ -1,6 +1,6 @@
 import { utilityProcess, type UtilityProcess } from "electron";
-import type { ServerUpdateAction } from "@t3-factory/contracts";
-import type { ApplicationUpdates } from "@t3-factory/backend/server";
+import type { ServerUpdateAction } from "@agent-easel/contracts";
+import type { ApplicationUpdates } from "@agent-easel/backend/server";
 
 export type BackendState = {
   readonly state: "stopped" | "starting" | "running" | "failed";
@@ -42,7 +42,7 @@ export class BackendSupervisor {
     if (this.child) return;
     this.set({ state: "starting", message: null });
     const child = utilityProcess.fork(this.entry, [], {
-      serviceName: "T3 Factory backend",
+      serviceName: "AgentEasel backend",
       env: { ...process.env, ...this.env },
       stdio: "inherit",
     });
@@ -68,7 +68,7 @@ export class BackendSupervisor {
         this.set({
           state: "failed",
           message:
-            "The Factory server stopped unexpectedly. Runs were not stopped; choose Retry to reopen and reconcile them.",
+            "The AgentEasel server stopped unexpectedly. Runs were not stopped; choose Retry to reopen and reconcile them.",
         });
     });
   }

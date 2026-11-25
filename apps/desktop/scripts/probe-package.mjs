@@ -19,7 +19,7 @@ import {
   FACTORY_MINIMUM_SERVER_PROTOCOL,
   FACTORY_PROTOCOL,
   protocolCompatibility,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { build } from "esbuild";
 import { WebSocketServer } from "ws";
 
@@ -27,12 +27,12 @@ const report = process.argv[2];
 if (!report) throw new Error("Usage: probe-package.mjs <report.json>");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
-const built = join(root, "release", "mac-arm64", "T3 Factory.app");
+const built = join(root, "release", "mac-arm64", "AgentEasel.app");
 const work = await mkdtemp(join(tmpdir(), "factory-desktop-probe-"));
-const app = join(work, "Applications", "T3 Factory.app");
-const executable = join(app, "Contents", "MacOS", "T3 Factory");
+const app = join(work, "Applications", "AgentEasel.app");
+const executable = join(app, "Contents", "MacOS", "AgentEasel");
 const home = join(work, "home");
-const factoryHome = join(home, ".t3-factory");
+const factoryHome = join(home, ".agenteasel");
 const port = 4395;
 const results = [];
 const clean = { HOME: home, PATH: "/usr/bin:/bin", TMPDIR: join(work, "tmp") };
@@ -72,7 +72,6 @@ function launch(userData, debugPort, env = {}) {
       ...clean,
       FACTORY_DESKTOP_USER_DATA: userData,
       ...env,
-      FACTORY_TELEMETRY_ENABLED: "false",
     },
     stdio: ["ignore", log, log],
   });
@@ -307,7 +306,7 @@ try {
 
   await stage("the window shows First-run setup before completion", async () => {
     const text = await until(() =>
-      pageText(9441).then((value) => (value?.includes("Set up Factory") ? value : undefined)),
+      pageText(9441).then((value) => (value?.includes("Set up AgentEasel") ? value : undefined)),
     );
     return { excerpt: text.slice(0, 120) };
   });
@@ -332,7 +331,7 @@ try {
     return { excerpt: text.slice(0, 120) };
   });
 
-  await stage("the packaged backend serves Factory MCP to harnesses", mcpReport);
+  await stage("the packaged backend serves AgentEasel MCP to harnesses", mcpReport);
 
   await stage("the host relay streams the backend's live connection snapshot", async () => {
     // The same pair rule the live upgrade gate applies, plus the exact protocol of this checkout.
@@ -424,7 +423,7 @@ try {
     return { flows: flows.length };
   });
 
-  await stage("client-only startup starts no backend and needs no T3", async () => {
+  await stage("client-only startup starts no backend and needs no T3 Code", async () => {
     const clientHome = join(work, "client-home");
     const clientData = join(work, "client-profile");
     await mkdir(clientHome);
@@ -434,11 +433,11 @@ try {
     const text = await until(
       () =>
         pageText(9443).then((value) =>
-          value?.includes("Connect to a Factory server") ? value : undefined,
+          value?.includes("Connect to an AgentEasel server") ? value : undefined,
         ),
       60_000,
     );
-    const backendStarted = existsSync(join(clientHome, ".t3-factory"));
+    const backendStarted = existsSync(join(clientHome, ".agenteasel"));
     const answered = await api("/api/protocol").then(
       () => true,
       () => false,

@@ -8,7 +8,7 @@ import {
   CONDITION_ARRIVAL_PAGE_DEFAULT,
   CONDITION_ARRIVAL_PAGE_MAX,
   SUBFLOW_INVOCATION_PAGE_MAX,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   authoringTools,
   callAuthoringTool,

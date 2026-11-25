@@ -1,4 +1,4 @@
-import type { RunDetail, WaitArrival } from "@t3-factory/contracts";
+import type { RunDetail, WaitArrival } from "@agent-easel/contracts";
 import { FastForward } from "lucide-react";
 import { useState } from "react";
 import { MutationGate } from "@/client-gate";

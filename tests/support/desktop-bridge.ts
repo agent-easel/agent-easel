@@ -5,6 +5,7 @@ import {
   type DesktopState,
   type FactoryDesktop,
   type NotificationPermission,
+  type PreviousInstallation,
 } from "../../packages/contracts/src/desktop-bridge.ts";
 
 export const desktopBridgeOptions = (
@@ -13,7 +14,10 @@ export const desktopBridgeOptions = (
   releaseNotes:
     | string
     | null = "<ul><li>Reopen authorization from an approved client.</li><li>Review client and server upgrades together.</li></ul>",
-) => ({ role, update, releaseNotes, livePortMessage });
+  previousInstallation:
+    | { [Key in keyof PreviousInstallation]: PreviousInstallation[Key] }
+    | null = null,
+) => ({ role, update, releaseNotes, livePortMessage, previousInstallation });
 
 // The bundled desktop UI asks the native shell for its role. This stand-in bridge reports
 // a first launch and records the choice; native lifecycle is proven by the packaged probe.
@@ -29,6 +33,7 @@ export function desktopBridgeScript({
   update,
   releaseNotes,
   livePortMessage,
+  previousInstallation,
   rejectAppearanceSave,
 }: ReturnType<typeof desktopBridgeOptions> & { rejectAppearanceSave?: boolean }) {
   const desktopWindow = window as Window & {
@@ -39,6 +44,7 @@ export function desktopBridgeScript({
     __observePermission?: (permission: NotificationPermission) => void;
     __notificationSettingsOpened?: boolean;
     __route?: (route: DesktopRoute) => void;
+    __previousInstallationRemoved?: boolean;
   };
   let state: DesktopState = {
     version: "0.1.0",
@@ -56,6 +62,7 @@ export function desktopBridgeScript({
     updateChannel: "stable",
     backend: { state: role === "server" ? "running" : "stopped", message: null },
     minimized: false,
+    previousInstallation,
     update: {
       state: update,
       version: "0.2.0",
@@ -87,7 +94,7 @@ export function desktopBridgeScript({
     },
     probeServer: async () => ({
       ok: false,
-      message: "No Factory server answered securely at that address.",
+      message: "No AgentEasel server answered securely at that address.",
     }),
     connectServer: async () => ({ ok: true }),
     forgetServer: async () => ({ ok: true }),
@@ -125,6 +132,27 @@ export function desktopBridgeScript({
     installUpdate: async () => {
       desktopWindow.__clientInstallRequested = true;
       state = { ...state, update: { ...state.update, state: "idle", version: null } };
+      publish();
+      return { ok: true };
+    },
+    dismissMigrationSummary: async () => {
+      state = state.previousInstallation
+        ? {
+            ...state,
+            previousInstallation: { ...state.previousInstallation, summaryPending: false },
+          }
+        : state;
+      publish();
+      return { ok: true };
+    },
+    removePreviousInstallation: async () => {
+      desktopWindow.__previousInstallationRemoved = true;
+      state = state.previousInstallation
+        ? {
+            ...state,
+            previousInstallation: { ...state.previousInstallation, oldDataPresent: false },
+          }
+        : state;
       publish();
       return { ok: true };
     },

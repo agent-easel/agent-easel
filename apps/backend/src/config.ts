@@ -21,7 +21,6 @@ export interface Configuration {
   readonly port: number;
   readonly allowedHosts?: readonly string[];
   readonly remoteAccess?: RemoteAccessConfiguration;
-  readonly telemetryEnabled: boolean;
 }
 
 export const defaultRemotePort = 4312;
@@ -57,11 +56,11 @@ async function resolvedDestination(path: string): Promise<string> {
 }
 
 const invalidHome = () =>
-  new Error("FACTORY_HOME must be an absolute path outside the Factory source checkout.");
+  new Error("FACTORY_HOME must be an absolute path outside the AgentEasel source checkout.");
 
 /** Factory data must never live inside the checkout it runs from, even through a symlink. */
 async function factoryHome(env: NodeJS.ProcessEnv): Promise<string> {
-  const requestedHome = env.FACTORY_HOME ?? join(homedir(), ".t3-factory");
+  const requestedHome = env.FACTORY_HOME ?? join(homedir(), ".agenteasel");
   if (!isAbsolute(requestedHome)) throw invalidHome();
   const checkout = sourceCheckout();
   const home = await resolvedDestination(requestedHome);
@@ -122,7 +121,7 @@ function binding(
     port < 0 ||
     port > 65535
   ) {
-    throw new Error("Factory needs a non-empty host and an integer port from 0 to 65535.");
+    throw new Error("AgentEasel needs a non-empty host and an integer port from 0 to 65535.");
   }
   return { host, port };
 }
@@ -219,13 +218,9 @@ export async function loadConfiguration(
   const credentialsDirectory = await privateCredentialsDirectory(home);
   const saved = await savedConfiguration(home);
   const { host, port } = binding(env, saved);
-  const telemetryEnabled = "telemetryEnabled" in saved ? saved.telemetryEnabled : true;
-  if (typeof telemetryEnabled !== "boolean")
-    throw new Error("config.json telemetryEnabled must be a boolean.");
   return {
     allowedHosts: allowedHosts(env, saved),
     remoteAccess: remoteAccess(env, saved),
-    telemetryEnabled,
     home: resolve(home),
     databasePath: join(home, "factory.sqlite"),
     credentialsDirectory,

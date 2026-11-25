@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { timelineRows } from "../src/run-timeline-rows.ts";
 
 type RunEvent = RunDetail["events"][number];
@@ -23,7 +23,7 @@ const entry = (
 const statusObserved = (sequence: number, blockId: string, engineStatus: string) =>
   entry(sequence, "execution-observed", blockId, engineStatus);
 
-it("consecutive T3 status observations of one Block become one Key events row with every observation", () => {
+it("consecutive T3 Code status observations of one Block become one Key events row with every observation", () => {
   // Arrange
   const events = [
     entry(1, "launch-acknowledged"),

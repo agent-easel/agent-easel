@@ -1,8 +1,3 @@
-// Prepares `stage/`, the Electron application directory: the bundle from `build/`, a
-// minimal package.json, the native lock module rebuilt for Electron's arm64 ABI and the
-// macOS notifications module.
-// Run `pnpm --filter @t3-factory/desktop build` first. Requires the Xcode Command Line
-// Tools and network access to Electron's header download.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -57,12 +52,12 @@ await writeFile(
   join(isolated, "package.json"),
   JSON.stringify(
     {
-      name: "t3-factory",
-      productName: "T3 Factory",
+      name: "agenteasel",
+      productName: "AgentEasel",
       version: identity.version,
       factoryBuild: identity,
       description: desktop.description,
-      author: "T3 Factory",
+      author: "AgentEasel",
       license: "UNLICENSED",
       type: "module",
       main: "build/main.js",
@@ -122,5 +117,5 @@ await writeFile(join(stage, "package.json"), JSON.stringify(packagedManifest, nu
 await rm(join(stage, "node_modules"), { recursive: true, force: true });
 await rm(isolated, { recursive: true, force: true });
 console.log(
-  `Staged T3 Factory ${identity.version} for Electron ${electronVersion} arm64 at ${stage}`,
+  `Staged AgentEasel ${identity.version} for Electron ${electronVersion} arm64 at ${stage}`,
 );

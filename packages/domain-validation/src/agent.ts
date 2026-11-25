@@ -10,7 +10,7 @@ import type {
   UpdateAgentInput,
   UpdateRunTitleSettingInput,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { parseAgentExits } from "./block-exits.ts";
 import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
 
@@ -130,7 +130,7 @@ export function validateExecutionSettings(execution: unknown): Result<AgentExecu
     execution,
     "environmentId",
     "invalid_environment",
-    "Choose a T3 environment.",
+    "Choose a T3 Code environment.",
   );
   if (!environmentId.ok) return environmentId;
   const providerInstanceId = parseExecutionReference(
@@ -221,7 +221,7 @@ function parseProjectOverride(entry: unknown, index: number): Result<AgentProjec
     `projectOverrides.${index}.projectId`,
     512,
     "invalid_project",
-    "Each Project override names a Factory Project.",
+    "Each Project override names an AgentEasel Project.",
   );
   if (!projectId.ok) return projectId;
   const settings = underOverride(

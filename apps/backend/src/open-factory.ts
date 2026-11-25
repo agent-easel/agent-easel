@@ -1,9 +1,8 @@
-import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type { FactoryOperations, Result, RunDetail } from "@t3-factory/contracts";
+import type { FactoryOperations, Result, RunDetail } from "@agent-easel/contracts";
 import { factoryLayer } from "./factory-layer.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { FactoryService } from "./factory-service.ts";
@@ -12,9 +11,8 @@ import type { RuntimeReply } from "./runtime-types.ts";
 import type { RunListSource, RunReadSource } from "./run-read-source.ts";
 import type { RunUpdateSubscription } from "./run-updates.ts";
 import type { LiveStreams } from "./live-streams.ts";
-import type { EventName, EventProperties, Telemetry } from "./telemetry.ts";
 
-export interface Factory extends FactoryOperations {
+export interface AgentEasel extends FactoryOperations {
   readonly runtime: { [K in keyof RuntimeReports]: (input: unknown) => Promise<RuntimeReply> };
   /** Factory MCP's text-only Start through the same Start operation as `startRun`. */
   startTextRun(input: unknown): Promise<Result<RunDetail>>;
@@ -26,16 +24,8 @@ export interface Factory extends FactoryOperations {
   ): Promise<Result<RunReadSource | null>>;
   /** Scoped live observation; each stream needs no services and runs on any Effect runtime. */
   readonly live: LiveStreams;
-  readonly telemetry: Pick<Telemetry, "enabled" | "disabledReason"> & {
-    setPreference(enabled: boolean): Promise<void>;
-  };
   setRuntimeBackendUrl(url: string): void;
   awaitWorkerTitles(): Promise<void>;
-  readonly recordTelemetry: <K extends EventName>(
-    event: K,
-    properties: EventProperties[K],
-  ) => Promise<void>;
-  recordClientUpdate(receipt: InstalledUpdateReceipt): Promise<Result<null>>;
   close(): Promise<void>;
 }
 
@@ -63,7 +53,7 @@ function promiseOperations<T extends Record<keyof T, EffectOperation>, R>(
 }
 
 /** Promise compatibility for Node callers; business logic executes in FactoryService. */
-export async function openFactory(options: FactoryOptions): Promise<Factory> {
+export async function openFactory(options: FactoryOptions): Promise<AgentEasel> {
   const runtime = ManagedRuntime.make(
     options.clock
       ? Layer.provideMerge(factoryLayer(options), Layer.succeed(Clock.Clock)(options.clock))
@@ -85,7 +75,6 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     readRunByReference,
     setRuntimeBackendUrl,
     live,
-    telemetry,
     ...operations
   } = service;
   const facade = promiseOperations(runtime, operations);
@@ -100,14 +89,6 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     readRunByReference: (reference) => runtime.runPromise(readRunByReference(reference)),
     setRuntimeBackendUrl,
     live,
-    recordTelemetry: (event, properties) => runtime.runPromise(telemetry.record(event, properties)),
-    telemetry: {
-      get enabled() {
-        return telemetry.enabled;
-      },
-      disabledReason: telemetry.disabledReason,
-      setPreference: (enabled) => runtime.runPromise(telemetry.setPreference(enabled)),
-    },
     close: () => (closing ??= runtime.dispose()),
   };
 }

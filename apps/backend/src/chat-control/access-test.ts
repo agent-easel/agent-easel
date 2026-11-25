@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import type * as Cause from "effect/Cause";
 import type * as Attempt from "effect/Result";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { DiscordAccessTest, DiscordAccessTestPost, Result } from "@t3-factory/contracts";
+import type { DiscordAccessTest, DiscordAccessTestPost, Result } from "@agent-easel/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 
-const REQUEST = "reply here to confirm you can use Factory.";
+const REQUEST = "reply here to confirm you can use AgentEasel.";
 const MESSAGE_LIMIT = 2000;
-const FORUM_POST_NAME = "Factory access test";
+const FORUM_POST_NAME = "AgentEasel access test";
 
 /**
  * The test's next message: as many of `users` as fit within Discord's length, mentioned in order.
@@ -62,7 +62,7 @@ const channelRequest = (client: Client<true>, channelId: string) =>
       channel?.type === ChannelType.GuildForum
         ? {
             forum: true,
-            request: `mention <@${client.user.id}> in this post to confirm you can use Factory.`,
+            request: `mention <@${client.user.id}> in this post to confirm you can use AgentEasel.`,
           }
         : { forum: false, request: REQUEST },
   );

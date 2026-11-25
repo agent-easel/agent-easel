@@ -4,8 +4,8 @@ import type {
   RunTitleDiagnostic,
   RunTitleGeneration,
   RunTitleModel,
-} from "@t3-factory/contracts";
-import type { StartPrompt } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import type { StartPrompt } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { now } from "../../time.ts";

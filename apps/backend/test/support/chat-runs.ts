@@ -1,8 +1,8 @@
 import { assert, expect, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { FactoryProject } from "@t3-factory/contracts";
-import type { Factory } from "../../src/index.ts";
+import type { FactoryProject } from "@agent-easel/contracts";
+import type { AgentEasel } from "../../src/index.ts";
 import {
   ALLOWED_CHANNEL,
   discordBot,
@@ -32,7 +32,7 @@ export async function chatWorlds(c: TestContext) {
 /** Saves the Language model and connection, allows the participant and collaborator for
  * `projectIds` in the allowed channel and turns Chat control On. */
 async function operating(
-  factory: Factory,
+  factory: AgentEasel,
   { model, discord }: { model: ControlledModel; discord: ControlledDiscord },
   projectIds: readonly string[],
 ) {
@@ -53,16 +53,9 @@ async function operating(
  * collaborator are allowed in the allowed channel for the prepared Project, with the threads of
  * `conversing`. The model answers "OK" unless scripted.
  */
-export async function runConversation(
-  c: TestContext,
-  shape?: ReadyFlowShape,
-  telemetry?: NonNullable<Parameters<typeof prepared>[2]>["telemetry"],
-) {
+export async function runConversation(c: TestContext, shape?: ReadyFlowShape) {
   const worlds = await chatWorlds(c);
-  const fixture = await prepared(c, shape, {
-    discordApiUrl: worlds.discord.apiUrl,
-    ...(telemetry ? { telemetry } : {}),
-  });
+  const fixture = await prepared(c, shape, { discordApiUrl: worlds.discord.apiUrl });
   await operating(fixture.f, worlds, [fixture.project.id]);
   return { ...fixture, ...worlds };
 }

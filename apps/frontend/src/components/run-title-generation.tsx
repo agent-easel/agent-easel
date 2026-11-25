@@ -1,5 +1,5 @@
 import { Sparkle } from "lucide-react";
-import type { RunTitleGeneration, RunTitleGenerationState } from "@t3-factory/contracts";
+import type { RunTitleGeneration, RunTitleGenerationState } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import { StatusBadge, type RunStateKind } from "./status-badge.tsx";
 

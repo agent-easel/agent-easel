@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerDefinition } from "@agent-easel/contracts";
 
 /** The deadline of a Trigger that checks on its schedule, or null when it never checks by itself. */
 const scheduledDeadline = (trigger: TriggerDefinition | undefined) =>

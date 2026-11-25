@@ -22,7 +22,7 @@ import type {
   FlowDraft,
   FlowEnding,
   FlowGraph,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   CircleAlert,
   Copy,
@@ -1165,7 +1165,7 @@ function EditorToolbar({
       owner={
         <>
           <OwnerBadge owner={owner} />
-          {readOnly && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+          {readOnly && <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>}
         </>
       }
       nameField={{
@@ -1378,7 +1378,7 @@ function OwnerGoneNotice({
       tone="attention"
       density="compact"
       icon={TriangleAlert}
-      title={`${owner.title} is no longer in T3`}
+      title={`${owner.title} is no longer in T3 Code`}
       action={
         <MutationGate>
           <TextLink onClick={onChangeOwner}>Change owner…</TextLink>

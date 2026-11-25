@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { CONDITION_ARRIVAL_MAX } from "@t3-factory/contracts";
+import { CONDITION_ARRIVAL_MAX } from "@agent-easel/contracts";
 
 /** The open backend's storage, for a change no public operation can make. */
 function openStorage(databasePath: string) {

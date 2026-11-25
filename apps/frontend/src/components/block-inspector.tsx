@@ -9,8 +9,8 @@ import type {
   FlowGraph,
   ValidationIssue,
   WaitUnit,
-} from "@t3-factory/contracts";
-import { effectiveExits, joinSlots } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { effectiveExits, joinSlots } from "@agent-easel/domain-validation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Surface } from "@/components/ui/surface";

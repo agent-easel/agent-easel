@@ -7,10 +7,10 @@ import type {
   AgentModelOptionDescriptor,
   AgentModelOptionValue,
   FactoryProject,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { optionValue, resolveAgentModel } from "@t3-factory/domain-validation";
+import { optionValue, resolveAgentModel } from "@agent-easel/domain-validation";
 import { modelOptionLabel } from "@/lib/agent-display";
 import { revisionExitLines, revisionLine, type RevisionLine } from "../../revision-diff.ts";
 import { RevisionComparison } from "../revision-comparison.tsx";

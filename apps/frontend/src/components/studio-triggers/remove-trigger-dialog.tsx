@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerDefinition } from "@agent-easel/contracts";
 import { MutationGate } from "@/client-gate";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";

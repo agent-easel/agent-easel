@@ -5,7 +5,7 @@ import type {
   TriggerDefinition,
   TriggerProblem,
   TriggerSchedule,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /** "every 5 min", "every 2 hours", or "manual" when only Run checks it. */
 export function scheduleText(schedule: TriggerSchedule) {

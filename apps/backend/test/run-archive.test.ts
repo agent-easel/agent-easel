@@ -106,7 +106,7 @@ it("explicit Run search finds archived history by title or exact number", async 
   expect(await f.searchArchivedRuns(`${number}0`)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Factory launches nothing for an archived Run on later reconciliation", async (c) => {
+it("AgentEasel launches nothing for an archived Run on later reconciliation", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -155,7 +155,7 @@ it("a working report for an archived Run succeeds without changing the Run", asy
   expect(await f.f.getRun(f.runId)).toStrictEqual(before);
 });
 
-it("Factory MCP answers a report for an archived Run as a success that tells the worker to stop", async (c) => {
+it("AgentEasel MCP answers a report for an archived Run as a success that tells the worker to stop", async (c) => {
   // Arrange
   const { t3, mcp, world, input } = await preparedServer(c);
   await archived(world, await workerLaunched(world, input));

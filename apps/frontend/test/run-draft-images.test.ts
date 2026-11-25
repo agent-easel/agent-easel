@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
+import { RUN_IMAGE_MAX_BYTES } from "@agent-easel/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { draftTitle } from "../src/run-draft.ts";
 import {
@@ -267,7 +267,7 @@ it("images without prompt text keep an Untitled draft after reload", async (cont
   expect(draft.getDrafts().map(draftTitle)).toStrictEqual(["Untitled draft"]);
 });
 
-it("Start uploads only the images Factory lacks before sending the request", async (context) => {
+it("Start uploads only the images AgentEasel lacks before sending the request", async (context) => {
   // Arrange
   const { draft, startRun, images } = composer(context);
   await draft.attachImages([pngFile("held.png", 1), pngFile("new.png", 2)]);
@@ -286,7 +286,7 @@ it("Start uploads only the images Factory lacks before sending the request", asy
   ]);
 });
 
-it("images Factory reports missing are uploaded again and the same request retried once", async (context) => {
+it("images AgentEasel reports missing are uploaded again and the same request retried once", async (context) => {
   // Arrange
   const { draft, startRun, images } = composer(context);
   await draft.attachImages([pngFile("swept.png", 1)]);
@@ -325,7 +325,7 @@ it("images still missing after the retry keep the draft locked with its request"
     pending: true,
     busy: false,
     error:
-      "Factory still lacks some images of this request. Check the same request to upload them again.",
+      "AgentEasel still lacks some images of this request. Check the same request to upload them again.",
   });
 });
 
@@ -342,7 +342,7 @@ it("a confirmed Start removes the draft's saved image bytes", async (context) =>
   expect(images.bytes.size).toBe(0);
 });
 
-it("a Start whose image bytes this browser lost unlocks once Factory reports the image missing", async (context) => {
+it("a Start whose image bytes this browser lost unlocks once AgentEasel reports the image missing", async (context) => {
   // Arrange
   const { draft, startRun, images } = composer(context);
   await draft.attachImages([pngFile("lost.png", 1)]);

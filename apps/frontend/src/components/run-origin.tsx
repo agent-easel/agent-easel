@@ -1,4 +1,4 @@
-import type { RunOrigin } from "@t3-factory/contracts";
+import type { RunOrigin } from "@agent-easel/contracts";
 import { CircleDashed, ExternalLink, Zap } from "lucide-react";
 import { TextLink } from "@/components/ui/text-link";
 import { InspectorSection } from "./inspector-section.tsx";

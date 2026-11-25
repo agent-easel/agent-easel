@@ -1,0 +1,10 @@
+version: 0.12.0
+files:
+  - url: ../v0.12.0/T3.Factory-0.12.0-arm64.zip
+    sha512: d6SdrkZgnodHKNnp7aZzMzvee6qWcSKdI2U4pWLekbUrp6cuidwEboGREzort/OruN1c7qPiwotuCUOgEKStoQ==
+    size: 144975917
+path: ../v0.12.0/T3.Factory-0.12.0-arm64.zip
+sha512: d6SdrkZgnodHKNnp7aZzMzvee6qWcSKdI2U4pWLekbUrp6cuidwEboGREzort/OruN1c7qPiwotuCUOgEKStoQ==
+releaseDate: "2026-11-24T23:19:27.343Z"
+releaseName: T3 Factory 0.12.0
+releaseNotes: "<ul><li>T3 Factory is now AgentEasel. This is the last T3 Factory version: download AgentEasel from agenteasel.app, and it brings over your data on first launch. Until then this app keeps working.</li></ul>"

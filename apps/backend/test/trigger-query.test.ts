@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { parseTriggerQuery } from "@t3-factory/domain-validation";
+import { parseTriggerQuery } from "@agent-easel/domain-validation";
 
 it("a quoted label is the ready label without its quotes", () => {
   // Act
@@ -100,7 +100,7 @@ it("a repository qualifier is refused because the Project chooses the repository
   });
 });
 
-it("a state qualifier is refused because Factory reads open issues only", () => {
+it("a state qualifier is refused because AgentEasel reads open issues only", () => {
   // Act
   const parsed = parseTriggerQuery("label:factory:ready is:closed");
 

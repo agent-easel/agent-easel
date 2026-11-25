@@ -56,7 +56,7 @@ export function projectsFixture({ factory, t3, home }: Host) {
       async withdraw({ id }: { id: string }) {
         const { projects } = requireSuccess(await factory.listProjects());
         const project = projects.find((entry) => entry.id === id);
-        if (!project) throw new Error(`Project ${id} is not in Factory's catalog.`);
+        if (!project) throw new Error(`Project ${id} is not in AgentEasel's catalog.`);
         withdrawn.push(
           ...t3.projects.catalog.filter((entry) => entry.projectId === project.projectId),
         );

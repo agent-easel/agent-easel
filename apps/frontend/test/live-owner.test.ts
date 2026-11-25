@@ -3,7 +3,7 @@ import {
   type RunHeader,
   type RunNavigationEntry,
   type RunViewLiveMessage,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { expect, it } from "vite-plus/test";
 import { navigationScope } from "../src/live/navigation.ts";
 import { reconnectDelay } from "../src/live/owner.ts";

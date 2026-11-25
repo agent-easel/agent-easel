@@ -1,4 +1,4 @@
-import type { ConnectionState, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
+import type { ConnectionState, FlowWorkspace, T3Contract } from "@agent-easel/contracts";
 import type { T3ConnectionReason, T3Endpoint } from "./connection.ts";
 
 export interface T3ContractReader {
@@ -127,8 +127,8 @@ function launchExplanation(supported: boolean, omissionPermitted: boolean) {
   if (supported)
     return "Launch schema supports saved settings and a request key. Replay requires separate continuity/retention proof.";
   if (!omissionPermitted)
-    return "T3 launch schema does not establish support for omitting runtimeMode. Use a compatible T3 launch schema before starting or replaying this Run.";
-  return "T3 launch schema cannot preserve the selected settings and request key.";
+    return "T3 Code launch schema does not establish support for omitting runtimeMode. Use a compatible T3 Code launch schema before starting or replaying this Run.";
+  return "T3 Code launch schema cannot preserve the selected settings and request key.";
 }
 
 function launchSupport(ready: boolean, schema: ToolSchema): T3Support["launch"] {
@@ -146,7 +146,7 @@ function launchSupport(ready: boolean, schema: ToolSchema): T3Support["launch"] 
           supported: false,
           retryScope: null,
           explanation:
-            "T3 launch schema cannot express worktree and existing_worktree launches. Update T3 before starting a worktree Run.",
+            "T3 Code launch schema cannot express worktree and existing_worktree launches. Update T3 Code before starting a worktree Run.",
         }
       : checkout;
   return { checkout, worktree };
@@ -177,7 +177,7 @@ function sendSupport(ready: boolean, schema: ToolSchema): LaunchSupport {
     retryScope: null,
     explanation: supported
       ? "Queue schema supports independent turns and a request key. Replay requires separate continuity/retention proof."
-      : "T3 send schema cannot preserve queue mode and the request key.",
+      : "T3 Code send schema cannot preserve queue mode and the request key.",
   };
 }
 
@@ -195,7 +195,7 @@ function settleSupport(ready: boolean, schema: ToolSchema): ReportSupport {
     supported,
     explanation: supported
       ? "Explicit thread settlement is supported. Organization has no execution compare-and-set or replay key."
-      : "T3 organization schema cannot preserve explicit thread settlement.",
+      : "T3 Code organization schema cannot preserve explicit thread settlement.",
   };
 }
 
@@ -209,7 +209,7 @@ function stopSupport(ready: boolean, schema: ToolSchema): ReportSupport {
     supported,
     explanation: supported
       ? "Thread Stop supported; it is not run-fenced."
-      : "T3 Stop schema unavailable.",
+      : "T3 Code Stop schema unavailable.",
   };
 }
 
@@ -305,7 +305,7 @@ const unsupportedRename = (explanation: string): RenameSupport => ({
 
 function renameSupport(ready: boolean, schema: ToolSchema): RenameSupport {
   if (!ready || !flatToolSchema(schema))
-    return unsupportedRename("T3 thread update schema does not advertise thread rename.");
+    return unsupportedRename("T3 Code thread update schema does not advertise thread rename.");
   const props = propertiesOf<BoundedString>(schema);
   const environmentId = plainString(props.environmentId, 1, Infinity);
   const allowed = new Set<string>([...RENAMED_FIELDS, ...(environmentId ? ["environmentId"] : [])]);
@@ -321,7 +321,7 @@ function renameSupport(ready: boolean, schema: ToolSchema): RenameSupport {
     ) &&
     required.every((field) => typeof field === "string" && allowed.has(field));
   if (!supported)
-    return unsupportedRename("T3 thread update schema cannot accept a worker title rename.");
+    return unsupportedRename("T3 Code thread update schema cannot accept a worker title rename.");
   return {
     supported: true,
     includeEnvironmentId: environmentId,
@@ -364,8 +364,8 @@ export function attachmentSupport(support: T3Support, count: number): ReportSupp
   return {
     supported,
     explanation: supported
-      ? "T3 accepts uploaded image attachments on launches."
-      : `T3 does not advertise t3_attachment_prepare_upload and launch attachments for ${count} images with a request key.`,
+      ? "T3 Code accepts uploaded image attachments on launches."
+      : `T3 Code does not advertise t3_attachment_prepare_upload and launch attachments for ${count} images with a request key.`,
   };
 }
 
@@ -374,7 +374,7 @@ export function reportSupport(support: T3Support): ReportSupport {
   return {
     supported,
     explanation: supported
-      ? "Public T3 reads support exact-item provenance and complete tool metadata retrieval; each observation validates the returned identity."
-      : "T3 public reads cannot safely retrieve reporting activity for this harness. Reconnect or update T3 and recheck.",
+      ? "Public T3 Code reads support exact-item provenance and complete tool metadata retrieval; each observation validates the returned identity."
+      : "T3 Code public reads cannot safely retrieve reporting activity for this harness. Reconnect or update T3 Code and recheck.",
   };
 }

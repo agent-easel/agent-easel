@@ -1,4 +1,4 @@
-import type { RunDetail, RunNavigationEntry, RunSettlementOutcome } from "@t3-factory/contracts";
+import type { RunDetail, RunNavigationEntry, RunSettlementOutcome } from "@agent-easel/contracts";
 
 /** The Run actions, with the ids of their shortcut and desktop menu commands. */
 export type RunActionId = "snoozeRestore" | "settle" | "archive" | "rename";

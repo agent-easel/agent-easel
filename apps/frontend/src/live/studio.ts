@@ -2,7 +2,7 @@ import {
   applyStudioChange,
   type StudioDefinitions,
   type StudioLiveMessage,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { useLiveScope } from "./live-connection.ts";
 import type { LiveScope } from "./owner.ts";
 

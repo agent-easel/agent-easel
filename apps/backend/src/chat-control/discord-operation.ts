@@ -1,4 +1,3 @@
-import type { Telemetry } from "../telemetry.ts";
 import { DiscordAdapter } from "@chat-adapter/discord";
 import { Message as ChatMessage, type Thread } from "chat";
 import { Events, type Client, type Interaction, type Message } from "discord.js";
@@ -14,7 +13,7 @@ import type {
   DiscordConnectionProblem,
   DiscordConnectionStatus,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { sqliteChatState } from "./chat-state.ts";
@@ -73,7 +72,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
     const built = super.buildMessagePayload(...args);
     const raw = typeof message === "object" && "raw" in message ? message.raw : undefined;
     if (raw !== undefined && raw.length > 2000)
-      throw new Error("A Factory message exceeded Discord's length.");
+      throw new Error("An AgentEasel message exceeded Discord's length.");
     return {
       ...built,
       payload: {
@@ -86,7 +85,7 @@ class FactoryDiscordAdapter extends DiscordAdapter {
 
   /** Factory splits its own messages; anything longer is a defect, never silently cut. */
   protected override truncateContent(content: string): string {
-    if (content.length > 2000) throw new Error("A Factory message exceeded Discord's length.");
+    if (content.length > 2000) throw new Error("An AgentEasel message exceeded Discord's length.");
     return content;
   }
 
@@ -241,7 +240,7 @@ const UNEXPECTED_STOP =
 
 const RECONNECTING: Omit<DiscordConnectionProblem, "occurredAt"> = {
   outcome: "unreachable",
-  message: "Discord closed the Gateway connection. Factory is reconnecting.",
+  message: "Discord closed the Gateway connection. AgentEasel is reconnecting.",
 };
 
 /**
@@ -275,7 +274,6 @@ export const makeDiscordOperation = (
   gateway: DiscordGateway,
   credentials: ChatCredentials,
   conversation: {
-    readonly telemetry: Telemetry;
     readonly model: ConversationalModelAccess;
     readonly tools: readonly ChatTool[];
     readonly actions: ChatActions;
@@ -359,7 +357,6 @@ export const makeDiscordOperation = (
           applicationId,
           generations,
           model: conversation.model,
-          telemetry: conversation.telemetry,
           tools: conversation.tools,
           operating: () => !released(),
           post,

@@ -39,9 +39,9 @@ export function T3AddressHelp({
   return (
     <div className="grid gap-2.5 text-sm text-muted-foreground">
       <p>
-        T3 serves Factory’s connection at /mcp on its own address. With T3’s default port that is
-        http://127.0.0.1:3773/mcp — if you started T3 on another port, use that port. T3 must run on
-        this computer, as the same user as Factory.
+        T3 Code serves AgentEasel’s connection at /mcp on its own address. With T3 Code’s default
+        port that is http://127.0.0.1:3773/mcp — if you started T3 Code on another port, use that
+        port. T3 Code must run on this computer, as the same user as AgentEasel.
       </p>
       {children}
       {invalid && <AddressProblem />}

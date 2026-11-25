@@ -3,7 +3,7 @@ import type {
   RunBlock,
   RunDetail,
   RunThreadBinding,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * Empty targets mean no active work. Active work takes precedence over failure. A `sent`

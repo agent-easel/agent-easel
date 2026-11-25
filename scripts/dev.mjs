@@ -10,7 +10,7 @@ const productionData = process.argv.includes("--production-data");
 const env = {
   ...process.env,
   ...(productionData
-    ? { FACTORY_HOME: process.env.FACTORY_HOME ?? join(homedir(), ".t3-factory") }
+    ? { FACTORY_HOME: process.env.FACTORY_HOME ?? join(homedir(), ".agenteasel") }
     : { FACTORY_DEV_HOME: await developmentHome() }),
   ...(productionData ? {} : { FACTORY_PORT: process.env.FACTORY_PORT ?? "4311" }),
 };
@@ -56,7 +56,7 @@ const host = config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? ":
 env.FACTORY_HOST = config.host;
 env.FACTORY_PORT = String(config.port);
 env.FACTORY_DEV_BACKEND_URL = `http://${host.includes(":") ? `[${host}]` : host}:${config.port}`;
-console.log(`Factory development data: ${config.home}`);
+console.log(`AgentEasel development data: ${config.home}`);
 
 // Replace the launcher: concurrently owns the tasks and their signal cleanup.
 const cli = fileURLToPath(
@@ -74,8 +74,8 @@ process.execve(
     "5000",
     "--names",
     "backend,frontend",
-    `pnpm --filter @t3-factory/backend ${productionData ? "dev:prod" : "dev"}`,
-    "pnpm --filter @t3-factory/frontend dev",
+    `pnpm --filter @agent-easel/backend ${productionData ? "dev:prod" : "dev"}`,
+    "pnpm --filter @agent-easel/frontend dev",
   ],
   env,
 );

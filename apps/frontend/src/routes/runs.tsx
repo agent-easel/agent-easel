@@ -14,7 +14,7 @@ import type {
   RunDetail,
   RunNavigationEntry,
   SubflowInvocation,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChevronRight, Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
@@ -491,7 +491,7 @@ function RunTopBar({
             </>
           )}
           <span className="truncate font-medium">{project?.title ?? "Project"}</span>
-          {projectUnavailable && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+          {projectUnavailable && <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>}
           <span aria-hidden>·</span>
           <Workflow aria-hidden className="size-2.75 shrink-0" strokeWidth={1.75} />
           <RunFlowName run={run} />
@@ -605,8 +605,8 @@ function ObservationBadge({ freshness }: { freshness: RunFreshness }) {
       <span className="truncate text-muted-foreground">
         ·{" "}
         {freshness.lastObservedAt
-          ? `showing what Factory last observed at ${clockTime(freshness.lastObservedAt)}`
-          : "Factory has not observed this Run yet"}
+          ? `showing what AgentEasel last observed at ${clockTime(freshness.lastObservedAt)}`
+          : "AgentEasel has not observed this Run yet"}
       </span>
     </p>
   );
@@ -643,18 +643,18 @@ function CanvasOverlay({
           density="compact"
           tone="error"
           icon={Unplug}
-          title="T3 is disconnected"
+          title="T3 Code is disconnected"
           className="w-140"
           action={
             <TextLink asChild trailingIcon={ChevronRight}>
               <SettingsLink selection={{ tab: "connection" }}>
-                Open T3 connection settings
+                Open T3 Code connection settings
               </SettingsLink>
             </TextLink>
           }
         >
-          Showing what Factory last observed. Blocks won’t advance here until Factory reconnects;
-          nothing is lost.
+          Showing what AgentEasel last observed. Blocks won’t advance here until AgentEasel
+          reconnects; nothing is lost.
         </ProblemCard>
       )}
     </>

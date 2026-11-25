@@ -8,7 +8,7 @@ import type {
   RunDefinitions,
   RunTitleProvenance,
   RuntimeReadiness,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { T3ContractSnapshot } from "../t3/contract.ts";
 import type { T3Target } from "../t3/connection.ts";
 import type { RunWorkspace } from "./run-workspace.ts";

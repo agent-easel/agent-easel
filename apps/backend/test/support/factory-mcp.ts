@@ -1,6 +1,6 @@
 import type { TestContext } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { runtimeMcpHandler } from "../../src/runtime-mcp.ts";
 import {
   discoveredClones,
@@ -15,7 +15,7 @@ import {
  */
 export async function factoryMcpClient(
   c: TestContext,
-  factory: Factory,
+  factory: AgentEasel,
   options: { loseCallResponses?: boolean } = {},
 ) {
   const handler = runtimeMcpHandler(factory.runtime, factory);

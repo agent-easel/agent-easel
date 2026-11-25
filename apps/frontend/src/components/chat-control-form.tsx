@@ -60,7 +60,7 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
         setDraft(draftOf(value));
       },
       (cause: unknown) =>
-        active && setLoadError(chatControlError(cause, `Factory could not read ${name}.`)),
+        active && setLoadError(chatControlError(cause, `AgentEasel could not read ${name}.`)),
     );
     return () => {
       active = false;
@@ -85,7 +85,7 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
             return true;
           }
           setSaveFailure({
-            message: `${chatControlError(cause, `Factory could not save ${name}.`)} Your edits are kept; save again when Factory answers.`,
+            message: `${chatControlError(cause, `AgentEasel could not save ${name}.`)} Your edits are kept; save again when AgentEasel answers.`,
             paths: [],
           });
           return false;
@@ -201,7 +201,7 @@ export function ChatControlPage({
     >
       {loadError ? (
         <ProblemCard tone="error" title="Couldn’t read the settings" details={loadError}>
-          Factory didn’t answer. Try again.
+          AgentEasel didn’t answer. Try again.
         </ProblemCard>
       ) : children !== null ? (
         <MutationGate>{children}</MutationGate>

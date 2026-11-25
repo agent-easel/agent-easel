@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
-import type { DefinitionExport } from "@t3-factory/contracts";
-import { portableDocumentText } from "@t3-factory/domain-validation";
+import type { DefinitionExport } from "@agent-easel/contracts";
+import { portableDocumentText } from "@agent-easel/domain-validation";
 import { ApiError } from "./api.ts";
 
 /** Saves a file through the browser's download; the desktop app shows its own save dialog. */
@@ -41,7 +41,7 @@ export interface DefinitionExportSnapshot {
 function exportError(cause: unknown): string {
   if (cause instanceof ApiError)
     return [cause.message, ...cause.detail.issues.map((issue) => issue.message)].join(" ");
-  return cause instanceof Error ? cause.message : "Factory could not export this definition.";
+  return cause instanceof Error ? cause.message : "AgentEasel could not export this definition.";
 }
 
 const idle: DefinitionExportSnapshot = {

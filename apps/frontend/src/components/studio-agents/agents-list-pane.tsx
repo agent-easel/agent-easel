@@ -1,6 +1,6 @@
 import { useMutationsAllowed } from "@/client-gate";
 import { Bot, FolderGit2, Trash2 } from "lucide-react";
-import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@agent-easel/contracts";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
   agentRuntimeMeta,

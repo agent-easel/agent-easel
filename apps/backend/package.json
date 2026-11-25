@@ -1,5 +1,5 @@
 {
-  "name": "@t3-factory/backend",
+  "name": "@agent-easel/backend",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -30,6 +30,9 @@
     "dev:prod": "vpx --watch --clear-screen=false --no-rerun-on-enter --include \"src/migrations/**/*.sql\" --include \"../../packages/*/src/**/*.ts\" --conditions=factory-source src/main.ts --api-only"
   },
   "dependencies": {
+    "@agent-easel/contracts": "workspace:*",
+    "@agent-easel/domain-validation": "workspace:*",
+    "@agent-easel/flow-layout": "workspace:*",
     "@ai-sdk/anthropic": "4.0.107",
     "@ai-sdk/openai-compatible": "3.0.94",
     "@chat-adapter/discord": "4.45.0",
@@ -38,9 +41,6 @@
     "@effect/sql-sqlite-node": "4.1.2",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/server": "2.4.0",
-    "@t3-factory/contracts": "workspace:*",
-    "@t3-factory/domain-validation": "workspace:*",
-    "@t3-factory/flow-layout": "workspace:*",
     "ai": "7.0.178",
     "chat": "4.45.0",
     "discord.js": "14.28.1",

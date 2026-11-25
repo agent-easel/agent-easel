@@ -6,7 +6,7 @@ import {
   type FlowDraft,
   type FlowGraph,
   type FlowReadiness,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   canvasGraph,
   createFlowLayoutDimensions,
@@ -14,7 +14,7 @@ import {
   type CanvasBlock,
   type CanvasDimensions,
   type CanvasGraph,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import {
   applyLayoutPositions,
   type FlowLayoutDimensions,

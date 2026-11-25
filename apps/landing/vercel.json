@@ -5,24 +5,14 @@
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
   "git": {
-    "deploymentEnabled": {
-      "main": true,
-      "*": false,
-      "**": false
-    }
+    "deploymentEnabled": false
   },
-  "rewrites": [
+  "redirects": [
     {
-      "source": "/ingest/static/:path*",
-      "destination": "https://eu-assets.i.posthog.com/static/:path*"
-    },
-    {
-      "source": "/ingest/batch/",
-      "destination": "https://eu.i.posthog.com/batch/"
-    },
-    {
-      "source": "/ingest/:path*",
-      "destination": "https://eu.i.posthog.com/:path*"
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "t3factory.app" }],
+      "destination": "https://agenteasel.app/:path*",
+      "permanent": true
     }
   ]
 }

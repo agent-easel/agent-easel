@@ -34,7 +34,7 @@ const runtimeFile = (fields: Record<string, unknown>) =>
     ...fields,
   });
 
-it("a running T3's runtime file proposes its MCP address and version, and unknown fields do not matter", async (c) => {
+it("a running T3 Code's runtime file proposes its MCP address and version, and unknown fields do not matter", async (c) => {
   // Arrange
   const { open } = await freshHome(c, runtimeFile({ managedPolicy: null, extra: { nested: 1 } }));
   const factory = await open();
@@ -79,7 +79,7 @@ it.for([
   ["an origin with a query", runtimeFile({ origin: "https://t3.example?token=secret" })],
   ["an origin with a path", runtimeFile({ origin: "http://127.0.0.1:3773/base" })],
   ["origin text the URL parser would repair", runtimeFile({ origin: "http://127.0.0.1:37\n73" })],
-])("%s means no running T3 was found", async ([_name, contents], c) => {
+])("%s means no running T3 Code was found", async ([_name, contents], c) => {
   // Arrange
   const { open } = await freshHome(c, contents);
   const factory = await open();
@@ -94,7 +94,7 @@ it.for([
   });
 });
 
-it("a runtime file in the overridden T3 state directory is the one detection reads", async (c) => {
+it("a runtime file in the overridden T3 Code state directory is the one detection reads", async (c) => {
   // Arrange
   const { harness, state } = await freshHome(c, runtimeFile({ origin: "http://127.0.0.1:4000" }));
   const other = join(harness.processHome, "other-state");
@@ -118,7 +118,7 @@ it("a runtime file in the overridden T3 state directory is the one detection rea
   expect(setup.value.detectedT3?.endpoint).toBe("http://127.0.0.1:5000/mcp");
 });
 
-it("installable harnesses T3 keeps off are named, by T3's enablement rule", async (c) => {
+it("installable harnesses T3 Code keeps off are named, by T3 Code's enablement rule", async (c) => {
   // Arrange
   const { state, open } = await freshHome(c);
   await writeFile(

@@ -10,8 +10,8 @@ import type {
   RunTitleModel,
   RunTitleSetting,
   UpdateRunTitleSettingInput,
-} from "@t3-factory/contracts";
-import { buildOptions, optionAvailability, optionValue } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { buildOptions, optionAvailability, optionValue } from "@agent-easel/domain-validation";
 import { ChoiceMenu } from "@/components/choice-menu";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -47,7 +47,7 @@ function useTitleSetting() {
     api.getRunTitleSetting().then(
       (value) => active && setSetting(value),
       (cause: unknown) =>
-        active && setLoadError(errorMessage(cause, "Factory could not read Run titles.")),
+        active && setLoadError(errorMessage(cause, "AgentEasel could not read Run titles.")),
     );
     api.getAgentCapabilities().then(
       (value) => active && setCatalog(value),
@@ -67,7 +67,7 @@ function useTitleSetting() {
         return true;
       })
       .catch((cause: unknown) => {
-        setSaveError(errorMessage(cause, "Factory could not save Run titles."));
+        setSaveError(errorMessage(cause, "AgentEasel could not save Run titles."));
         return false;
       })
       .finally(() => setSaving(false));
@@ -282,7 +282,7 @@ function WorkerRows({
             onChange={chooseProvider}
             disabled={!editable}
             placeholder={providers ? "Choose a provider" : "—"}
-            empty="T3 offers no providers"
+            empty="T3 Code offers no providers"
             className={rowChoiceClass}
           />
         }
@@ -343,18 +343,18 @@ function TitleConnectionProblem() {
     <ProblemCard
       tone="neutral"
       icon={Unplug}
-      title="Factory can’t reach T3"
+      title="AgentEasel can’t reach T3 Code"
       action={
         <Button
           variant="outline"
           size="sm"
           onClick={() => void openSettings({ tab: "connection" })}
         >
-          Open T3 connection
+          Open T3 Code connection
         </Button>
       }
     >
-      Provider and model choices load once T3 is connected.
+      Provider and model choices load once T3 Code is connected.
     </ProblemCard>
   );
 }
@@ -365,7 +365,7 @@ function providerChoices(providers: readonly AgentProviderCapability[]) {
       id: entry.providerInstanceId,
       label: entry.displayName ?? entry.providerInstanceId,
       disabled: !entry.reporting.supported || entry.models.length === 0,
-      ...(!entry.reporting.supported ? { badge: "No Factory reporting" } : {}),
+      ...(!entry.reporting.supported ? { badge: "No AgentEasel reporting" } : {}),
     }))
     .sort((left, right) => Number(left.disabled) - Number(right.disabled));
 }

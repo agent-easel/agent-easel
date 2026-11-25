@@ -1,4 +1,4 @@
-import type { FactoryProject, ValidationIssue } from "@t3-factory/contracts";
+import type { FactoryProject, ValidationIssue } from "@agent-easel/contracts";
 import { gitHubRepairGuidance, type GitHubAdapter } from "../adapters/github.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 

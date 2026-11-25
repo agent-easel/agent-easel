@@ -1,4 +1,4 @@
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition } from "@agent-easel/contracts";
 
 export const capabilities: AgentCapabilities = {
   state: "ready",

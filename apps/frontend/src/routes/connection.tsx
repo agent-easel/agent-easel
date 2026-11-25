@@ -1,6 +1,6 @@
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
-import type { T3Connection } from "@t3-factory/contracts";
+import type { T3Connection } from "@agent-easel/contracts";
 import { KeyRound, LoaderCircle, Unplug } from "lucide-react";
 import { useClientScope } from "../client-scope.ts";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ export function ConnectionSettingsPanel() {
   };
   return (
     <SettingsPage
-      title="T3 connection"
+      title="T3 Code connection"
       badge={<ConnectionStateBadge presentation={busy === "checking" ? "loading" : presentation} />}
       hostManaged={!host}
       action={
@@ -89,7 +89,7 @@ export function ConnectionSettingsPanel() {
       {operationError && (
         <ProblemCard
           tone="error"
-          title="Couldn’t change the T3 connection"
+          title="Couldn’t change the T3 Code connection"
           details={operationError}
         />
       )}
@@ -166,7 +166,7 @@ function ConnectionRows({
           }
         />
         <SettingsDetailRow
-          label="T3 version"
+          label="T3 Code version"
           value={
             contract ? (
               <span className="inline-flex flex-wrap items-center gap-2">
@@ -276,10 +276,10 @@ function ConnectionProblem({
       <ProblemCard
         tone="error"
         icon={Unplug}
-        title="Factory can’t reach T3"
+        title="AgentEasel can’t reach T3 Code"
         details={connection?.explanation}
       >
-        Start T3 on the Factory host, then check again. Runs keep going in T3.
+        Start T3 Code on the AgentEasel host, then check again. Runs keep going in T3 Code.
       </ProblemCard>
     );
   if (presentation === "authorization-required")
@@ -287,26 +287,26 @@ function ConnectionProblem({
       <ProblemCard
         tone="attention"
         icon={LoaderCircle}
-        title="Approve in the browser on the Factory host"
+        title="Approve in the browser on the AgentEasel host"
         action={action}
       >
         This page updates by itself.
       </ProblemCard>
     ) : (
-      <ProblemCard tone="attention" title="Authorize Factory in T3" action={action}>
-        T3’s approval page opens in a browser on the Factory host.
+      <ProblemCard tone="attention" title="Authorize AgentEasel in T3 Code" action={action}>
+        T3 Code’s approval page opens in a browser on the AgentEasel host.
       </ProblemCard>
     );
   if (presentation === "incompatible" && connection)
     return (
-      <ProblemCard tone="attention" title="Update T3" details={contractDetails(connection)}>
-        This T3 version is incompatible. Existing Runs keep their history.
+      <ProblemCard tone="attention" title="Update T3 Code" details={contractDetails(connection)}>
+        This T3 Code version is incompatible. Existing Runs keep their history.
       </ProblemCard>
     );
   if (presentation === "load-error")
     return (
       <ProblemCard tone="error" title="Couldn’t read the connection status" details={error}>
-        Check that Factory is running, then check again.
+        Check that AgentEasel is running, then check again.
       </ProblemCard>
     );
   return null;

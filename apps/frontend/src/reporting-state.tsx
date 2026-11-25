@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { CircleDashed, type LucideIcon } from "lucide-react";
-import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
+import type { AgentDefinition, ReportingInstallation } from "@agent-easel/contracts";
 import type { SettingKind } from "./components/status-badge.tsx";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
@@ -47,7 +47,7 @@ export function agentReportingStatus(
       label: "Reporting not configured",
       launchSkill: null,
       message:
-        "Factory could not find a reporting installation for this provider. Check Agent reporting before starting a Run.",
+        "AgentEasel could not find a reporting installation for this provider. Check Agent reporting before starting a Run.",
     };
   if (target.status === "installed")
     return {
@@ -134,7 +134,7 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
         targets: null,
         agents,
         error:
-          "Factory could not check Agent reporting. Check that Factory is running, then check again.",
+          "AgentEasel could not check Agent reporting. Check that AgentEasel is running, then check again.",
       }
     : { targets, agents, error: "" };
   const installHome = async (target: ReportingInstallation) => {

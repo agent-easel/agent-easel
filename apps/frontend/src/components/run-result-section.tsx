@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Flag } from "lucide-react";
-import type { RunDetail, RunResult } from "@t3-factory/contracts";
+import type { RunDetail, RunResult } from "@agent-easel/contracts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
 import { blockName, capturedEnding, deliveryWorker, resultVisit } from "../run-evidence.ts";

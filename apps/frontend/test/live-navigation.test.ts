@@ -1,4 +1,4 @@
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import { expect, it } from "vite-plus/test";
 import { navigationScope } from "../src/live/navigation.ts";
 

@@ -1,4 +1,4 @@
-import type { FlowBlockInput, FlowGraphInput } from "@t3-factory/contracts";
+import type { FlowBlockInput, FlowGraphInput } from "@agent-easel/contracts";
 
 type Binding = "bound" | "unbound";
 type PlacedFlows = ReadonlyMap<string, { readonly graph: FlowGraphInput }>;

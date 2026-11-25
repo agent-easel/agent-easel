@@ -2,7 +2,7 @@ import { assert, type TestContext } from "@effect/vitest";
 import { isolatedUserHome, writeReportingState } from "./reporting-home.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FactoryOperations } from "@t3-factory/contracts";
+import type { FactoryOperations } from "@agent-easel/contracts";
 import { loadConfiguration } from "../../src/config.ts";
 import { startServer } from "../../src/server.ts";
 import { factoryHarness } from "./factory.ts";

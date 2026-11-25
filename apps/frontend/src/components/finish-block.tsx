@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Flag } from "lucide-react";
-import type { FlowEnding } from "@t3-factory/contracts";
+import type { FlowEnding } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 
 export type FinishBlockState =

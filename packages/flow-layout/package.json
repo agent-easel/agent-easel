@@ -1,5 +1,5 @@
 {
-  "name": "@t3-factory/flow-layout",
+  "name": "@agent-easel/flow-layout",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,8 +15,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@t3-factory/contracts": "workspace:*",
-    "@t3-factory/domain-validation": "workspace:*",
+    "@agent-easel/contracts": "workspace:*",
+    "@agent-easel/domain-validation": "workspace:*",
     "elkjs": "0.12.1"
   }
 }

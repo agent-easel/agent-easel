@@ -27,13 +27,13 @@ test("a selected Block's Needs input names the request plainly, and its long nat
 
   // Assert
   const input = screen.getByRole("region", "Needs input");
-  await expect(input).toContainText("Implement change needs permission in T3");
+  await expect(input).toContainText("Implement change needs permission in T3 Code");
   await expect(input).not.toContainText(worker.threadId);
   const inspector = screen.getByRole("complementary", "Run inspector");
   await inspector.getByRole("button", "Technical details", { exact: true }).tap();
   await expect(inspector).toContainText(worker.threadId);
   await expect(inspector).toContainText(worker.executionId);
-  await expect(input.getByRole("link", "Open in T3", { exact: true })).toHaveAttribute(
+  await expect(input.getByRole("link", "Open in T3 Code", { exact: true })).toHaveAttribute(
     "href",
     run.attention.find((item) => item.kind === "native-request" && !item.settledAt)!.link!,
   );
@@ -70,7 +70,7 @@ test("a worker whose own turn ended while its subagents still run stays working 
   // Assert
   const activations = screen.getByRole("region", "Block activations");
   await expect(activations).toContainText("Implement change · Visit 1");
-  await expect(activations.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(activations.getByRole("link", "Open in T3 Code", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   await app.screenshot("working-delegated-subagents");
 });
@@ -164,7 +164,7 @@ test("the inspector breadcrumb returns from a selected Block to the Run overview
   await app.screenshot("inspector-overview");
 });
 
-test("Key events collapses a discussing worker's repeated T3 status updates into one row", async ({
+test("Key events collapses a discussing worker's repeated T3 Code status updates into one row", async ({
   app,
   screen,
   browser,
@@ -194,12 +194,12 @@ test("Key events collapses a discussing worker's repeated T3 status updates into
   await expect(timeline).toContainText("3 key events");
   await expect(timeline.getByRole("listitem")).toHaveCount(4);
   await expect(timeline).toContainText("started");
-  await expect(timeline).toContainText("entered · new T3 thread");
+  await expect(timeline).toContainText("entered · new T3 Code thread");
   await expect(timeline).toContainText("still working · not a final result");
   await expect(
     timeline.getByRole(
       "button",
-      /^\d\d:\d\d(–\d\d:\d\d)? 9 T3 status updates from Implement change/,
+      /^\d\d:\d\d(–\d\d:\d\d)? 9 T3 Code status updates from Implement change/,
     ),
   ).toContainText("completed ↔ running · hidden in Key events");
   await app.screenshot("timeline-key-events");
@@ -224,7 +224,7 @@ test("All events shows every recorded entry and stays chosen after reload", asyn
   const timeline = screen.getByRole("region", "Timeline");
   await expect(timeline).toContainText("12 events");
   await expect(timeline.getByRole("listitem")).toHaveCount(12);
-  await expect(timeline.getByText(/T3 reports · running/)).toHaveCount(4);
+  await expect(timeline.getByText(/T3 Code reports · running/)).toHaveCount(4);
   await app.screenshot("timeline-all-events");
   await browser.reload();
   await expect(screen.getByRole("tab", "All 12", { exact: true })).toHaveAttribute(
@@ -277,7 +277,7 @@ test("a Settled Run’s activation shows the result title and the reader action"
     .getByRole("complementary", "Run inspector")
     .getByRole("article", settledResultCard, { exact: true });
   await expect(card.getByText("Welcome copy updated", { exact: true })).toBeVisible();
-  await expect(card.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(card.getByRole("link", "Open in T3 Code", { exact: true })).toBeVisible();
   await expect(card.getByRole("button", "Read result", { exact: true })).toBeVisible();
   await expect(card.getByRole("listitem")).toHaveCount(0);
   await app.screenshot("final-result-card");

@@ -1,5 +1,5 @@
-import { attentionPresentation, type FlowGraph, type RunDetail } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import { attentionPresentation, type FlowGraph, type RunDetail } from "@agent-easel/contracts";
+import { effectiveExits } from "@agent-easel/domain-validation";
 
 export function referenceOf(value: string): { id: string } | { number: number } {
   const number = /^#?(\d{1,15})$/.exec(value.trim())?.[1];
@@ -43,7 +43,7 @@ export function runOverview(
     const blocked = (detail.settlement?.workers ?? [])
       .filter((worker) => worker.state === "unresolved")
       .map((worker) => `${worker.blockName}: ${worker.problem ?? "not resolved"}`);
-    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3, or Archive the Run.`;
+    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3 Code, or Archive the Run.`;
   };
 
   const run = {

@@ -7,7 +7,11 @@ import type { AgentCapabilities, AgentExecutionSettings, AgentModelOptionValue }
 import type { BlockExit, FlowBlock, FlowFinishBlock, FlowGraph, FlowWorkspace } from "./flow.ts";
 import { operation, type RawBody } from "./operation.ts";
 
-export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
+export const PORTABLE_DOCUMENT_FORMAT = "agenteasel/definitions";
+export const LEGACY_PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
+export type PortableDocumentFormat =
+  | typeof PORTABLE_DOCUMENT_FORMAT
+  | typeof LEGACY_PORTABLE_DOCUMENT_FORMAT;
 /** The version every export writes. */
 export const PORTABLE_DOCUMENT_VERSION = 7;
 export type PortableFormatVersion = 1 | 2 | 3 | 4 | 5 | 6 | typeof PORTABLE_DOCUMENT_VERSION;
@@ -35,7 +39,7 @@ export interface PortableAgent {
 }
 
 interface PortableEnvelope<Version extends PortableFormatVersion> {
-  readonly format: typeof PORTABLE_DOCUMENT_FORMAT;
+  readonly format: PortableDocumentFormat;
   readonly formatVersion: Version;
   /** Informational only; import never interprets it. */
   readonly factoryVersion: string;

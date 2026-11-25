@@ -10,7 +10,7 @@ const out = `${root}build`;
 const backend = fileURLToPath(new URL("../../backend/", import.meta.url));
 // Resolved through the workspace dependency, which also orders `pnpm -r build`.
 const frontend = fileURLToPath(
-  new URL("./dist/", import.meta.resolve("@t3-factory/frontend/package.json")),
+  new URL("./dist/", import.meta.resolve("@agent-easel/frontend/package.json")),
 );
 
 await rm(out, { recursive: true, force: true });

@@ -1,4 +1,3 @@
-import type { ServerOptions } from "../../src/server.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,8 +6,8 @@ import type {
   DiscordSettings,
   UpdateChatModelInput,
   UpdateDiscordConnectionInput,
-} from "@t3-factory/contracts";
-import type { Factory } from "../../src/index.ts";
+} from "@agent-easel/contracts";
+import type { AgentEasel } from "../../src/index.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import {
   controlledDiscord,
@@ -34,7 +33,7 @@ export const chatModelSave = (overrides: Partial<UpdateChatModelInput> = {}) =>
 
 /** The Language model saved once from the empty section; the save must succeed. */
 export async function savedChatModel(
-  factory: Pick<Factory, "updateChatModelSettings">,
+  factory: Pick<AgentEasel, "updateChatModelSettings">,
   overrides: Partial<UpdateChatModelInput> = {},
 ): Promise<ChatModelSettings> {
   const saved = await factory.updateChatModelSettings(chatModelSave(overrides));
@@ -61,7 +60,7 @@ export const discordConnectionSave = (overrides: Partial<UpdateDiscordConnection
 
 /** The Discord connection saved once from the empty section; the save must succeed. */
 export async function savedDiscordConnection(
-  factory: Pick<Factory, "updateDiscordConnection">,
+  factory: Pick<AgentEasel, "updateDiscordConnection">,
   overrides: Partial<UpdateDiscordConnectionInput> = {},
 ): Promise<DiscordSettings> {
   const saved = await factory.updateDiscordConnection(discordConnectionSave(overrides));
@@ -90,7 +89,7 @@ export const discordGuild = {
  * connection to the controlled Discord, and Access allowing the participant in the allowed channel
  * for that Project. Chat control is still Off.
  */
-export async function chatControlWorld(c: TestContext, telemetry?: ServerOptions["telemetry"]) {
+export async function chatControlWorld(c: TestContext) {
   const model = await controlledModelProvider(c);
   const discord = await controlledDiscord(c);
   discord.addBot(discordBot);
@@ -105,7 +104,6 @@ export async function chatControlWorld(c: TestContext, telemetry?: ServerOptions
       t3,
       discordApiUrl: discord.apiUrl,
       connectionRetryMs: 60_000,
-      ...(telemetry ? { telemetry } : {}),
     });
   const factory = await open();
   await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" });
@@ -130,7 +128,7 @@ const COMMANDS = /^\/api\/v10\/applications\/\d+\/commands$/;
  * its command right after attaching its handlers. `registrations` counts every registration so far.
  */
 export async function turnedOn(
-  factory: Pick<Factory, "setChatControlEnabled">,
+  factory: Pick<AgentEasel, "setChatControlEnabled">,
   discord: ControlledDiscord,
   registrations = 1,
 ) {
@@ -184,7 +182,7 @@ const OBSERVATION_PASSES = 2000;
  * settings again after yielding to pending I/O, for a bounded number of passes.
  */
 export async function discordSettingsWhen(
-  factory: Pick<Factory, "getDiscordSettings">,
+  factory: Pick<AgentEasel, "getDiscordSettings">,
   until: (settings: DiscordSettings) => boolean,
 ) {
   for (let pass = 0; pass < OBSERVATION_PASSES; pass++) {

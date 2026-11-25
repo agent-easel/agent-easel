@@ -7,8 +7,8 @@ import {
   type FlowBlock,
   type FlowEnding,
   type FlowGraph,
-} from "@t3-factory/contracts";
-import type { WireSource } from "@t3-factory/flow-layout";
+} from "@agent-easel/contracts";
+import type { WireSource } from "@agent-easel/flow-layout";
 import {
   CONTINUATION_EXIT,
   exitsWithEndings,
@@ -16,7 +16,7 @@ import {
   JOIN_OUTPUT,
   WAIT_OUTPUT,
   type ExitWithEndings,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

@@ -79,7 +79,7 @@ it("an import review reports the models and the owner, tells the agent to show t
   expect(assertOk(await factory.listAgents())).toHaveLength(before);
 });
 
-it("an import of a document that is not a Factory export fails with the shared review's issue", async (context) => {
+it("an import of a document that is not an AgentEasel export fails with the shared review's issue", async (context) => {
   // Arrange
   const { client } = await exportedRelease(context);
 

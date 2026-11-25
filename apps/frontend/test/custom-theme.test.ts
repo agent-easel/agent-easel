@@ -3,7 +3,7 @@ import {
   MAX_THEME_JSON_BYTES,
   parseCustomThemeJson,
   parseStoredCustomTheme,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { noticesForApply } from "../src/components/theme-color-settings.tsx";
 
 function hexLuminance(hex: string): number {
@@ -25,7 +25,7 @@ function contrastRatio(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-it("a dark seed theme generates custom dark colors and keeps Factory light colors", () => {
+it("a dark seed theme generates custom dark colors and keeps AgentEasel light colors", () => {
   // Arrange
   const json = JSON.stringify({
     name: "Nightfall",
@@ -69,7 +69,7 @@ it("a dark theme with a light variant generates custom colors for both modes", (
   expect(result.presentation.modes.light.kind).toBe("custom");
 });
 
-it("a T3 v1 config with one valid seed and explicit colors applies the colors to the base palette", () => {
+it("a T3 Code v1 config with one valid seed and explicit colors applies the colors to the base palette", () => {
   // Arrange
   const json = JSON.stringify({
     appearance: "dark",
@@ -219,7 +219,7 @@ it("foreground, secondary text, sidebar text and status colors are adjusted to m
   expect(contrastRatio(c["primary-foreground"], c["primary-hover"])).toBeGreaterThanOrEqual(4.5);
 });
 
-it("status colors are adjusted away from Factory defaults when a surface would otherwise fail 4.5:1", () => {
+it("status colors are adjusted away from AgentEasel defaults when a surface would otherwise fail 4.5:1", () => {
   // Arrange
   const json = JSON.stringify({
     name: "LighterSidebar",
@@ -244,7 +244,7 @@ it("status colors are adjusted away from Factory defaults when a surface would o
   expect(contrastRatio(c.destructive, c.background)).toBeGreaterThanOrEqual(4.5);
 });
 
-it("when one mode has impossible contrast, that mode falls back to Factory baseline while the other stays custom", () => {
+it("when one mode has impossible contrast, that mode falls back to AgentEasel baseline while the other stays custom", () => {
   // Arrange
   const json = JSON.stringify({
     name: "ImpossibleLight",
@@ -291,7 +291,7 @@ it("a mid-lightness accent lightens on hover when darkening would make action la
   expect(contrastRatio(c["primary-foreground"], c["primary-hover"])).toBeGreaterThanOrEqual(4.5);
 });
 
-it("a translucent color on a mapped role rejects that mode to Factory baseline", () => {
+it("a translucent color on a mapped role rejects that mode to AgentEasel baseline", () => {
   // Arrange
   const json = JSON.stringify({
     name: "Translucent",
@@ -308,7 +308,7 @@ it("a translucent color on a mapped role rejects that mode to Factory baseline",
 
   // Assert
   assert(!result.ok);
-  expect(result.details).toContain("colors Factory cannot read");
+  expect(result.details).toContain("colors AgentEasel cannot read");
 });
 
 it("stored custom themes are re-derived from rawJson so tampered presentations cannot bypass WCAG checks", () => {
@@ -388,7 +388,7 @@ it("applying a theme with an unreadable mapped color while storage is unavailabl
   // Assert
   expect(notices).toHaveLength(2);
   expect(notices[0]?.title).toBe("Custom colors applied for this tab only");
-  expect(notices[1]?.title).toBe("1 color Factory cannot read was ignored");
+  expect(notices[1]?.title).toBe("1 color AgentEasel cannot read was ignored");
 });
 
 it("low-contrast dark borders and inputs are lifted to stay visible on muted, card, canvas and sidebar surfaces", () => {

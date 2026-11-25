@@ -31,7 +31,7 @@ it("a valid endpoint saves as authorization-required without leaking authorizati
   expect(saved.ok && saved.value.authorizationContext).toBe(null);
 });
 
-it.effect("transient T3 outages reconnect to ready without a manual recheck", (context) =>
+it.effect("transient T3 Code outages reconnect to ready without a manual recheck", (context) =>
   Effect.gen(function* () {
     // Arrange
     const harness = yield* Effect.promise(() => factoryHarness(context));
@@ -175,7 +175,7 @@ it("later checks of the same ready connection keep its ready generation", async 
   expect(rechecked.value.readyGeneration).toBe(ready.readyGeneration);
 });
 
-it("a reconnect after T3 was unavailable is a new ready generation for the same authorization context", async (context) => {
+it("a reconnect after T3 Code was unavailable is a new ready generation for the same authorization context", async (context) => {
   // Arrange
   const { t3, factory, ready } = await readyConnection(context);
   t3.connection.available = false;
@@ -193,7 +193,7 @@ it("a reconnect after T3 was unavailable is a new ready generation for the same 
   expect(reconnected.value.readyGeneration).not.toBe(ready.readyGeneration);
 });
 
-it("a new authorization context while T3 stays ready is a new ready generation", async (context) => {
+it("a new authorization context while T3 Code stays ready is a new ready generation", async (context) => {
   // Arrange
   const { t3, factory, ready } = await readyConnection(context);
   t3.connection.identity = "controlled-grant-another";

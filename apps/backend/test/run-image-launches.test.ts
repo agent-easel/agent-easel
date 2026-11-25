@@ -60,8 +60,8 @@ it("a failed image upload leaves the launch pending with the upload problem and 
   assert(run.ok);
   expect(f.t3.threads.launchCalls).toBe(0);
   expect(run.value.intents.map((intent) => [intent.state, intent.problem])).toStrictEqual([
-    ["pending", "Image upload to T3 failed: T3 answered the upload with HTTP 500."],
-    ["pending", "Image upload to T3 failed: T3 answered the upload with HTTP 500."],
+    ["pending", "Image upload to T3 Code failed: T3 Code answered the upload with HTTP 500."],
+    ["pending", "Image upload to T3 Code failed: T3 Code answered the upload with HTTP 500."],
   ]);
   expect(run.value.blocks.map((block) => [block.state, block.problem])).toStrictEqual([
     ["not-started", null],
@@ -71,7 +71,7 @@ it("a failed image upload leaves the launch pending with the upload problem and 
   expect(run.value.attention).toStrictEqual([]);
 });
 
-it("a pending image launch uploads its images again after restart once T3 accepts attachments", async (c) => {
+it("a pending image launch uploads its images again after restart once T3 Code accepts attachments", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const f = { ...setup, ...(await imageDispatchHeld(setup.world, await imageRequest(setup))) };
@@ -94,7 +94,7 @@ it("a pending image launch uploads its images again after restart once T3 accept
   expect(f.t3.threads.uploadCalls).toBe(6);
 });
 
-it("Run image bytes missing from Factory storage cancel the launch with a Block error", async (c) => {
+it("Run image bytes missing from AgentEasel storage cancel the launch with a Block error", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const f = { ...setup, ...(await imageDispatchHeld(setup.world, await imageRequest(setup))) };
@@ -110,8 +110,8 @@ it("Run image bytes missing from Factory storage cancel the launch with a Block 
   expect(f.t3.threads.launchCalls).toBe(0);
   expect(run.value.intents.map((intent) => intent.state)).toStrictEqual(["cancelled", "cancelled"]);
   expect(run.value.blocks.slice(0, 2).map((block) => [block.state, block.problem])).toStrictEqual([
-    ["error", "Run image missing from Factory storage"],
-    ["error", "Run image missing from Factory storage"],
+    ["error", "Run image missing from AgentEasel storage"],
+    ["error", "Run image missing from AgentEasel storage"],
   ]);
 });
 

@@ -5,12 +5,12 @@ import type {
   Result,
   RunDefinitions,
   StartRunInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   compositionReadiness,
   mayPlaceAgent,
   type StartPrompt,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { currentAgentRevisionNumber } from "../../agent-revisions.ts";

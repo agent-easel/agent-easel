@@ -50,7 +50,7 @@ it("a worker observation reads its branch independently of its explicitly linked
   });
 });
 
-it("a worker PR cannot supply an executable link to Factory clients", async (c) => {
+it("a worker PR cannot supply an executable link to AgentEasel clients", async (c) => {
   // Arrange
   const { threads, endpoint } = await repositoryWorker(c, "javascript:alert(1)");
 
@@ -96,7 +96,7 @@ it("a captured checkout worker retains exact execution identity from its nested 
   });
 });
 
-it("a worker resumed by a notification shows a missing report when T3 settles it from an earlier result run", async (c) => {
+it("a worker resumed by a notification shows a missing report when T3 Code settles it from an earlier result run", async (c) => {
   // Arrange
   const f = await wireWorker(c, (runId) => ({
     ...settledAnswer(runId),
@@ -117,7 +117,7 @@ it("a worker resumed by a notification shows a missing report when T3 settles it
   ]);
 });
 
-it("a reported worker's result stays held while T3's delegated wait times out", async (c) => {
+it("a reported worker's result stays held while T3 Code's delegated wait times out", async (c) => {
   // Arrange
   const f = await wireWorker(c, (runId) => ({ ...settledAnswer(runId), timedOut: true }));
   assert((await report(f.world, f.worker, finishedReport())) === "ACCEPTED");
@@ -288,7 +288,7 @@ it("a waiting worker with a pending native request still marks its Run Needs inp
   });
 });
 
-it("an image upload posts its exact bytes to T3's signed upload address without the OAuth bearer", async (c) => {
+it("an image upload posts its exact bytes to T3 Code's signed upload address without the OAuth bearer", async (c) => {
   // Arrange
   const { threads, external } = await launchFixture(c);
   const upload = { name: "image-1-screenshot.png", mimeType: "image/png", sizeBytes: 0 };
@@ -310,7 +310,7 @@ it("an image upload posts its exact bytes to T3's signed upload address without 
   expect(received.authorization).toBeUndefined();
 });
 
-it("a malformed upload address from T3 is an invalid answer that never reveals the address", async (c) => {
+it("a malformed upload address from T3 Code is an invalid answer that never reveals the address", async (c) => {
   // Arrange
   const { threads, external } = await launchFixture(c);
   external.malformUploadAddresses();
@@ -326,7 +326,7 @@ it("a malformed upload address from T3 is an invalid answer that never reveals t
 
   // Assert
   await expect(uploaded).rejects.toStrictEqual(
-    new T3Failure("invalid-response", "T3 returned an invalid upload address."),
+    new T3Failure("invalid-response", "T3 Code returned an invalid upload address."),
   );
   expect(external.uploads).toStrictEqual([]);
 });
@@ -351,7 +351,7 @@ it("a launch sends its uploaded attachments with the first message", async (c) =
   expect(seen).toStrictEqual([{ ...payload, attachments }]);
 });
 
-it("Start rejects worktree support that cannot express whether T3 fetches origin", async (c) => {
+it("Start rejects worktree support that cannot express whether T3 Code fetches origin", async (c) => {
   // Arrange
   const { live, external, schema } = await launchFixture(c);
   const strategy = (
@@ -429,7 +429,7 @@ it("execution observation preserves native requests and renewed work references"
   expect(observation.recentRuns[2]?.startedAt).toBeNull();
 });
 
-it("a worktree thread read exposes the worktree path and branch T3 bound", async (c) => {
+it("a worktree thread read exposes the worktree path and branch T3 Code bound", async (c) => {
   // Arrange
   const fixture = await launchFixture(c);
   fixture.attachWorktree();
@@ -694,7 +694,7 @@ it("installed plain-text errors identify a missing thread and a denied capabilit
   expect(unclassified).toStrictEqual({ kind: "unclassified" });
 });
 
-it("a rename reply reports the different title returned by T3", () => {
+it("a rename reply reports the different title returned by T3 Code", () => {
   // Arrange
   const answer = {
     isError: false,
@@ -715,7 +715,7 @@ it("a rename reply reports the different title returned by T3", () => {
 it.for([
   { reason: "expired grant", identity: () => "previous", current: true },
   { reason: "cancelled claim", identity: (id: string) => id, current: false },
-])("a rename with a $reason cannot reach the T3 wire", async ({ identity, current }, c) => {
+])("a rename with a $reason cannot reach the T3 Code wire", async ({ identity, current }, c) => {
   // Arrange
   const { live, threads, endpoint, external } = await authorizedLiveOAuth(c, { updateSchema });
   const { authorizationIdentity } = await live.contract.inspect({ endpoint });
@@ -886,8 +886,8 @@ const continuationReads = (reads: readonly Record<string, unknown>[]) =>
   reads.filter((args) => typeof args.textOffset === "number");
 
 it.for([
-  { layout: "T3's pretty-printed Claude", text: startCallText(CLAUDE_START, "request-1") },
-  { layout: "T3's pretty-printed Codex", text: startCallText(CODEX_START, "request-1") },
+  { layout: "T3 Code's pretty-printed Claude", text: startCallText(CLAUDE_START, "request-1") },
+  { layout: "T3 Code's pretty-printed Codex", text: startCallText(CODEX_START, "request-1") },
   { layout: "compact", text: compact(startCallText(CLAUDE_START, "request-1")) },
 ])(
   "a conversation's own recorded factory_start_run call in $layout JSON proves it started the Run",
@@ -905,7 +905,7 @@ it.for([
   },
 );
 
-it("a live-captured T3 tool record carrying the Run's Start call proves the origin", async (c) => {
+it("a live-captured T3 Code tool record carrying the Run's Start call proves the origin", async (c) => {
   // Arrange
   const captured = workerActivity.items.find((item) => item.type === "dynamic_tool")!;
   const text = captured.text

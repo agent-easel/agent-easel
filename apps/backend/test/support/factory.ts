@@ -10,7 +10,7 @@ import {
   factoryLayer,
   FactoryService,
   openFactory,
-  type Factory,
+  type AgentEasel,
   type FactoryOptions,
 } from "../../src/index.ts";
 import { unavailableGitHub } from "../../src/adapters/github.ts";
@@ -19,7 +19,7 @@ import { ControlledGit } from "./controlled-git.ts";
 let templatePromise: Promise<string> | undefined;
 
 async function createTemplateDatabase(): Promise<string> {
-  const directory = await realpath(await mkdtemp(join(tmpdir(), "t3-factory-template-")));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "agenteasel-template-")));
   const databasePath = join(directory, "factory.sqlite");
   process.once("exit", () => rmSync(directory, { recursive: true, force: true }));
   const factory = await openFactory({ databasePath });
@@ -52,9 +52,9 @@ export async function factoryHarness(
 ) {
   const freshDatabase = options.freshDatabase ?? false;
   // Canonical, as a configured data home is, so a server reopening it sees the same paths.
-  const directory = await realpath(await mkdtemp(join(tmpdir(), "t3-factory-")));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "agenteasel-")));
   const databasePath = join(directory, "factory.sqlite");
-  const opened: Factory[] = [];
+  const opened: AgentEasel[] = [];
   context.onTestFinished(async () => {
     for (const factory of opened) await factory.close();
     await rm(directory, { recursive: true, force: true });

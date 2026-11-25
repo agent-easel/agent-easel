@@ -1,7 +1,7 @@
 import { MutationGate, useMutationsAllowed, useOfflineReason } from "@/client-gate";
 import { useState, type FormEvent } from "react";
-import type { FlowDraft } from "@t3-factory/contracts";
-import { validateCreateFlow } from "@t3-factory/domain-validation";
+import type { FlowDraft } from "@agent-easel/contracts";
+import { validateCreateFlow } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";

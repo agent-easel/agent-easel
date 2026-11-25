@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { DEFINITION_REQUEST_LIMIT_BYTES, saveRequestBound } from "@t3-factory/domain-validation";
+import { DEFINITION_REQUEST_LIMIT_BYTES, saveRequestBound } from "@agent-easel/domain-validation";
 import { discoveredClones, assertOk, openFactoryWithApprovedT3 } from "./support/domain-setup.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
@@ -23,7 +23,6 @@ import {
   humanStep,
 } from "./support/scenarios.ts";
 import { ending, resave, savedFlow, subflowBlock, toEnding } from "./support/subflow.ts";
-import { mockIngest } from "./support/telemetry.ts";
 
 it("import creates one new copy of every shared Flow and Agent under the chosen owner, preserving ending IDs", async (context) => {
   // Arrange
@@ -109,12 +108,9 @@ it("replay after restart and Flow removal returns actual keys in file order and 
   expect(assertOk(await reopened.listFlows()).map(({ id }) => id)).not.toContain(first.id);
 });
 
-it("a failed v5 Flow receipt rolls back the import without emitting an event", async (context) => {
+it("a failed v5 Flow receipt rolls back the import", async (context) => {
   // Arrange
-  const ingest = await mockIngest(context);
-  const factory = await factoryFailingInserts(context, "definition_import_receipt_flows", {
-    telemetry: { env: ingest.env },
-  });
+  const factory = await factoryFailingInserts(context, "definition_import_receipt_flows");
 
   // Act
   const result = await factory.commitImport({
@@ -129,7 +125,6 @@ it("a failed v5 Flow receipt rolls back the import without emitting an event", a
   expect(assertOk(await factory.listAgents())).toStrictEqual([]);
   expect(assertOk(await factory.listFlows())).toStrictEqual([]);
   await factory.close();
-  expect(ingest.events("definition.imported")).toHaveLength(0);
 });
 
 it.for([
@@ -293,9 +288,9 @@ it("review reports an invalid Flow before the per-save size of another valid def
   expect(result.error.issues[0]?.path).toBe("flows.0.name");
 });
 
-type Factory = Awaited<ReturnType<typeof openFactoryWithApprovedT3>>["factory"];
+type AgentEasel = Awaited<ReturnType<typeof openFactoryWithApprovedT3>>["factory"];
 
-async function exportedDiamondWithRenamedEnding(factory: Factory) {
+async function exportedDiamondWithRenamedEnding(factory: AgentEasel) {
   const reviewer = assertOk(
     await factory.createAgent({
       name: "Reviewer",
@@ -360,7 +355,7 @@ function endingPlacement(id: string, source: string, exitId: string, target: str
   };
 }
 
-async function saveWideComposition(factory: Factory, count: number) {
+async function saveWideComposition(factory: AgentEasel, count: number) {
   const children = [];
   for (let index = 1; index < count; index++)
     children.push(await savedFlow(factory, { name: `Stage ${index}` }));
@@ -443,7 +438,7 @@ it("a second import gives a root cycle independent identities", async (context) 
   ]);
 });
 
-async function exportedBrokenDraft(factory: Factory) {
+async function exportedBrokenDraft(factory: AgentEasel) {
   const child = await savedFlow(factory, {
     name: "Checks",
     graph: {

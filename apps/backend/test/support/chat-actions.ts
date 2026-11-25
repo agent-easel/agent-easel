@@ -1,7 +1,7 @@
 import { assert, type TestContext } from "@effect/vitest";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { ALLOWED_CHANNEL, discordBot, discordGuild } from "./chat-control.ts";
 import { invocation, operatingService, THREAD } from "./chat-conversation.ts";
 import { chatWorlds, runConversation } from "./chat-runs.ts";
@@ -24,12 +24,8 @@ import {
  * An operating Chat control over a Factory that can start Runs (the prepared ready Flow of
  * `runConversation`). `open` reopens the same home against the same external worlds.
  */
-export async function startingWorld(
-  c: TestContext,
-  shape?: ReadyFlowShape,
-  telemetry?: Parameters<typeof runConversation>[2],
-) {
-  const fixture = await runConversation(c, shape, telemetry);
+export async function startingWorld(c: TestContext, shape?: ReadyFlowShape) {
+  const fixture = await runConversation(c, shape);
   const open = () =>
     fixture.h.open({
       t3: fixture.t3,
@@ -139,7 +135,7 @@ export async function proposed(
 }
 
 const CONFIRMATION_ANSWER =
-  /^(?:🔒 Only the person|↪️ Nothing was done|🔤 That is not|🚫 This confirmation|⌛ This review|🚫 Chat control does not accept this confirmation|⚠️ Factory could not (?:confirm your access|act on this)|⏳ Factory is already|❓ Factory cannot tell|You already confirmed)/;
+  /^(?:🔒 Only the person|↪️ Nothing was done|🔤 That is not|🚫 This confirmation|⌛ This review|🚫 Chat control does not accept this confirmation|⚠️ AgentEasel could not (?:confirm your access|act on this)|⏳ AgentEasel is already|❓ AgentEasel cannot tell|You already confirmed)/;
 
 const isConfirmationAnswer = (message: CreatedMessage) => CONFIRMATION_ANSWER.test(message.content);
 
@@ -253,7 +249,7 @@ export async function privateStartingWorld(c: TestContext) {
 }
 
 /** The Runs Factory shows in navigation, as identity and title. */
-export async function runsOf(factory: Pick<Factory, "listRunNavigation">) {
+export async function runsOf(factory: Pick<AgentEasel, "listRunNavigation">) {
   const navigation = await factory.listRunNavigation();
   assert(navigation.ok, JSON.stringify(navigation));
   return navigation.value.map((entry) => ({ number: entry.number, title: entry.title }));
@@ -294,12 +290,8 @@ export const HUMAN_CONTEXT = "Review this change.\nCheck the empty state.";
  * An operating Chat control over a Run started in Factory (Run #1) of the Human review Flow, whose
  * Review waits on its pending occurrence with the worker's result `context`.
  */
-export async function answeringWorld(
-  c: TestContext,
-  context = HUMAN_CONTEXT,
-  telemetry?: Parameters<typeof runConversation>[2],
-) {
-  const world = await startingWorld(c, humanReviewFlow, telemetry);
+export async function answeringWorld(c: TestContext, context = HUMAN_CONTEXT) {
+  const world = await startingWorld(c, humanReviewFlow);
   const worker = await workerAtWork(world.world, world.input);
   await resultReported(world.world, worker, { message: context });
   const review = await resultReleasedToHumanReview(world.world, worker);
@@ -320,7 +312,7 @@ export const answerCall = (
 });
 
 /** The occurrence `id` of the Run as Factory shows it now. */
-export async function occurrenceOf(factory: Pick<Factory, "getRun">, runId: string, id: string) {
+export async function occurrenceOf(factory: Pick<AgentEasel, "getRun">, runId: string, id: string) {
   const run = await factory.getRun(runId);
   assert(run.ok, JSON.stringify(run));
   return {
@@ -345,7 +337,7 @@ export const archiveCall = (input: Record<string, unknown> = {}) => ({
 });
 
 /** The Run's lifecycle as Factory shows it now. */
-export async function lifecycleOf(factory: Pick<Factory, "getRun">, runId: string) {
+export async function lifecycleOf(factory: Pick<AgentEasel, "getRun">, runId: string) {
   const run = await factory.getRun(runId);
   assert(run.ok, JSON.stringify(run));
   return run.value.lifecycle;

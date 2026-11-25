@@ -21,7 +21,7 @@ import {
   useStudioRead,
   type StudioDefinitions,
 } from "../studio-definitions.ts";
-import type { AgentDefinition, FlowDraft, TriggerDefinition } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowDraft, TriggerDefinition } from "@agent-easel/contracts";
 import { liveOwner } from "../live/live-connection.ts";
 
 /** This Studio session's saved definitions, delivered live while Studio is open. */

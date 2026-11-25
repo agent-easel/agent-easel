@@ -6,7 +6,7 @@ import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const sections = (screen: Screen) => screen.getByRole("navigation", "Settings sections");
 
-test("the desktop host lists every Settings section under Factory, Chat control, Runs and This device", async ({
+test("the desktop host lists every Settings section under AgentEasel, Chat control, Runs and This device", async ({
   app,
   screen,
   browser,
@@ -18,8 +18,8 @@ test("the desktop host lists every Settings section under Factory, Chat control,
   await app.open("/settings/connection");
 
   // Assert
-  const factory = sections(screen).getByRole("group", "Factory");
-  await expect(factory.getByRole("link", /^T3 connection, /)).toBeVisible();
+  const factory = sections(screen).getByRole("group", "AgentEasel");
+  await expect(factory.getByRole("link", /^T3 Code connection, /)).toBeVisible();
   await expect(factory.getByRole("link", /^Agent reporting/)).toBeVisible();
   await expect(factory.getByRole("link", /^Devices & access/)).toBeVisible();
   const chat = sections(screen).getByRole("group", "Chat control");
@@ -54,7 +54,7 @@ test("in a small desktop window Settings opens below the title bar that holds th
     .toMatchObject({ x: 16, y: 48, width: 968, height: 636 });
 });
 
-test("a browser on the Factory host lists no Desktop app section", async ({ app, screen }) => {
+test("a browser on the AgentEasel host lists no Desktop app section", async ({ app, screen }) => {
   // Act
   await app.open("/settings/connection");
 
@@ -76,7 +76,9 @@ test("a remote client lists neither Devices & access nor Desktop app and locks R
 
   // Assert
   await expect(
-    sections(screen).getByRole("link", "Run titles, Managed on the Factory host", { exact: true }),
+    sections(screen).getByRole("link", "Run titles, Managed on the AgentEasel host", {
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(sections(screen).getByRole("link", "Appearance")).toBeVisible();
   await expect(sections(screen).getByRole("link", /^Devices & access/)).toHaveCount(0);
@@ -84,12 +86,15 @@ test("a remote client lists neither Devices & access nor Desktop app and locks R
   await app.screenshot("settings-navigation-remote-client");
 });
 
-test("a removed Settings path opens the default T3 connection section", async ({ app, screen }) => {
+test("a removed Settings path opens the default T3 Code connection section", async ({
+  app,
+  screen,
+}) => {
   // Act
   await app.open("/settings/application");
 
   // Assert
-  await expect(sections(screen).getByRole("link", /^T3 connection, /)).toHaveAttribute(
+  await expect(sections(screen).getByRole("link", /^T3 Code connection, /)).toHaveAttribute(
     "aria-current",
     "page",
   );
@@ -133,8 +138,8 @@ test("searching for notifications finds Desktop app and keeps the open page", as
 
   // Assert
   await expect(sections(screen).getByRole("link", "Desktop app", { exact: true })).toBeVisible();
-  await expect(sections(screen).getByRole("group", "Factory", { exact: true })).toHaveCount(0);
-  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await expect(sections(screen).getByRole("group", "AgentEasel", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("heading", "T3 Code connection", { exact: true })).toBeVisible();
   await app.screenshot("settings-search-notifications");
 });
 
@@ -173,7 +178,7 @@ for (const { mode, ring } of focusRings)
     await screen.getByRole("radio", mode, { exact: true }).tap();
     await app.open("/settings/connection");
     const shadow = [noShadow, noShadow, noShadow, ring, noShadow].join(", ");
-    const connection = sections(screen).getByRole("link", /^T3 connection, /);
+    const connection = sections(screen).getByRole("link", /^T3 Code connection, /);
     await screen.getByLabel("Search settings", { exact: true }).focus();
 
     // Act
@@ -199,7 +204,7 @@ for (const { mode, ring } of focusRings)
     await app.screenshot(`button-focus-${mode.toLowerCase()}`);
   });
 
-test("a not-allowed T3 address names the card that explains it", async ({
+test("a not-allowed T3 Code address names the card that explains it", async ({
   app,
   screen,
   browser,
@@ -233,7 +238,9 @@ test("searching for a visible row label such as Mode finds Appearance", async ({
 
   // Assert
   await expect(sections(screen).getByRole("link", "Appearance", { exact: true })).toBeVisible();
-  await expect(sections(screen).getByRole("link", "T3 connection", { exact: true })).toHaveCount(0);
+  await expect(
+    sections(screen).getByRole("link", "T3 Code connection", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("searching for Antigravity finds Agent reporting", async ({ app, screen }) => {
@@ -298,7 +305,7 @@ async function reconnectT3(fixture: Fixture, screen: Screen) {
   await expect(screen.getByText("Connected", { exact: true })).toBeVisible();
 }
 
-test("a Worker option search started after T3 reconnects finds Run titles", async ({
+test("a Worker option search started after T3 Code reconnects finds Run titles", async ({
   fixture,
   app,
   screen,
@@ -315,7 +322,7 @@ test("a Worker option search started after T3 reconnects finds Run titles", asyn
   await expect(runTitlesRow(screen)).toBeVisible();
 });
 
-test("a search kept open while T3 reconnects finds a Worker option after the query is replaced", async ({
+test("a search kept open while T3 Code reconnects finds a Worker option after the query is replaced", async ({
   fixture,
   app,
   screen,

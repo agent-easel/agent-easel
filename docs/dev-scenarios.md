@@ -1,7 +1,7 @@
 # Development scenarios and maintenance workflow
 
-`pnpm dev` is a persistent demo environment: a real SQLite database and a simulated T3 engine. Its Agents and Runs launch no real models, need no OAuth and install no repository MCP configuration.
-`pnpm dev:prod` and `pnpm start` connect to live T3. The simulator is developer evidence, not proof of live T3 integration.
+`pnpm dev` is a persistent demo environment: a real SQLite database and a simulated T3 Code engine. Its Agents and Runs launch no real models, need no OAuth and install no repository MCP configuration.
+`pnpm dev:prod` and `pnpm start` connect to live T3 Code. The simulator is developer evidence, not proof of live T3 Code integration.
 
 ## Seed lifecycle and isolation
 
@@ -63,12 +63,12 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 ## Simulator support limits
 
 - The simulator retains execution states but generates no code changes and finishes no work on its own. Seeded Runs launch Run-owned Block workers that report through `factory_update_block`; the
-  persistent demo does not model T3 reply turns.
-- Native T3 links, thread settlement, delegated waits and repository branch/PR facts in simulated Runs are fixture state. They do not prove real threads, T3 list organization, native settlement or reopen,
+  persistent demo does not model T3 Code reply turns.
+- Native T3 Code links, thread settlement, delegated waits and repository branch/PR facts in simulated Runs are fixture state. They do not prove real threads, T3 Code list organization, native settlement or reopen,
   real delegated-work settlement, Git changes or live GitHub state. A seeded Problem is deliberate; reset restores it.
 - The `generated-title` Run turns **Generate Run titles** on only for its own Start, so the setting stays off for other
   seeded Runs and new demo Runs. Its title thread is simulated and the seed submits the generated title through
-  `factory_set_run_title` itself; it proves no title model or live T3 launch.
+  `factory_set_run_title` itself; it proves no title model or live T3 Code launch.
 - The `ending-reached` Run starts two workers in a Flow whose Finish block has the endings Shipped and Dropped. The first worker's result enters Shipped, so the Run records its result, stops the second worker
   (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once in that scenario. For the Subflow canvas, inspect **Review panel** in `subflow-closing` to see the accepted
   **Approved** ending with **Stop acknowledged** and **Release pending** together. The
@@ -85,10 +85,10 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - The demo does not simulate connection loss, TLS or revocation; controlled transport and UI fixtures cover those boundaries.
 - Triggers read a GitHub stand-in, never the host's `gh`. Its repository and issues are saved in the demo home, so scheduled checks after a restart keep each Trigger's health. It proves no live
   GitHub access, search or labelling.
-- Fresh or reset homes install a disposable reporting target for the seeded Agents' simulated provider, pointing at the demo backend's own Factory MCP URL, and the `$factory-block` skill before creating Runs; real harness homes are never
+- Fresh or reset homes install a disposable reporting target for the seeded Agents' simulated provider, pointing at the demo backend's own AgentEasel MCP URL, and the `$factory-block` skill before creating Runs; real harness homes are never
   configured. The simulator also offers a second provider whose reporting is not installed and which no seeded Agent uses.
 
-The saved simulator format is version 5, which records each thread's worktree branch. Startup also restores version 4 without its idle worker threads, which Factory no longer uses, and version 3
+The saved simulator format is version 5, which records each thread's worktree branch. Startup also restores version 4 without its idle worker threads, which AgentEasel no longer uses, and version 3
 (simulated subagents instead of native delegation and descendant evidence) as checkout threads without a branch, and saves either as version 5. A version 4 home whose Run queued a Block's first visit on
 an idle worker loses that thread and needs a reset to observe it. Earlier versions need an explicit reset; startup never invents missing state for retained Runs.
 
@@ -104,8 +104,8 @@ needs no edit to the seed or to this document; describe product behavior in its 
 
 1. **Choose the observable case.** Read the product contract and the catalog above. State the screen, precondition, user action and expected result, and reuse an entry that already reaches that state.
 2. **Create through public operations.** Add a new named state in `apps/backend/test/support/scenarios.ts` (one only the persistent simulator can reach, such as delegated subagent work, beside it in
-   `scripts/dev/seed-support.ts`) and a new scenario as one entry in the exported list in `scripts/dev/seed-scenarios.ts`. Use Factory operations and drive external execution and report evidence through
-   the simulated T3 engine, with stable logical request keys and descriptive demo content. Check every `Result`. A fresh seed must reach the intended state without direct SQL edits, network access or model
+   `scripts/dev/seed-support.ts`) and a new scenario as one entry in the exported list in `scripts/dev/seed-scenarios.ts`. Use AgentEasel operations and drive external execution and report evidence through
+   the simulated T3 Code engine, with stable logical request keys and descriptive demo content. Check every `Result`. A fresh seed must reach the intended state without direct SQL edits, network access or model
    workloads.
 3. **Preserve lifecycle.** Seed only a fresh demo database; keep user edits on ordinary startup and restore simulator state before reconciling retained Runs. Keep saved simulator state compatible with its
    restoration; incompatible changes need an explicit version change and reset or migration policy. A second startup must preserve identifiers, counts and Run states without duplicating or overwriting
@@ -120,12 +120,12 @@ reload. Restart and confirm identifiers, counts and Run states are preserved wit
 state, then stop dev, reset and verify the baseline returns. Record the exact commands and sanitized results in the PR, keeping fixture proof distinct from live proof and raw artifacts in ignored `.e2e/`
 storage.
 
-For UI evidence against the seed, use the [verification skill](../.agents/skills/verify-t3-factory/SKILL.md) with an ad hoc e2e config under `.e2e/proof/<case>/` (`web()` and
+For UI evidence against the seed, use the [verification skill](../.agents/skills/verify-agenteasel/SKILL.md) with an ad hoc e2e config under `.e2e/proof/<case>/` (`web()` and
 `app: { url: "<Vite URL>" }`, no command), run it with `pnpm exec e2e run --config .e2e/proof/<case>/config.ts --trace on`, and stop your dev process afterwards. The default e2e fixture is separate and
-does not prove this seed. Controlled UI success neither replaces the disposable-demo check nor proves live T3 or model behavior.
+does not prove this seed. Controlled UI success neither replaces the disposable-demo check nor proves live T3 Code or model behavior.
 
 ## Related topics
 
-Product behavior is described in [Runs](runs.md), the [Runner](runner.md), [Studio](studio.md), [projects](projects.md), [T3 integration and Agent reporting](t3-integration.md),
+Product behavior is described in [Runs](runs.md), the [Runner](runner.md), [Studio](studio.md), [projects](projects.md), [T3 Code integration and Agent reporting](t3-integration.md),
 [desktop and approved clients](desktop-and-clients.md) and [keyboard shortcuts](keyboard-shortcuts.md). Backend tests own business invariants and controlled journeys own user journeys, independent of
-mutable developer data: see the [testing policy](testing.md) and the [controlled UI journey map](../.agents/skills/verify-t3-factory/features/README.md) for UI evidence.
+mutable developer data: see the [testing policy](testing.md) and the [controlled UI journey map](../.agents/skills/verify-agenteasel/features/README.md) for UI evidence.

@@ -1,6 +1,6 @@
 import type { TestContext } from "@effect/vitest";
-import type { Factory } from "../../src/index.ts";
-import type { BlockExit, FlowGraph } from "@t3-factory/contracts";
+import type { AgentEasel } from "../../src/index.ts";
+import type { BlockExit, FlowGraph } from "@agent-easel/contracts";
 import { factoryHarness } from "./factory.ts";
 import {
   loadMigrationData,
@@ -9,7 +9,7 @@ import {
 } from "./migration-data.ts";
 
 type Success<T> = T extends { ok: true; value: infer V } ? V : never;
-type Value<K extends keyof Factory> = Factory[K] extends (...args: never[]) => infer R
+type Value<K extends keyof AgentEasel> = AgentEasel[K] extends (...args: never[]) => infer R
   ? Success<Awaited<R>>
   : never;
 type CapturedExit = { id: string; outcome: string; requiresFeedback: boolean };

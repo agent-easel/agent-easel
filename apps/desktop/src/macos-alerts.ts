@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { Notification, type Dock } from "electron";
-import type { NotificationPermission } from "@t3-factory/contracts/desktop-bridge";
+import type { NotificationPermission } from "@agent-easel/contracts/desktop-bridge";
 import type { DesktopAlertPort } from "./attention-coordinator.ts";
 
 /** The staged N-API module (native/notifications.mm); macOS only, never loaded by tests. */

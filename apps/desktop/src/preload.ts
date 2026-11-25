@@ -8,7 +8,7 @@ import {
   type DesktopRoute,
   type DesktopState,
   type FactoryDesktop,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { channels } from "./ipc.ts";
 
 contextBridge.exposeInMainWorld("factoryDesktop", {
@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
     ipcRenderer.invoke(channels.setUpdateChannel, String(channel)),
   setAppearance: (preference: string) =>
     ipcRenderer.invoke(channels.setAppearance, String(preference)),
+  dismissMigrationSummary: () => ipcRenderer.invoke(channels.dismissMigrationSummary),
+  removePreviousInstallation: () => ipcRenderer.invoke(channels.removePreviousInstallation),
   setMenuState: (state: unknown) => ipcRenderer.invoke(channels.setMenuState, state),
   onMenuCommand(listener) {
     // The main process sends only ids it built its menu from.

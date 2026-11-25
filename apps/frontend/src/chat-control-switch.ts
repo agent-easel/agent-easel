@@ -1,4 +1,4 @@
-import type { DiscordSettings } from "@t3-factory/contracts";
+import type { DiscordSettings } from "@agent-easel/contracts";
 
 /**
  * What the page knows of the Language model's provider, base URL and model: saved or not, still

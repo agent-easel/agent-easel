@@ -1,7 +1,7 @@
 import { runFactoryProcess } from "./support/factory-process.ts";
 import { assert, expect, it } from "@effect/vitest";
 import { fileURLToPath } from "node:url";
-import type { ProjectCatalog, Result } from "@t3-factory/contracts";
+import type { ProjectCatalog, Result } from "@agent-easel/contracts";
 import { iconProject, liveIconProjects } from "./support/project-icons.ts";
 
 it("the last known project icon survives a fresh backend process without its connection", async (context) => {
@@ -31,7 +31,7 @@ it("the last known project icon survives a fresh backend process without its con
   expect(recovered.value.projects[0]?.availability).toBe("connection-unavailable");
 });
 
-it("a project absent from T3 keeps its selected history and last known icon", async (context) => {
+it("a project absent from T3 Code keeps its selected history and last known icon", async (context) => {
   // Arrange
   const icon = { kind: "emoji" as const, emoji: "🧪" };
   const { factory, t3, original } = await iconProject(context, icon);

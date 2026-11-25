@@ -7,8 +7,8 @@ import {
   type FlowDraft,
   type FlowGraph,
   type ReadinessIssue,
-} from "@t3-factory/contracts";
-import { exitsWithEndings, reachesEnding, subflowCyclePath } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { exitsWithEndings, reachesEnding, subflowCyclePath } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { TextLink } from "@/components/ui/text-link";

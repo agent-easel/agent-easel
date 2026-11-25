@@ -93,7 +93,7 @@ it("a Stop the demo simulator holds stays held after the simulator restarts", as
   expect(restarted.threads.executionObservations.get(threadId)?.activeRunId).toBe(runId);
 });
 
-it("a demo launch T3 accepted but could not save reports T3 unavailable, not a file error", async (c) => {
+it("a demo launch T3 Code accepted but could not save reports T3 Code unavailable, not a file error", async (c) => {
   // Arrange
   const { processHome } = await factoryHarness(c);
   const t3 = new PersistentT3(processHome, false);

@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { FactoryClient, Result } from "@t3-factory/contracts";
+import type { FactoryClient, Result } from "@agent-easel/contracts";
 import { SettingsStore } from "../../desktop/src/settings-store.ts";
 import {
   ControlledProtection,
@@ -186,7 +186,7 @@ it("forgetting a server invalidates already captured credential callbacks", asyn
   const remembered = captured.rememberCredential("obsolete-fixture-credential");
 
   // Assert
-  await expect(remembered).rejects.toThrow("selected Factory server changed");
+  await expect(remembered).rejects.toThrow("selected AgentEasel server changed");
   expect(client.capture()).toBeNull();
 });
 

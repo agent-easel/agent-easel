@@ -4,7 +4,7 @@ import type {
   TriggerDefinition,
   TriggerMissedIssue,
   TriggerStartedRun,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 type TriggerRow = {
   id: string;

@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { remotePrepared, remoteServer } from "./support/remote-clients.ts";
 
 it("a Start whose response was lost resolves to the original Run when the client retries it", async (c) => {
@@ -91,7 +91,7 @@ it("a protocol 16 client, which cannot validate a Flow under its owning Project,
 
 const serverUpdate = {
   status: 426,
-  body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
+  body: { ok: false, error: { message: expect.stringMatching(/Update the AgentEasel server/) } },
 } as const;
 
 it.for([

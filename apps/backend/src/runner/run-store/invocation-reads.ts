@@ -6,7 +6,7 @@ import {
   type SubflowInvocationPage,
   type SubflowInvocationPath,
   type SubflowPlacementSummary,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { failure } from "../../result.ts";

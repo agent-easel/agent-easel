@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { TriggerCheckReply, TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerCheckReply, TriggerDefinition } from "@agent-easel/contracts";
 import { ApiError } from "../../api.ts";
 import type { StudioDefinitions } from "../../studio-definitions.ts";
 import { currentSettings } from "../../trigger-review.ts";
@@ -60,7 +60,7 @@ export function useTriggerActions(
               message:
                 cause instanceof Error
                   ? cause.message
-                  : `Factory could not ${action} this Trigger.`,
+                  : `AgentEasel could not ${action} this Trigger.`,
             });
             return undefined;
           },

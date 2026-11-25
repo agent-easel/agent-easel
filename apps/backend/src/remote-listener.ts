@@ -1,7 +1,7 @@
 import { createServer, type Server as HttpsServer } from "node:https";
 import type { Server } from "node:http";
 import { networkInterfaces } from "node:os";
-import type { RemoteAccessStatus, Result } from "@t3-factory/contracts";
+import type { RemoteAccessStatus, Result } from "@agent-easel/contracts";
 import type { Configuration, configurationWriter } from "./config.ts";
 import type { RemoteAccessControl } from "./access-routes.ts";
 import { listen, type Listener } from "./listener.ts";
@@ -32,7 +32,6 @@ export function remoteAccessController(
   config: Configuration,
   handlerFor: HandlerFor,
   writeConfiguration: ReturnType<typeof configurationWriter>,
-  toggled: (enabled: boolean, certificateMode: "factory_ca" | "custom_cert") => Promise<void>,
 ): RemoteAccessControl & {
   start(): Promise<void>;
   close(): Promise<void>;
@@ -64,7 +63,7 @@ export function remoteAccessController(
     } catch (error) {
       problem =
         error instanceof Error && "code" in error && error.code === "EADDRINUSE"
-          ? `Port ${settings.port} is already in use. Free it or change remoteAccess.port in config.json, then restart Factory.`
+          ? `Port ${settings.port} is already in use. Free it or change remoteAccess.port in config.json, then restart AgentEasel.`
           : "Remote access could not start. Check the certificate files and bind address in config.json.";
       throw new Error(problem, { cause: error });
     }
@@ -98,7 +97,6 @@ export function remoteAccessController(
     status,
     setEnabled: (next) =>
       serialized(async (): Promise<Result<RemoteAccessStatus>> => {
-        const changed = enabled !== next;
         await writeConfiguration(
           (saved) => {
             const current = saved.remoteAccess;
@@ -109,7 +107,6 @@ export function remoteAccessController(
             enabled = next;
           },
         );
-        if (changed) await toggled(next, settings.certificate ? "custom_cert" : "factory_ca");
         if (!next) {
           await stopListener();
           problem = null;

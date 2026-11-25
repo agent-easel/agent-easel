@@ -4,7 +4,7 @@ import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { createHash } from "node:crypto";
-import type { ReportingInstallation, T3Connection } from "@t3-factory/contracts";
+import type { ReportingInstallation, T3Connection } from "@agent-easel/contracts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 import { withReportingInstallationActions } from "./reporting-installation-actions.ts";
 import { isReportingDriver, providerReporting } from "./reporting-drivers.ts";
@@ -76,7 +76,7 @@ function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedH
     const expanded = expandHomePath(rawHome, userHome);
     if (!isAbsolute(expanded))
       throw Error(
-        "Relative provider homes cannot be resolved from Factory. Set an absolute homePath or a tilde-based path in this T3 provider's settings.",
+        "Relative provider homes cannot be resolved from AgentEasel. Set an absolute homePath or a tilde-based path in this T3 Code provider's settings.",
       );
     return { directory: expanded, assumedDefault: false };
   }
@@ -95,7 +95,7 @@ async function vibeReportingDirectory(instance: Record<string, unknown>) {
     )
   )
     throw Error(
-      "Vibe's effective configuration depends on redacted T3 settings. Use manual setup.",
+      "Vibe's effective configuration depends on redacted T3 Code settings. Use manual setup.",
     );
   if (providerEnvironmentValue(instance, "VIBE_MCP_SERVERS"))
     throw Error(
@@ -107,7 +107,7 @@ async function vibeReportingDirectory(instance: Record<string, unknown>) {
     userHome,
   );
   if (!isAbsolute(home) || !isAbsolute(userHome))
-    throw Error("Set an absolute VIBE_HOME and HOME in this T3 provider's environment.");
+    throw Error("Set an absolute VIBE_HOME and HOME in this T3 Code provider's environment.");
   const info = await stat(home).catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
@@ -135,9 +135,9 @@ async function antigravityConfigDirectory(stateDirectory: string, instanceId: st
     throw error;
   });
   if ((await realpath(profile)) !== profile)
-    throw Error("The T3 Antigravity profile must be a local directory.");
+    throw Error("The T3 Code Antigravity profile must be a local directory.");
   if (!runtime.isDirectory())
-    throw Error("The antigravity-acp folder inside the T3 profile must be a local directory.");
+    throw Error("The antigravity-acp folder inside the T3 Code profile must be a local directory.");
   const directory = join(profile, "config");
   const config = await lstat(directory).catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -286,7 +286,7 @@ const targetFor = Effect.fn(function* (
       const directory = yield* boundary(() => antigravityConfigDirectory(stateDirectory, id));
       return targetAt(
         directory,
-        "Installs in this provider's T3 profile. T3 disables its built-in text generation for Antigravity profiles with user MCP servers.",
+        "Installs in this provider's T3 Code profile. T3 Code disables its built-in text generation for Antigravity profiles with user MCP servers.",
       );
     }
     if (profile.home.kind === "fixed") {
@@ -305,7 +305,7 @@ const targetFor = Effect.fn(function* (
     return targetAt(
       directory,
       resolved.assumedDefault
-        ? "Using the standard home for this OS user. If T3 inherits a custom configuration directory at launch, verify that directory manually before installing."
+        ? "Using the standard home for this OS user. If T3 Code inherits a custom configuration directory at launch, verify that directory manually before installing."
         : "Install once for all projects and Agents using this home.",
     );
   }).pipe(
@@ -353,17 +353,17 @@ const enabledLocalReportingInstances = Effect.fn(function* (
   const context = connection.authorizationContext;
   if (connection.state !== "ready" || !context)
     return {
-      problem: "Connect and authorize T3 before discovering installation targets.",
+      problem: "Connect and authorize T3 Code before discovering installation targets.",
     } as const;
   if (!isLocalEndpoint(context.endpoint))
     return {
       problem:
-        "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
+        "Remote execution hosts require manual installation on that host. AgentEasel will not configure its own home for a remote host.",
     } as const;
   if (process.platform === "win32" || (yield* managedHost()))
     return {
       problem:
-        "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
+        "Managed or unsupported host configuration requires administrator-reviewed manual installation. AgentEasel will not infer effective provider settings.",
     } as const;
   const environment = (yield* boundary(() =>
     readFile(join(stateDirectory, "environment-id"), "utf8"),
@@ -371,7 +371,7 @@ const enabledLocalReportingInstances = Effect.fn(function* (
   if (environment !== context.environmentId)
     return {
       problem:
-        "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
+        "Cannot discover local T3 Code configuration: Connected T3 Code identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 Code state directory; remote provisioning is unsupported.",
     } as const;
   return yield* boundary(async () => {
     const settings = record(
@@ -406,7 +406,7 @@ export const readVibeReportingInstances = (stateDirectory: string, connection: T
     Effect.catch(() =>
       Effect.succeed({
         problem:
-          "Cannot read the local T3 configuration to identify ACP Registry providers. Check the T3 state directory on the Factory host.",
+          "Cannot read the local T3 Code configuration to identify ACP Registry providers. Check the T3 Code state directory on the AgentEasel host.",
       }),
     ),
   );
@@ -442,7 +442,7 @@ export const discoverReporting = Effect.fn(function* (
       : [
           discoveryResult(
             "none-enabled",
-            "No enabled provider instances found in local T3 settings.",
+            "No enabled provider instances found in local T3 Code settings.",
           ),
         ];
   }).pipe(
@@ -451,7 +451,7 @@ export const discoverReporting = Effect.fn(function* (
       return Effect.succeed([
         discoveryResult(
           "discovery-refused",
-          `Cannot discover local T3 configuration: ${error instanceof Error ? error.message.replace(/\.$/, "") : "unavailable"}. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory.`,
+          `Cannot discover local T3 Code configuration: ${error instanceof Error ? error.message.replace(/\.$/, "") : "unavailable"}. Check that T3 Code has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 Code state directory.`,
         ),
       ]);
     }),

@@ -91,7 +91,7 @@ it("HTTP rejects hostile Host headers", async (c) => {
   expect(rootStatus).toBe(421);
 });
 
-it("Factory MCP refuses a cross-origin browser request", async (c) => {
+it("AgentEasel MCP refuses a cross-origin browser request", async (c) => {
   // Arrange
   const t3 = new ControlledT3();
   const { base } = await startConnectionServer(c, t3);

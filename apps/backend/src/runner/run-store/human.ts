@@ -1,6 +1,6 @@
 import { definitionsAtBlock } from "./run-definitions.ts";
-import type { Result } from "@t3-factory/contracts";
-import { handoffRecipients, HUMAN_EXITS } from "@t3-factory/domain-validation";
+import type { Result } from "@agent-easel/contracts";
+import { handoffRecipients, HUMAN_EXITS } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { HumanRow } from "../runner-types.ts";
@@ -79,7 +79,7 @@ export function openRunHuman(database: RunnerDatabase) {
               return failure(
                 "conflict",
                 (yield* readRunSettlement(sql, runRow))
-                  ? "Factory is settling this Run and stopping its workers, so it accepts no answers."
+                  ? "AgentEasel is settling this Run and stopping its workers, so it accepts no answers."
                   : "This Run is archived or settled by you, so it accepts no answers.",
               );
             if (!occurrence) return failure("not_found", "This Human occurrence does not exist.");

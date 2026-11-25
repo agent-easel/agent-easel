@@ -1,4 +1,4 @@
-import type { NavigationLiveMessage, RunNavigationEntry } from "@t3-factory/contracts";
+import type { NavigationLiveMessage, RunNavigationEntry } from "@agent-easel/contracts";
 import { useLiveScope } from "./live-connection.ts";
 import type { LiveScope } from "./owner.ts";
 

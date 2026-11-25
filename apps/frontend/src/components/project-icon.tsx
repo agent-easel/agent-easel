@@ -1,4 +1,4 @@
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import { useState } from "react";
 import { FolderIcon } from "lucide-react";
 import { cn } from "@/lib/utils";

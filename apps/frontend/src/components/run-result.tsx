@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import { OpenInT3 } from "./open-in-t3.tsx";
-import type { RunDetail } from "@t3-factory/contracts";
+import type { RunDetail } from "@agent-easel/contracts";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { isSingleOutput } from "../block-kind.ts";

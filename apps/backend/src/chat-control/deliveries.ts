@@ -9,7 +9,7 @@ import type {
   ChatDeliveryProblem,
   Result,
   RetryChatDeliveryInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
@@ -83,7 +83,7 @@ const backoffMs = (attempts: number) =>
   Math.min(1000 * 2 ** Math.max(0, attempts - 1), MAX_BACKOFF_MS);
 
 const PROBLEMS: Record<SendFailure, string> = {
-  transient: "Discord asked Factory to slow down. Factory retries automatically.",
+  transient: "Discord asked AgentEasel to slow down. AgentEasel retries automatically.",
   rejected:
     "Discord refused the message. Check that the thread still exists, is not locked or archived beyond reach, and that the bot can view it and send messages there, then retry.",
   unknown: UNKNOWN_CREATE_PROBLEM,
@@ -92,23 +92,23 @@ const PROBLEMS: Record<SendFailure, string> = {
 /** Corrections Factory can name from Discord's error code; others get the general refusal. */
 const CORRECTIONS: Partial<Record<number, string>> = {
   [DISCORD_CODES.unknownChannel]:
-    "Discord does not show the thread to the bot: it was deleted or the bot lost access. Factory never recreates a thread or posts elsewhere. Restore the bot's access, then retry.",
+    "Discord does not show the thread to the bot: it was deleted or the bot lost access. AgentEasel never recreates a thread or posts elsewhere. Restore the bot's access, then retry.",
   [DISCORD_CODES.locked]:
-    "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.",
+    "The thread is locked, and AgentEasel never unlocks threads. Unlock it in Discord, then retry.",
   [DISCORD_CODES.activeThreads]:
-    "Factory could not reopen the archived thread: the server reached Discord's active thread limit. Archive another thread, then retry.",
+    "AgentEasel could not reopen the archived thread: the server reached Discord's active thread limit. Archive another thread, then retry.",
 };
 
-const EDIT_UNANSWERED = "Discord did not confirm the edit. Factory retries automatically.";
+const EDIT_UNANSWERED = "Discord did not confirm the edit. AgentEasel retries automatically.";
 const REPLACEMENT_LOST =
-  "Discord deleted this Run's replacement status card too. Factory does not create another on its own; Retry creates a new card.";
+  "Discord deleted this Run's replacement status card too. AgentEasel does not create another on its own; Retry creates a new card.";
 
 /** What a definite refusal asks the owner to correct. */
 const correction = (error: unknown) =>
   CORRECTIONS[discordError(error).code ?? 0] ?? PROBLEMS.rejected;
 
 const INTERRUPTED =
-  "Factory stopped while sending the message, so it cannot tell whether Discord created it. Retrying may post it twice.";
+  "AgentEasel stopped while sending the message, so it cannot tell whether Discord created it. Retrying may post it twice.";
 
 type DeliveryRow = {
   id: string;

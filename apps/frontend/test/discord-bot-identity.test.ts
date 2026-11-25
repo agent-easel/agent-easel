@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { DiscordSettings } from "@t3-factory/contracts";
+import type { DiscordSettings } from "@agent-easel/contracts";
 import { checkedBot } from "../src/discord-bot-identity.ts";
 
 /**
@@ -28,7 +28,7 @@ const replacedBot = (overrides: Partial<Parameters<typeof checkedBot>[0]>) => ({
   ...overrides,
 });
 
-it("names the bot whose saved credentials passed the check while Off, not the bot Factory last operated as", () => {
+it("names the bot whose saved credentials passed the check while Off, not the bot AgentEasel last operated as", () => {
   // Arrange
   const settings = replacedBot({});
 

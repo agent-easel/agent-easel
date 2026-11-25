@@ -8,7 +8,7 @@ import {
   type DesktopMenuCommand,
   type DesktopMenuCommandId,
   type DesktopMenuState,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import type { KeyboardEvent, MenuItemConstructorOptions } from "electron";
 
 export interface MenuActions {
@@ -171,7 +171,7 @@ export function buildApplicationMenu(
   const run = commands("run");
   return [
     {
-      label: "T3 Factory",
+      label: "AgentEasel",
       submenu: sections(
         [{ role: "about" }],
         [...commands("settings"), { label: "Check for Updates…", click: actions.checkForUpdates }],
@@ -203,7 +203,7 @@ export function buildApplicationMenu(
     { role: "windowMenu" },
     {
       role: "help",
-      submenu: [{ label: "Factory Documentation", click: actions.openDocumentation }],
+      submenu: [{ label: "AgentEasel Documentation", click: actions.openDocumentation }],
     },
   ];
 }

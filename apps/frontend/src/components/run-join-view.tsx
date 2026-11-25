@@ -4,7 +4,7 @@ import type {
   JoinSourceDetail,
   JoinSummary,
   RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Surface } from "@/components/ui/surface";
 import { blockExitRecipients } from "../flow-graph.ts";
 import { joinSummaryOf } from "../join-display.ts";
@@ -235,7 +235,7 @@ export function JoinInspection({ run, block }: { run: RunDetail; block: JoinBloc
 export function WorkerlessNote() {
   return (
     <p className="text-xs text-subtle-foreground">
-      Workerless · no T3 thread. Settle or Archive ends a round that never completes.
+      Workerless · no T3 Code thread. Settle or Archive ends a round that never completes.
     </p>
   );
 }

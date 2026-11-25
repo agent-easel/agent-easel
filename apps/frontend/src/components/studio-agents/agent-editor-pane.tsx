@@ -6,7 +6,7 @@ import type {
   AgentDefinition,
   FactoryProject,
   FlowDraft,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { ChevronRight, Copy, FolderGit2, MoreHorizontal, Unplug } from "lucide-react";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
@@ -275,10 +275,10 @@ function OwnerGoneCard({ ownership, ownerGone, onChangeOwner }: CardProps) {
     <ProblemCard
       tone="attention"
       icon={Unplug}
-      title={`${ownership.owner.title} is no longer in T3`}
+      title={`${ownership.owner.title} is no longer in T3 Code`}
       action={onChangeOwner && <TextLink onClick={onChangeOwner}>Change owner…</TextLink>}
     >
-      This Agent can’t be edited or placed until it has an owner in T3.
+      This Agent can’t be edited or placed until it has an owner in T3 Code.
     </ProblemCard>
   );
 }
@@ -339,11 +339,11 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
 }
 
 const createOutcomeCopy = {
-  checking: "Factory may have created this Agent. Checking before it can be created again…",
-  created: "Factory created this Agent.",
-  removed: "Factory created this Agent and it was removed elsewhere. Your changes are kept.",
-  absent: "Factory didn’t create this Agent. Your changes are kept.",
-  unconfirmed: "Factory couldn’t confirm the outcome. Your changes are kept.",
+  checking: "AgentEasel may have created this Agent. Checking before it can be created again…",
+  created: "AgentEasel created this Agent.",
+  removed: "AgentEasel created this Agent and it was removed elsewhere. Your changes are kept.",
+  absent: "AgentEasel didn’t create this Agent. Your changes are kept.",
+  unconfirmed: "AgentEasel couldn’t confirm the outcome. Your changes are kept.",
 };
 
 function CreateOutcomeCard({

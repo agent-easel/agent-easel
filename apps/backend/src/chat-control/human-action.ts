@@ -1,8 +1,8 @@
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { HumanOccurrence, Result, RunDetail } from "@t3-factory/contracts";
-import { effectiveExits, HUMAN_EXITS } from "@t3-factory/domain-validation";
+import type { HumanOccurrence, Result, RunDetail } from "@agent-easel/contracts";
+import { effectiveExits, HUMAN_EXITS } from "@agent-easel/domain-validation";
 import {
   exceedsReviewLimit,
   type ActionOutcome,
@@ -71,7 +71,7 @@ const inputSchema: JSONSchema7 = {
       type: "string",
       enum: [...TEXT_SOURCES],
       description:
-        "requester-message or selected-reply when message is copied exactly from that text; composed when you wrote it, which Factory labels in the review.",
+        "requester-message or selected-reply when message is copied exactly from that text; composed when you wrote it, which AgentEasel labels in the review.",
     },
     supersedes: {
       type: "string",
@@ -143,7 +143,7 @@ function arrivalLine(detail: RunDetail, occurrence: HumanOccurrence) {
 const ANSWER_EMOJI: Record<ExitId, string> = { approve: "✅", "request-changes": "✏️" };
 
 const DISCLOSURE =
-  "ℹ️ Answers exactly this occurrence. If it was answered or cancelled elsewhere meanwhile, Factory answers nothing and never applies this answer to another one.";
+  "ℹ️ Answers exactly this occurrence. If it was answered or cancelled elsewhere meanwhile, AgentEasel answers nothing and never applies this answer to another one.";
 
 /** The complete review of a Human answer, as ordered Discord messages. */
 function answerReview(
@@ -289,9 +289,9 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
     summary: (outcome) => {
       if (outcome.kind === "accepted") {
         const facts = outcome.facts as AnswerFacts;
-        return `Factory accepted ${exitOf(facts.answer).name} for the Human step “${clip(facts.block, 200)}” in ${runLine(facts.runNumber, facts.title)}.`;
+        return `AgentEasel accepted ${exitOf(facts.answer).name} for the Human step “${clip(facts.block, 200)}” in ${runLine(facts.runNumber, facts.title)}.`;
       }
-      return `Factory did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
+      return `AgentEasel did not accept it: ${clip((outcome.facts as RejectedFacts).message, 300)}`;
     },
     target: (parameters) => (parameters as unknown as AnswerParameters).occurrenceId,
   };
@@ -299,7 +299,7 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
   const tool: MutationTool = {
     name: "answer_human",
     description:
-      "Propose answering exactly one pending Human occurrence of a Run with Approve (no message) or Request changes (the requester's exact feedback). Nothing is answered now: Factory posts a complete review with the occurrence's full context and a confirmation phrase only the requester can reply with, and ends this reply. Read the Run first; when several occurrences are pending, or the Run or answer is unclear, ask. Never answer several occurrences for one request.",
+      "Propose answering exactly one pending Human occurrence of a Run with Approve (no message) or Request changes (the requester's exact feedback). Nothing is answered now: AgentEasel posts a complete review with the occurrence's full context and a confirmation phrase only the requester can reply with, and ends this reply. Read the Run first; when several occurrences are pending, or the Run or answer is unclear, ask. Never answer several occurrences for one request.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -318,7 +318,8 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
             "This Run is Archived and read-only; it takes no answers.",
           );
         const detail = yield* operations.getRun(identity.id);
-        if (!detail.ok) return refused("unavailable", "Factory could not read this Run right now.");
+        if (!detail.ok)
+          return refused("unavailable", "AgentEasel could not read this Run right now.");
         const occurrence = detail.value.humanOccurrences.find(
           (entry) => entry.id === parsed.occurrenceId,
         );
@@ -335,7 +336,7 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
         if (occurrence.context === null)
           return refused(
             "context_unavailable",
-            "Factory no longer has this occurrence's context, so it cannot review an answer in chat. Suggest answering in Factory.",
+            "AgentEasel no longer has this occurrence's context, so it cannot review an answer in chat. Suggest answering in AgentEasel.",
           );
         const parameters: AnswerParameters = {
           runId: identity.id,
@@ -352,7 +353,7 @@ export function humanAnswerAction(sql: SqlClient.SqlClient, operations: HumanAns
         if (exceedsReviewLimit(review))
           return refused(
             "review_too_long",
-            "Factory's complete review of this answer, with the occurrence's full context, would exceed 32,000 characters, so it cannot be confirmed in chat. The context stays readable with read_run; suggest answering in Factory.",
+            "AgentEasel's complete review of this answer, with the occurrence's full context, would exceed 32,000 characters, so it cannot be confirmed in chat. The context stays readable with read_run; suggest answering in AgentEasel.",
           );
         return {
           operation: "human-answer",

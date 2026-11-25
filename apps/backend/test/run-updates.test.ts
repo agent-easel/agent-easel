@@ -12,7 +12,7 @@ import {
 } from "./support/run-updates.ts";
 import { archived, workerWorking } from "./support/scenarios.ts";
 
-it("a conversation whose own T3 activity records the Start call binds the Run's updates to itself", async (c) => {
+it("a conversation whose own T3 Code activity records the Start call binds the Run's updates to itself", async (c) => {
   // Arrange
   const run = await conversationRun(c);
 
@@ -28,7 +28,7 @@ it("a conversation whose own T3 activity records the Start call binds the Run's 
   });
 });
 
-it("a thread whose T3 activity does not record the Run's Start call is refused as an unverified origin", async (c) => {
+it("a thread whose T3 Code activity does not record the Run's Start call is refused as an unverified origin", async (c) => {
   // Arrange
   const run = await conversationRun(c);
 
@@ -75,7 +75,7 @@ it("a bound Run that newly needs input queues one update in its conversation wit
     environmentId: run.t3.connection.environmentId,
   });
   expect(update.message).toContain(
-    `Factory Run #1 (id ${run.worker.runId}) needs input (1 matter).`,
+    `AgentEasel Run #1 (id ${run.worker.runId}) needs input (1 matter).`,
   );
   expect(update.message).toContain('factory_read_run({"run":"#1"})');
   expect(update.message).not.toContain("Improve search");
@@ -91,7 +91,7 @@ it("a bound Run's confirmed settlement queues one settlement update in its conve
 
   // Assert
   expect((await sent).message).toContain(
-    `Factory Run #1 (id ${run.worker.runId}) settled automatically.`,
+    `AgentEasel Run #1 (id ${run.worker.runId}) settled automatically.`,
   );
 });
 
@@ -119,7 +119,7 @@ it("an update whose acknowledgement was lost is never sent again, also after a r
   expect(sends[0]).toContain("settled automatically");
 });
 
-it("an update T3 refuses is not sent again or to another conversation", async (c) => {
+it("an update T3 Code refuses is not sent again or to another conversation", async (c) => {
   // Arrange
   const run = await subscribedRun(c);
   run.t3.threads.refusedSendThreads.add(CONVERSATION);
@@ -146,7 +146,7 @@ it("an update T3 refuses is not sent again or to another conversation", async (c
   ]);
 });
 
-it("a T3 activity read that does not complete binds nothing and may be retried", async (c) => {
+it("a T3 Code activity read that does not complete binds nothing and may be retried", async (c) => {
   // Arrange
   const run = await conversationRun(c);
   run.t3.threads.beforeFindStartCall = async () => {
@@ -199,7 +199,7 @@ it("a settlement still waiting to be sent is not sent once the Run is Active aga
   expect(sent).toStrictEqual([expect.stringContaining("needs input")]);
 });
 
-it("an update T3 rejected for its grant waits and is sent once after reauthorization", async (c) => {
+it("an update T3 Code rejected for its grant waits and is sent once after reauthorization", async (c) => {
   // Arrange
   const run = await subscribedRun(c);
   const rejected = new Promise<void>((resolve) => {

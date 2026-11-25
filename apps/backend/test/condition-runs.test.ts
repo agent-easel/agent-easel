@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { CONDITION_ARRIVAL_MAX } from "@t3-factory/contracts";
+import { CONDITION_ARRIVAL_MAX } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import {
   capturedConditionRuleDeleted,

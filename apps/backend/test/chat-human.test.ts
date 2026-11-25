@@ -49,7 +49,7 @@ it("a Human answer proposal reviews the Run, the exact occurrence with its compl
         `\`\`\`\n${HUMAN_CONTEXT}\n\`\`\``,
         "✏️ \\*\\*Request changes\\*\\* with this message:",
         `\`\`\`\n${FEEDBACK}\n\`\`\``,
-        "ℹ️ Answers exactly this occurrence\\. If it was answered or cancelled elsewhere meanwhile, Factory answers nothing and never applies this answer to another one\\.$",
+        "ℹ️ Answers exactly this occurrence\\. If it was answered or cancelled elsewhere meanwhile, AgentEasel answers nothing and never applies this answer to another one\\.$",
       ].join("\n"),
     ),
   );
@@ -111,7 +111,7 @@ it("revoking the requester's Access ends the waiting Discord confirmation on an 
   expect(confirmationOnPage(messages)).toBeNull();
 });
 
-it("the requester's confirmation answers exactly the reviewed occurrence of a Run started in Factory and posts the receipt in the request thread without giving the Run an origin", async (c) => {
+it("the requester's confirmation answers exactly the reviewed occurrence of a Run started in AgentEasel and posts the receipt in the request thread without giving the Run an origin", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
   const confirmation = await proposed(
@@ -141,7 +141,7 @@ it("the requester's confirmation answers exactly the reviewed occurrence of a Ru
   expect(statusCardsIn(world.discord)).toStrictEqual([]);
 });
 
-it("an identical answer given in Factory meanwhile is not this action's: the confirmation is rejected and the receipt says nothing was answered", async (c) => {
+it("an identical answer given in AgentEasel meanwhile is not this action's: the confirmation is rejected and the receipt says nothing was answered", async (c) => {
   // Arrange
   const world = await answeringWorld(c);
   const confirmation = await proposed(

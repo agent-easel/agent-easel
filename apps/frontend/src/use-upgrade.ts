@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ApplicationUpdate, ServerUpdate, UpdateChannel } from "@t3-factory/contracts";
+import type { ApplicationUpdate, ServerUpdate, UpdateChannel } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
-import type { DesktopState } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopState } from "@agent-easel/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { OfflineError } from "./transport.ts";
 import { useDesktopState } from "./desktop-state.ts";
@@ -38,7 +38,7 @@ const upToDateMs = 4000;
 const serverRestartMs = 10 * 60_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const describe = (cause: unknown) =>
-  cause instanceof Error ? cause.message : "Factory could not complete the update.";
+  cause instanceof Error ? cause.message : "AgentEasel could not complete the update.";
 
 /** The most urgent state across targets decides the single control the user sees. */
 function phaseOf(

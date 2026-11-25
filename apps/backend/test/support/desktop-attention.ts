@@ -1,5 +1,5 @@
 import type { TestContext } from "@effect/vitest";
-import type { DesktopAlertSettings } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopAlertSettings } from "@agent-easel/contracts/desktop-bridge";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,7 +70,7 @@ export async function desktopAttention(
   selection: AttentionSelection,
   settings: Partial<DesktopAlertSettings> = {},
 ) {
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-attention-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-desktop-attention-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const alerts = recordingAlerts();
   const coordinator = await AttentionCoordinator.open(directory, alerts.port, {

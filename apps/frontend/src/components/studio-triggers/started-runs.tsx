@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { TriggerStartedRun } from "@t3-factory/contracts";
+import type { TriggerStartedRun } from "@agent-easel/contracts";
 import {
   DropdownMenu,
   DropdownMenuContent,

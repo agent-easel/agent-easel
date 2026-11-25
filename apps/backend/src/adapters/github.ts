@@ -110,9 +110,9 @@ export interface GitHubAdapter {
 export function gitHubRepairGuidance(failure: GitHubFailure): string {
   switch (failure.reason) {
     case "gh_missing":
-      return "Install GitHub CLI (gh) on the Factory host. Factory looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin; restart a Factory opened from Finder after installing.";
+      return "Install GitHub CLI (gh) on the AgentEasel host. AgentEasel looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin; restart an AgentEasel opened from Finder after installing.";
     case "signed_out":
-      return `On the Factory host, run gh auth login --hostname ${failure.host} as the user Factory runs as.`;
+      return `On the AgentEasel host, run gh auth login --hostname ${failure.host} as the user AgentEasel runs as.`;
     case "no_repository":
       return `This Project's folder has no remote that gh recognizes as a GitHub repository. ${failure.message}`;
     case "unreadable":
@@ -124,7 +124,7 @@ export function gitHubRepairGuidance(failure: GitHubFailure): string {
     case "timeout":
       return "GitHub did not answer in time. The next check tries again.";
     case "truncated":
-      return "GitHub's answer was larger than Factory reads. Narrow the query.";
+      return "GitHub's answer was larger than AgentEasel reads. Narrow the query.";
     case "failed":
       return `GitHub could not be read. ${failure.message}`;
   }

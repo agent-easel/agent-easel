@@ -2,7 +2,7 @@ import { openBlockTools } from "./runner-block-tools.ts";
 import { settleRecoveries } from "./runner-recovery-settlement.ts";
 import { releaseContinuationResults } from "./handoff-release.ts";
 import { openRunNavigation } from "./run-navigation.ts";
-import type { FactoryOperations, Result } from "@t3-factory/contracts";
+import type { FactoryOperations, Result } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
@@ -29,7 +29,6 @@ import { makeWaitTimers } from "./runner-wait-timers.ts";
 import { openWorkerTitleDispatch } from "./worker-title-dispatch.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import type { RunImages } from "../run-images.ts";
-import type { Telemetry } from "../telemetry.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
 
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
@@ -47,7 +46,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   changes: LiveChanges,
   images: RunImages,
   titles: RunnerTitleGeneration,
-  telemetry: Telemetry,
 ) {
   const freshSnapshot = snapshots.fresh;
   const scope = yield* Effect.scope;
@@ -101,10 +99,9 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     titles.planTitleGeneration,
     followTitleGeneration,
     images,
-    telemetry,
   );
   const ownedThreads = openOwnedThreads(t3);
-  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads, telemetry);
+  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads);
   const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
   const actions = openRunActions({
     store,
@@ -114,7 +111,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     freshSnapshot,
     cancelWaitTimer: waitTimers.cancel,
     settlement,
-    telemetry,
     reconcileTitleGeneration: titles.reconcileTitleGeneration,
   });
 
@@ -217,11 +213,11 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     Result<void>,
     unknown
   > {
-    if (closed) return failure("conflict", "Factory is shutting down.");
+    if (closed) return failure("conflict", "AgentEasel is shutting down.");
     return yield* sweeps
       .withPermit(
         Effect.gen(function* () {
-          if (closed) return failure("conflict", "Factory is shutting down.");
+          if (closed) return failure("conflict", "AgentEasel is shutting down.");
           // A Settled Run is driven only while it still owes an operation, so its work continues.
           const ids = yield* store.runsToReconcile();
           // Restart observes every Run before dispatching any pending intent.
@@ -291,7 +287,10 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         const run = yield* row(runId);
         if (!run) return failure("not_found", "This Run does not exist.");
         if (closed || snapshot.contextId !== run.context_id)
-          return failure("conflict", "The Runner or this Run’s T3 authorization is unavailable.");
+          return failure(
+            "conflict",
+            "The Runner or this Run’s T3 Code authorization is unavailable.",
+          );
         const attempted = yield* store.retryInvocation(runId, invocationId, run.context_id);
         if (!attempted.ok) return attempted;
         yield* fork(drive(runId, "dispatch"));

@@ -4,7 +4,7 @@ import {
   type FlowBlock,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { isCancelledJoin, joinSummaryOf } from "./join-display.ts";
 import type { RunStateKind } from "./components/status-badge.tsx";
 

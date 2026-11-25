@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { validateCreateAgent } from "@t3-factory/domain-validation";
+import { validateCreateAgent } from "@agent-easel/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { createShapedContent } from "../src/agent-draft.ts";
 import { comparedAgentLines } from "../src/components/studio-agents/agent-revision-panel.tsx";
@@ -44,7 +44,7 @@ it("a new Agent starts with one optional-message exit and the first reporting pr
   });
 });
 
-it("a new Agent leaves the provider unset when none supports Factory reporting", () => {
+it("a new Agent leaves the provider unset when none supports AgentEasel reporting", () => {
   // Arrange
   const offered = { ...capabilities, providers: [capabilities.providers[0]!] };
 
@@ -60,7 +60,7 @@ it("a new Agent leaves the provider unset when none supports Factory reporting",
   });
 });
 
-it("a new Agent leaves worker settings unset without T3 capabilities", () => {
+it("a new Agent leaves worker settings unset without T3 Code capabilities", () => {
   // Arrange
 
   // Act
@@ -92,7 +92,7 @@ it("an Agent saved without a model opens with no Worker choice preselected", () 
   });
 });
 
-it("a saved model T3 no longer offers opens cleared, reading Needs a model without a change to save", () => {
+it("a saved model T3 Code no longer offers opens cleared, reading Needs a model without a change to save", () => {
   // Arrange
   const agent = savedAgent({
     execution: {
@@ -121,7 +121,7 @@ it("a saved model T3 no longer offers opens cleared, reading Needs a model witho
   });
 });
 
-it("a saved environment T3 no longer offers clears the whole Worker selection", () => {
+it("a saved environment T3 Code no longer offers clears the whole Worker selection", () => {
   // Arrange
   const agent = savedAgent({
     execution: {
@@ -144,7 +144,7 @@ it("a saved environment T3 no longer offers clears the whole Worker selection", 
   });
 });
 
-it("a saved selection is kept as saved while T3's capabilities are unavailable", () => {
+it("a saved selection is kept as saved while T3 Code's capabilities are unavailable", () => {
   // Arrange
   const agent = savedAgent({
     execution: {
@@ -269,7 +269,7 @@ it("an invalid Agent is rejected with the validation message without sending a r
   expect(factory.updateAgent).not.toHaveBeenCalled();
 });
 
-it("a new Agent saves without a model when no provider supports Factory reporting", async () => {
+it("a new Agent saves without a model when no provider supports AgentEasel reporting", async () => {
   // Arrange
   const offered = { ...capabilities, providers: [capabilities.providers[0]!] };
   const { draft, factory } = agentDraft(null, offered);
@@ -428,7 +428,7 @@ it("a lost Create checks its own request and ends in a safe state if the lookup 
   });
 });
 
-it("Create again stays blocked while Factory is checking the original request", async () => {
+it("Create again stays blocked while AgentEasel is checking the original request", async () => {
   // Arrange
   const setup = agentDraft(null);
   const { draft, factory } = setup;
@@ -451,7 +451,7 @@ it("Create again stays blocked while Factory is checking the original request", 
   await saving;
 });
 
-it("a lost Create that made nothing offers Create again after Factory confirms absence", async () => {
+it("a lost Create that made nothing offers Create again after AgentEasel confirms absence", async () => {
   // Arrange
   const { draft, factory } = agentDraft(null);
   draft.edit({ name: "New reviewer", prompt: "Review the change." });

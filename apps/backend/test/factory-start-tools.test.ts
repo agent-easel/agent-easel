@@ -110,7 +110,7 @@ it("a Project listing that cannot read Generate Run titles reports it unknown wi
   const client = await factoryMcpClient(c, {
     ...fixture.f,
     getRunTitleSetting: async () =>
-      failure("internal", "Factory could not complete the operation."),
+      failure("internal", "AgentEasel could not complete the operation."),
   });
 
   // Act
@@ -444,7 +444,7 @@ it("an identical image Start retried after a lost receipt returns the same Run, 
   );
 });
 
-it("a Start naming an image Factory does not hold, or on a T3 without attachments, creates no Run", async (c) => {
+it("a Start naming an image AgentEasel does not hold, or on a T3 Code without attachments, creates no Run", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);
@@ -501,7 +501,7 @@ it("staging refuses content that is not the declared image and takes no host pat
   expect(notBase64.isError).toBe(true);
 });
 
-it("an image Start changed to an image Factory does not hold conflicts under an accepted request identity", async (c) => {
+it("an image Start changed to an image AgentEasel does not hold conflicts under an accepted request identity", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);

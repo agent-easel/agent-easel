@@ -4,8 +4,8 @@ import type {
   DiscordSettings,
   FactoryProject,
   UpdateDiscordAccessInput,
-} from "@t3-factory/contracts";
-import { validateUpdateDiscordAccess } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateUpdateDiscordAccess } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -328,7 +328,7 @@ export function AccessCard({
       </SettingsGroup>
       <SettingsGroup
         label="Bots"
-        description="Bots may talk to Factory and start Runs in allowed channels. Every Start still needs the confirmation phrase. Bots can’t answer Human blocks or archive."
+        description="Bots may talk to AgentEasel and start Runs in allowed channels. Every Start still needs the confirmation phrase. Bots can’t answer Human blocks or archive."
       >
         <FieldRow
           label="Bot IDs"
@@ -659,10 +659,10 @@ function ProjectsSelect({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-(--radix-dropdown-menu-trigger-width)">
         {projects === undefined && (
-          <p className="px-3 py-2 text-sm text-muted-foreground">Reading Factory’s Projects…</p>
+          <p className="px-3 py-2 text-sm text-muted-foreground">Reading AgentEasel’s Projects…</p>
         )}
         {projects?.length === 0 && (
-          <p className="px-3 py-2 text-sm text-muted-foreground">Factory has no Projects yet.</p>
+          <p className="px-3 py-2 text-sm text-muted-foreground">AgentEasel has no Projects yet.</p>
         )}
         {projects?.map((project) => (
           <DropdownMenuCheckboxItem

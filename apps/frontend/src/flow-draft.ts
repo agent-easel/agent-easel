@@ -5,8 +5,8 @@ import type {
   FlowDraft,
   FlowGraph,
   FlowReadiness,
-} from "@t3-factory/contracts";
-import { flowAgentRevisions } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { flowAgentRevisions } from "@agent-easel/domain-validation";
 import { api, ApiError } from "./api.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import { canonical, createRevisionedDraft, type RevisionedDraftState } from "./revisioned-draft.ts";
@@ -83,7 +83,7 @@ function closureCurrent(
 }
 
 const unknownOutcome =
-  "Save outcome unknown. The connection was lost before Factory answered; your draft is kept and nothing is sent again.";
+  "Save outcome unknown. The connection was lost before AgentEasel answered; your draft is kept and nothing is sent again.";
 
 /**
  * One opened Flow on the shared revision protocol: loading it from Studio's saved Flows or this

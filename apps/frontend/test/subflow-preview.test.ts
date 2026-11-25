@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
-import { FINISH_BLOCK_ID, type FlowDraft, type FlowGraph } from "@t3-factory/contracts";
-import { subflowCyclePath } from "@t3-factory/domain-validation";
-import { AUTHORING_DIMENSIONS, canvasGraph } from "@t3-factory/flow-layout";
+import { FINISH_BLOCK_ID, type FlowDraft, type FlowGraph } from "@agent-easel/contracts";
+import { subflowCyclePath } from "@agent-easel/domain-validation";
+import { AUTHORING_DIMENSIONS, canvasGraph } from "@agent-easel/flow-layout";
 import {
   blockedSubflowReasons,
   computeSubflowPreviews,

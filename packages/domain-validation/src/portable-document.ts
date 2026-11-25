@@ -1,4 +1,5 @@
 import {
+  LEGACY_PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_VERSION,
   type AgentExecutionSettings,
@@ -9,6 +10,7 @@ import {
   type FlowInputBlock,
   type FlowWorkspace,
   type ImportedDocument,
+  type PortableDocumentFormat,
   type OperationError,
   type PortableAgent,
   type PortableDocument,
@@ -19,7 +21,7 @@ import {
   type PortableModelHint,
   type Result,
   type ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { validateCreateAgent, validateExecutionSettings, validateModelReference } from "./agent.ts";
 import { isRecord } from "./block-exits.ts";
 import { validateCreateFlow } from "./flow.ts";
@@ -179,7 +181,7 @@ const issue = (code: string, path: string, message: string): ValidationIssue => 
   message,
 });
 
-const NOT_JSON_MESSAGE = "This file is not valid JSON. Choose a file exported by Factory.";
+const NOT_JSON_MESSAGE = "This file is not valid JSON. Choose a file exported by AgentEasel.";
 
 const documentTooLarge = () =>
   rejected("too_large", [
@@ -252,12 +254,15 @@ function countIssue(fields: Record<string, unknown>): ValidationIssue | undefine
 function checkEnvelope(
   value: unknown,
 ): Result<{ fields: Record<string, unknown>; reader: FormatReader }> {
-  if (!isRecord(value) || value.format !== PORTABLE_DOCUMENT_FORMAT)
+  if (
+    !isRecord(value) ||
+    (value.format !== PORTABLE_DOCUMENT_FORMAT && value.format !== LEGACY_PORTABLE_DOCUMENT_FORMAT)
+  )
     return rejected("validation", [
       issue(
         "not_factory_export",
         "format",
-        "This file is not a Factory export. Choose a file exported from an Agent or a Flow.",
+        "This file is not an AgentEasel export. Choose a file exported from an Agent or a Flow.",
       ),
     ]);
   const version = value.formatVersion;
@@ -272,13 +277,13 @@ function checkEnvelope(
         "unsupported_format_version",
         "formatVersion",
         (version as number) > PORTABLE_DOCUMENT_VERSION
-          ? `This file uses format version ${version as number}, which this Factory cannot read. Update Factory to import it.`
-          : `This file uses format version ${version as number}, which Factory cannot read.`,
+          ? `This file uses format version ${version as number}, which this AgentEasel cannot read. Update AgentEasel to import it.`
+          : `This file uses format version ${version as number}, which AgentEasel cannot read.`,
       ),
     ]);
   if (value.kind !== "agent" && value.kind !== "flow")
     return rejected("validation", [
-      issue("invalid_kind", "kind", "A Factory export is an Agent file or a Flow file."),
+      issue("invalid_kind", "kind", "An AgentEasel export is an Agent file or a Flow file."),
     ]);
   return { ok: true, value: { fields: value, reader } };
 }
@@ -324,7 +329,7 @@ function checkFields(
         issue(
           "unknown_field",
           shownField(path, field),
-          `${subject} has a field that a Factory export does not have.`,
+          `${subject} has a field that an AgentEasel export does not have.`,
         ),
       );
   for (const field of required)
@@ -775,7 +780,7 @@ const envelopeOf = <Kind extends PortableDocument["kind"]>(
   reader: FormatReader,
   kind: Kind,
 ) => ({
-  format: PORTABLE_DOCUMENT_FORMAT as typeof PORTABLE_DOCUMENT_FORMAT,
+  format: fields.format as PortableDocumentFormat,
   formatVersion: reader.version,
   kind,
   factoryVersion: fields.factoryVersion as string,

@@ -2,7 +2,7 @@ import type {
   ConditionArrivalEvidence,
   ConditionArrivalPage,
   RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { exitDisplayName } from "./connection-label.ts";
 import { capturedExits } from "./flow-graph.ts";
 

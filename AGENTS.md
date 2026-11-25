@@ -6,7 +6,7 @@
 
 - Implement the current request in the module that owns the behavior. Keep refactors local to what the change needs; leave unrelated cleanup out of the diff.
 - Reuse existing code and dependencies. Add an abstraction, dependency or tool only when a concrete current requirement justifies it; prefer a direct implementation over speculative extension points or pass-through wrappers.
-- For T3 integrations, inspect T3 Code's advertised tools and relevant implementation before adding Factory-side behavior. Reuse a supported T3 capability when it meets the requested behavior; explain the concrete capability gap in the PR when Factory must implement it.
+- For T3 integrations, inspect T3 Code's advertised tools and relevant implementation before adding AgentEasel-side behavior. Reuse a supported T3 Code capability when it meets the requested behavior; explain the concrete capability gap in the PR when Factory must implement it.
 - Validate untrusted input at boundaries. Within those boundaries, use established types and invariants instead of redundant guards, silent defaults or catch-and-continue paths. Preserve required security, recovery and error handling.
 - Names and code explain the steps. Put durable JavaScript and TypeScript decisions in ADRs and follow the [comment ratchet](docs/quality-gates.md#comment-ratchet).
 - Assemble UI from the components in [which component for which pattern](docs/design-system.md#which-component-for-which-pattern). A pattern with no component joins the design system and the Figma 🧩 Components page first, then reaches the screen. The Figma file URL for the Figma MCP is in [Figma source](docs/design-system.md#figma-source).
@@ -41,7 +41,7 @@ and summarize results in the PR.
 
 For UI changes, follow the [design system](docs/design-system.md).
 For acceptance on an existing local installation, follow [local development acceptance](docs/testing.md#local-development-acceptance), including the browser/desktop and same-device/remote verification boundaries.
-For UI changes, exploration, or application screenshots, use [verify-t3-factory](.agents/skills/verify-t3-factory/SKILL.md). It runs the isolated e2e fixture and defines evidence requirements. The e2e runner's own reference (writing tests, MCP, debugging) is printed by `pnpm exec e2e guide [topic]` for the installed version.
+For UI changes, exploration, or application screenshots, use [verify-agenteasel](.agents/skills/verify-agenteasel/SKILL.md). It runs the isolated e2e fixture and defines evidence requirements. The e2e runner's own reference (writing tests, MCP, debugging) is printed by `pnpm exec e2e guide [topic]` for the installed version.
 
 ### Quality gates
 

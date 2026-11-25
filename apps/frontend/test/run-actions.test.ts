@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunNavigationEntry } from "@agent-easel/contracts";
 import {
   createRunActions,
   runActionAvailability,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { JoinDetail, JoinSummary } from "@t3-factory/contracts";
+import type { JoinDetail, JoinSummary } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 import { joinDetailKey } from "./join-display.ts";
 

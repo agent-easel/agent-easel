@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DesktopState, FactoryDesktop } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopState, FactoryDesktop } from "@agent-easel/contracts/desktop-bridge";
 import { Button } from "@/components/ui/button";
 import { useUpgrade } from "../use-upgrade.ts";
 import { dayAndTime } from "../time-format.ts";
@@ -99,11 +99,11 @@ function UpdateProblem({ upgrade }: { upgrade: ReturnType<typeof useUpgrade> }) 
       tone="error"
       title={
         upgrade.failure?.title ??
-        (version ? `Couldn’t install ${version}` : "Couldn’t update Factory")
+        (version ? `Couldn’t install ${version}` : "Couldn’t update AgentEasel")
       }
       details={details}
     >
-      Factory stays on its current version.
+      AgentEasel stays on its current version.
     </ProblemCard>
   );
 }

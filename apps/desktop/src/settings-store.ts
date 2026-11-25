@@ -1,10 +1,10 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpdateChannel } from "@t3-factory/contracts";
+import type { UpdateChannel } from "@agent-easel/contracts";
 import type {
   AppearancePreference,
   DesktopAlertSettings,
-} from "@t3-factory/contracts/desktop-bridge";
+} from "@agent-easel/contracts/desktop-bridge";
 import { parseWindowBounds, type WindowBounds } from "./window-bounds.ts";
 
 /** How this client trusts its server: a pinned Factory authority, or the system's trust store. */

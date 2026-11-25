@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { FlowDraft, RunDefinitions } from "@t3-factory/contracts";
+import type { FlowDraft, RunDefinitions } from "@agent-easel/contracts";
 import { factoryHarness } from "./support/factory.ts";
 import { loadMigrationData } from "./support/migration-data.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";

@@ -1,7 +1,7 @@
 import { connectionLabel, exitDisplayName } from "../connection-label.ts";
 import { placementKey } from "../subflow-preview.ts";
 import { selectComposedExecutionTargets, type RunSubflows } from "../run-subflows.ts";
-import type { SubflowInvocation } from "@t3-factory/contracts";
+import type { SubflowInvocation } from "@agent-easel/contracts";
 import { SubflowInvocationHeader, invocationOutcome } from "./run-subflow.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { runResultState, stoppedVisitAt } from "../run-status.ts";
@@ -11,7 +11,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
@@ -189,10 +189,10 @@ function outcomeText(run: RunDetail, block: FlowBlock) {
 
 /** A Block's activity line for each pending matter kind that has one, from when it appeared. */
 const MATTER_LINES: Partial<Record<RunAttention["kind"], (at: string) => string>> = {
-  "execution-failed": (at) => `Failed in T3 · ${at}`,
+  "execution-failed": (at) => `Failed in T3 Code · ${at}`,
   "condition-integrity": (at) => `Can’t count arrivals · ${at}`,
   "join-integrity": (at) => `Can’t forward its round · ${at}`,
-  "native-request": (at) => `Waiting for permission in T3 · since ${at}`,
+  "native-request": (at) => `Waiting for permission in T3 Code · since ${at}`,
 };
 
 /** A missing or rejected report's activity line, from the earliest of its matters. */
@@ -231,7 +231,7 @@ export function attentionActivityText(
   if (report) return report;
   if (!run.settlement || recorded.state !== "working") return null;
   const start = blockVisits(run, block).at(-1)?.start ?? recorded.observedAt;
-  return `Still running in T3${start ? ` · since ${clockTime(start)}` : ""}`;
+  return `Still running in T3 Code${start ? ` · since ${clockTime(start)}` : ""}`;
 }
 
 function stoppedVisitText(run: RunDetail, visit: number, end: string | null) {

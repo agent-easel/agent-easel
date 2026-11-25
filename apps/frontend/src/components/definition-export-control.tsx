@@ -66,5 +66,5 @@ export function definitionExportNotice(state: DefinitionExportSnapshot): string 
   if (state.error) return state.error;
   if (state.driverKindOmitted.length === 0) return "";
   const names = state.driverKindOmitted.map((name) => `"${name}"`).join(", ");
-  return `Exported without the driver kind for ${names}: T3 did not list the provider, so another installation can match the model only to the same provider instance.`;
+  return `Exported without the driver kind for ${names}: T3 Code did not list the provider, so another installation can match the model only to the same provider instance.`;
 }

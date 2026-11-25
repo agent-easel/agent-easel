@@ -5,7 +5,7 @@ import {
   type FlowEnding,
   type RunDetail,
   type RunResult,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { blockedWorkers } from "../attention-copy.ts";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
@@ -38,7 +38,7 @@ function endedText(run: RunDetail, result: RunResult) {
       ? `${reaching} is stopping ${listed(stopping)}.`
       : `${reaching} closed the Run to new work.`;
     const problem = unresolved.length
-      ? ` Factory couldn’t confirm the stop for ${listed(unresolved)}.`
+      ? ` AgentEasel couldn’t confirm the stop for ${listed(unresolved)}.`
       : "";
     return `${progress}${problem} Edits made in the workspace stay.`;
   }

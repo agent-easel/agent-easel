@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { JSONSchema7, JSONValue } from "ai";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { Result, RunDetail } from "@t3-factory/contracts";
+import type { Result, RunDetail } from "@agent-easel/contracts";
 import { referenceOf, runOverview } from "../runner/run-overview.ts";
 import { RUN_SEARCH_MAX_WORDS, searchWords } from "../runner/run-search-words.ts";
 import type { ReadTool, ChatToolOutcome, ChatToolScope } from "./chat-tools.ts";
@@ -70,7 +70,7 @@ const handleOwner = (scope: ChatToolScope) => ({
 export const runReference = (run: Pick<RunIdentity, "id" | "number">) =>
   run.number === null ? run.id : `#${run.number}`;
 
-const unavailable = failed("unavailable", "Factory could not read this Run right now.");
+const unavailable = failed("unavailable", "AgentEasel could not read this Run right now.");
 
 const findRuns = (search: RunSearch, handles: ConversationHandles): ReadTool => {
   const searchPage = (
@@ -309,7 +309,7 @@ const readRun = (
       if (read.kind === "denied") return failed("not_found", NOT_PERMITTED);
       const text = runReadOverview(read.identity, read.detail).sections.get(section) ?? null;
       if (text === null)
-        return failed("unavailable", "Factory no longer retains this text for the Run.");
+        return failed("unavailable", "AgentEasel no longer retains this text for the Run.");
       if (versionOf(text) !== recorded)
         return failed(
           "stale",
@@ -333,7 +333,7 @@ const readRun = (
 
   return {
     name: "read_run",
-    description: `Read one Run of the Projects this thread permits, in any state, as Factory has it now: its state, Blocks, latest results with where each went, pending Waits and deadlines, Needs input, Problems and pending Human occurrences with the arrival that brought each, all described by the definitions the Run captured at Start (later Flow edits do not change it). Read the overview by passing "run" (Run ID, or number such as 12 or #12) and optionally "page" when it has more overview pages. Long texts are sections listed with their size: read one by passing the overview's "read" handle, the section key and optionally "page" (${SECTION_PAGE} characters each). Keep accepted result, worker completion, handoff release and Run lifecycle distinct, and say when an observation is stale or unknown rather than calling it a Problem. Answering a Human occurrence through chat will need its complete context within a 32,000-character review; longer context stays readable here page by page.`,
+    description: `Read one Run of the Projects this thread permits, in any state, as AgentEasel has it now: its state, Blocks, latest results with where each went, pending Waits and deadlines, Needs input, Problems and pending Human occurrences with the arrival that brought each, all described by the definitions the Run captured at Start (later Flow edits do not change it). Read the overview by passing "run" (Run ID, or number such as 12 or #12) and optionally "page" when it has more overview pages. Long texts are sections listed with their size: read one by passing the overview's "read" handle, the section key and optionally "page" (${SECTION_PAGE} characters each). Keep accepted result, worker completion, handoff release and Run lifecycle distinct, and say when an observation is stale or unknown rather than calling it a Problem. Answering a Human occurrence through chat will need its complete context within a 32,000-character review; longer context stays readable here page by page.`,
     inputSchema: {
       type: "object",
       properties: {

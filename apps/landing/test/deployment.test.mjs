@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-await test("Git deployment is limited to main and ingest routes use PostHog EU", () => {
+await test("Vercel never deploys from Git and the old domain redirects every path", () => {
   // Arrange
   const file = new URL("../vercel.json", import.meta.url);
 
@@ -13,15 +13,16 @@ await test("Git deployment is limited to main and ingest routes use PostHog EU",
   const config = JSON.parse(readFileSync(file, "utf8"));
 
   // Assert
-  assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false, "**": false });
-  assert.deepEqual(config.rewrites, [
+  assert.equal(config.git.deploymentEnabled, false);
+  assert.deepEqual(config.redirects, [
     {
-      source: "/ingest/static/:path*",
-      destination: "https://eu-assets.i.posthog.com/static/:path*",
+      source: "/:path*",
+      has: [{ type: "host", value: "t3factory.app" }],
+      destination: "https://agenteasel.app/:path*",
+      permanent: true,
     },
-    { source: "/ingest/batch/", destination: "https://eu.i.posthog.com/batch/" },
-    { source: "/ingest/:path*", destination: "https://eu.i.posthog.com/:path*" },
   ]);
+  assert.equal(config.rewrites, undefined);
 });
 
 function buildLanding(context, env) {
@@ -34,33 +35,38 @@ function buildLanding(context, env) {
   return output;
 }
 
-await test("the production canonical URL and root Release download appear in built assets", (context) => {
+await test("a Vercel build links the published Release it is given, not the root manifest version", (context) => {
   // Arrange
-  const { version } = JSON.parse(
-    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
-  );
+  const version = "9.8.7";
 
   // Act
-  const output = buildLanding(context, { FACTORY_SITE_URL: "https://t3factory.app/" });
+  const output = buildLanding(context, {
+    VERCEL: "1",
+    FACTORY_RELEASE_VERSION: version,
+    FACTORY_SITE_URL: "https://agenteasel.app/",
+  });
 
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
-  assert.ok(html.includes('<link rel="canonical" href="https://t3factory.app/"'));
-  assert.ok(html.includes('<meta property="og:url" content="https://t3factory.app/"'));
+  assert.ok(html.includes('<link rel="canonical" href="https://agenteasel.app/"'));
+  assert.ok(html.includes('<meta property="og:url" content="https://agenteasel.app/"'));
   assert.ok(
-    html.includes('<meta property="og:image" content="https://t3factory.app/og-image.png"'),
+    html.includes('<meta property="og:image" content="https://agenteasel.app/og-image.png"'),
   );
   assert.ok(
-    html.includes('<meta name="twitter:image" content="https://t3factory.app/og-image.png"'),
+    html.includes('<meta name="twitter:image" content="https://agenteasel.app/og-image.png"'),
   );
-  assert.ok(html.includes(`/releases/download/v${version}/T3.Factory-${version}-arm64.dmg`));
+  assert.ok(html.includes(`/releases/download/v${version}/AgentEasel-${version}-arm64.dmg`));
+  assert.ok(html.includes(`/releases/download/v${version}/SHA256SUMS.txt`));
   assert.ok(
     readFileSync(join(output, "robots.txt"), "utf8").includes(
-      "Sitemap: https://t3factory.app/sitemap.xml",
+      "Sitemap: https://agenteasel.app/sitemap.xml",
     ),
   );
   assert.ok(
-    readFileSync(join(output, "sitemap.xml"), "utf8").includes("<loc>https://t3factory.app/</loc>"),
+    readFileSync(join(output, "sitemap.xml"), "utf8").includes(
+      "<loc>https://agenteasel.app/</loc>",
+    ),
   );
 });
 
@@ -74,7 +80,18 @@ await test("a build without a site URL uses the production domain", (context) =>
   // Assert
   assert.ok(
     readFileSync(join(output, "index.html"), "utf8").includes(
-      '<link rel="canonical" href="https://t3factory.app/"',
+      '<link rel="canonical" href="https://agenteasel.app/"',
     ),
   );
+});
+
+await test("a Vercel build without a published Release version fails instead of linking a draft", (context) => {
+  // Arrange
+  const env = { VERCEL: "1", FACTORY_RELEASE_VERSION: "" };
+
+  // Act
+  const build = () => buildLanding(context, env);
+
+  // Assert
+  assert.throws(build);
 });

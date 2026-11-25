@@ -59,7 +59,7 @@ it("a user listed twice in Access is refused and the saved Access stays unchange
   expect(await factory.getDiscordSettings()).toStrictEqual(before);
 });
 
-it("a channel cannot be granted a Project Factory does not know", async (c) => {
+it("a channel cannot be granted a Project AgentEasel does not know", async (c) => {
   // Arrange
   const factory = await (await factoryHarness(c)).open();
 
@@ -170,7 +170,10 @@ it("a passing check records the bot's display name and the names Discord knows f
 
   // Assert
   assert(checked.ok);
-  expect(checked.value.latestCheck).toMatchObject({ outcome: "verified", botName: "Factory bot" });
+  expect(checked.value.latestCheck).toMatchObject({
+    outcome: "verified",
+    botName: "AgentEasel bot",
+  });
   expect(checked.value.access).toMatchObject({
     userNames: { [PARTICIPANT_ID]: "participant", [unknownUser]: null },
     channelNames: { [ALLOWED_CHANNEL]: "factory", [unknownChannel]: null },
@@ -324,7 +327,7 @@ it("the operating connection registers only /factory reset, for the application 
   expect(discord.commands.get(discordBot.applicationId)).toStrictEqual([
     {
       name: "factory",
-      description: "Factory Chat control",
+      description: "AgentEasel Chat control",
       type: 1,
       contexts: [0],
       integration_types: [0],
@@ -354,7 +357,7 @@ it("registering /factory reset keeps the commands other software registered for 
   ).toStrictEqual([other.name, "factory"]);
 });
 
-it("a token of another application saved while On makes Factory operate as that application", async (c) => {
+it("a token of another application saved while On makes AgentEasel operate as that application", async (c) => {
   // Arrange
   const { discord, factory } = await chatControlWorld(c);
   await turnedOn(factory, discord);
@@ -378,7 +381,7 @@ it("a token of another application saved while On makes Factory operate as that 
   });
 });
 
-it("On persists through a restart and the reopened Factory reconnects by itself", async (c) => {
+it("On persists through a restart and the reopened AgentEasel reconnects by itself", async (c) => {
   // Arrange
   const { discord, factory, open } = await chatControlWorld(c);
   await turnedOn(factory, discord);

@@ -1,5 +1,5 @@
-import type { ProtocolCompatibility, ProtocolDescriptor } from "@t3-factory/contracts";
-import { protocolCompatibility } from "@t3-factory/domain-validation";
+import type { ProtocolCompatibility, ProtocolDescriptor } from "@agent-easel/contracts";
+import { protocolCompatibility } from "@agent-easel/domain-validation";
 
 /** Browser profiles hold their credential only in this HttpOnly cookie, never in script. */
 const credentialCookieName = "factory_client";
@@ -35,7 +35,7 @@ export function declaredProtocolCompatibility(
   if (!/^\d{1,6}$/.test(protocol) || !/^\d{1,6}$/.test(minimum))
     return {
       kind: "update-client",
-      message: "This client sent an unreadable Factory protocol. Update this client.",
+      message: "This client sent an unreadable AgentEasel protocol. Update this client.",
     };
   return protocolCompatibility(
     { protocol: Number(protocol), minimumPeerProtocol: Number(minimum) },

@@ -1,4 +1,4 @@
-import type { RunPullRequest } from "@t3-factory/contracts";
+import type { RunPullRequest } from "@agent-easel/contracts";
 import type { ExecutionObservation } from "./threads.ts";
 
 function pullRequest(value: unknown): RunPullRequest {

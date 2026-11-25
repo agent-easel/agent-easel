@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { TriggerSave } from "@t3-factory/contracts";
+import type { TriggerSave } from "@agent-easel/contracts";
 import { remotePrepared } from "./support/remote-clients.ts";
 import { triggerSaved } from "./support/scenarios.ts";
 import {
@@ -186,7 +186,7 @@ it("a removed Trigger's name can be used again", async (c) => {
   expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [saved.value.trigger] });
 });
 
-it("a Trigger cannot be created for a Project that has left T3", async (c) => {
+it("a Trigger cannot be created for a Project that has left T3 Code", async (c) => {
   // Arrange
   const { f, t3, triggerInput } = await triggerWorld(c);
   t3.projects.catalog = [];
@@ -201,7 +201,7 @@ it("a Trigger cannot be created for a Project that has left T3", async (c) => {
   expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [] });
 });
 
-it("a Project on a remote T3 environment is refused", async (c) => {
+it("a Project on a remote T3 Code environment is refused", async (c) => {
   // Arrange
   const { f, triggerInput } = await triggerWorld(c);
   const remote = await remoteProject(f);
@@ -594,7 +594,7 @@ it("readiness for a Trigger's editor still warns about its confirmed repository 
   ]);
 });
 
-it("readiness reports gh missing from the Factory host", async (c) => {
+it("readiness reports gh missing from the AgentEasel host", async (c) => {
   // Arrange
   const { f, github } = await triggerWorld(c);
   github.found = false;
@@ -607,14 +607,14 @@ it("readiness reports gh missing from the Factory host", async (c) => {
   expect(readiness.value).toMatchObject({
     gitHub: {
       ready: false,
-      problem: expect.stringContaining("Install GitHub CLI (gh) on the Factory host"),
+      problem: expect.stringContaining("Install GitHub CLI (gh) on the AgentEasel host"),
     },
     repository: null,
     flow: null,
   });
 });
 
-it("readiness reports gh signed out on the Factory host", async (c) => {
+it("readiness reports gh signed out on the AgentEasel host", async (c) => {
   // Arrange
   const { f, github, project } = await triggerWorld(c);
   github.signedIn = false;
@@ -627,7 +627,7 @@ it("readiness reports gh signed out on the Factory host", async (c) => {
   expect(readiness.value.gitHub).toStrictEqual({
     ready: false,
     problem:
-      "On the Factory host, run gh auth login --hostname github.com as the user Factory runs as.",
+      "On the AgentEasel host, run gh auth login --hostname github.com as the user AgentEasel runs as.",
   });
 });
 

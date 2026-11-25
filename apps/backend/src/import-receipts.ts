@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { CommitImportInput, ImportResult, Result } from "@t3-factory/contracts";
+import type { CommitImportInput, ImportResult, Result } from "@agent-easel/contracts";
 import { failure } from "./result.ts";
 
 /**

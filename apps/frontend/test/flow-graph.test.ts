@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { ConditionRule, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import type { ConditionRule, FlowBlock, FlowGraph } from "@agent-easel/contracts";
 import { conditionRoutes } from "../src/components/flow-block.tsx";
 import {
   canvasGraph,

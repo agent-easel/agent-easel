@@ -254,11 +254,11 @@ function modelOptions(value: unknown): LaunchCandidate["options"] {
 
 function asObject(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw Error("T3 JSON object is unavailable");
+    throw Error("T3 Code JSON object is unavailable");
   return value as Record<string, unknown>;
 }
 
 function requiredString(value: unknown) {
-  if (typeof value !== "string" || !value) throw Error("T3 identity field is unavailable");
+  if (typeof value !== "string" || !value) throw Error("T3 Code identity field is unavailable");
   return value;
 }

@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, generateText, type LanguageModel } from "ai";
-import type { ChatModelProviderKind } from "@t3-factory/contracts";
+import type { ChatModelProviderKind } from "@agent-easel/contracts";
 
 /** A complete saved connection with its resolved key; null means keyless. */
 export interface ChatModelConnection {
@@ -43,7 +43,7 @@ export function failureMessage(error: unknown, timeoutMs: number): string {
   if (!APICallError.isInstance(error))
     return "The provider's answer could not be read as a model response.";
   const status = error.statusCode;
-  if (status === undefined) return "Factory could not reach the provider at the saved base URL.";
+  if (status === undefined) return "AgentEasel could not reach the provider at the saved base URL.";
   if (status === 401 || status === 403)
     return `The provider refused the request (HTTP ${status}). Check the key.`;
   if (status === 404)
@@ -66,7 +66,7 @@ export async function requestSyntheticReply(
   try {
     await generateText({
       model: chatLanguageModel(connection),
-      prompt: "This is a connection test from T3 Factory. Reply with the single word OK.",
+      prompt: "This is a connection test from AgentEasel. Reply with the single word OK.",
       maxOutputTokens: 16,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(TEST_TIMEOUT_MS),

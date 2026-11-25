@@ -60,7 +60,7 @@ it("a Block read lists the Run images in label order, duplicate names by id, wit
   );
 });
 
-it("a Block read of a Run without images lists no images over the listening Factory MCP endpoint", async (c) => {
+it("a Block read of a Run without images lists no images over the listening AgentEasel MCP endpoint", async (c) => {
   // Arrange
   const { t3, mcp, world, input } = await preparedServer(c);
   await workerLaunched(world, input);
@@ -254,7 +254,7 @@ it("stored image bytes that no longer match their digest are reported unavailabl
   });
 });
 
-it("stored image bytes missing from Factory storage are reported unavailable for that image", async (c) => {
+it("stored image bytes missing from AgentEasel storage are reported unavailable for that image", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const [entry] = await twoWorkersStarted(setup.world, await imageRequest(setup));
@@ -297,7 +297,7 @@ it("a storage read failure is reported as a retryable failure for that image", a
   });
 });
 
-it("repeated, lost-response and failed image reads change neither the Run nor anything in T3", async (c) => {
+it("repeated, lost-response and failed image reads change neither the Run nor anything in T3 Code", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const [entry] = await twoWorkersStarted(setup.world, await imageRequest(setup));

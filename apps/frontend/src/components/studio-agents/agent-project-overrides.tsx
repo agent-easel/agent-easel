@@ -6,7 +6,7 @@ import type {
   AgentExecutionSettings,
   AgentProjectOverride,
   FactoryProject,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { agentRuntimeMeta } from "@/lib/agent-display";

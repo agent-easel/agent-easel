@@ -139,7 +139,7 @@ jobs:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          FACTORY_UPDATE_GITHUB_OWNER: ${{ github.repository_owner }}
+          FACTORY_UPDATE_URL: https://agenteasel.app/updates
         run: |
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER; do
             if [[ -z "${!name}" ]]; then
@@ -147,8 +147,6 @@ jobs:
               exit 1
             fi
           done
-          # Scheduled runs carry no repository payload; derive the feed repository from the run.
-          export FACTORY_UPDATE_GITHUB_REPO="${GITHUB_REPOSITORY#*/}"
           export APPLE_API_KEY="$RUNNER_TEMP/factory-notary-key.p8"
           (umask 077; printf '%s' "$APPLE_API_KEY_CONTENT" > "$APPLE_API_KEY")
           if [[ "$BUILD_CHANNEL" = release ]]; then
@@ -172,7 +170,7 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
       - name: Verify packaged application
         run: |
-          app='apps/desktop/release/mac-arm64/T3 Factory.app'
+          app='apps/desktop/release/mac-arm64/AgentEasel.app'
           codesign --verify --deep --strict --verbose=2 -R='anchor apple generic' "$app"
           apps/desktop/scripts/stapler.sh validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
@@ -183,14 +181,14 @@ jobs:
         run: |
           # Same CDHash and an intact deep seal mean each archive ships the verified, probed bundle.
           cdhash() { codesign --display --verbose=4 "$1" 2>&1 | sed -n 's/^CDHash=//p'; }
-          expected=$(cdhash 'apps/desktop/release/mac-arm64/T3 Factory.app')
+          expected=$(cdhash 'apps/desktop/release/mac-arm64/AgentEasel.app')
           test -n "$expected"
           unpacked="$RUNNER_TEMP/release-zip"
           mounted="$RUNNER_TEMP/release-dmg"
           ditto -x -k apps/desktop/release/*.zip "$unpacked"
           hdiutil attach -readonly -nobrowse -mountpoint "$mounted" apps/desktop/release/*.dmg
           trap 'hdiutil detach "$mounted"' EXIT
-          for app in "$unpacked/T3 Factory.app" "$mounted/T3 Factory.app"; do
+          for app in "$unpacked/AgentEasel.app" "$mounted/AgentEasel.app"; do
             codesign --verify --deep --strict --verbose=2 -R='anchor apple generic' "$app"
             apps/desktop/scripts/stapler.sh validate "$app"
             if [[ "$(cdhash "$app")" != "$expected" ]]; then

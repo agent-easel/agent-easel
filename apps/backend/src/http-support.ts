@@ -4,11 +4,11 @@ import { HttpServerResponse } from "effect/http";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import { isHttpServerError } from "effect/http/HttpServerError";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
-import type { Result } from "@t3-factory/contracts";
+import type { Result } from "@agent-easel/contracts";
 import {
   DEFINITION_REQUEST_LIMIT_BYTES,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { failure } from "./result.ts";
 
 const jsonResultHeaders = {
@@ -225,5 +225,4 @@ export interface RouteTrust {
   /** Host setup that changes the host's T3, reporting or installation-wide settings; remote
    * clients get `host_only`. */
   readonly hostOnly?: true;
-  readonly desktopOnly?: true;
 }

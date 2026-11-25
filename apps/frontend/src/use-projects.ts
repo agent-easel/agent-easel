@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FactoryProject } from "@t3-factory/contracts";
+import type { FactoryProject } from "@agent-easel/contracts";
 import { api } from "./api.ts";
 
 /** How Studio and the Project picker name each Project availability. */
@@ -7,7 +7,7 @@ export const projectAvailabilityLabels: Record<FactoryProject["availability"], s
   available: "Available",
   "directory-unavailable": "Repository unavailable",
   "project-unavailable": "Project unavailable",
-  "connection-unavailable": "T3 connection unavailable",
+  "connection-unavailable": "T3 Code connection unavailable",
   "different-environment": "Different environment",
 };
 

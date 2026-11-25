@@ -261,7 +261,7 @@ test("Import creates the file's definitions in the chosen target Project", async
   await app.open("/studio/flows");
   // The list heading renders before the connection is current; a delivered row means it is.
   await expect(screen.getByRole("link", /Northwind release/)).toBeVisible();
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
+  await screen.getByLabel("Choose an AgentEasel export file").setInputFiles([file]);
   const review = screen.getByRole("dialog", /^Import “/);
   await review.getByRole("radio", "Project", { exact: true }).tap();
   await review.getByRole("combobox", "Owning Project", { exact: true }).tap();
@@ -297,14 +297,14 @@ test("Import on the Agents list creates the file's Agent and opens it", async ({
   await expect(screen.getByRole("link", source.name, { exact: false })).toBeVisible();
   // Records that Import… opens the file chooser; the test supplies the chosen file below.
   await browser.evaluate(
-    `document.querySelector('input[aria-label="Choose a Factory export file"]').addEventListener("click", (event) => { event.preventDefault(); document.body.dataset.chooserOpened = "true"; }, { once: true })`,
+    `document.querySelector('input[aria-label="Choose an AgentEasel export file"]').addEventListener("click", (event) => { event.preventDefault(); document.body.dataset.chooserOpened = "true"; }, { once: true })`,
   );
   const before = new Set((await listAgentDefinitions(app.baseUrl)).map((agent) => agent.id));
 
   // Act
   await app.screenshot("agents-import");
   await screen.getByRole("button", "Import", { exact: true }).tap();
-  await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
+  await screen.getByLabel("Choose an AgentEasel export file").setInputFiles([file]);
   const review = screen.getByRole("dialog", /^Import “/);
   await review.getByRole("button", "Import", { exact: true }).tap();
 
@@ -352,7 +352,7 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
   const source = await ownedFlow(app.baseUrl, "Docs refresh");
   await app.open(`/studio/flows/${source.id}`);
-  const gone = screen.getByText("Docs site is no longer in T3", { exact: true });
+  const gone = screen.getByText("Docs site is no longer in T3 Code", { exact: true });
   await expect(gone).toBeVisible();
   await app.screenshot("rescue-banner");
   await chooseFlowAction(screen, "Duplicate…");

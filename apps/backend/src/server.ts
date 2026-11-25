@@ -1,4 +1,3 @@
-import { reportInstalledUpdate } from "./telemetry.ts";
 import { createServer, type Server } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -10,8 +9,6 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
 import {
   agentOperations,
-  featureUsageOperations,
-  isReportedFeature,
   definitionImportOperations,
   flowOperations,
   projectOperations,
@@ -23,14 +20,14 @@ import {
   LIVE_PATH,
   type ProtocolDescriptor,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   FACTORY_MINIMUM_PEER_PROTOCOL,
   FACTORY_PROTOCOL,
   RUN_IMAGE_MAX_BYTES,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { FactoryOptions } from "./factory-options.ts";
-import { openFactory, type Factory } from "./open-factory.ts";
+import { openFactory, type AgentEasel } from "./open-factory.ts";
 import { configurationWriter, type Configuration } from "./config.ts";
 import { failure } from "./result.ts";
 import { accessRoutes } from "./access-routes.ts";
@@ -58,7 +55,6 @@ import { remoteAccessController } from "./remote-listener.ts";
 import { serverUpdateRoutes, type ApplicationUpdates } from "./server-update-routes.ts";
 import { startLiveTransport, type LiveTransport } from "./live-transport.ts";
 import { routeTable, type RouteEntries, type RouteTable } from "./route-table.ts";
-import { privacyRoutes } from "./privacy-routes.ts";
 
 export type { ApplicationUpdates } from "./server-update-routes.ts";
 
@@ -122,7 +118,7 @@ function requestTarget(request: HttpServerRequestType): { url: URL; pathname: st
 const answer = (operation: () => Promise<Result<unknown>>, successStatus = 200) =>
   Effect.map(Effect.promise(operation), (result) => resultResponse(result, successStatus));
 
-function apiRoutes(factory: Factory) {
+function apiRoutes(factory: AgentEasel) {
   return {
     ...runRoutes(factory),
     ...connectionRoutes(factory),
@@ -132,26 +128,10 @@ function apiRoutes(factory: Factory) {
     ...importRoutes(factory),
     ...chatControlRoutes(factory),
     ...triggerRoutes(factory),
-    ...featureUsageRoutes(factory),
   };
 }
 
-function featureUsageRoutes(factory: Factory): RouteEntries<typeof featureUsageOperations> {
-  return {
-    reportFeatureUsed: {
-      body: standardBody,
-      handle: ({ input }) =>
-        isReportedFeature(input)
-          ? Effect.promise(async () => {
-              await factory.recordTelemetry("feature.used", { feature: input });
-              return resultResponse({ ok: true, value: null });
-            })
-          : Effect.succeed(resultResponse(failure("validation", "Unknown feature."))),
-    },
-  };
-}
-
-function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
+function runRoutes(factory: AgentEasel): RouteEntries<typeof runOperations> {
   return {
     listRunNavigation: {
       handle: () => answer(() => factory.listRunNavigation()),
@@ -284,7 +264,7 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
   };
 }
 
-function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOperations> {
+function connectionRoutes(factory: AgentEasel): RouteEntries<typeof connectionOperations> {
   return {
     getReportingInstallations: { handle: () => answer(() => factory.getReportingInstallations()) },
     installReporting: {
@@ -326,7 +306,7 @@ function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOpera
  * credentials and access policy, its Test may be charged, and its check and On/Off switch connect
  * to Discord: approved clients can neither read nor change it.
  */
-function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOperations> {
+function chatControlRoutes(factory: AgentEasel): RouteEntries<typeof chatControlOperations> {
   return {
     getChatModelSettings: {
       hostOnly: true,
@@ -379,7 +359,7 @@ function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOpe
 }
 
 function projectRoutes(
-  factory: Factory,
+  factory: AgentEasel,
 ): RouteEntries<typeof projectOperations & typeof projectServerOperations> {
   return {
     listProjects: { handle: () => answer(() => factory.listProjects()) },
@@ -414,7 +394,7 @@ function projectRoutes(
   };
 }
 
-function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
+function flowRoutes(factory: AgentEasel): RouteEntries<typeof flowOperations> {
   return {
     listFlows: { handle: () => answer(() => factory.listFlows()) },
     createFlow: {
@@ -455,7 +435,7 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
   };
 }
 
-function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
+function agentRoutes(factory: AgentEasel): RouteEntries<typeof agentOperations> {
   return {
     getAgentCapabilities: { handle: () => answer(() => factory.getAgentCapabilities()) },
     listAgents: { handle: () => answer(() => factory.listAgents()) },
@@ -488,7 +468,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
 }
 
 /** Every approved client manages Triggers; their bodies carry typed settings only. */
-function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations> {
+function triggerRoutes(factory: AgentEasel): RouteEntries<typeof triggerOperations> {
   return {
     getTriggerReadiness: {
       handle: ({ parameters }) =>
@@ -533,7 +513,7 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
   };
 }
 
-function importRoutes(factory: Factory): RouteEntries<typeof definitionImportOperations> {
+function importRoutes(factory: AgentEasel): RouteEntries<typeof definitionImportOperations> {
   return {
     reviewImport: {
       body: importBody,
@@ -564,16 +544,17 @@ function admission(
       return failure("incompatible", compatibility.message);
     const required = binding.surface === "remote" || route.protocolRequired === true;
     if (required && !exempt && !route.protocolOptional && compatibility === undefined)
-      return failure("incompatible", "This client does not declare a Factory protocol. Update it.");
+      return failure(
+        "incompatible",
+        "This client does not declare an AgentEasel protocol. Update it.",
+      );
     if (binding.surface === "host" || route.public) return { ok: true, value: null };
     const client = yield* Effect.promise(() =>
       binding.factory.authenticateClient(credential ?? ""),
     );
     if (!client.ok) return client;
-    if (route.desktopOnly && client.value.kind !== "desktop")
-      return failure("unauthorized", "An approved desktop is required.");
     if (route.hostOnly)
-      return failure("host_only", "This operation is available only on the Factory host.");
+      return failure("host_only", "This operation is available only on the AgentEasel host.");
     return { ok: true, value: client.value.id };
   });
 }
@@ -661,7 +642,7 @@ interface HttpBinding {
   readonly routes: RouteTable;
   readonly uiDirectory: string | null;
   readonly protocol: ProtocolDescriptor;
-  readonly factory: Factory;
+  readonly factory: AgentEasel;
   readonly mcp: (request: Request) => Promise<Response>;
   readonly live: LiveTransport;
 }
@@ -688,7 +669,7 @@ function serveLive(
     return Effect.succeed(
       writeJsonResponse(
         403,
-        failure("validation", "Live delivery requires the Origin of this Factory address."),
+        failure("validation", "Live delivery requires the Origin of this AgentEasel address."),
       ),
     );
   if (request.method !== "GET" || request.headers.upgrade?.toLowerCase() !== "websocket")
@@ -702,17 +683,6 @@ function serveLive(
   return binding.live.serve(
     request,
     admission(liveTrust, declared, requestCredential(request.headers), binding),
-    (clientId) =>
-      Effect.promise(() =>
-        binding.factory.recordTelemetry("client.connected", {
-          surface:
-            clientId !== null
-              ? "approved_remote_client"
-              : request.headers["x-factory-desktop"] === "1"
-                ? "desktop"
-                : "browser",
-        }),
-      ),
   );
 }
 
@@ -728,13 +698,16 @@ function serveMcp(
     return Effect.succeed(
       writeJsonResponse(
         403,
-        failure("host_only", "Harnesses reach Factory MCP only on the host's loopback address."),
+        failure("host_only", "Harnesses reach AgentEasel MCP only on the host's loopback address."),
       ),
     );
   const origin = request.headers.origin;
   if (origin !== undefined && origin !== `http://${request.headers.host}`)
     return Effect.succeed(
-      writeJsonResponse(403, failure("validation", "Factory MCP refuses cross-origin requests.")),
+      writeJsonResponse(
+        403,
+        failure("validation", "AgentEasel MCP refuses cross-origin requests."),
+      ),
     );
   return HttpServerRequest.toWeb(request).pipe(
     Effect.flatMap((web) => Effect.promise(() => binding.mcp(web))),
@@ -747,7 +720,9 @@ function handleHttpRequest(
   binding: HttpBinding,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.catchCause(handleHttpRequestInner(request, binding), () =>
-    Effect.succeed(resultResponse(failure("internal", "Factory could not complete the request."))),
+    Effect.succeed(
+      resultResponse(failure("internal", "AgentEasel could not complete the request.")),
+    ),
   );
 }
 
@@ -760,7 +735,7 @@ function handleHttpRequestInner(
     if (!isAllowedHost(request.headers.host, address, binding.allowedHosts)) {
       return writeJsonResponse(
         421,
-        failure("validation", "Host is not allowed for this Factory binding."),
+        failure("validation", "Host is not allowed for this AgentEasel binding."),
       );
     }
     const peer = toIncomingMessage(request).socket?.remoteAddress ?? "";
@@ -769,7 +744,7 @@ function handleHttpRequestInner(
         403,
         failure(
           "host_only",
-          "This Factory address serves only its own host. Connect other devices through secure remote access.",
+          "This AgentEasel address serves only its own host. Connect other devices through secure remote access.",
         ),
       );
     }
@@ -813,12 +788,10 @@ export interface ServerOptions {
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
   /** Reported by the handshake; desktop builds pass their release, source runs say `source`. */
   readonly applicationVersion?: string;
-  readonly telemetry?: Omit<NonNullable<FactoryOptions["telemetry"]>, "home" | "preference">;
   /** Another release's protocol range, for compatibility tests of mixed installations. */
   readonly protocol?: Pick<ProtocolDescriptor, "protocol" | "minimumPeerProtocol">;
   /** The desktop server's updater, which approved clients may operate. */
   readonly applicationUpdates?: ApplicationUpdates;
-  readonly updateReceipt?: string;
 }
 
 const accessRequestsPerMinute = 5;
@@ -828,11 +801,6 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
   return {
     databasePath: config.databasePath,
     credentialsDirectory: config.credentialsDirectory,
-    telemetry: {
-      ...options.telemetry,
-      home: config.home,
-      preference: config.telemetryEnabled,
-    },
     ...(options.reportingStateDirectory
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),
@@ -892,8 +860,6 @@ export async function startServer(config: Configuration, options: ServerOptions 
     config,
     handlerFor("remote", config.allowedHosts ?? []),
     writeConfiguration,
-    (enabled, certificateMode) =>
-      factory.recordTelemetry("remote_access.toggled", { enabled, certificateMode }),
   );
   const nodeServer = createServer();
   let host: Awaited<ReturnType<typeof listen>>;
@@ -902,7 +868,6 @@ export async function startServer(config: Configuration, options: ServerOptions 
     routes = routeTable({
       ...accessRoutes(factory, protocol, remote, limiter, live),
       ...apiRoutes(factory),
-      ...privacyRoutes(factory.telemetry, writeConfiguration, config.telemetryEnabled),
       ...serverUpdateRoutes(factory, protocol.application, options.applicationUpdates),
     });
     host = await listen(
@@ -920,9 +885,6 @@ export async function startServer(config: Configuration, options: ServerOptions 
   factory.setRuntimeBackendUrl(loopbackUrl(config.host, host.address.port));
   // A remote-access failure is reported on the host panel; the host-local surface keeps serving.
   await remote.start().catch(() => undefined);
-  const updateReported = options.updateReceipt
-    ? reportInstalledUpdate(options.updateReceipt, protocol.application, factory.recordTelemetry)
-    : undefined;
   let closing: Promise<void> | undefined;
   return {
     factory,
@@ -931,7 +893,7 @@ export async function startServer(config: Configuration, options: ServerOptions 
     remoteAddress: () => remote.address(),
     remoteAccess: remote,
     close() {
-      return (closing ??= Promise.allSettled([remote.close(), host.close(), updateReported])
+      return (closing ??= Promise.allSettled([remote.close(), host.close()])
         .then(() => limiter.close())
         .then(() => live.close())
         .then(() => factory.close()));

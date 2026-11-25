@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { RotateCcw, Upload } from "lucide-react";
-import type { CustomThemePresentation } from "@t3-factory/contracts";
-import { MAX_THEME_JSON_BYTES } from "@t3-factory/domain-validation";
+import type { CustomThemePresentation } from "@agent-easel/contracts";
+import { MAX_THEME_JSON_BYTES } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -40,15 +40,15 @@ function unreadWarning(count: number): ThemeNotice {
   const label = count === 1 ? "1 color" : `${count} colors`;
   return {
     tone: "neutral",
-    title: `${label} Factory cannot read ${count === 1 ? "was" : "were"} ignored`,
+    title: `${label} AgentEasel cannot read ${count === 1 ? "was" : "were"} ignored`,
     body: "Supported color formats are hex (#rgb, #rrggbb), rgb(), rgba() and oklch().",
   };
 }
 
 function keepPreviousBody(hasPrevious: boolean) {
   return hasPrevious
-    ? "Factory keeps your previous custom colors."
-    : "Factory keeps its own colors.";
+    ? "AgentEasel keeps your previous custom colors."
+    : "AgentEasel keeps its own colors.";
 }
 
 export function noticesForApply(
@@ -164,7 +164,7 @@ export function ThemeColorSettings() {
       <SettingsGroup label="Theme config">
         <SettingsRow
           title="JSON config"
-          description="Paste or upload a T3 v1 color theme JSON. Saved on this device only."
+          description="Paste or upload a T3 Code v1 color theme JSON. Saved on this device only."
           control={
             <ThemeConfigActions
               canApply={canApply}
@@ -235,11 +235,11 @@ function ActiveThemeGroup({ presentation }: { presentation: CustomThemePresentat
       <SettingsDetailRow label="Theme" value={presentation.name} />
       <SettingsDetailRow
         label="Light"
-        value={presentation.modes.light.kind === "custom" ? "Custom colors" : "Factory colors"}
+        value={presentation.modes.light.kind === "custom" ? "Custom colors" : "AgentEasel colors"}
       />
       <SettingsDetailRow
         label="Dark"
-        value={presentation.modes.dark.kind === "custom" ? "Custom colors" : "Factory colors"}
+        value={presentation.modes.dark.kind === "custom" ? "Custom colors" : "AgentEasel colors"}
       />
     </SettingsGroup>
   );
@@ -277,7 +277,7 @@ function ThemeConfigActions({
       {hasTheme && (
         <Button size="sm" variant="outline" onClick={onReset}>
           <RotateCcw className="size-3.5" />
-          Reset to Factory
+          Reset to AgentEasel
         </Button>
       )}
     </>

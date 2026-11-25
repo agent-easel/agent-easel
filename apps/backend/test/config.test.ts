@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { loadConfiguration } from "../src/config.ts";
 
 const source = fileURLToPath(new URL("../../../", import.meta.url));
-const checkoutMessage = /FACTORY_HOME must be an absolute path outside the Factory source checkout/;
+const checkoutMessage =
+  /FACTORY_HOME must be an absolute path outside the AgentEasel source checkout/;
 
 it("configuration rejects a relative FACTORY_HOME", async () => {
   // Arrange
@@ -20,7 +21,7 @@ it("configuration rejects a relative FACTORY_HOME", async () => {
   await expect(rejection).rejects.toThrow(checkoutMessage);
 });
 
-it("configuration rejects FACTORY_HOME inside the Factory source checkout", async () => {
+it("configuration rejects FACTORY_HOME inside the AgentEasel source checkout", async () => {
   // Arrange
   const input = { FACTORY_HOME: source };
 
@@ -33,7 +34,7 @@ it("configuration rejects FACTORY_HOME inside the Factory source checkout", asyn
 
 it("configuration rejects FACTORY_HOME resolving through a symlink into the checkout", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-config-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-config-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await symlink(source, join(directory, "checkout"), "dir");
 
@@ -48,7 +49,7 @@ it("configuration rejects FACTORY_HOME resolving through a symlink into the chec
 
 it("configuration rejects a default HOME inside the source checkout", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-config-default-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-config-default-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
 
   // Act
@@ -71,7 +72,7 @@ it("configuration rejects a default HOME inside the source checkout", async (c) 
 
 it("allowed DNS hosts load from config.json with lowercase normalization", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-config-hosts-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-config-hosts-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await writeFile(
     join(directory, "config.json"),
@@ -87,7 +88,7 @@ it("allowed DNS hosts load from config.json with lowercase normalization", async
 
 it("configuration rejects FACTORY_ALLOWED_HOSTS values that are not DNS host names", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-config-hosts-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-config-hosts-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await writeFile(
     join(directory, "config.json"),

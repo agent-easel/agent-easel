@@ -63,16 +63,17 @@ import {
 } from "./support/status-cards.ts";
 
 const NOTICE =
-  "_Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card._";
+  "_AgentEasel's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card._";
 const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
 const CORRECTIONS = {
   locked:
-    "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.",
+    "The thread is locked, and AgentEasel never unlocks threads. Unlock it in Discord, then retry.",
   missingThread:
-    "Discord does not show the thread to the bot: it was deleted or the bot lost access. Factory never recreates a thread or posts elsewhere. Restore the bot's access, then retry.",
+    "Discord does not show the thread to the bot: it was deleted or the bot lost access. AgentEasel never recreates a thread or posts elsewhere. Restore the bot's access, then retry.",
   replacementLost:
-    "Discord deleted this Run's replacement status card too. Factory does not create another on its own; Retry creates a new card.",
-  unknown: "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
+    "Discord deleted this Run's replacement status card too. AgentEasel does not create another on its own; Retry creates a new card.",
+  unknown:
+    "AgentEasel cannot tell whether Discord created the message. Retrying may post it twice.",
 } as const;
 
 /** The other application a replaced Discord connection names. */
@@ -215,7 +216,7 @@ it("a Human step replaces the Block's waiting state with one Needs input row", a
   ]);
 });
 
-it("a native T3 request replaces Working with one Needs input row that points to T3", async (c) => {
+it("a native T3 Code request replaces Working with one Needs input row that points to T3 Code", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker, card } = await chatStartedRun(world);
@@ -226,11 +227,11 @@ it("a native T3 request replaces Working with one Needs input row that points to
   // Assert
   const shown = await messageShows(world.discord, card, /🙋 \*\*Entry worker\*\* — needs input/);
   expect(shown.content.split("\n").slice(1)).toEqual([
-    "🙋 **Entry worker** — needs input (answer in T3)",
+    "🙋 **Entry worker** — needs input (answer in T3 Code)",
   ]);
 });
 
-it("a worker idle on a working report asks for review in T3, including when its observation goes stale", async (c) => {
+it("a worker idle on a working report asks for review in T3 Code, including when its observation goes stale", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker, card } = await chatStartedRun(world);
@@ -243,7 +244,7 @@ it("a worker idle on a working report asks for review in T3, including when its 
   // Assert
   const shown = await messageShows(world.discord, card, /· observation stale/);
   expect(shown.content.split("\n").slice(1)).toEqual([
-    "🙋 **Entry worker** — needs input (answer in T3) · observation stale",
+    "🙋 **Entry worker** — needs input (answer in T3 Code) · observation stale",
   ]);
 });
 
@@ -318,9 +319,9 @@ it("confirmed Settle stays above the Block's own state while stopping workers", 
   assert((await world.factory.settleRun(runId, { stopWorkers: true })).ok);
 
   // Assert
-  const shown = await messageShows(world.discord, card, /Settle confirmed: Factory is stopping/);
+  const shown = await messageShows(world.discord, card, /Settle confirmed: AgentEasel is stopping/);
   expect(shown.content.split("\n").slice(1)).toEqual([
-    "⏹️ Settle confirmed: Factory is stopping this Run's workers.",
+    "⏹️ Settle confirmed: AgentEasel is stopping this Run's workers.",
     expect.stringMatching(/^⚙️ \*\*Entry worker\*\* — working/),
   ]);
 });
@@ -381,7 +382,7 @@ it("oversize cards summarize not-started Blocks while keeping actionable rows", 
   expect(shown.content.length).toBeLessThanOrEqual(2_000);
   expect(shown.content.split("\n").slice(1)).toEqual([
     expect.stringMatching(/^⚙️ \*\*Entry worker\*\* — working/),
-    "🙋 **Second entry** — needs input (answer in T3)",
+    "🙋 **Second entry** — needs input (answer in T3 Code)",
     "○ 25 Blocks not started",
   ]);
 });
@@ -420,7 +421,7 @@ it("oversize cards summarize finished Blocks above actionable rows and not-start
   expect(shown.content.length).toBeLessThanOrEqual(2_000);
   expect(shown.content.split("\n").slice(1)).toEqual([
     "✅ 25 Blocks finished",
-    "🙋 **Second entry** — needs input (answer in T3)",
+    "🙋 **Second entry** — needs input (answer in T3 Code)",
     "○ 1 Block not started",
   ]);
 });
@@ -1140,7 +1141,7 @@ it("a reply to the Run's status card gives the model only the Run's ID to read a
     }),
   );
   expect(JSON.stringify(requestMessages(world.model, requests))).not.toContain(
-    "Factory keeps this card current",
+    "AgentEasel keeps this card current",
   );
 });
 

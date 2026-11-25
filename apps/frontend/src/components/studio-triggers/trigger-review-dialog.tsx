@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CirclePause, CircleX, ExternalLink } from "lucide-react";
-import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
+import type { TriggerPreview, TriggerPreviewIssue } from "@agent-easel/contracts";
 import { MutationGate } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
@@ -147,7 +147,7 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
           read: {
             status: "failed",
             message:
-              cause instanceof Error ? cause.message : "Factory could not preview this Trigger.",
+              cause instanceof Error ? cause.message : "AgentEasel could not preview this Trigger.",
           },
         }),
     );

@@ -1,4 +1,4 @@
-# Contributing to T3 Factory
+# Contributing to AgentEasel
 
 Bug reports, documentation fixes and focused pull requests are welcome. Repository
 documentation, issues and pull requests are written in English.
@@ -25,12 +25,12 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The dev server starts a persistent, seeded demo with simulated T3. No OAuth or paid
+The dev server starts a persistent, seeded demo with simulated T3 Code. No OAuth or paid
 model work is needed. Open the Vite URL printed in the terminal. See
 [installation](docs/installation.md) for prerequisites, homes and reset behavior.
 
 Use disposable data for experiments. `pnpm dev:prod` opens real production data and
-can interact with live T3; ordinary `pnpm dev` is the default contribution environment.
+can interact with live T3 Code; ordinary `pnpm dev` is the default contribution environment.
 
 ## Making a change
 
@@ -67,7 +67,7 @@ Tests protect important business behavior through public operations. Read the
 documentation-only changes do not need new tests.
 
 For UI or user-journey changes, use the
-[Factory verification workflow](.agents/skills/verify-t3-factory/SKILL.md) and follow
+[AgentEasel verification workflow](.agents/skills/verify-agenteasel/SKILL.md) and follow
 the [verification cadence](docs/testing.md#verification-cadence).
 
 Browser installation may be needed on first use; see [UI verification](docs/testing.md#ui-verification).

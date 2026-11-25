@@ -4,8 +4,8 @@ import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import { HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { FactoryLive } from "@t3-factory/contracts/live-rpc";
-import type { Result } from "@t3-factory/contracts";
+import { FactoryLive } from "@agent-easel/contracts/live-rpc";
+import type { Result } from "@agent-easel/contracts";
 import { resultResponse } from "./http-support.ts";
 import type { LiveStreams } from "./live-streams.ts";
 
@@ -39,7 +39,6 @@ export async function startLiveTransport(live: LiveStreams) {
     serve(
       request: HttpServerRequest.HttpServerRequest,
       authenticate: Effect.Effect<Result<string | null>>,
-      connected: (clientId: string | null) => Effect.Effect<void>,
     ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
       return Effect.scoped(
         Effect.gen(function* () {
@@ -67,7 +66,6 @@ export async function startLiveTransport(live: LiveStreams) {
             const registered = yield* authenticate;
             if (!registered.ok) return resultResponse(registered);
           }
-          yield* connected(clientId);
           return yield* rpc.pipe(
             Effect.provideService(HttpServerRequest.HttpServerRequest, request),
           );

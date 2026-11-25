@@ -3,7 +3,7 @@
  * local backend (server role) or one pinned remote server (client role). Business rules
  * stay in the backend's public operations.
  */
-import { hostReceiptPath, reportClientUpdates, stageUpdate } from "./update-receipts.ts";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -29,10 +29,12 @@ import {
 import {
   clientAccessOperations,
   operationPath,
+  productPositioning,
+  productStatement,
   type Result as OperationResult,
   type ServerUpdateAction,
   type UpdateChannel,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type {
   Appearance,
   AppearancePreference,
@@ -43,14 +45,9 @@ import type {
   DesktopRoute,
   DesktopState,
   FactoryDesktop,
-} from "@t3-factory/contracts/desktop-bridge";
+  PreviousInstallation,
+} from "@agent-easel/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
-import {
-  factoryDataHome,
-  handOffToAgentEasel,
-  migratedToAgentEasel,
-} from "./agenteasel-handoff.ts";
-import { productStatement } from "./about.ts";
 import { AttentionCoordinator } from "./attention-coordinator.ts";
 import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
 import { BackendSupervisor } from "./backend.ts";
@@ -58,6 +55,18 @@ import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
+import {
+  defaultPreviousInstallationPaths,
+  dismissMigrationSummary,
+  migrationText,
+  migratePreviousInstallation,
+  postponeRemovalReminder,
+  previousInstallation,
+  removalReminderDue,
+  removalDetail,
+  removePreviousInstallation,
+  skipPreviousInstallation,
+} from "./previous-installation.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
@@ -114,6 +123,7 @@ let pendingActivate = false;
 let installingUpdate = false;
 /** An approved client's install request was accepted and starts on the next tick. */
 let serverInstallAccepted = false;
+let previous: PreviousInstallation | null = null;
 
 const updateChannel = (): UpdateChannel => store.get().updateChannel ?? buildChannel();
 
@@ -153,6 +163,7 @@ function desktopState(): DesktopState {
     update: updates.current,
     // macOS keeps a minimized window's document "visible"; live delivery detaches on this.
     minimized: window !== null && !window.isDestroyed() && window.isMinimized(),
+    previousInstallation: previous,
   };
 }
 
@@ -206,7 +217,6 @@ function followAttention() {
   pendingRoute = null;
   attentionHost = store.get().role === "server" ? attentionHostBase() : null;
   attentionSubscription.follow(attentionSelection());
-  reportClientUpdate();
 }
 
 /** Quit: alerts stop with the process; delivered notifications stay in Notification Center. */
@@ -234,7 +244,7 @@ async function openRunCount(): Promise<number | null> {
 }
 
 const interruption = {
-  quit: { button: "Quit Factory", verb: "Quitting" },
+  quit: { button: "Quit AgentEasel", verb: "Quitting" },
   switch: { button: "Stop server and switch", verb: "Switching to client mode" },
 } as const;
 
@@ -249,7 +259,7 @@ async function confirmInterruption(action: keyof typeof interruption): Promise<b
   if (action === "quit" && open === 0) return true;
   const runs =
     open === null
-      ? "Factory could not count open Runs."
+      ? "AgentEasel could not count open Runs."
       : `${open} Run${open === 1 ? " is" : "s are"} still open.`;
   const { verb, button } = interruption[action];
   const options = {
@@ -257,8 +267,8 @@ async function confirmInterruption(action: keyof typeof interruption): Promise<b
     buttons: [button, "Cancel"],
     defaultId: 1,
     cancelId: 1,
-    message: `${verb} stops Factory control on this computer.`,
-    detail: `${runs} Reports, Human answers and transitions wait until Factory runs again, and work already started in T3 may continue meanwhile. Runs are not stopped: on restart Factory reconciles them before eligible work resumes.`,
+    message: `${verb} stops AgentEasel control on this computer.`,
+    detail: `${runs} Reports, Human answers and transitions wait until AgentEasel runs again, and work already started in T3 Code may continue meanwhile. Runs are not stopped: on restart AgentEasel reconciles them before eligible work resumes.`,
   };
   const { response } = window
     ? await dialog.showMessageBox(window, options)
@@ -305,7 +315,7 @@ function openWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: "T3 Factory",
+    title: "AgentEasel",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 17 },
     backgroundColor: windowBackground[effectiveAppearance()],
@@ -396,13 +406,13 @@ function refreshTray() {
       : settings.role === "client"
         ? `Client of ${settings.server?.url ?? "no server"}`
         : "Role not chosen";
-  tray.setToolTip(`T3 Factory — ${status}`);
+  tray.setToolTip(`AgentEasel — ${status}`);
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: status, enabled: false },
       { type: "separator" },
-      { label: "Open Factory", click: openWindow },
-      { label: "Quit Factory", click: () => app.quit() },
+      { label: "Open AgentEasel", click: openWindow },
+      { label: "Quit AgentEasel", click: () => app.quit() },
     ]),
   );
 }
@@ -433,7 +443,7 @@ async function chooseRole(role: DesktopRole): Promise<DesktopResult> {
   const current = store.get().role;
   if (role === current) return { ok: true };
   if (current === "server" && !(await stopBackendFor("switch")))
-    return failed("Factory kept running as a server.");
+    return failed("AgentEasel kept running as a server.");
   // Local data stays where it is; nothing is copied to or from another server.
   await approvedClient.chooseRole(role);
   if (role === "server") backend.start();
@@ -459,7 +469,7 @@ async function setLaunchAtLogin(enabled: boolean): Promise<DesktopResult> {
   broadcast();
   const status = app.getLoginItemSettings().status;
   if (enabled && status === "requires-approval")
-    return failed("Approve T3 Factory in System Settings → General → Login Items.");
+    return failed("Approve AgentEasel in System Settings → General → Login Items.");
   return { ok: true };
 }
 
@@ -518,19 +528,6 @@ async function setAppearance(preference: unknown): Promise<DesktopResult> {
   return { ok: true };
 }
 
-function reportClientUpdate() {
-  const settings = store.get();
-  if (!app.isPackaged || settings.role !== "client" || !settings.server) return;
-  const connection = approvedClient.capture();
-  if (connection)
-    void reportClientUpdates(
-      app.getPath("userData"),
-      clientServer(settings.server),
-      app.getVersion(),
-      connection,
-    ).catch(() => undefined);
-}
-
 /** Confirmed in the upgrade review; the backend still shuts down in order before replacement. */
 async function installUpdate(): Promise<DesktopResult> {
   if (installingUpdate) return failed("Update installation is already in progress.");
@@ -541,17 +538,6 @@ async function installUpdate(): Promise<DesktopResult> {
     await persistWindowBounds();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
-    const settings = store.get();
-    const server =
-      settings.role === "client" && settings.server ? clientServer(settings.server) : null;
-    if (app.isPackaged && updates.current.version && (settings.role === "server" || server)) {
-      await stageUpdate(
-        app.getPath("userData"),
-        server,
-        app.getVersion(),
-        updates.current.version,
-      ).catch(() => undefined);
-    }
     quitting = true;
     updates.install();
     return { ok: true };
@@ -605,7 +591,7 @@ function closeLive(reason: string) {
 /** Captures the current target: a later selection or backend change closes this channel. */
 function openLive(query: string, port: LivePort) {
   const socket = openLiveSocket(apiTarget(), query);
-  if (!socket) return refuseLive(port, "The Factory server is unreachable.");
+  if (!socket) return refuseLive(port, "The AgentEasel server is unreachable.");
   const channel = relayLive(socket, port, () => liveChannels.delete(channel));
   liveChannels.add(channel);
 }
@@ -645,7 +631,7 @@ const bridgeHandlers: BridgeHandlers = {
       return failed(
         error instanceof Error && error.message.startsWith("Enter")
           ? error.message
-          : "No Factory server answered securely at that address. Check that the server app is running with remote access enabled.",
+          : "No AgentEasel server answered securely at that address. Check that the server app is running with remote access enabled.",
       );
     }
   },
@@ -682,6 +668,13 @@ const bridgeHandlers: BridgeHandlers = {
   installUpdate: () => installUpdate(),
   setUpdateChannel: (_frame, channel: unknown) => setUpdateChannel(channel),
   setAppearance: (_frame, preference: unknown) => setAppearance(preference),
+  dismissMigrationSummary: async () => {
+    const paths = previousInstallationPaths();
+    if (paths) await dismissMigrationSummary(paths);
+    await refreshPreviousInstallation();
+    return { ok: true };
+  },
+  removePreviousInstallation: () => confirmPreviousInstallationRemoval(),
   setMenuState: (_frame, state: unknown) => {
     const publication = parseMenuState(state);
     if (!publication.ok) return failed(publication.message);
@@ -772,19 +765,24 @@ if (!app.requestSingleInstanceLock()) {
     .catch((error: unknown) => {
       // A startup failure must be visible; the app never lingers without a window.
       dialog.showErrorBox(
-        "T3 Factory could not start",
-        `Factory could not read its desktop settings or start its window. Your Factory data was not changed.\n\n${String(error)}`,
+        "AgentEasel could not start",
+        `AgentEasel could not read its desktop settings or start its window. Your AgentEasel data was not changed.\n\n${String(error)}`,
       );
       app.exit(1);
     });
 }
 
 async function start() {
-  app.setAboutPanelOptions({ applicationName: "T3 Factory", credits: productStatement });
-  if (migratedToAgentEasel(app.getPath("userData"), factoryDataHome())) {
+  app.setAboutPanelOptions({
+    applicationName: "AgentEasel",
+    credits: `${productPositioning}\n\n${productStatement}`,
+  });
+  if (!(await migrateAtFirstLaunch())) {
     quitting = true;
-    return handOffToAgentEasel();
+    app.exit(0);
+    return;
   }
+  await refreshPreviousInstallation();
   store = await SettingsStore.open(app.getPath("userData"));
   windowBounds = new WindowBoundsTracker(store.get().windowBounds);
   applyNativeAppearance(store.get().appearance);
@@ -795,12 +793,10 @@ async function start() {
     join(here, "backend-host.js"),
     {
       FACTORY_UI_DIRECTORY: uiDirectory,
-      FACTORY_UPDATE_RECEIPT: hostReceiptPath(app.getPath("userData")),
       FACTORY_APPLICATION_VERSION: app.getVersion(),
-      FACTORY_DESKTOP_PACKAGED: String(app.isPackaged),
     },
     (state) => {
-      if (state.state !== "running") closeLive("The Factory server stopped.");
+      if (state.state !== "running") closeLive("The AgentEasel server stopped.");
       if (store.get().role === "server" && attentionHostBase() !== attentionHost) followAttention();
       broadcast();
     },
@@ -850,10 +846,7 @@ async function start() {
   attentionSubscription = new AttentionSubscription(attention);
   // No window is needed: a grant made in System Settings is noticed here and catches up.
   const checkPermission = () => void attention.checkPermission();
-  permissionCheck = setInterval(() => {
-    checkPermission();
-    reportClientUpdate();
-  }, 60_000);
+  permissionCheck = setInterval(checkPermission, 60_000);
   app.on("did-become-active", checkPermission);
   powerMonitor.on("resume", checkPermission);
   app.on("browser-window-focus", () => attention.focus(true));
@@ -866,7 +859,7 @@ async function start() {
   registerBridge();
   applyMenuState(null);
   if (store.get().role === "server") backend.start();
-  updates.start();
+  updates.start(updateChannel());
   applyMenuBarIcon();
   refreshTray();
   started = true;
@@ -880,4 +873,105 @@ async function start() {
   if (!background) openWindow();
   if (pendingActivate) void attention.dock(false).then(openRoute);
   if (store.problem) void dialog.showMessageBox({ type: "warning", message: store.problem });
+  void remindAboutPreviousInstallation();
+}
+
+const previousInstallationPaths = () =>
+  defaultPreviousInstallationPaths(
+    process.env,
+    homedir(),
+    app.getPath("appData"),
+    app.getPath("userData"),
+  );
+
+async function refreshPreviousInstallation() {
+  const paths = previousInstallationPaths();
+  previous = paths ? await previousInstallation(paths) : null;
+  if (started) broadcast();
+}
+
+async function migrateAtFirstLaunch(): Promise<boolean> {
+  const paths = previousInstallationPaths();
+  if (!paths) return true;
+  for (;;) {
+    const attempt = await migratePreviousInstallation(paths, () =>
+      app.setLoginItemSettings({ openAtLogin: true }),
+    ).then(
+      (outcome) => outcome,
+      (error: unknown) => ({ kind: "failed" as const, error }),
+    );
+    if (attempt.kind === "none" || attempt.kind === "migrated") return true;
+    if (attempt.kind === "refused") {
+      const { response } = await dialog.showMessageBox({
+        type: "warning",
+        buttons: ["Retry", "Quit"],
+        defaultId: 0,
+        cancelId: 1,
+        message: migrationText.migrating,
+        detail: attempt.reason,
+      });
+      if (response === 1) return false;
+      continue;
+    }
+    const { response } = await dialog.showMessageBox({
+      type: "error",
+      buttons: ["Retry", "Start Without Migrating", "Quit"],
+      defaultId: 0,
+      cancelId: 2,
+      message: migrationText.migrating,
+      detail: `${migrationText.failed}\n\n${String(attempt.error)}`,
+    });
+    if (response === 2) return false;
+    if (response === 1) {
+      await skipPreviousInstallation(paths, new Date());
+      return true;
+    }
+  }
+}
+
+async function confirmPreviousInstallationRemoval(): Promise<DesktopResult> {
+  const paths = previousInstallationPaths();
+  if (!paths || !previous?.oldDataPresent) return failed(migrationText.nothingToRemove);
+  const options = {
+    type: "warning" as const,
+    buttons: ["Move to Trash", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    message: migrationText.removeQuestion,
+    detail: removalDetail(previous),
+  };
+  const { response } = window
+    ? await dialog.showMessageBox(window, options)
+    : await dialog.showMessageBox(options);
+  if (response !== 0) return { ok: true };
+  const refused = await removePreviousInstallation(
+    paths,
+    (path) => shell.trashItem(path),
+    new Date(),
+  ).catch((error: unknown) => ({ refused: `The data could not be moved: ${String(error)}` }));
+  await refreshPreviousInstallation();
+  return refused ? failed(refused.refused) : { ok: true };
+}
+
+async function remindAboutPreviousInstallation() {
+  const paths = previousInstallationPaths();
+  if (!paths || !(await removalReminderDue(paths, new Date()))) return;
+  const { response } = await dialog.showMessageBox({
+    type: "info",
+    buttons: ["Move to Trash…", "Remind Me in 30 Days"],
+    defaultId: 1,
+    cancelId: 1,
+    message: migrationText.reminder,
+    detail: migrationText.reminderDetail,
+  });
+  const result = response === 0 ? await confirmPreviousInstallationRemoval() : null;
+  if (result && !result.ok) {
+    await dialog.showMessageBox({
+      type: "warning",
+      message: migrationText.removalFailed,
+      detail: result.message,
+    });
+    return;
+  }
+  if (previous?.oldDataPresent) await postponeRemovalReminder(paths, new Date());
 }

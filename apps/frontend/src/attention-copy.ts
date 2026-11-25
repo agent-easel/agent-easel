@@ -3,7 +3,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * Plain wording for each Attention card: one sentence that names the Block and what happened, and
@@ -25,7 +25,7 @@ const REPORT_REJECTIONS: Record<string, string> = {
 /** What a rejected report did, in plain words, for the card title. */
 function reportRejection(message: string | null) {
   const code = reportReasonCode(message);
-  return (code && REPORT_REJECTIONS[code]) ?? "sent a report Factory couldn't accept";
+  return (code && REPORT_REJECTIONS[code]) ?? "sent a report AgentEasel couldn't accept";
 }
 
 type Recovery = RunDetail["recoveries"][number];
@@ -119,8 +119,8 @@ export function settlementCopy(run: RunDetail) {
   return {
     title: `Settle couldn’t stop ${names([...new Set(blocked.map((worker) => worker.blockName))])}`,
     next: unsupported
-      ? `This T3 version can’t stop worker threads. Stop ${them} in T3, then retry settlement.`
-      : `T3 didn’t confirm the stop. Retry settlement, or stop ${them} in T3.`,
+      ? `This T3 Code version can’t stop worker threads. Stop ${them} in T3 Code, then retry settlement.`
+      : `T3 Code didn’t confirm the stop. Retry settlement, or stop ${them} in T3 Code.`,
   };
 }
 
@@ -138,7 +138,7 @@ export function reportCopy(
         : `${blockName} finished without a report`;
   const next =
     state === "no-valid-report"
-      ? "Request the report again, or check the Agent’s work in T3."
+      ? "Request the report again, or check the Agent’s work in T3 Code."
       : rejection
         ? "Request a report so the Agent corrects it without redoing the work."
         : "Request a report so the Agent reports its work without redoing it.";
@@ -151,13 +151,13 @@ export function matterCopy(item: RunAttention): { title: string; next: string | 
   switch (item.kind) {
     case "execution-failed":
       return {
-        title: `${block} failed in T3`,
-        next: "Check the error and continue in T3. The Run continues when the Agent’s next turn completes or it reports.",
+        title: `${block} failed in T3 Code`,
+        next: "Check the error and continue in T3 Code. The Run continues when the Agent’s next turn completes or it reports.",
       };
     case "native-request":
-      return { title: `${block} needs permission in T3`, next: null };
+      return { title: `${block} needs permission in T3 Code`, next: null };
     case "conversation-waiting":
-      return { title: `${block} asked a question`, next: "Answer it in T3." };
+      return { title: `${block} asked a question`, next: "Answer it in T3 Code." };
     case "condition-integrity":
       return {
         title: `${block} can’t count new arrivals`,
@@ -171,7 +171,7 @@ export function matterCopy(item: RunAttention): { title: string; next: string | 
     case "report-problem":
       return {
         title: `${block} ${reportRejection(item.message)}`,
-        next: "Check the Agent’s work in T3.",
+        next: "Check the Agent’s work in T3 Code.",
       };
     case "missing-report":
       return reportCopy(block, undefined, "missing");

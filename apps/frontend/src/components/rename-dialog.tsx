@@ -1,6 +1,6 @@
 import { MutationGate, useMutationsAllowed } from "../client-gate.tsx";
 import { useState, type FormEvent } from "react";
-import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
+import { TASK_TITLE_LIMIT } from "@agent-easel/domain-validation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";

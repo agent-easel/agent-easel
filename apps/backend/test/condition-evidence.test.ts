@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { CONDITION_TIMELINE_ARRIVALS, FINISH_BLOCK_ID } from "@t3-factory/contracts";
+import { CONDITION_TIMELINE_ARRIVALS, FINISH_BLOCK_ID } from "@agent-easel/contracts";
 import { appliedRun, subscribe, watchRun } from "./support/live.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {

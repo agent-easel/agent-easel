@@ -1,4 +1,4 @@
-import { CONDITION_OTHERWISE_ID, type FlowBlock } from "@t3-factory/contracts";
+import { CONDITION_OTHERWISE_ID, type FlowBlock } from "@agent-easel/contracts";
 import { canvasGraph, type CanvasBlock, type CanvasGraph } from "../../src/flow-graph.ts";
 
 export function geometryGraph(): CanvasGraph {

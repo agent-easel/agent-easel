@@ -60,10 +60,10 @@ export const elapse = (ms: number) => new Promise((resolve) => setTimeout(resolv
 export async function openWaitingConnection(app: FixtureApp, screen: Screen) {
   await remoteAccess(app).t3Endpoint();
   await openApproved(app, "/settings/connection");
-  await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Managed on the AgentEasel host")).toBeVisible();
   await screen.getByRole("button", "Authorize").tap();
   await expect(
-    screen.getByText("Approve in the browser on the Factory host").first(),
+    screen.getByText("Approve in the browser on the AgentEasel host").first(),
   ).toBeVisible();
 }
 

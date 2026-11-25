@@ -1,12 +1,11 @@
-import type { Telemetry } from "../telemetry.ts";
 import type {
   Result,
   RunDetail,
   RunSettlementOutcome,
   SettleRunInput,
   TaskSummary,
-} from "@t3-factory/contracts";
-import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { TASK_TITLE_LIMIT } from "@agent-easel/domain-validation";
 import * as Effect from "effect/Effect";
 import type { T3Threads } from "../t3/threads.ts";
 import type { ContractSnapshots } from "../connection.ts";
@@ -31,7 +30,7 @@ const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> 
   ),
   closed: failure(
     "conflict",
-    "This Run is archived, stopping its workers to settle, or no longer run by this Factory, so it forwards no Wait arrival.",
+    "This Run is archived, stopping its workers to settle, or no longer run by this AgentEasel, so it forwards no Wait arrival.",
   ),
 };
 
@@ -62,7 +61,6 @@ export function openRunActions({
   freshSnapshot,
   cancelWaitTimer,
   settlement,
-  telemetry,
   reconcileTitleGeneration,
 }: {
   store: RunStore;
@@ -72,7 +70,6 @@ export function openRunActions({
   freshSnapshot: ContractSnapshots["fresh"];
   cancelWaitTimer: (arrivalId: string) => Effect.Effect<void>;
   settlement: RunnerSettlement;
-  telemetry: Telemetry;
   reconcileTitleGeneration: (runId: string) => Effect.Effect<void, unknown>;
 }) {
   const { isClosed, drive, fork, getRun } = lifecycle;
@@ -82,7 +79,7 @@ export function openRunActions({
     action: Effect.Effect<Result<A>, unknown>,
   ): Effect.Effect<Result<A>, unknown> {
     return Effect.suspend(() =>
-      isClosed() ? Effect.succeed(failure("conflict", "Factory is shutting down.")) : action,
+      isClosed() ? Effect.succeed(failure("conflict", "AgentEasel is shutting down.")) : action,
     );
   }
 
@@ -124,7 +121,6 @@ export function openRunActions({
         if (!runId) return waitRefusals["not-found"];
         const outcome = yield* store.forwardWaitArrival(runId, id, "user");
         if (outcome !== "forwarded") return waitRefusals[outcome];
-        yield* telemetry.record("run.continued", {});
         yield* cancelWaitTimer(id);
         const detail = yield* getRun(runId);
         yield* fork(drive(runId, "dispatch"));
@@ -225,11 +221,6 @@ export function openRunActions({
         Effect.gen(function* () {
           const archived = yield* store.archive(id, requestId);
           if (!archived.ok) return archived;
-          if (archived.value === "active") {
-            yield* telemetry.record("run.cancelled", {});
-          }
-          if (archived.value === "active" || archived.value === "closing")
-            yield* settlement.recordFinished(id, "cancelled");
           if (archived.value !== "unchanged") yield* fork(interruptWorkerThreads(id));
           return yield* getRun(id);
         }),
@@ -276,10 +267,7 @@ export function openRunActions({
       const accepted = yield* store.acceptSettlement(id, request.reason);
       if (!accepted.ok) return accepted;
       const outcome = yield* settlement.currentOutcome(id);
-      if (accepted.value !== "unchanged") {
-        if (accepted.value === "manual") yield* telemetry.record("run.cancelled", {});
-        yield* fork(settlement.advanceSettlement(id));
-      }
+      if (accepted.value !== "unchanged") yield* fork(settlement.advanceSettlement(id));
       return outcome;
     });
   }
@@ -345,7 +333,7 @@ export function openRunActions({
             )
               return failure(
                 "conflict",
-                "Request report needs the worker thread finished in T3 with no run newer than the one Factory observed.",
+                "Request report needs the worker thread finished in T3 Code with no run newer than the one AgentEasel observed.",
               );
             return { ok: true as const, value: undefined };
           }),
@@ -353,7 +341,7 @@ export function openRunActions({
             Effect.succeed(
               failure(
                 "conflict",
-                "The worker thread cannot be read from T3. Refresh before requesting a report.",
+                "The worker thread cannot be read from T3 Code. Refresh before requesting a report.",
               ),
             ),
         );

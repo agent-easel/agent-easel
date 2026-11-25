@@ -129,7 +129,7 @@ export function discordFixture(
         invocations += 1;
         const test = discord.created.findLast(
           (message) =>
-            message.channelId === channelId && message.content.endsWith("you can use Factory."),
+            message.channelId === channelId && message.content.endsWith("you can use AgentEasel."),
         )!;
         discord.deliver(
           messageEvent({

@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { factoryHarness } from "./support/factory.ts";
 import { schemaSnapshot } from "./support/schema-snapshot.ts";
 
-it("the current-schema snapshot matches the schema produced by Factory migrations", async (context) => {
+it("the current-schema snapshot matches the schema produced by AgentEasel migrations", async (context) => {
   // Arrange
   const harness = await factoryHarness(context, { freshDatabase: true });
 

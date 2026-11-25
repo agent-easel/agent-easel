@@ -5,7 +5,7 @@ import type {
   TriggerKind,
   TriggerSchedule,
   UpdateTriggerInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { invalid } from "./agent.ts";
 
 const TRIGGER_KINDS: readonly TriggerKind[] = ["github_issues"];
@@ -111,7 +111,7 @@ function forbiddenQualifier(qualifiers: readonly Qualifier[]): Result<never> | u
   if (scope)
     return queryRefusal(
       "trigger_query_scope",
-      `Remove "${scope.name}:". Factory always reads open issues in the Project's repository, so a query cannot choose the repository, owner, type, state or project.`,
+      `Remove "${scope.name}:". AgentEasel always reads open issues in the Project's repository, so a query cannot choose the repository, owner, type, state or project.`,
     );
   if (qualifiers.some((entry) => entry.name === "no" && entry.value.toLowerCase() === "label"))
     return queryRefusal(

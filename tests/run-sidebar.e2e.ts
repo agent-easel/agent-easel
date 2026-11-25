@@ -619,7 +619,7 @@ test("a notification route opens its Run with the Block of its one pending matte
   // Assert
   await expect(browser).toHaveURL(`/runs/${run.id}`);
   await expect(browser.locator(selectedBlock)).toContainText(blockName);
-  await expect(screen.getByRole("link", "Open in T3").nth(0)).toBeVisible();
+  await expect(screen.getByRole("link", "Open in T3 Code").nth(0)).toBeVisible();
   await app.screenshot("desktop-route-run-block");
 });
 

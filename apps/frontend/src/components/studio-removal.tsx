@@ -4,7 +4,7 @@ import type {
   FlowDraft,
   TriggerDefinition,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChevronRight, Trash2, Workflow, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -171,7 +171,7 @@ function RemovalBlocker({
       <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
       <span className="truncate text-sm leading-[normal] font-medium">{name}</span>
       <span className="shrink-0 text-2xs leading-[normal] text-subtle-foreground">{detail}</span>
-      {gone && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+      {gone && <StatusBadge kind="neutral">Not in T3 Code</StatusBadge>}
       <span className="flex-1" />
     </>
   );

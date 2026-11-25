@@ -1,4 +1,3 @@
-import type { InstalledUpdateReceipt } from "@t3-factory/contracts";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Cause from "effect/Cause";
@@ -6,7 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { FactoryOperations, OperationError, Result, RunDetail } from "@t3-factory/contracts";
+import type { FactoryOperations, OperationError, Result, RunDetail } from "@agent-easel/contracts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";
@@ -50,7 +49,6 @@ import { failure } from "./result.ts";
 import { makeLiveChanges } from "./live-changes.ts";
 import { makeLiveStreams, type LiveStreams } from "./live-streams.ts";
 import { makeTriggers } from "./triggers/triggers.ts";
-import { makeTelemetry, telemetryCount, type Telemetry } from "./telemetry.ts";
 import { makeRunUpdates, type RunUpdateSubscription } from "./run-updates.ts";
 
 /** Public Effect service shared by HTTP, background workers and controlled-clock tests. */
@@ -71,8 +69,6 @@ export class FactoryService extends Context.Service<
     ) => Effect.Effect<Result<RunReadSource | null>>;
     readonly setRuntimeBackendUrl: (url: string) => void;
     readonly live: LiveStreams;
-    readonly telemetry: Telemetry;
-    readonly recordClientUpdate: (receipt: InstalledUpdateReceipt) => Effect.Effect<Result<null>>;
   }
 >()("factory/FactoryService") {}
 
@@ -83,7 +79,7 @@ const guard = <A>(operation: Effect.Effect<Result<A>, unknown>): Effect.Effect<R
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)
         ? Effect.interrupt
-        : Effect.succeed(failure("internal", "Factory could not complete the operation.")),
+        : Effect.succeed(failure("internal", "AgentEasel could not complete the operation.")),
     ),
   );
 
@@ -118,11 +114,6 @@ export const makeFactoryService = (
     const intervalMs = options.connectionRetryMs ?? 5_000;
     const changes = makeLiveChanges();
     const sql = yield* SqlClient.SqlClient;
-    const telemetry = yield* makeTelemetry(
-      dirname(options.databasePath),
-      options.applicationVersion,
-      options.telemetry,
-    );
     const t3StateDirectory =
       options.reportingStateDirectory ??
       process.env.FACTORY_T3_STATE_DIRECTORY ??
@@ -131,9 +122,6 @@ export const makeFactoryService = (
       { connection: t3.connection, contract: t3.contract, close: () => t3.close() },
       intervalMs,
       changes,
-      telemetry,
-      t3.projects,
-      t3StateDirectory,
     );
     const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
@@ -144,7 +132,6 @@ export const makeFactoryService = (
       changes,
       t3StateDirectory,
       options.applicationVersion ?? "source",
-      telemetry,
     );
     let runner: Effect.Success<ReturnType<typeof makeRunner>>;
     const triggers = yield* makeTriggers(
@@ -156,7 +143,6 @@ export const makeFactoryService = (
         startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
       },
       changes,
-      telemetry,
     );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
@@ -170,12 +156,7 @@ export const makeFactoryService = (
       ),
     );
     const reporting = Context.get(reportingContext, ReportingInstaller.ReportingInstaller);
-    const firstRunSetup = yield* makeFirstRunSetup(
-      t3StateDirectory,
-      telemetry,
-      connection.getConnection,
-      reporting.getReportingInstallations,
-    );
+    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
     const setupContext = yield* Layer.build(
       RuntimeSetup.RuntimeSetupLayer(
         {
@@ -199,7 +180,6 @@ export const makeFactoryService = (
       },
       connection.snapshots,
       changes,
-      telemetry,
     );
     const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
     const discordGateway = yield* makeDiscordGateway(options.discordApiUrl ?? DISCORD_API_URL);
@@ -246,11 +226,9 @@ export const makeFactoryService = (
       chatDeliveries,
       reportCapture.changed,
       changes.runChanged,
-      telemetry,
       botGuards,
     );
     const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
-      telemetry,
       model: conversationalModel(sql, chatCredentials),
       tools: [
         ...discoveryTools({
@@ -391,21 +369,6 @@ export const makeFactoryService = (
       );
     const factory: FactoryService["Service"] = {
       ...guarded,
-      recordClientUpdate: ({ receiptId, fromVersion, toVersion }) =>
-        guard(
-          Effect.gen(function* () {
-            const claimed =
-              yield* sql`INSERT INTO installed_update_receipts(receipt_id) VALUES(${receiptId}) ON CONFLICT DO NOTHING RETURNING receipt_id`;
-            if (claimed.length)
-              yield* telemetry.record("update.installed", {
-                fromVersion,
-                toVersion,
-                channel: toVersion.includes("-beta.") ? "beta" : "stable",
-              });
-            return { ok: true as const, value: null };
-          }),
-        ),
-      telemetry,
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
@@ -454,7 +417,6 @@ export const makeFactoryService = (
       changes,
       images,
       runTitles,
-      telemetry,
     );
     yield* runner.initialize();
     // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
@@ -464,28 +426,5 @@ export const makeFactoryService = (
     // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
     yield* Effect.forkScoped(reportCapture.run);
     yield* Effect.forkScoped(runUpdates.run);
-    if (telemetry.enabled) {
-      yield* Effect.gen(function* () {
-        const [usage] = yield* sql<{
-          setupCompleted: number;
-          projects: number;
-          flows: number;
-          agents: number;
-        }>`SELECT
-          (SELECT completed FROM first_run_setup WHERE singleton = 1) AS setupCompleted,
-          (SELECT count(*) FROM projects) AS projects,
-          (SELECT count(*) FROM flows WHERE removed_at IS NULL) AS flows,
-          (SELECT count(*) FROM agents WHERE removed_at IS NULL) AS agents`;
-        if (!usage) return;
-        yield* telemetry.record("app.started", {
-          isFirstRun: usage.setupCompleted !== 1,
-          projectCount: telemetryCount(usage.projects),
-          flowCount: telemetryCount(usage.flows),
-          agentCount: telemetryCount(usage.agents),
-        });
-      }).pipe(
-        Effect.catch(() => Effect.logWarning("Anonymous analytics could not record startup.")),
-      );
-    }
     return factory;
   });

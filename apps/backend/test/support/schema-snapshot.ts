@@ -17,7 +17,7 @@ export function schemaSnapshot(databasePath: string) {
       .all() as { sql: string }[];
     return [
       "-- Generated current-schema snapshot. Do not edit by hand.",
-      "-- Regenerate: pnpm --filter @t3-factory/backend schema:update",
+      "-- Regenerate: pnpm --filter @agent-easel/backend schema:update",
       `-- Newest applied migration: ${newest.name}`,
       "",
       declarations.map(({ sql }) => `${sql};`).join("\n\n"),

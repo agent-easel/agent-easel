@@ -15,7 +15,7 @@ import type {
   PortableFlowDocument,
   PortableModelHint,
   Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   definitionSaveFits,
   hintedSelection,
@@ -23,7 +23,7 @@ import {
   portableDocumentText,
   validatePortableDocument,
   resolveAgentModel,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import type { AgentRevision } from "./agent-revisions.ts";
 import { unsupportedReportingFailure } from "./agents.ts";
 import type { FlowRevision } from "./flow-revisions.ts";
@@ -115,7 +115,7 @@ export function definitionExport<Document extends PortableDocument>(
   if (!validated.ok)
     return failure(
       validated.error.code,
-      "Factory could not export this file because another installation could not import it.",
+      "AgentEasel could not export this file because another installation could not import it.",
       validated.error.issues,
     );
   const oversized = agents.flatMap(({ name, prompt, execution, exits }, index) =>
@@ -328,7 +328,7 @@ export function unsupportedSelections(
   const names = refused.map(({ agent }) => `"${agent.name}"`).join(", ");
   return failure(
     "validation",
-    `Choose another model for ${names}: Factory cannot take reports from the chosen provider.`,
+    `Choose another model for ${names}: AgentEasel cannot take reports from the chosen provider.`,
     refused.map(({ agent, explanation }) => ({
       code: "harness_unsupported",
       path: `selections.${agent.key}.providerInstanceId`,

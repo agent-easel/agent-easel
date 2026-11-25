@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import type { FlowWorkspaceBase } from "@t3-factory/contracts";
+import type { FlowWorkspaceBase } from "@agent-easel/contracts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import type { GitAdapter } from "./git.ts";
 

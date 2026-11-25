@@ -7,7 +7,7 @@ import type {
   StartRunInput,
   StartTitleProvenance,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   isCanonicalTimestamp,
   isStartTitleProvenance,
@@ -16,7 +16,7 @@ import {
   promptTitle,
   RUN_IMAGE_LIMIT,
   TASK_TITLE_LIMIT,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { randomId } from "./lib/ids.ts";
 import { admittedStart, api, ApiError } from "./api.ts";
 import { transport } from "./transport.ts";
@@ -296,7 +296,7 @@ const missingDigests = (error: ApiError) =>
 class LocalImageMissing extends Error {}
 
 const missingImagesOutcome =
-  "Factory still lacks some images of this request. Check the same request to upload them again.";
+  "AgentEasel still lacks some images of this request. Check the same request to upload them again.";
 
 export function createRunDraft(
   startRun: (submission: StartRunInput) => Promise<{ id: string }> = admittedStart.startRun,

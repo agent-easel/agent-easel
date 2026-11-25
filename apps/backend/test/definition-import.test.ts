@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { FlowGraph, Result } from "@t3-factory/contracts";
+import {
+  LEGACY_PORTABLE_DOCUMENT_FORMAT,
+  PORTABLE_DOCUMENT_FORMAT,
+  type FlowGraph,
+  type Result,
+} from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import { HttpServerResponse } from "effect/http";
 import { loadConfiguration } from "../src/config.ts";
@@ -79,7 +84,7 @@ it("a file that is not JSON is rejected as not JSON and nothing is created", asy
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
 });
 
-it("JSON without the Factory marker is rejected as not a Factory export", async (context) => {
+it("JSON without the AgentEasel marker is rejected as not an AgentEasel export", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
 
@@ -91,7 +96,25 @@ it("JSON without the Factory marker is rejected as not a Factory export", async 
   expect(review.error.issues.map((issue) => issue.code)).toStrictEqual(["not_factory_export"]);
 });
 
-it("a newer format version is rejected before its definitions are read and asks to update Factory", async (context) => {
+it.for([PORTABLE_DOCUMENT_FORMAT, LEGACY_PORTABLE_DOCUMENT_FORMAT])(
+  "a file marked %s is reviewed and imported",
+  async (format, context) => {
+    // Arrange
+    const { factory } = await openFactoryWithApprovedT3(context);
+    const document = agentFile(exportedAgent(), { format });
+
+    // Act
+    const review = await factory.reviewImport(fileBody(document));
+    const committed = await factory.commitImport(reviewedCommit("import-1", undefined, document));
+
+    // Assert
+    assert(review.ok);
+    assert(committed.ok);
+    expect(assertOk(await factory.listAgents())).toHaveLength(1);
+  },
+);
+
+it("a newer format version is rejected before its definitions are read and asks to update AgentEasel", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
 
@@ -107,7 +130,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 8, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 8, which this AgentEasel cannot read. Update AgentEasel to import it.",
     },
   ]);
 });
@@ -207,7 +230,7 @@ it("an import upload that breaks off under the size limit is answered as unreada
 
 it("an import request over 16 MiB is refused with HTTP 413", async (c) => {
   // Arrange
-  const directory = await mkdtemp(join(tmpdir(), "t3-factory-server-"));
+  const directory = await mkdtemp(join(tmpdir(), "agenteasel-server-"));
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const config = await loadConfiguration({ FACTORY_HOME: directory, FACTORY_PORT: "0" });
   const server = await startServer(config, { uiDirectory: null });
@@ -425,7 +448,7 @@ it("a commit into an unavailable Project is refused and creates nothing", async 
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
 });
 
-it("with T3 disconnected a commit still saves the reviewed selection", async (context) => {
+it("with T3 Code disconnected a commit still saves the reviewed selection", async (context) => {
   // Arrange
   const factory = await (await factoryHarness(context)).open({ t3: new ControlledT3() });
 
@@ -439,7 +462,7 @@ it("with T3 disconnected a commit still saves the reviewed selection", async (co
   );
 });
 
-it("a selection whose provider has no Factory reporting rejects the whole commit and names the Agent", async (context) => {
+it("a selection whose provider has no AgentEasel reporting rejects the whole commit and names the Agent", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   t3.projects.controlledProviders.push({
@@ -1058,7 +1081,7 @@ it("a commit reusing a request id with different selections conflicts and create
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });
 
-it("after restart and removal of the imported Agent a retried commit replays its receipt without T3 and recreates nothing", async (context) => {
+it("after restart and removal of the imported Agent a retried commit replays its receipt without T3 Code and recreates nothing", async (context) => {
   // Arrange
   const harness = await factoryHarness(context);
   const factory = await harness.open({ t3: new ControlledT3() });

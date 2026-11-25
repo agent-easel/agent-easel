@@ -9,7 +9,7 @@ import {
   type RunAttention,
   type RunBlock,
   type RunDetail,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { ChoiceMenu } from "./choice-menu.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
@@ -242,9 +242,9 @@ function ReviewInT3({
     <AttentionCard
       tone="needs-input"
       subject={block.name}
-      label={`Review ${block.name} in T3`}
+      label={`Review ${block.name} in T3 Code`}
       compact={compact}
-      title={`Review ${block.name} in T3`}
+      title={`Review ${block.name} in T3 Code`}
       actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
       {delayed && <p>No progress report for at least three hours.</p>}
@@ -558,11 +558,11 @@ function WorkspaceProblem({ run }: { run: RunDetail }) {
       tone="problem"
       subject="Run"
       compact={false}
-      title="T3 couldn’t create this Run’s worktree"
+      title="T3 Code couldn’t create this Run’s worktree"
       next={
         fix
-          ? "Fix it in T3, then start the Run again."
-          : "Settle this Run, then start it again once T3 can create the worktree."
+          ? "Fix it in T3 Code, then start the Run again."
+          : "Settle this Run, then start it again once T3 Code can create the worktree."
       }
       actions={fix ? <OpenInT3 href={fix} variant="button" /> : <SettleRunAction run={run} />}
       details={[
@@ -748,7 +748,7 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
   if (run.settlement)
     return (
       <p className="text-sm text-muted-foreground">
-        Factory is settling this Run and stopping its workers, so it accepts no answers.
+        AgentEasel is settling this Run and stopping its workers, so it accepts no answers.
       </p>
     );
   return <HumanResponseForm run={run} blockName={attentionSubject(item)} occurrence={occurrence} />;
@@ -777,7 +777,7 @@ function submitBlocker({
   decided: boolean;
   messageMissing: boolean;
 }) {
-  if (!online) return "Factory offline";
+  if (!online) return "AgentEasel offline";
   if (confirming) return "A Discord confirmation is waiting";
   if (!decided) return "Choose a decision first";
   if (messageMissing) return "Add your changes";
@@ -1063,7 +1063,7 @@ function RequestReportButton({
       {waiting && (
         <>
           <p id={reasonId} className="text-xs text-muted-foreground">
-            Waiting for T3 to confirm the Agent is idle
+            Waiting for T3 Code to confirm the Agent is idle
           </p>
           {openInT3}
         </>

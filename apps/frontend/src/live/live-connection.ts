@@ -1,9 +1,9 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { Layer } from "effect";
 import { Socket } from "effect/socket";
-import { LIVE_PATH } from "@t3-factory/contracts";
-import { rpcSessions } from "@t3-factory/contracts/live-session";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import { LIVE_PATH } from "@agent-easel/contracts";
+import { rpcSessions } from "@agent-easel/contracts/live-session";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import { recheckAccess } from "../client-gate.tsx";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { transport } from "../transport.ts";

@@ -1,4 +1,4 @@
-The theme seed generator and T3 Chat base palette in this directory
+The theme seed generator and T3 Code Chat base palette in this directory
 (`t3-theme-generator.ts` and `t3-theme-palettes.ts`) are ported from
 T3 Code (https://github.com/pingdotgg/t3code) at revision
 `d2c25950b4d9183ea342d5d5fc14c326b9e0172a`.

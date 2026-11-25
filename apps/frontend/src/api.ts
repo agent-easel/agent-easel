@@ -2,8 +2,6 @@ import { OfflineError, protocolHeaders, transport, unreachableHeader } from "./t
 import {
   AGENT_CREATE_WINDOW_MS,
   agentOperations,
-  featureUsageOperations,
-  type ReportedFeature,
   definitionImportOperations,
   flowOperations,
   projectOperations,
@@ -21,7 +19,7 @@ import {
   type OperationParameterValues,
   type OperationError,
   type Result,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 export class ApiError extends Error {
   constructor(readonly detail: OperationError) {
@@ -73,7 +71,7 @@ async function request<A>(path: string, init?: RequestInit, admitted = false): P
     if (result.error.code === "incompatible") transport.incompatible(result.error.message);
     throw new ApiError(result.error);
   }
-  if (!response.ok) throw new Error("Factory could not complete the request.");
+  if (!response.ok) throw new Error("AgentEasel could not complete the request.");
   return result.value;
 }
 
@@ -124,16 +122,6 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
   return calls as OperationCalls<Definitions>;
 }
 
-export function reportFeature(feature: ReportedFeature): void {
-  const definition = featureUsageOperations.reportFeatureUsed;
-  void Promise.resolve()
-    .then(() =>
-      factoryRequest(operationPath(definition), requestInit(definition, feature), false, fetch),
-    )
-    .then((response) => response.body?.cancel())
-    .catch(() => undefined);
-}
-
 export const api = {
   ...operationCalls(agentOperations, false, {
     reserveAgentCreate: 5_000,
@@ -157,7 +145,7 @@ export const api = {
     });
     if (response.status === 404) return false;
     if (response.ok) return true;
-    throw new Error("Factory could not check the image.");
+    throw new Error("AgentEasel could not check the image.");
   },
 };
 

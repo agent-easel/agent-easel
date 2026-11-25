@@ -1,6 +1,6 @@
 # Chat control
 
-Chat control is administered only on the Factory host, in the **Chat control** group of Settings.
+Chat control is administered only on the AgentEasel host, in the **Chat control** group of Settings.
 It is Off on every new and upgraded installation. This document describes what is implemented
 today: the **Language model** and **Discord** pages. Approved clients do not see these pages or their
 search entries, and the server refuses its operations on the approved-client listener with
@@ -9,7 +9,7 @@ server administer it through the same host operations.
 
 ## Language model
 
-Chat control has its own language-model connection. It does not configure Agents, T3 or Run title
+Chat control has its own language-model connection. It does not configure Agents, T3 Code or Run title
 generation, and they do not configure it. The page saves four values as one section with **Save**
 and **Discard** in the page header (Discard appears only while there are unsaved edits):
 
@@ -20,10 +20,10 @@ and **Discard** in the page header (Discard appears only while there are unsaved
 | Model | Free text, as the provider names the model |
 | API key | Optional; without one, requests go out keyless |
 
-Factory sends requests to the base URL followed by `/chat/completions` or `/messages`. It refuses
+AgentEasel sends requests to the base URL followed by `/chat/completions` or `/messages`. It refuses
 a base URL with embedded credentials, a query or a fragment. Anthropic's messages API needs the
 API version segment in the base URL (`https://api.anthropic.com/v1`, not `https://api.anthropic.com`):
-Factory refuses an Anthropic base URL without a path and explains this, rather than appending the
+AgentEasel refuses an Anthropic base URL without a path and explains this, rather than appending the
 segment itself.
 
 Every request uses only the saved values. The server's environment, such as `OPENAI_*` or
@@ -36,7 +36,7 @@ because the Anthropic provider requires one.
 While Chat control is Off the owner may save an incomplete section, for example only a provider.
 Malformed supplied values are always refused. While Chat control is On, removing the provider,
 base URL or model is refused. A structurally valid configuration is saved even when the provider is
-unreachable; Factory never falls back to earlier values. Saving, enabling and restarting never send
+unreachable; AgentEasel never falls back to earlier values. Saving, enabling and restarting never send
 a request to the provider.
 
 Each save names the revision its edits started from. A save against a revision that changed in the
@@ -65,10 +65,10 @@ and `credentials/` together so the committed configuration keeps its key file.
 ### Test
 
 **Test connection** in the page header sends one short synthetic request with fixed text to the saved
-configuration: no Run content, tools or retries. Providers may charge for it, and Factory never
+configuration: no Run content, tools or retries. Providers may charge for it, and AgentEasel never
 runs it automatically. Unsaved edits must be saved or discarded first, and the request names the
 saved revision being tested. The result is recorded with that revision and its time, with
-Factory's own description of a failure (an HTTP status category, unreachable or timed out), never a
+AgentEasel's own description of a failure (an HTTP status category, unreachable or timed out), never a
 provider's response body or the request URL. A Test is dated evidence for one saved configuration:
 a later save leaves it as evidence for its own, earlier revision. The outcome for the saved revision
 is the page's header badge (**Testing**, **Test passed** or **Test failed**), and a **Last tested**
@@ -78,20 +78,20 @@ and a failed Test does not turn Chat control off.
 ### Conversation failures
 
 An actual conversation whose model request fails (an HTTP error, an unreachable provider, no answer
-within 60 seconds or an answer Factory cannot read) records a runtime problem with the configuration
-revision it used, its time and Factory's own description. While Chat control is On the page's header
+within 60 seconds or an answer AgentEasel cannot read) records a runtime problem with the configuration
+revision it used, its time and AgentEasel's own description. While Chat control is On the page's header
 badge reads **Not answering**, one card explains the failure with its time, revision and description
 under Technical details, and the **Language model** navigation item shows a red indicator. Only a later successful
 conversational model request clears it. A Test neither sets nor clears it, and a later save leaves it
-dated to its earlier revision. Factory's own capacity and time limits are not provider failures and
+dated to its earlier revision. AgentEasel's own capacity and time limits are not provider failures and
 record nothing here.
 
 ## Discord
 
-Chat control uses one Discord application per Factory installation, reached with the Chat SDK
-Discord adapter in direct Gateway mode. Factory opens outbound connections only: it adds no webhook
+Chat control uses one Discord application per AgentEasel installation, reached with the Chat SDK
+Discord adapter in direct Gateway mode. AgentEasel opens outbound connections only: it adds no webhook
 listener or public endpoint, the application has no Interactions Endpoint URL, and the bot is not
-a Factory MCP client. The bot works only while the Factory backend runs.
+an AgentEasel MCP client. The bot works only while the AgentEasel backend runs.
 
 ### Connection
 
@@ -120,8 +120,8 @@ section are guarded as on the Language model page. The settings never show the t
 save that replaced it cannot be confirmed by that read: it counts as failed, the token stays in the
 draft and Access is not sent.
 
-No Application ID is configured. Factory's application is the one Discord reports for the
-authenticated Gateway session; Factory never reads it from the token itself. Factory records the
+No Application ID is configured. AgentEasel's application is the one Discord reports for the
+authenticated Gateway session; AgentEasel never reads it from the token itself. AgentEasel records the
 application its operating connection authenticated as, with the bot user's display name, when a
 session becomes ready; a check records the name with its result. The page's **Bot** row shows that
 name, with a **Gateway verified** tag after a passing check, or "—" until a session was ready. While a
@@ -149,29 +149,29 @@ Language model page over Discord; Esc or ✕ returns to Discord with its unsaved
 model saved there clears the requirement. Until the page has read the Language model the switch
 stays disabled, and when that read fails it says "Couldn't read the language model".
 
-On is persisted: after a restart Factory reconnects by itself. While On, Factory runs exactly one
+On is persisted: after a restart AgentEasel reconnects by itself. While On, AgentEasel runs exactly one
 Gateway connection. It logs in with the saved token and waits for a ready session; only once
-Discord has authenticated the session and reported its application, and Factory has recorded it
-(applying an application replacement when it differs), does Factory attach any handler, register
+Discord has authenticated the session and reported its application, and AgentEasel has recorded it
+(applying an application replacement when it differs), does AgentEasel attach any handler, register
 its command or post anything. There is no fallback to an earlier token or another application. A
 transient failure (Discord unreachable, a timeout, HTTP 429 or a 5xx answer) shows the
 connection as **Reconnecting** and is retried after a wait that starts at one second and doubles up
 to five minutes. A failure that needs correction (a rejected token, a missing Message Content intent
-or another refusal) shows **Rejected** with Factory's description
+or another refusal) shows **Rejected** with AgentEasel's description
 and stops connecting; the rejection is persisted, so a restart does not retry it. **Retry
 connection** on the page, which replaces the check while On, restarts the same connection; saving
 the connection section while On also reconnects with the newly saved values, which is how a token
 rotation takes effect. Neither opens a second session.
 
 Turning Off stops admitting messages and commands and disconnects; it returns once the Gateway
-session is released. Configuration, Access, conversations and accepted Factory work are kept, and
+session is released. Configuration, Access, conversations and accepted AgentEasel work are kept, and
 Off is not Archive, Settle or a worker interruption.
 
 The page header badge reports the connection (**Off**, **Checking**, **Connecting**, **Connected**,
 **Reconnecting**, **Rejected**); a failed command setup has its own card: a connected Gateway does not
 mean the command works. While On, the Discord item in the Settings navigation shows an indicator only
 for a current unresolved failure: amber while reconnecting, red for a rejected connection, a failed
-command setup or a message Factory could not deliver. Off shows none, and incomplete setup or empty
+command setup or a message AgentEasel could not deliver. Off shows none, and incomplete setup or empty
 Access is not an outage. Chat control failures never become
 Run Problems, Needs input, toasts or OS notifications.
 
@@ -183,26 +183,26 @@ lists:
 
 - allowed Discord user IDs, as one comma-separated field; pasting one ID per line is accepted and
   normalised;
-- allowed parent channels, each with the Factory Projects it grants. Threads inherit their parent
+- allowed parent channels, each with the AgentEasel Projects it grants. Threads inherit their parent
   channel's grant. A parent is a text, announcement or forum channel; a forum post is a thread of
   its forum.
 
 The page lists **Bots** in a separate group directly below Access, saved by the same Save with the
 Access revision. It holds one comma-separated **Bot IDs** field, entered like the users, and the
-bot accounts' names with a neutral **Bot** tag. A listed bot may converse with Factory and propose and
+bot accounts' names with a neutral **Bot** tag. A listed bot may converse with AgentEasel and propose and
 confirm its own Starts in allowed channels, but never Human answers or Archives; see
 [bot requesters](#bot-requesters).
 
 IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, bot, channel
 or Project grant is refused rather than merged, as is an ID listed as both a user and a bot. Names are not used to match anything. A channel without
-Projects grants nothing. A granted Project Factory no longer knows grants nothing, is not listed and
-is dropped from the channel on the next save. Server membership, roles, administrator status and Factory client approval grant no chat
-authority, and Access grants no Factory UI access or client approval. Factory does not administer
+Projects grants nothing. A granted Project AgentEasel no longer knows grants nothing, is not listed and
+is dropped from the channel on the next save. Server membership, roles, administrator status and AgentEasel client approval grant no chat
+authority, and Access grants no AgentEasel UI access or client approval. AgentEasel does not administer
 Discord permissions: everyone who can read an allowed channel or its threads sees what the bot posts
 there, including people Access does not list. When a save grants a channel its first Project, the
 page says once that everyone who can read that channel sees the bot's replies.
 
-When a check passes or an operating session becomes ready, Factory looks up each allowed user ID, bot
+When a check passes or an operating session becomes ready, AgentEasel looks up each allowed user ID, bot
 ID and channel ID through Discord and records the names it reports, and for user and bot IDs whether
 Discord's user data flags the account as a bot. The page shows the names under the IDs. An
 ID Discord does not know shows an **Unknown user** or **Unknown channel** tag and one warning; saving
@@ -230,7 +230,7 @@ test, so everyone it asks is **Waiting** again.
 A reply from an allowed user to one of the test's messages, or an invocation in a test's forum post,
 takes the normal admission path of an [invocation](#invocations) (an allowed user, in an allowed
 channel that grants a Project), but it opens no thread or conversation and never reaches the
-Language model: the bot reacts ✅ and Factory records the user as **Reached** with the time. A
+Language model: the bot reacts ✅ and AgentEasel records the user as **Reached** with the time. A
 test's messages count as soon as Discord accepts them, and an earlier test's messages keep counting
 after Send again, so a late reply to them also marks the user Reached. One reply in any allowed
 channel is enough. Waiting has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
@@ -242,20 +242,20 @@ Project; a message already sent stays sent.
 
 ### Invocations
 
-Factory admits only a new message from a human, or from a [listed bot](#bot-requesters), in a server
+AgentEasel admits only a new message from a human, or from a [listed bot](#bot-requesters), in a server
 channel, that mentions the bot or replies to one of its messages. Ordinary messages, edits,
-reactions, direct messages, webhooks, unlisted bots and Factory's own messages are ignored. The
+reactions, direct messages, webhooks, unlisted bots and AgentEasel's own messages are ignored. The
 adapter's own Gateway handling is not used, because it creates a thread before any authorization and
-drops every bot author. Before anything else happens, Factory requires that the author is an
+drops every bot author. Before anything else happens, AgentEasel requires that the author is an
 allowed user (or, for a bot account, a listed bot), that the channel or the thread's parent channel is allowed and grants at least one
-Project Factory knows, and current evidence of the author's access. Only then does a parent-channel
+Project AgentEasel knows, and current evidence of the author's access. Only then does a parent-channel
 invocation get a new public thread started on the invoking message, carrying only that message; an
 invocation inside a thread uses that thread. A denied event creates no thread and sends Discord
 nothing.
 
 Requester evidence comes from Discord itself: posting a message shows the author can see the
 channel, and for a command Discord states the member's permissions in that channel. A private thread
-also needs membership. Factory requests no Server Members intent, so other-user removal events
+also needs membership. AgentEasel requests no Server Members intent, so other-user removal events
 cannot keep a membership cache current. Instead, it asks Discord directly for private-thread
 membership before each dispatch or publication and on each command or confirmation. A connection
 gap or observed permission change invalidates the remaining permission evidence; stale, absent or
@@ -264,7 +264,7 @@ ambiguous evidence denies.
 Each Discord message or command is taken once: a content-free marker of its ID is kept, so a
 repeated delivery, also after a restart, admits nothing twice. Every admitted invocation belongs to
 one shared conversation per thread of the operating application in this installation, and work on
-it is serialized per conversation. Before Factory publishes anything for an invocation it checks
+it is serialized per conversation. Before AgentEasel publishes anything for an invocation it checks
 again that Chat control is On, the evidence is current, Access still allows the author there and
 the conversation has not been reset. Multipart conversational replies repeat this check before each
 part: an already dispatched send may finish, but revocation or reset stops later parts and prevents
@@ -275,20 +275,20 @@ admitted invocation is answered.
 
 Discord's own author flag decides which list applies: a bot account acts only through **Bot IDs** and
 a person only through Users, so a bot ID among the Users or a person's ID among the Bot IDs admits
-nothing. A listed bot can invoke Factory with an explicit mention in the message text. A bot's Reply
-to a status card, Run notice or action receipt is silently dropped even if the text mentions Factory.
+nothing. A listed bot can invoke AgentEasel with an explicit mention in the message text. A bot's Reply
+to a status card, Run notice or action receipt is silently dropped even if the text mentions AgentEasel.
 A Reply to a review is admitted only if it contains the exact phrase and references the persisted
 last message of the bot's own pending Start review in the same thread. Bot messages never answer the
 [access test](#access-test).
 
 - Each bot can have one pending Start per thread. A second proposal is refused and leaves the
   original review available for confirmation. A review holds the slot while it is being prepared,
-  while its confirmation phrase is live, or while Factory is resolving its acceptance.
-- Factory admits up to three consecutive bot turns in a thread, shared across bots. A bot request
+  while its confirmation phrase is live, or while AgentEasel is resolving its acceptance.
+- AgentEasel admits up to three consecutive bot turns in a thread, shared across bots. A bot request
   answered with the [busy reply](#bounds-and-queue) also counts as a turn. The next bot
   request gets one refusal without a mention. Further requests stay silent until a human posts in
-  the thread, Factory accepts a Start there, or five minutes pass since the last admitted bot turn.
-  A human message can clear the breaker without mentioning Factory.
+  the thread, AgentEasel accepts a Start there, or five minutes pass since the last admitted bot turn.
+  A human message can clear the breaker without mentioning AgentEasel.
 - Across all threads, each bot gets six model requests per minute and two Start proposals per five
   minutes. Model requests include follow-ups after tool calls. Each window starts with the bot's
   first use of that budget. The first request blocked by either limit gets one refusal without a
@@ -300,22 +300,22 @@ while conversational requests are paused. It requires the same Access and review
 confirmation and spends neither budget.
 
 An admitted bot gets the same conversation, Run reads and Start proposals as a person, with the same
-review and typed confirmation. It cannot propose or confirm a Human answer or an Archive: Factory
+review and typed confirmation. It cannot propose or confirm a Human answer or an Archive: AgentEasel
 refuses such a proposal to the model before any review, and a confirmation of those actions needs
 its requester among the Users. The bot's thread is the Run's [originating thread](#originating-thread),
 and its status card and notices go there, mentioning the bot while it stays listed. People allowed in
-the channel keep talking to Factory in that thread as usual.
+the channel keep talking to AgentEasel in that thread as usual.
 
 ### /factory reset
 
-When the connection is authenticated, Factory creates or updates its one `/factory` command (with the
+When the connection is authenticated, AgentEasel creates or updates its one `/factory` command (with the
 `reset` subcommand) by name and leaves the application's other commands untouched; it is available in
 servers only. An allowed participant can use it
-inside a thread of an allowed channel. Factory acknowledges it at once, privately to the invoker,
+inside a thread of an allowed channel. AgentEasel acknowledges it at once, privately to the invoker,
 checks access as for invocations (including private-thread membership) and clears the thread's
 shared conversation by starting its next generation; unfinished work admitted before the reset can
 no longer publish. A reset needs no model and no review. It deletes no Discord message and changes
-no accepted Factory work. Used outside a thread, by someone not allowed, or when access cannot be
+no accepted AgentEasel work. Used outside a thread, by someone not allowed, or when access cannot be
 confirmed, it clears nothing and says so privately. There is no message-text fallback.
 
 ### Check
@@ -326,12 +326,12 @@ become ready, reads the application and bot name Discord authenticated, looks up
 names, and disconnects. It attaches no conversation handler: it answers no message or command,
 posts nothing, registers no command and makes no model request; messages arriving meanwhile are not
 serviced. Only one Gateway session exists at a time, so a check while another runs is refused, and
-closing Factory ends a running check's session. While Chat control is On there is no separate check:
+closing AgentEasel ends a running check's session. While Chat control is On there is no separate check:
 the page reports the running connection and offers **Retry connection** in the header while it is
 reconnecting or rejected or command setup failed. A failed command
 setup can be retried here even while the Gateway is connected, after correcting its cause in Discord.
 
-The result is recorded with the checked revision and its time, using Factory's own description:
+The result is recorded with the checked revision and its time, using AgentEasel's own description:
 verified with the authenticated application, a token Discord rejects, a missing Message Content
 intent, Discord unreachable, timed out, or another Gateway failure. The page shows one card per
 failure, and a rejected token or missing intent also tags the Bot token row. Discord's error bodies
@@ -351,41 +351,41 @@ the first passing check its header links here with **Setup guide ↗**.
 2. On the Bot page, reset and copy the token and turn on **Message Content Intent**; the adapter
    requests it and Discord refuses a connection without it. Other privileged intents are not needed.
 3. Leave **Interactions Endpoint URL** empty. With a URL set, Discord sends interactions there
-   instead of over Factory's Gateway connection.
+   instead of over AgentEasel's Gateway connection.
 4. Invite the bot with the `bot` and `applications.commands` scopes and the permissions View
    Channels, Send Messages, Send Messages in Threads, Create Public Threads, Manage Threads, Read
    Message History, Add Reactions and Attach Files. One application can serve several servers; no
    server (Guild) ID is configured.
-5. Keep the Factory backend running. Factory registers `/factory reset` itself when Chat control
+5. Keep the AgentEasel backend running. AgentEasel registers `/factory reset` itself when Chat control
    turns On.
 
 ## Conversations
 
 ### Interpretation
 
-Factory answers an admitted invocation with the saved Language model through a bounded AI SDK tool
+AgentEasel answers an admitted invocation with the saved Language model through a bounded AI SDK tool
 loop. Fixed system instructions state the bot's role, the tools, the exact-text and ambiguity rules
-and that a proposal is neither consent nor acceptance; Factory adds the requester and the Projects
+and that a proposal is neither consent nor acceptance; AgentEasel adds the requester and the Projects
 the thread permits from the Discord event and Access. Message text, selected replies, names and tool
 results reach the model as untrusted data in JSON envelopes, never as instructions or authority.
 
-The tools run in-process over Factory's own operations. Reads answer the model directly; a mutation
-only proposes, and Factory itself reviews and performs it (see [Actions](#actions)):
+The tools run in-process over AgentEasel's own operations. Reads answer the model directly; a mutation
+only proposes, and AgentEasel itself reviews and performs it (see [Actions](#actions)):
 
 | Tool | Returns |
 | --- | --- |
 | List Projects | The Projects the thread's parent channel grants the requester: stable ID, name, repository path and availability |
 | List Flows | Global Flows and the Flows owned by the Projects the thread permits: stable ID, owning Project ID (`null` for global), name, workspace setting and readiness with its first reasons; a Project Flow starts only in its [owning Project](studio.md#ownership) |
 | Find Runs | Runs of those Projects: ID, Run number, title, Project name and repository path, Flow and state |
-| Read Run | One such Run as Factory has it now, by its captured definitions, in an overview with readable sections |
-| Start Run | Nothing to perform: a validated proposal whose review Factory posts, or why it cannot be proposed |
+| Read Run | One such Run as AgentEasel has it now, by its captured definitions, in an overview with readable sections |
+| Start Run | Nothing to perform: a validated proposal whose review AgentEasel posts, or why it cannot be proposed |
 | Answer Human occurrence | The same for answering one pending Human occurrence |
 | Archive Run | The same for archiving one Run |
 
 List Projects and List Flows return pages of 20 entries with the page count, so every entry stays
 reachable; [Finding and reading Runs](#finding-and-reading-runs) describes the Run tools. The model is
 told to list candidates and ask when several could match, and never to pick the first match or
-substitute a missing one. Before every model request, tool call and publication Factory checks
+substitute a missing one. Before every model request, tool call and publication AgentEasel checks
 again that Chat control is On, Access still allows the requester in that channel, the conversation
 was not cleared, the requester's evidence is current and the Language model configuration is
 unchanged. Replies mention nobody, whatever the model wrote, and a reply longer than one Discord
@@ -393,7 +393,7 @@ message goes out as ordered parts while these checks still pass. Chat control ad
 **Continue now** or worker control: the model is told that a request to stop a Run means Archive.
 
 While an admitted invocation is actively interpreted, not while it waits in the queue, the bot shows
-Discord's typing indicator in the thread. Factory triggers it again before Discord's roughly ten-second
+Discord's typing indicator in the thread. AgentEasel triggers it again before Discord's roughly ten-second
 indicator lapses, rechecking first that the invocation is still permitted, and stops as soon as
 publication begins or the interpretation ends, fails, times out or is fenced; nothing is triggered
 while the Gateway connection is down. Typing is best effort: a failed trigger is not retried, is no
@@ -404,9 +404,9 @@ attempts show no typing.
 ### Finding and reading Runs
 
 A participant can find and read every Run of the Projects the thread's parent channel grants, whoever
-started it and wherever: in Factory, from a T3 conversation or by another participant. Nothing else
+started it and wherever: in AgentEasel, from a T3 Code conversation or by another participant. Nothing else
 limits it; there is no per-person ownership. A Run of another Project is not found, even by its exact
-ID or number, and the answer is the same as for a Run that does not exist. Every call reads Factory's
+ID or number, and the answer is the same as for a Run that does not exist. Every call reads AgentEasel's
 current state and the Access policy afresh, and reading changes nothing: it creates no reporting
 destination for the Run and records no Discord identifier with it.
 
@@ -429,17 +429,17 @@ worker's completion is confirmed, and each handoff as held, released without con
 delivered or cancelled), Needs input, Problems, pending Human occurrences with the arrival that brought
 each (source Block and exit), and pending Wait arrivals with their deadlines. Names and exits come from
 the definitions the Run captured at Start, so later Flow edits do not change the reading. A stale or
-unknown observation is reported as such, not as a Problem, and Native T3 requests are marked as
-answered in T3. Lists longer than ten entries continue on further overview pages.
+unknown observation is reported as such, not as a Problem, and Native T3 Code requests are marked as
+answered in T3 Code. Lists longer than ten entries continue on further overview pages.
 
 Long texts are sections that the overview lists with their size: the prompt, each latest result, each
 working message, each pending Human occurrence's context and each pending Wait message. Each is read
 in pages of 4,000 characters, so text of any length, including Human context beyond the 32,000
 characters a chat review will allow, stays readable. A section whose text changed since the overview
-listed it is reported stale instead of being mixed with the earlier version, and text Factory no
+listed it is reported stale instead of being mixed with the earlier version, and text AgentEasel no
 longer retains is reported unavailable.
 
-Continuation and read handles are opaque names Factory stores with the conversation. They grant
+Continuation and read handles are opaque names AgentEasel stores with the conversation. They grant
 nothing: each use rechecks access and the source. A handle works only in the thread and conversation
 generation that issued it and only while the turn that issued it is retained, so a reset, expiry,
 clearing (including Access, provider or application replacement) or eviction of that turn makes it
@@ -449,7 +449,7 @@ survive into the next invocation, so a search or read that needs more tool calls
 allows continues in the next one.
 
 Replying to a Status card, attention notice, catch-up or completion notice from the operating
-application in the same thread gives the model only the Run's ID for a fresh read. Factory reads
+application in the same thread gives the model only the Run's ID for a fresh read. AgentEasel reads
 within the current Project grants for the thread's channel and keeps the referenced message's text
 out of the model input.
 
@@ -458,16 +458,16 @@ out of the model input.
 Each thread of the operating application has one shared conversation; nothing is shared between
 threads and there are no personal profiles, inferred preferences or automatic summaries. A completed
 turn keeps the admitted message exactly as it arrived with its author's Discord ID, the reply
-Discord accepted and compact Factory facts from its tool calls (identities, names and read handles,
+Discord accepted and compact AgentEasel facts from its tool calls (identities, names and read handles,
 not the raw results; the newest within 2 KiB). Discord edits and deletions change neither the kept copy nor invoke the bot; only a reset
 or the retention rules below remove it, and neither recalls what was already sent to the provider or
 posted in Discord. A failed or discarded interpretation keeps nothing.
 
 An invoker can select a human message by replying to it in the same thread, including another
-author's or one from before a reset; Factory takes its text from the event itself. A reply target
+author's or one from before a reset; AgentEasel takes its text from the event itself. A reply target
 Discord did not supply, a message outside the thread (including a parent-channel starter) or a
 message by a bot, webhook or the system is passed to the model only as unusable, so it asks for the
-exact text. Factory fetches no messages or links, imports no bot prose and reads no attachments,
+exact text. AgentEasel fetches no messages or links, imports no bot prose and reads no attachments,
 previews or worker conversations.
 
 ### Retention and clearing
@@ -510,17 +510,17 @@ work but keeps what they contributed for the remaining participants.
 | Resend notice | Sent within fifteen minutes of admission |
 
 A message over its size limit, or input that cannot fit one request with the required instructions,
-gets a clear refusal without a model request; Factory never shortens it. Needing more model requests
+gets a clear refusal without a model request; AgentEasel never shortens it. Needing more model requests
 or tool calls ends the interpretation with an explanation. A fifth message while four wait gets a
 fixed busy reply and is not kept. Each invocation is answered on its own, with its own requester.
-Factory's byte bound does not prove a provider's token window.
+AgentEasel's byte bound does not prove a provider's token window.
 
 ### Interruptions
 
 A backend restart, a session that ends, Off, a committed Language model save and a model failure
 discard unfinished interpretation without replaying it, and late model output or tool calls are
 fenced. A model failure also discards the invocations waiting behind it. During a Gateway outage
-while the backend runs, Factory dispatches nothing new and holds finished output, within the bounds
+while the backend runs, AgentEasel dispatches nothing new and holds finished output, within the bounds
 above; once the connection resumes it rechecks On, Access, the configuration and the requester's
 access (with a targeted Discord lookup, since the outage made earlier evidence stale) before
 continuing. Timed-out work frees its place at once without waiting for the provider to stop.
@@ -532,16 +532,16 @@ notice and deletes the markers, so turning On again revives none; a reset or cle
 
 ## Actions
 
-A mutation in chat is a proposal, a review, the requester's consent and Factory's acceptance, kept
-apart. The model can only propose; Factory renders the review, records the consent and performs the
-action through the same shared Factory operation as every other client, and reports the actual
+A mutation in chat is a proposal, a review, the requester's consent and AgentEasel's acceptance, kept
+apart. The model can only propose; AgentEasel renders the review, records the consent and performs the
+action through the same shared AgentEasel operation as every other client, and reports the actual
 result itself. Chat control can start a Run, answer a Human occurrence and archive a Run.
 
 ### Start proposals
 
 Start Run takes a permitted Project ID, a saved Flow ID and the Run's complete prompt. The prompt is
 text only and must be copied exactly from the requester's current message or the human reply they
-selected; text the model wrote must be marked composed, and the review labels it so. Factory refuses,
+selected; text the model wrote must be marked composed, and the review labels it so. AgentEasel refuses,
 before any review, a prompt that is blank, is not found verbatim in its stated source, exceeds 8,000
 Unicode characters or 16 KiB UTF-8, a Project the thread does not permit or that is unavailable, an
 unknown or not-ready Flow and a Flow another Project owns (`flow_project_mismatch`); the model is told
@@ -557,9 +557,9 @@ of it and the answer: **Approve**, which carries no message, or **Request change
 requester's nonblank feedback, held to the same exact-text, composed-label and size rules as a Start
 prompt. Any such Run qualifies, whoever started it and wherever. Without an identified occurrence
 nothing is proposed, so a broad request such as "approve this Run" never answers several
-occurrences or picks one; the model is told to ask. Factory refuses an Archived Run, an occurrence
+occurrences or picks one; the model is told to ask. AgentEasel refuses an Archived Run, an occurrence
 the Run does not have or that no longer waits (answered, withdrawn or cancelled, or the Run accepts
-no answers) and an occurrence whose context Factory no longer has.
+no answers) and an occurrence whose context AgentEasel no longer has.
 
 While a review to answer an occurrence can still be confirmed, the Run's own decision form for that
 occurrence is disabled with **A Discord confirmation is waiting**, so the same occurrence is not answered
@@ -571,32 +571,32 @@ an Access or application change leaves the form waiting until the review would h
 Archive Run takes one Run (ID or number) in a permitted Project, whoever started it and wherever;
 an Archived Run gets no review. The review names the Run (number, title, Project name and repository
 path), its Flow and state and how many Human occurrences and Wait arrivals are pending, and states
-that Archive is final, cancels the automatic work Factory still owes the Run and its pending Human
-and Wait items without inventing answers, and asks T3 once to interrupt the worker threads without
+that Archive is final, cancels the automatic work AgentEasel still owes the Run and its pending Human
+and Wait items without inventing answers, and asks T3 Code once to interrupt the worker threads without
 waiting for or confirming that they stop. It says that nothing is rolled back and that the Run's
-history stays readable in Factory.
+history stays readable in AgentEasel.
 
 ### Reviews and consent
 
 Reviews are compact: one short emoji-led line per fact, exact text in code blocks, and consecutive
 lines and blocks sharing a Discord message while it fits. A Human answer review names the Run
 (number, title, Project name and repository path), the Human step with when it appeared and the
-Block and exit it arrived from, then the occurrence's complete context, read by Factory itself
+Block and exit it arrived from, then the occurrence's complete context, read by AgentEasel itself
 whatever pages the model read, the selected answer and the exact message, labelled when it came from
 a replied-to message or was composed by the assistant. A context too long for a 32,000-character
 review stays readable through Read Run but cannot be confirmed in chat; nothing is shortened.
 
-A Start review is likewise Factory's own and minimal: one line naming the Flow (and its ID only when
+A Start review is likewise AgentEasel's own and minimal: one line naming the Flow (and its ID only when
 another saved Flow has the same name) and the Project, then the exact prompt in full. The Flow's and
 its Agents' current saved definitions, workspace included, are resolved at confirmation without
 another review, and the Run's automatic title is the prompt's first non-empty line. A
 review is at most 32,000 Unicode characters and goes out as fully visible ordered messages; only
-after every part was delivered does Factory post the last message, which mentions the requester and
+after every part was delivered does AgentEasel post the last message, which mentions the requester and
 shows the review's [confirmation phrase](#confirmation), says that only the requester can confirm and
 when the review expires, as a Discord relative timestamp. A part that fails, or a last message
-Discord refused or whose creation Factory cannot prove, leaves nothing to confirm and Factory says
-so. The review becomes confirmable only once Factory has recorded the last message's ID. Before each
-part and before the last message, Factory checks again that the proposal is still pending, Chat
+Discord refused or whose creation AgentEasel cannot prove, leaves nothing to confirm and AgentEasel says
+so. The review becomes confirmable only once AgentEasel has recorded the last message's ID. Before each
+part and before the last message, AgentEasel checks again that the proposal is still pending, Chat
 control is On, Access still allows the requester and the targeted Projects in that channel, the
 requester's Discord access is current and the conversation was not reset; otherwise it stops posting
 the review, posts no phrase and the proposal is not presented.
@@ -612,7 +612,7 @@ correction: it ends every earlier pending review of that target as superseded be
 posted, whether or not the model named one. Proposals for other targets stay independent unless the
 model names the one it supersedes; expired and confirmed proposals are never changed. A reply such as "yes" is never
 consent: the model is told to point to the review's phrase, and later turns see each proposal's current state
-(waiting, expired, accepted with the Run's identity, rejected or no longer valid) as a Factory fact,
+(waiting, expired, accepted with the Run's identity, rejected or no longer valid) as an AgentEasel fact,
 so a status question reads it instead of proposing the action again. A waiting confirmation occupies no
 place in the conversation's queue, and a reset or clearing removes the conversation, not the consent.
 
@@ -627,36 +627,36 @@ within the lifetime confirms. A plain "yes", any other text, a wrong code, a mes
 Reply to that message, someone else's reply, a reply after expiry and a reused phrase confirm
 nothing. There is no button and no setting that skips the phrase.
 
-Factory recognizes a confirmation attempt from its own records before anything reaches the language
+AgentEasel recognizes a confirmation attempt from its own records before anything reaches the language
 model: a Reply to a review's last message, or a message whose text is shaped like a phrase. Such a
 message is never interpreted. An attempt by a user Access does not allow there is ignored like any
 other message from them. An allowed user's attempt is taken once and decided; when it decides the
-review, nothing is posted for it: the review's last message shows **✅ Confirmed** when Factory
+review, nothing is posted for it: the review's last message shows **✅ Confirmed** when AgentEasel
 accepted the action or **🚫 No longer valid** when it definitively rejected it, and the result
 follows in the thread (an accepted Start's status card, otherwise the receipt). Every other attempt
 (someone else's, not a Reply to the review, not the exact phrase, an expired, used or voided review, a
-denied or unconfirmed access check, a moment Factory cannot decide, an outcome still being
+denied or unconfirmed access check, a moment AgentEasel cannot decide, an outcome still being
 established) gets a short public answer in the thread that mentions nobody, and a requester whose
-consent is still live or still being reconciled can reply again. Before taking the consent Factory
+consent is still live or still being reconciled can reply again. Before taking the consent AgentEasel
 checks again that Chat control is On, Access still allows the requester in that channel with the
-targeted Project, the application is still the one Factory operates as and the requester's Discord
+targeted Project, the application is still the one AgentEasel operates as and the requester's Discord
 access is current, then performs the action with no model request and outside any database
 transaction. Someone else's attempt, a denied or unconfirmed Discord access check and an attempt that
-arrives while Factory is momentarily unable to decide all leave the consent usable until it expires;
+arrives while AgentEasel is momentarily unable to decide all leave the consent usable until it expires;
 an attempt after expiry does nothing.
 
 The Start uses the shared Start operation with the action's own identity as its request ID, so the
 same validation, readiness checks and current-definition acceptance apply and a repeated attempt can
-only recover the same Run. External preflight is not acceptance: after it, Factory refreshes the
+only recover the same Run. External preflight is not acceptance: after it, AgentEasel refreshes the
 requester's guild membership and thread/parent-channel permissions from Discord, including private-thread
 membership, and checks the live consent, expiry, On state, application and Project grants inside the Run
 acceptance transaction. Revocation permanently fences a pending acceptance even if access is later
 regranted; work already accepted remains attributable and recoverable. Discord denial or unresolved
 access after preflight refuses only that attempt and leaves otherwise-live consent at its original
-expiry; it cannot restore consent voided by a Factory Access or application change. A definitive local
+expiry; it cannot restore consent voided by an AgentEasel Access or application change. A definitive local
 rejection, which proves nothing was started, uses the
 consent up. A duplicate or racing reply, a lost answer and a restart reconcile that same request: an
-attempt left without a recorded outcome is looked up by its request ID when Factory starts, and
+attempt left without a recorded outcome is looked up by its request ID when AgentEasel starts, and
 returns its consent (still bound to the original expiry) only when no Run was accepted. The
 requester's reply after the decision gets the result as a short answer, with current access
 required, and never a second receipt.
@@ -669,7 +669,7 @@ the consent up, only when the Run's current state shows the occurrence no longer
 accepts no answers; an attempt left without an outcome is looked up by the action's identity alone.
 
 An Archive uses the shared Archive operation in the same way: the Run records the action's identity
-with the Archive, so a Run archived elsewhere rejects the confirmation and Factory requests no
+with the Archive, so a Run archived elsewhere rejects the confirmation and AgentEasel requests no
 further worker interruption. Only an Archive this action performed requests interruption, and a
 repeated reply, restart or reconciliation never archives or interrupts again.
 
@@ -679,7 +679,7 @@ save that removes the requester, the channel or the targeted Project voids match
 an application replacement voids the previous application's, including after switching back.
 
 Showing a review's resolution is best effort and never decides anything: every attempt is checked
-against the review's recorded state. Factory edits a review's last message, replacing the phrase, once
+against the review's recorded state. AgentEasel edits a review's last message, replacing the phrase, once
 from a serving session when the review is decided or becomes unusable: **✅ Confirmed** or **🚫 No
 longer valid** once decided, **⌛ Expired** at its original expiry, **↩️ Replaced** when a correction
 superseded it, **🚫 No longer valid** when an Access save voided it. It edits only messages the
@@ -689,13 +689,13 @@ Nothing is edited while Chat control is Off: a review that expired while no sess
 an Access save voided while Chat control was Off, keeps its phrase as it is. The old bot's messages
 are not edited after an application replacement.
 
-Reviews posted with a **Confirm** button before the typed phrase replaced it expire when Factory is
+Reviews posted with a **Confirm** button before the typed phrase replaced it expire when AgentEasel is
 upgraded; their buttons stay as Discord shows them but confirm nothing, and their requesters ask for
 a fresh review.
 
 ### Receipts and delivery
 
-Factory writes the receipt from the decided facts, in one or two short lines. An accepted Start
+AgentEasel writes the receipt from the decided facts, in one or two short lines. An accepted Start
 has no receipt: its [status card](#status-cards), created in the same thread, is its only message.
 For a Human answer the accepted
 answer, the Human step and the Run; for an Archive the Run and what Archive cancelled and requested,
@@ -707,13 +707,13 @@ there, not on the requester remaining allowed; an Access save that revokes the d
 the owed receipt and keeps the accepted Run. After an application replacement, owed receipts go out
 from the new bot once it is authenticated and On.
 
-Factory records its intent before creating a message. Discord's rate limiting is retried with
+AgentEasel records its intent before creating a message. Discord's rate limiting is retried with
 waits from one second doubling to five minutes. A definite refusal (for example a deleted or locked
 thread or missing bot permissions) waits for correction and Retry. Every message create carries a
-nonce that stays the same for that message, and Factory asks Discord to enforce it: Discord then
+nonce that stays the same for that message, and AgentEasel asks Discord to enforce it: Discord then
 returns the message an earlier create with the same nonce made, for a few minutes, instead of creating
 another. When the connection dropped or Discord answered with a server error, so the outcome is
-unproven, Factory asks again with the same nonce at most twice, within one minute of the first
+unproven, AgentEasel asks again with the same nonce at most twice, within one minute of the first
 request. For queued deliveries, revoking the destination's Project grant stops those re-attempts,
 even if the grant returns before Discord answers. A returned message ID reconciles the create.
 An in-flight receipt, Status card, attention notice or catch-up with an unproven outcome keeps its
@@ -721,14 +721,14 @@ duplicate warning in Settings. Retry requires the Project grant and the host's a
 duplicate risk. A definite first refusal of a revoked create cancels that delivery.
 A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
-window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
+window, when the session ends meanwhile or after AgentEasel stopped while sending, the create is unknown
 and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Discord lists
 these current problems, with their destination and time, and confirmed actions whose outcome is
 still being reconciled. Retry of an unknown message first warns that Discord may show it twice;
 each Retry is one attempt, never repeats the action, and a new unknown outcome needs a new choice.
 Review parts and last messages follow the same nonce rule, so a last message Discord already created
 is not posted twice and keeps the expiry its first dispatch fixed. Reviews are never retried by the
-host: a review becomes confirmable only once Factory has recorded its last message's exact ID, so a
+host: a review becomes confirmable only once AgentEasel has recorded its last message's exact ID, so a
 review whose last message is uncertain ends with nothing to confirm and the requester asks again.
 
 ### Originating thread
@@ -736,14 +736,14 @@ review whose last message is uncertain ends with nothing to confirm and the requ
 A Run accepted from a chat Start records the Discord thread it was requested in as its originating
 thread, whether a person or a [listed bot](#bot-requesters) requested it. It is the destination of
 the Run's [status card](#status-cards), not ownership: any allowed participant may act on any Run in
-a permitted Project, within what a bot may do. Runs started in Factory, through Factory MCP
+a permitted Project, within what a bot may do. Runs started in AgentEasel, through AgentEasel MCP
 or before this release have none, and reading or acting on a Run never adds one. Ordinary Run views
 and approved clients never see it. A receipt goes to the thread its action was requested in, and its
 delivery is independent of the Run's card.
 
 ### Status cards
 
-Each chat-started Run has one status card in its originating thread, which Factory edits as the Run
+Each chat-started Run has one status card in its originating thread, which AgentEasel edits as the Run
 changes. Its header shows the Run's number, title, lifecycle and Flow. A confirmed Settle still
 stopping workers or an unresolved settlement Problem appears below the header. Each Block from
 the captured Flow revision has one row, in breadth-first order from the Flow input's targets.
@@ -751,8 +751,8 @@ Any remaining Blocks follow in canvas order from left to right, then top to bott
 breaking ties.
 
 A Block's pending Problem takes precedence over Needs input, a pending Wait, a waiting Join,
-working or Continuation sent, stopped, finished, and not started. Native T3 requests and workers
-awaiting review direct the reader to T3. When several arrivals are waiting on a Block, its row shows the
+working or Continuation sent, stopped, finished, and not started. Native T3 Code requests and workers
+awaiting review direct the reader to T3 Code. When several arrivals are waiting on a Block, its row shows the
 earliest deadline as a relative Discord timestamp and counts the pending arrivals. A Join with a
 partial round shows one text row, **Waiting · *n*/*m* sources**, with the sources that have arrived
 of those it waits for; it is not attention and posts no notice, while a Join integrity Problem
@@ -761,45 +761,45 @@ staleness and observations that have yet to be made appear on the relevant Block
 Archived Runs retain their final Block states. Use Read Run for Finish endings, results, report
 bodies and prompts.
 
-To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at the bottom first,
+To fit Discord's 2,000-character limit, AgentEasel summarizes not-started Blocks at the bottom first,
 then finished Blocks at the top if needed. It omits remaining overflow rows only when those
-summaries still leave insufficient room. When Factory creates the card, it opens with a mention of
+summaries still leave insufficient room. When AgentEasel creates the card, it opens with a mention of
 the Run's requester, person or bot, while saved Access still allows that requester among the Users
 or Bot IDs, and the card is fitted again so the mention counts toward the limit, including a
 stored card that already filled it. Otherwise, and on every edit, the card mentions nobody. Replying to the card points
-Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
+AgentEasel's conversation at its Run using the Run ID, and the model reads the Run afresh within the
 thread's current scope.
 
-Factory captures what each card owes from the Run's committed facts, not from the live updates the
-Factory UI receives: a change to a chat-started Run, every Access save and every backend start bring
+AgentEasel captures what each card owes from the Run's committed facts, not from the live updates the
+AgentEasel UI receives: a change to a chat-started Run, every Access save and every backend start bring
 the recorded card text up to date, whether Chat control is On or Off, whether anyone watches and
 whatever the language model's state. Snooze does not mute the card. Delivering the card never delays
 or changes the Run. While Off, during a Discord outage or while the backend is stopped, the owed
-update waits; once a session serves again, Factory edits the card to the Run's current state rather
+update waits; once a session serves again, AgentEasel edits the card to the Run's current state rather
 than replaying what happened meanwhile. A card the Run owes, because it was never posted or shows an
 older state, stays owed however old it is; a card that already shows a Settled or Archived Run gets
 nothing more. An upgrade to the all-Block layout refreshes existing Archived cards in place when
 the same application can still edit them.
 
 An Access save that stops the thread's channel granting the Run's Project cancels the card's owed
-update and nothing accrues while it stays revoked. After a regrant, Factory corrects a card it already
+update and nothing accrues while it stays revoked. After a regrant, AgentEasel corrects a card it already
 posted to the Run's current state without a new message, and posts a card it never managed to post only
 if the Run is Active or Snoozed or has pending Needs input or Problems. Revocation stops further
-create attempts. Factory records a message ID or definitive refusal from the request already sent.
+create attempts. AgentEasel records a message ID or definitive refusal from the request already sent.
 An unproven create keeps its warning through revocation and regrant. Retry requires the restored
 grant and the host's acceptance of the duplicate risk. A refusal of that Retry leaves the original
 create unproven and another Retry requires a fresh choice. Removing the requester from Access
 does not stop the card: it depends on the channel's grant and the bot's access.
 
 Editing in an archived thread needs it unarchived: when Discord refuses the edit because the thread is
-archived and a fresh read shows it unlocked, Factory unarchives it and edits the card without posting
-anything; a new message, such as a notice, reopens the thread by itself. Factory never unlocks,
+archived and a fresh read shows it unlocked, AgentEasel unarchives it and edits the card without posting
+anything; a new message, such as a notice, reopens the thread by itself. AgentEasel never unlocks,
 recreates or relocates a thread, and it reads the thread before each new message: it posts nothing in a
 locked thread, even though Discord would accept posts from a bot holding Manage Threads. A locked thread, a thread Discord no longer shows the bot, missing
 permissions or Discord's active-thread limit is a failed delivery in Settings with its correction and
 Retry. Only Discord's Unknown Message answer to an edit proves the card deleted; an unknown or deleted
 thread does not. A deleted card is replaced automatically once per Run; if that replacement is deleted
-too, Factory creates the next card only on the host's Retry, one attempt at a time, and restarts,
+too, AgentEasel creates the next card only on the host's Retry, one attempt at a time, and restarts,
 reconnects and time never renew the allowance. Card creates follow the receipt rules above: a create
 still unproven after its nonce re-attempts is unknown and only the warned Retry sends it again, while an edit is safe to repeat
 and is retried with waits. A request already sent when a session is released (Off, a token rotation or a
@@ -813,37 +813,37 @@ stays unknown. Rotating the same application's token keeps editing the same card
 
 ### Attention notices
 
-Factory posts an attention notice in a chat-started Run's originating thread when the Run has new
-Needs input or Problem matters. Attention follows the Run's own attention: a pending Human step or native T3
+AgentEasel posts an attention notice in a chat-started Run's originating thread when the Run has new
+Needs input or Problem matters. Attention follows the Run's own attention: a pending Human step or native T3 Code
 question or permission is Needs input, and a missing report, an execution failure, a report problem, a
 Condition or Join integrity Problem or a confirmed Settle that could not stop workers
 ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
 observation is never reported as a Problem. Each pending matter's line names where to act: **ask here**
 for a Human step, which is answered in the thread through the complete review and the requester's
-confirmation (the notice has no answer buttons), **answer it in T3** for a native T3 request, and
-**check it in Factory** for every Problem. The notice's [machine line](#machine-line) carries the same
+confirmation (the notice has no answer buttons), **answer it in T3 Code** for a native T3 Code request, and
+**check it in AgentEasel** for every Problem. The notice's [machine line](#machine-line) carries the same
 place for each matter as `thread`, `t3` or `factory`.
 
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
 own short line with its Block, up to eight per notice; the settlement Problem is about the
-Run and names no Block, and a retried Settle keeps its one notice. When Factory posts an attention
+Run and names no Block, and a retried Settle keeps its one notice. When AgentEasel posts an attention
 notice or catch-up, it mentions only the requester who confirmed the Run's Start, a person or a listed
-bot, if that requester is still allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
+bot, if that requester is still allowed in saved Access when the message is sent. AgentEasel checks Access again on every retry. The
 notice still posts to a permitted thread when the requester has been removed. When any matter
-resolves, Factory updates its line or the compacted count in place and removes the heading's
+resolves, AgentEasel updates its line or the compacted count in place and removes the heading's
 mention without notifying anyone.
 An `@` in a Run title, Flow name or Block name is followed by an invisible space so it cannot form a
-user, role or mass mention. An idle or overdue worker shown as awaiting review in T3 does not create
+user, role or mass mention. An idle or overdue worker shown as awaiting review in T3 Code does not create
 an attention notice unless the Run records an attention matter.
 
-Factory captures notices with the card from the Run's committed facts, comparing the Run's pending
+AgentEasel captures notices with the card from the Run's committed facts, comparing the Run's pending
 matters with what its notices already accounted for. So a matter that appeared and resolved between
 two captures, while Off or while the backend was stopped, is never reported. What accrues while no
 session serves (Off, an outage that ended the Discord session, or the backend being stopped) is posted,
 once a session serves again, as one catch-up per Run: the matters still pending that were never
 announced, each on its own line. Matters
 announced earlier are not repeated, and a Run whose notices were all delivered gets nothing merely
-because Factory reconnected. A catch-up not yet posted when the session ends again is the same catch-up
+because AgentEasel reconnected. A catch-up not yet posted when the session ends again is the same catch-up
 next time. An owed outcome has no age limit.
 
 While the thread's channel does not grant the Run's Project, nothing accrues and owed notices are
@@ -862,20 +862,20 @@ create is unknown, is no longer owed and leaves Settings.
 
 ### Completion notices
 
-When a chat-started Run becomes Settled, Factory posts one completion notice in its originating
+When a chat-started Run becomes Settled, AgentEasel posts one completion notice in its originating
 thread. The same notice covers automatic settlement, reaching a Finish ending and confirmed manual
 settlement, and names which one it was: **Settled automatically.**, **Settled manually.** or, for a
 Finish settlement, **Settled at Finish ending "*name*".** with the ending's name as the Flow defines
 it. Only a Finish settlement names an ending, so a later settlement of a Run that once reached an
 ending does not repeat it. The notice names the Run, says it finished and invites a reply to inspect
 the result or choose what to do next, and ends with its [machine line](#machine-line). Results, report
-bodies and prompts stay out of the message. Factory checks the requester's saved Access before each send and mentions only that user while
+bodies and prompts stay out of the message. AgentEasel checks the requester's saved Access before each send and mentions only that user while
 allowed. The thread still receives the notice if the requester was removed and the Project grant
 remains in place.
 
 A Run that stays Settled keeps its one notice. Returning to Active retires any unposted completion
 from that cycle and allows a new notice on the next settlement. Archive likewise retires an unposted
-completion and creates none. The database records which settlement Factory accounted for by the
+completion and creates none. The database records which settlement AgentEasel accounted for by the
 sequence of its Run timeline event, so a fast return to Active between reporting captures still
 starts a new cycle. Existing Settled Runs are baselined when an installation upgrades.
 
@@ -889,8 +889,8 @@ and a duplicate warning for an unproven create.
 
 ### Archive notices
 
-When a chat-started Run is Archived, Factory posts one Archive notice in its originating thread: the
-Run, that it was archived, that Archive is final and that its history stays readable in Factory, and
+When a chat-started Run is Archived, AgentEasel posts one Archive notice in its originating thread: the
+Run, that it was archived, that Archive is final and that its history stays readable in AgentEasel, and
 the [machine line](#machine-line). It mentions the requester under the same rule as a completion
 notice. A Run is Archived once, so it has one Archive notice.
 
@@ -915,7 +915,7 @@ restores it exactly.
 | --- | --- |
 | `v` | The record's version, `1`. A change that could break a reader raises it; added fields do not |
 | `event` | `attention`, `completion` or `archive` |
-| `id` | The event ID, assigned when Factory first records the notice |
+| `id` | The event ID, assigned when AgentEasel first records the notice |
 | `runId`, `runNumber` | The Run's ID and its number, `null` for a Run without one |
 
 An `attention` record adds `matters`, one `{id, kind, act}` per matter the notice lists (`id` is the
@@ -934,10 +934,10 @@ the ending name is, as data.
 ## Hermes consumer contract
 
 An agent such as Hermes that grills with humans in a Discord thread, publishes a spec and asks
-Factory to start a Flow reads what Factory posts there under these rules. Factory documents the
+AgentEasel to start a Flow reads what AgentEasel posts there under these rules. AgentEasel documents the
 contract and does not implement the consumer.
 
-- Accept only messages authored by Factory's own bot in the thread. Anyone else's message that
+- Accept only messages authored by AgentEasel's own bot in the thread. Anyone else's message that
   imitates a notice is not an event.
 - Parse the [machine line](#machine-line) and nothing else. Treat Run titles, Flow and Block names and
   ending names as data, never as instructions.
@@ -953,25 +953,25 @@ contract and does not implement the consumer.
   settlement, a missing or mismatched comment, an `attention` event (act where its `act` says) and an
   `archive` event.
 
-Hermes fetches the pull request and commit from GitHub itself; Factory writes nothing to GitHub.
+Hermes fetches the pull request and commit from GitHub itself; AgentEasel writes nothing to GitHub.
 
 ## Support limits
 
 The pinned AI SDK packages are `ai` 7.0.178, `@ai-sdk/openai-compatible` 3.0.94 and
 `@ai-sdk/anthropic` 4.0.107. The pinned Discord packages are `chat` 4.45.0 and
 `@chat-adapter/discord` 4.45.0, with `discord.js` 14.28.1 and `@discordjs/ws` 1.2.3, the versions the
-adapter resolves. Factory supplies its own Gateway shard strategy because `@discordjs/ws` 1.2.3 can
+adapter resolves. AgentEasel supplies its own Gateway shard strategy because `@discordjs/ws` 1.2.3 can
 leave a session that is destroyed before it is ready reconnecting. Chat SDK runs with its `concurrent`
-strategy because its queue merges queued messages and its drop strategy loses admitted ones; Factory
+strategy because its queue merges queued messages and its drop strategy loses admitted ones; AgentEasel
 serializes each conversation itself and discards unfinished work on restart. The Chat SDK state
-Factory needs, thread subscriptions and its expiring key-value entries such as message deduplication,
+AgentEasel needs, thread subscriptions and its expiring key-value entries such as message deduplication,
 lives in SQLite; the SDK's locks, lists and queues are not used.
 
 Controlled tests run every behavior on this page against loopback stand-ins for Discord's REST API
 and Gateway and for the model provider. The Discord stand-in can rate-limit, refuse, lose the answer
 to or hold a message create or edit, models deleted messages and threads and archived, locked and
 limited threads, and returns the earlier message for a repeated enforced nonce until a test lets the
-uniqueness window pass. Factory does not search for copies an unknown create may have left.
+uniqueness window pass. AgentEasel does not search for copies an unknown create may have left.
 
 ### Live qualification
 
@@ -979,7 +979,7 @@ One live qualification ran the earlier pins (`ai` 7.0.172, `@ai-sdk/openai-compa
 `@ai-sdk/anthropic` 4.0.104, `chat` 4.44.0, `@chat-adapter/discord` 4.44.0, `discord.js` 14.28.1 and
 `@discordjs/ws` 1.2.3) against the real Discord Gateway and REST API with one
 application, one server, one allowlisted channel and one human participant, and against an
-OpenAI-compatible local model gateway, with a disposable Factory home and a simulated T3 engine
+OpenAI-compatible local model gateway, with a disposable AgentEasel home and a simulated T3 Code engine
 (no real workers). It confirmed: the synthetic model Test; the Off connection-only check (real
 readiness and authenticated application, disconnect, no handlers or command registration); adoption of
 the authenticated application, `/factory reset` registration and reconnect after backend restarts;
@@ -1000,6 +1000,6 @@ commands, and Discord accepts posts in a locked thread from a bot holding Manage
 Not qualified live: another participant's confirmation attempt, private-thread membership evidence, several servers,
 same-thread reply-target payloads, uncertain-create nonce reconciliation, rate limits, the active-thread
 limit, deleted-card replacement, application replacement and token rotation, a real model failure, the
-Anthropic provider, real T3 workers, and the desktop application or a remote approved-client device.
+Anthropic provider, real T3 Code workers, and the desktop application or a remote approved-client device.
 A model's tool-calling quality is the owner's responsibility: a model that requests more than 16 tool
 calls for a broad question gets the deterministic refusal.

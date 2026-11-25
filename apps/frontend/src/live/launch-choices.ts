@@ -1,4 +1,4 @@
-import type { LaunchChoices, LaunchChoicesLiveMessage } from "@t3-factory/contracts";
+import type { LaunchChoices, LaunchChoicesLiveMessage } from "@agent-easel/contracts";
 import { useLiveScope } from "./live-connection.ts";
 import type { LiveScope } from "./owner.ts";
 

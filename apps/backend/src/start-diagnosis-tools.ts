@@ -5,7 +5,7 @@ import type {
   Result,
   T3Connection,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { textResult, toolArguments } from "./authoring-tools.ts";
 
 export type StartDiagnosisOperations = Pick<
@@ -14,14 +14,14 @@ export type StartDiagnosisOperations = Pick<
 > & { checkStart(projectId: string, flowId: string): Promise<Result<undefined>> };
 
 const POINT_IN_TIME =
-  "This is a point-in-time check of the current state. Factory's Start revalidates every blocker when it runs, so ready now does not promise that a later Start is accepted.";
+  "This is a point-in-time check of the current state. AgentEasel's Start revalidates every blocker when it runs, so ready now does not promise that a later Start is accepted.";
 const FRESH_SESSION =
   "A harness session keeps the tools and skills it loaded at start: after installing or repairing reporting, open a new agent session before relying on it.";
 
 export const startDiagnosisTools: Tool[] = [
   {
     name: "factory_check_start",
-    description: `Preflight a Start: report what currently blocks starting a saved Flow in a Project, or that it is ready. It is host-local and inspect-only: it applies the same blockers as factory_start_run (Project and Flow ownership, the T3 connection and its launch capabilities, Flow readiness, each Agent's resolved settings and Factory reporting installation, and worktree prerequisites for a worktree Flow), and creates no Run, Task, worktree or worker, writes no harness configuration and sends no prompt. It rechecks the T3 connection and refreshes Factory's Project catalog, as Start does, so it contacts T3. It does not check a prompt, images or completed GitHub issues. ${POINT_IN_TIME} Reply: status (ready or blocked), blockers [{code, path, message}], the connection state and next steps. Diagnose first; when the blocker is reporting, list the targets with factory_list_reporting_installations and install or repair only on the user's instruction, then call this tool again.`,
+    description: `Preflight a Start: report what currently blocks starting a saved Flow in a Project, or that it is ready. It is host-local and inspect-only: it applies the same blockers as factory_start_run (Project and Flow ownership, the T3 Code connection and its launch capabilities, Flow readiness, each Agent's resolved settings and AgentEasel reporting installation, and worktree prerequisites for a worktree Flow), and creates no Run, Task, worktree or worker, writes no harness configuration and sends no prompt. It rechecks the T3 Code connection and refreshes AgentEasel's Project catalog, as Start does, so it contacts T3 Code. It does not check a prompt, images or completed GitHub issues. ${POINT_IN_TIME} Reply: status (ready or blocked), blockers [{code, path, message}], the connection state and next steps. Diagnose first; when the blocker is reporting, list the targets with factory_list_reporting_installations and install or repair only on the user's instruction, then call this tool again.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -43,13 +43,13 @@ export const startDiagnosisTools: Tool[] = [
   },
   {
     name: "factory_get_t3_connection",
-    description: `Read Factory's T3 connection status: state (ready, unavailable, authorization-required or incompatible), the explanation, endpoint, when it was last checked, whether an approval is pending, T3's version and its contract problems. It is host-local and inspect-only and writes no harness configuration. By default it returns what Factory last saw; with recheck true Factory inspects T3 now, which contacts T3 but never opens a browser or starts an authorization. Connected does not prove Project availability, provider or model availability or reporting installation: factory_check_start checks those. Endpoint credentials, OAuth authorization and approved-client management stay in Factory's Settings on the host; no tool here changes them. ${POINT_IN_TIME}`,
+    description: `Read AgentEasel's T3 Code connection status: state (ready, unavailable, authorization-required or incompatible), the explanation, endpoint, when it was last checked, whether an approval is pending, T3 Code's version and its contract problems. It is host-local and inspect-only and writes no harness configuration. By default it returns what AgentEasel last saw; with recheck true AgentEasel inspects T3 Code now, which contacts T3 Code but never opens a browser or starts an authorization. Connected does not prove Project availability, provider or model availability or reporting installation: factory_check_start checks those. Endpoint credentials, OAuth authorization and approved-client management stay in AgentEasel's Settings on the host; no tool here changes them. ${POINT_IN_TIME}`,
     inputSchema: {
       type: "object",
       properties: {
         recheck: {
           type: "boolean",
-          description: "true: inspect T3 now. Default false: the last check's result.",
+          description: "true: inspect T3 Code now. Default false: the last check's result.",
         },
       },
       additionalProperties: false,
@@ -57,12 +57,12 @@ export const startDiagnosisTools: Tool[] = [
   },
   {
     name: "factory_list_reporting_installations",
-    description: `List the harness homes where Factory reporting can be installed, as Settings → Agent reporting lists them, with each target's id, provider, instances, configuration path and skills folder, status (installed, not-installed, needs-attention or unsupported), message, the action this server offers (install, repair or none) and next step. It is host-local and inspect-only: it reads harness configuration files and writes nothing. Only the listed targets can be installed; a conflicting factory-runtime entry, an inaccessible home, an unsupported provider and a remote T3 host are diagnostics for the user to fix. ${POINT_IN_TIME}`,
+    description: `List the harness homes where AgentEasel reporting can be installed, as Settings → Agent reporting lists them, with each target's id, provider, instances, configuration path and skills folder, status (installed, not-installed, needs-attention or unsupported), message, the action this server offers (install, repair or none) and next step. It is host-local and inspect-only: it reads harness configuration files and writes nothing. Only the listed targets can be installed; a conflicting factory-runtime entry, an inaccessible home, an unsupported provider and a remote T3 Code host are diagnostics for the user to fix. ${POINT_IN_TIME}`,
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "factory_install_reporting",
-    description: `Install or repair Factory reporting in one target from factory_list_reporting_installations. This call WRITES harness configuration: Factory's own factory-runtime MCP entry in the target's configuration file and Factory's skills in its skills folder, through the same installation as Settings → Agent reporting, with its validation. Call it only for a target whose action is install or repair and only on the user's instruction, after diagnosing with factory_check_start. It refuses unknown targets, installed targets and targets that need a manual fix, and changes nothing then. It never touches endpoint credentials, OAuth authorization or approved clients. ${FRESH_SESSION} Afterwards call factory_check_start again.`,
+    description: `Install or repair AgentEasel reporting in one target from factory_list_reporting_installations. This call WRITES harness configuration: AgentEasel's own factory-runtime MCP entry in the target's configuration file and AgentEasel's skills in its skills folder, through the same installation as Settings → Agent reporting, with its validation. Call it only for a target whose action is install or repair and only on the user's instruction, after diagnosing with factory_check_start. It refuses unknown targets, installed targets and targets that need a manual fix, and changes nothing then. It never touches endpoint credentials, OAuth authorization or approved clients. ${FRESH_SESSION} Afterwards call factory_check_start again.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -95,7 +95,7 @@ const unsupportedArguments = (args: Record<string, unknown>, allowed: readonly s
       )
     : undefined;
 
-const failedNext = "Recheck the Factory backend, then call the tool again.";
+const failedNext = "Recheck the AgentEasel backend, then call the tool again.";
 
 function failedResult(error: {
   code: string;
@@ -115,11 +115,11 @@ function connectionNext(connection: T3Connection) {
     case "ready":
       return "Connected does not prove Project, provider, model or reporting readiness. Call factory_check_start for a Project and Flow.";
     case "authorization-required":
-      return "The user approves T3 access on the Factory host in Settings → T3 connection; no tool here authorizes it. Recheck after they have.";
+      return "The user approves T3 Code access on the AgentEasel host in Settings → T3 Code connection; no tool here authorizes it. Recheck after they have.";
     case "incompatible":
-      return "T3's MCP protocol or contract is unsupported. The user can update T3, then recheck.";
+      return "T3 Code's MCP protocol or contract is unsupported. The user can update T3 Code, then recheck.";
     case "unavailable":
-      return "Check that T3 is running and the saved address is right in Settings → T3 connection on the Factory host, then recheck.";
+      return "Check that T3 Code is running and the saved address is right in Settings → T3 Code connection on the AgentEasel host, then recheck.";
   }
 }
 
@@ -189,7 +189,7 @@ async function checkStart(factory: StartDiagnosisOperations, args: Record<string
     connection: connectionState,
     next: reporting
       ? "A reporting blocker: call factory_list_reporting_installations. Install or repair the target only when the user asks, then call factory_check_start again; an unsupported provider is changed in Studio → Agents."
-      : "Explain the blockers to the user. Changing definitions, Projects or T3 setup is their decision; use factory_get_t3_connection with recheck for a connection blocker, then call factory_check_start again.",
+      : "Explain the blockers to the user. Changing definitions, Projects or T3 Code setup is their decision; use factory_get_t3_connection with recheck for a connection blocker, then call factory_check_start again.",
     note: POINT_IN_TIME,
   });
 }
@@ -292,7 +292,7 @@ export async function callStartDiagnosisTool(
   } catch {
     return textResult(true, {
       code: "internal",
-      message: "Factory could not complete this call.",
+      message: "AgentEasel could not complete this call.",
       issues: [],
       next:
         name === "factory_install_reporting"

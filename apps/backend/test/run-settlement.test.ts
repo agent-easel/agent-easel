@@ -39,7 +39,7 @@ import {
 import { prepared } from "./support/prepared-runner.ts";
 import { promptSent, responseForwarded } from "./support/continuation.ts";
 
-it("a finished terminal Block settles its worker thread in T3 without waiting for Run settlement", async (c) => {
+it("a finished terminal Block settles its worker thread in T3 Code without waiting for Run settlement", async (c) => {
   // Arrange
   const setup = await prepared(c);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -52,7 +52,7 @@ it("a finished terminal Block settles its worker thread in T3 without waiting fo
   expect(f.t3.threads.settlements).toStrictEqual([{ threadId: "thread-1" }]);
 });
 
-it("a replaced finished report in the same T3 run is not settled again", async (c) => {
+it("a replaced finished report in the same T3 Code run is not settled again", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -70,7 +70,7 @@ it("a replaced finished report in the same T3 run is not settled again", async (
   expect(f.t3.threads.settlements).toStrictEqual([{ threadId: "thread-1" }]);
 });
 
-it("a revisited Block settles its thread again after a new T3 run finishes", async (c) => {
+it("a revisited Block settles its thread again after a new T3 Code run finishes", async (c) => {
   // Arrange
   const setup = await prepared(c, { revisit: true });
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -192,7 +192,7 @@ it("an archived Run receives no per-Block thread settlement", async (c) => {
   expect(f.t3.threads.settlements).toStrictEqual([]);
 });
 
-it("per-Block settlement is a no-op when T3 lacks native settle support", async (c) => {
+it("per-Block settlement is a no-op when T3 Code lacks native settle support", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -206,12 +206,12 @@ it("per-Block settlement is a no-op when T3 lacks native settle support", async 
   expect(f.t3.threads.settlements).toStrictEqual([]);
 });
 
-it("a failed per-Block T3 thread settlement leaves the Run unchanged", async (c) => {
+it("a failed per-Block T3 Code thread settlement leaves the Run unchanged", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  f.t3.threads.settleThread = () => Promise.reject(Error("T3 could not settle the thread"));
+  f.t3.threads.settleThread = () => Promise.reject(Error("T3 Code could not settle the thread"));
 
   // Act
   await f.f.reconcileRuns();
@@ -222,7 +222,7 @@ it("a failed per-Block T3 thread settlement leaves the Run unchanged", async (c)
   expect(run.value.lifecycle).toBe("active");
 });
 
-it("a finished handoff Block settles its worker thread in T3 while the Run stays Active", async (c) => {
+it("a finished handoff Block settles its worker thread in T3 Code while the Run stays Active", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -321,7 +321,7 @@ it("a Run that returned to Active and settled again exposes a new Settled cycle"
   expect(second.value[0]?.settledCycle).toBeGreaterThan(first.value[0]?.settledCycle ?? 0);
 });
 
-it("a Run stays Active while T3 has not answered that its worker's delegated work settled", async (c) => {
+it("a Run stays Active while T3 Code has not answered that its worker's delegated work settled", async (c) => {
   // Arrange
   const setup = await prepared(c);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -338,12 +338,12 @@ it("a Run stays Active while T3 has not answered that its worker's delegated wor
   expect(f.t3.threads.settlements).toStrictEqual([]);
 });
 
-it("a failed T3 thread settlement leaves the Run Settled", async (c) => {
+it("a failed T3 Code thread settlement leaves the Run Settled", async (c) => {
   // Arrange
   const setup = await prepared(c);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  f.t3.threads.settleThread = () => Promise.reject(Error("T3 could not settle the thread"));
+  f.t3.threads.settleThread = () => Promise.reject(Error("T3 Code could not settle the thread"));
 
   // Act
   await f.f.reconcileRuns();
@@ -374,7 +374,7 @@ it("settling a Run whose worker is still running asks for confirmation and chang
       blockId: "worker",
       threadId: "thread-1",
       state: "executing",
-      problem: "T3 shows a run in progress.",
+      problem: "T3 Code shows a run in progress.",
     },
   ]);
   const run = await f.f.getRun(f.runId);
@@ -389,7 +389,7 @@ it("settling a Run whose worker is still running asks for confirmation and chang
   expect(f.t3.threads.threadStops).toStrictEqual([]);
 });
 
-it("a worker T3 cannot show is unresolved, not running, when Settle asks for confirmation", async (c) => {
+it("a worker T3 Code cannot show is unresolved, not running, when Settle asks for confirmation", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -405,7 +405,7 @@ it("a worker T3 cannot show is unresolved, not running, when Settle asks for con
     {
       blockId: "worker",
       state: "unresolved",
-      problem: "T3 could not show this worker thread in the Run's project and workspace.",
+      problem: "T3 Code could not show this worker thread in the Run's project and workspace.",
     },
   ]);
 });
@@ -500,7 +500,7 @@ it("an unresolved manual settlement refuses Human answers without asking for inp
   assert(!result.ok);
   expect(result.error).toMatchObject({
     code: "conflict",
-    message: "Factory is settling this Run and stopping its workers, so it accepts no answers.",
+    message: "AgentEasel is settling this Run and stopping its workers, so it accepts no answers.",
   });
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
@@ -558,7 +558,7 @@ it("confirming Settle stops every worker and records manual settlement once fres
   expect(run.value.attention).toStrictEqual([]);
 });
 
-it("a Run confirmed Settle settled records how T3 showed its stopped work end", async (c) => {
+it("a Run confirmed Settle settled records how T3 Code showed its stopped work end", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -664,7 +664,7 @@ it("Settle keeps the execution-failed Problem of a worker run that failed before
   ]);
 });
 
-it("a manually settled Run leaves a send with a lost T3 reply uncertain and drops its payload", async (c) => {
+it("a manually settled Run leaves a send with a lost T3 Code reply uncertain and drops its payload", async (c) => {
   // Arrange
   const setup = await prepared(c, { revisit: true });
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -691,13 +691,13 @@ it("a manually settled Run leaves a send with a lost T3 reply uncertain and drop
       state: "uncertain",
       payloadRetained: false,
       problem:
-        "The Run was settled before Factory confirmed whether T3 received this message; Factory will not resend it.",
+        "The Run was settled before AgentEasel confirmed whether T3 Code received this message; AgentEasel will not resend it.",
     },
   ]);
   expect(f.t3.threads.sends.size).toBe(1);
 });
 
-it("an acknowledged Stop does not settle the Run while T3 still shows the worker running", async (c) => {
+it("an acknowledged Stop does not settle the Run while T3 Code still shows the worker running", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -715,14 +715,16 @@ it("an acknowledged Stop does not settle the Run while T3 still shows the worker
     settlement: {
       state: "stopping",
       attempt: 1,
-      workers: [{ blockId: "worker", state: "stopping", problem: "T3 shows a run in progress." }],
+      workers: [
+        { blockId: "worker", state: "stopping", problem: "T3 Code shows a run in progress." },
+      ],
     },
     attention: [],
   });
   expect(f.t3.threads.threadStops).toHaveLength(1);
 });
 
-it("a Stop T3 does not support leaves the settlement unresolved and holds the Run's other work", async (c) => {
+it("a Stop T3 Code does not support leaves the settlement unresolved and holds the Run's other work", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const [first] = await twoWorkersStarted(setup.world, setup.input);
@@ -745,7 +747,7 @@ it("a Stop T3 does not support leaves the settlement unresolved and holds the Ru
       {
         blockId: "second",
         state: "unresolved",
-        problem: "T3 cannot stop worker threads: Controlled Stop support",
+        problem: "T3 Code cannot stop worker threads: Controlled Stop support",
       },
     ],
   });
@@ -890,7 +892,7 @@ it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (
   });
 });
 
-it("T3 unavailable for the first settlement pass keeps the worker's Stop for a later pass", async (c) => {
+it("T3 Code unavailable for the first settlement pass keeps the worker's Stop for a later pass", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -910,7 +912,7 @@ it("T3 unavailable for the first settlement pass keeps the worker's Stop for a l
   expect(f.t3.threads.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
 });
 
-it("Settle without confirmation lists a launch Factory has not confirmed as unresolved", async (c) => {
+it("Settle without confirmation lists a launch AgentEasel has not confirmed as unresolved", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
   const accepted = await f.startRun(input);
@@ -1188,7 +1190,7 @@ it("a newer completed turn is settled once by the Run fallback rather than an ol
   expect(f.t3.threads.settlements).toStrictEqual([{ threadId: "thread-1" }]);
 });
 
-it("a launch whose reply was lost during Settle holds the Run unresolved while Factory searches for its worker", async (c) => {
+it("a launch whose reply was lost during Settle holds the Run unresolved while AgentEasel searches for its worker", async (c) => {
   // Arrange
   const { f, t3, input, world } = await prepared(c);
   const accepted = await f.startRun(input);
@@ -1214,7 +1216,7 @@ it("a launch whose reply was lost during Settle holds the Run unresolved while F
           threadId: null,
           state: "unresolved",
           problem:
-            "Factory has not confirmed whether T3 launched this worker. It keeps searching and stops the worker it finds.",
+            "AgentEasel has not confirmed whether T3 Code launched this worker. It keeps searching and stops the worker it finds.",
         },
       ],
     },
@@ -1253,7 +1255,7 @@ it("a worker found after its launch reply was lost during Settle is stopped befo
   expect(t3.threads.launches.size).toBe(1);
 });
 
-it("a Stop is not requested once T3 authorization changes after the reads, and the worker stays unresolved", async (c) => {
+it("a Stop is not requested once T3 Code authorization changes after the reads, and the worker stays unresolved", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -1274,7 +1276,7 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
         {
           blockId: "worker",
           state: "unresolved",
-          problem: expect.stringContaining("so Factory did not request Stop"),
+          problem: expect.stringContaining("so AgentEasel did not request Stop"),
         },
       ],
     },
@@ -1282,7 +1284,7 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
   expect(f.t3.threads.threadStops).toStrictEqual([]);
 });
 
-it("a Stop whose authorization recheck T3 cannot answer is requested once by a later pass, which settles the Run", async (c) => {
+it("a Stop whose authorization recheck T3 Code cannot answer is requested once by a later pass, which settles the Run", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
@@ -1383,7 +1385,7 @@ it("after a restart, a worker blocked only by queued work keeps its queued reaso
   expect(setup.t3.threads.threadStops).toStrictEqual([]);
 });
 
-it("Settle under a replaced T3 authorization is refused and leaves the Run unchanged", async (c) => {
+it("Settle under a replaced T3 Code authorization is refused and leaves the Run unchanged", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const worker = await workerAtWork(setup.world, setup.input);
@@ -1397,14 +1399,14 @@ it("Settle under a replaced T3 authorization is refused and leaves the Run uncha
   assert(!result.ok);
   expect(result.error).toMatchObject({
     code: "conflict",
-    message: expect.stringContaining("earlier T3 authorization"),
+    message: expect.stringContaining("earlier T3 Code authorization"),
   });
   const run = await setup.f.getRun(worker.runId);
   assert(run.ok);
   expect(run.value).toMatchObject({ lifecycle: "active", gateOpen: true, settlement: null });
 });
 
-it("confirmed Settle under a replaced T3 authorization is refused while T3 is unavailable", async (c) => {
+it("confirmed Settle under a replaced T3 Code authorization is refused while T3 Code is unavailable", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const worker = await workerAtWork(setup.world, setup.input);
@@ -1419,7 +1421,7 @@ it("confirmed Settle under a replaced T3 authorization is refused while T3 is un
   assert(!result.ok);
   expect(result.error).toMatchObject({
     code: "conflict",
-    message: expect.stringContaining("earlier T3 authorization"),
+    message: expect.stringContaining("earlier T3 Code authorization"),
   });
   const run = await setup.f.getRun(worker.runId);
   assert(run.ok);
@@ -1427,7 +1429,7 @@ it("confirmed Settle under a replaced T3 authorization is refused while T3 is un
   expect(setup.t3.threads.threadStops).toStrictEqual([]);
 });
 
-it("Settle of a Run without workers still settles under a replaced T3 authorization", async (c) => {
+it("Settle of a Run without workers still settles under a replaced T3 Code authorization", async (c) => {
   // Arrange
   const setup = await prepared(c);
   setup.t3.threads.rejectLaunch = true;
@@ -1458,7 +1460,7 @@ it("a report while a confirmed settlement is stopping its worker records nothing
   expect(result).toMatchObject({
     code: "RUN_SETTLING",
     state: "settling",
-    next: "The user is settling this Run: Factory accepts no new work for it and is stopping its workers, so Factory recorded nothing. Stop work on this Block and end the turn.",
+    next: "The user is settling this Run: AgentEasel accepts no new work for it and is stopping its workers, so AgentEasel recorded nothing. Stop work on this Block and end the turn.",
   });
   const run = await f.f.getRun(f.runId);
   assert(run.ok);

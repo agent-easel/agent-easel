@@ -7,8 +7,8 @@ import {
   type FlowDraft,
   type FlowEnding,
   type FlowGraph,
-} from "@t3-factory/contracts";
-import { exitsWithEndings } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { exitsWithEndings } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";

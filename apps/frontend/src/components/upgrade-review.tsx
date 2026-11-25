@@ -46,8 +46,8 @@ export function UpgradeReview({
       ? "The server updates before the client restarts."
       : server
         ? openRuns
-          ? `Factory restarts while ${openRuns} open Run${openRuns === 1 ? "" : "s"} keep going.`
-          : "Factory restarts and open Runs keep going."
+          ? `AgentEasel restarts while ${openRuns} open Run${openRuns === 1 ? "" : "s"} keep going.`
+          : "AgentEasel restarts and open Runs keep going."
         : "The desktop app restarts to apply the update.";
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>

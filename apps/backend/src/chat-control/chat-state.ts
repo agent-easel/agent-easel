@@ -7,7 +7,7 @@ type Run = <A>(effect: Effect.Effect<A, unknown>) => Promise<A>;
 const unused = (what: string) => () =>
   Promise.reject(
     new Error(
-      `Chat control keeps no Chat SDK ${what}: Factory serializes each conversation itself and discards unfinished work on restart.`,
+      `Chat control keeps no Chat SDK ${what}: AgentEasel serializes each conversation itself and discards unfinished work on restart.`,
     ),
   );
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { FlowGraph } from "@t3-factory/contracts";
-import { joinSlots } from "@t3-factory/domain-validation";
+import type { FlowGraph } from "@agent-easel/contracts";
+import { joinSlots } from "@agent-easel/domain-validation";
 
 export type JoinSource = {
   readonly sourceBlockId: string;

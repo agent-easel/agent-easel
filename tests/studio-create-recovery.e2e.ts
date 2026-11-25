@@ -88,7 +88,7 @@ async function reviseAgentBeforeLosingCreateReply(
     if (reply.status !== 201)
       return route.fulfill({ status: reply.status, body: await reply.text() });
     const agent = (await listAgentDefinitions(baseUrl)).find((entry) => entry.name === original);
-    if (!agent) throw new Error("The Create did not reach Factory.");
+    if (!agent) throw new Error("The Create did not reach AgentEasel.");
     await saveAgentElsewhere(baseUrl, agent, { name: revised });
     await route.abort();
   });

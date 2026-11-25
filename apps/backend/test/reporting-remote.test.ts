@@ -1,10 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ReportingInstallation } from "@t3-factory/contracts";
+import type { ReportingInstallation } from "@agent-easel/contracts";
 import { remoteReporting } from "./support/remote-clients.ts";
 
-it("an approved client installs Factory MCP in the server's discovered harness home", async (c) => {
+it("an approved client installs AgentEasel MCP in the server's discovered harness home", async (c) => {
   // Arrange
   const { server, laptop, target, config, home } = await remoteReporting(c);
   expect(target.status).toBe("not-installed");
@@ -28,7 +28,7 @@ it("an approved client installs Factory MCP in the server's discovered harness h
   expect(installed.value[0]!.status).toBe("installed");
 });
 
-it("a pending client cannot install Factory MCP on the server", async (c) => {
+it("a pending client cannot install AgentEasel MCP on the server", async (c) => {
   // Arrange
   const { server, target, config } = await remoteReporting(c);
   const pending = server.client();
@@ -42,7 +42,7 @@ it("a pending client cannot install Factory MCP on the server", async (c) => {
   await expect(readFile(config, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("a revoked client cannot install Factory MCP on the server", async (c) => {
+it("a revoked client cannot install AgentEasel MCP on the server", async (c) => {
   // Arrange
   const { server, laptop, target, config } = await remoteReporting(c);
   assert((await server.host("POST", `/api/host/clients/${laptop.id}/revoke`)).body.ok);

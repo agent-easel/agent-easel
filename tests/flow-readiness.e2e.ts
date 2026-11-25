@@ -116,7 +116,7 @@ test("Agent-scoped runtime contract blockers point to the connection without bla
     "t3_thread_send lacks required runtime fields",
   );
   await expect(
-    screen.getByRole("link", "Open T3 connection settings", { exact: true }).first(),
+    screen.getByRole("link", "Open T3 Code connection settings", { exact: true }).first(),
   ).toBeVisible();
   await app.screenshot("connection-only-blocker");
   await expect(screen.getByRole("link", "Open Studio → Agents", { exact: true })).toHaveCount(0);

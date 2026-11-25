@@ -371,7 +371,7 @@ it("requested Archived Runs merge with the others newest first under one total",
   expect(reply.total).toBe(3);
 });
 
-it("Needs you flags match the Run list: a Snoozed Run and an Agent awaiting review in T3 do not need the owner, an unresolved confirmed Settle does", async (c) => {
+it("Needs you flags match the Run list: a Snoozed Run and an Agent awaiting review in T3 Code do not need the owner, an unresolved confirmed Settle does", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const runs = await attentionRuns(fixture);
@@ -452,7 +452,7 @@ it("a Run needing the owner older than the limit's worth of newer Runs that do n
   expect(toolReply(result).hint).toBeNull();
 });
 
-it("the list works while T3 is offline", async (c) => {
+it("the list works while T3 Code is offline", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await startedRun(fixture, {
@@ -472,7 +472,7 @@ it("the list works while T3 is offline", async (c) => {
   expect(toolReply(result).runs).toMatchObject([{ title: "Saved Run", notInT3: false }]);
 });
 
-it("a Run whose stored Project T3 no longer lists stays listed and is marked not in T3", async (c) => {
+it("a Run whose stored Project T3 Code no longer lists stays listed and is marked not in T3 Code", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await startedRun(fixture, {
@@ -1004,7 +1004,7 @@ it("the prompt is cut at 2,000 characters", async (c) => {
   expect(Array.from(reply.run.prompt.text)).toHaveLength(2_000);
 });
 
-it("the read works while T3 is offline and marks a Run whose stored Project T3 no longer lists", async (c) => {
+it("the read works while T3 Code is offline and marks a Run whose stored Project T3 Code no longer lists", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const run = await startedRun(fixture, {
@@ -1056,7 +1056,7 @@ it("a read carries the Run tools' notice and changes nothing a Run records", asy
   expect(await fixture.f.listRunNavigation()).toStrictEqual(navigationBefore);
 });
 
-it("pending Needs input and Problems are listed one by one and a native T3 request is answered in T3", async (c) => {
+it("pending Needs input and Problems are listed one by one and a native T3 Code request is answered in T3 Code", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const runs = await attentionRuns(fixture);

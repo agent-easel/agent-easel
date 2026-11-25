@@ -1,4 +1,4 @@
-import type { RunDefinitions, RunImage } from "@t3-factory/contracts";
+import type { RunDefinitions, RunImage } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type { LaunchAttachment, LaunchPayload, T3Threads } from "../t3/threads.ts";
 import { isT3Refusal, type T3Target } from "../t3/connection.ts";
@@ -19,14 +19,17 @@ import {
   type StoredLaunchPayload,
 } from "./worker-payloads.ts";
 
-const LAUNCH_REJECTED = { block: "T3 rejected the worker launch.", worktree: WORKTREE_REJECTED };
+const LAUNCH_REJECTED = {
+  block: "T3 Code rejected the worker launch.",
+  worktree: WORKTREE_REJECTED,
+};
 const IMAGE_MISSING = {
   block: RUN_IMAGE_MISSING,
   worktree: `The worker that creates the Run worktree could not launch: ${RUN_IMAGE_MISSING}.`,
 };
 
 const LAUNCH_RECOVERY =
-  "Launch acknowledgement is uncertain. Factory will search for the worker and will not launch another.";
+  "Launch acknowledgement is uncertain. AgentEasel will search for the worker and will not launch another.";
 
 /** Flow-input targets that launch with the accepted Start; a worktree Run starts only its creator. */
 export function entryMessagesTooLong(
@@ -92,7 +95,7 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
       yield* store.noteUnresolved(
         launch,
         support.explanation ??
-          "T3 launch capabilities are unavailable. Factory will retry this launch.",
+          "T3 Code launch capabilities are unavailable. AgentEasel will retry this launch.",
       );
       return;
     }
@@ -210,7 +213,7 @@ function uploadLaunchImages(context: LaunchContext, launchImages: readonly Launc
     if (!support.supported) {
       yield* store.noteUnresolved(
         launch,
-        `T3 no longer accepts image attachments. Factory will retry this launch. ${support.explanation}`,
+        `T3 Code no longer accepts image attachments. AgentEasel will retry this launch. ${support.explanation}`,
       );
       return undefined;
     }
@@ -218,7 +221,7 @@ function uploadLaunchImages(context: LaunchContext, launchImages: readonly Launc
     for (const image of launchImages) {
       const stored = yield* images.storedBytes(image.sha256).pipe(Effect.result);
       if (stored._tag === "Failure")
-        return yield* noteUploadFailure(context, "Factory could not read the image.");
+        return yield* noteUploadFailure(context, "AgentEasel could not read the image.");
       const bytes = stored.success;
       if (bytes.kind === "missing") {
         yield* store.failLaunch(runRow, launch, IMAGE_MISSING);
@@ -242,7 +245,7 @@ function uploadLaunchImages(context: LaunchContext, launchImages: readonly Launc
 }
 
 const uploadFailureReason = (error: unknown) =>
-  error instanceof Error && error.message ? error.message : "T3 did not accept the upload.";
+  error instanceof Error && error.message ? error.message : "T3 Code did not accept the upload.";
 
 /** The launch stays pending: nothing was launched, so this is neither a Block error nor a Problem. */
 function noteUploadFailure(context: LaunchContext, reason: string) {
@@ -252,7 +255,7 @@ function noteUploadFailure(context: LaunchContext, reason: string) {
     const notBefore = retryNotBefore(current, launch.recovery_attempt + 1);
     yield* store.retryImageUploadLater(
       launch,
-      `Image upload to T3 failed: ${reason}`,
+      `Image upload to T3 Code failed: ${reason}`,
       current,
       notBefore,
     );

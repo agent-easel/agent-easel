@@ -6,9 +6,9 @@ const RATE_LIMITS = {
 } as const;
 
 export const BOT_LOOP_REFUSAL =
-  "Factory paused bot requests in this thread after three consecutive bot turns. A human message or an accepted Start can clear the pause.";
+  "AgentEasel paused bot requests in this thread after three consecutive bot turns. A human message or an accepted Start can clear the pause.";
 export const BOT_RATE_REFUSAL =
-  "Factory paused requests from this bot because it reached a rate limit. Try again after the current limit window clears.";
+  "AgentEasel paused requests from this bot because it reached a rate limit. Try again after the current limit window clears.";
 
 export type BotGuardDecision = "allow" | "refuse" | "drop";
 

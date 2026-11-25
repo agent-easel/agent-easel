@@ -1,4 +1,4 @@
-import type { FactoryProject, ValidationIssue } from "@t3-factory/contracts";
+import type { FactoryProject, ValidationIssue } from "@agent-easel/contracts";
 import type { ConnectionPresentation } from "./connection-state.tsx";
 
 /** The one composer card, so a field can point its description at it. */

@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import type { T3Connection } from "@t3-factory/contracts";
+import type { T3Connection } from "@agent-easel/contracts";
 import { remoteConnection } from "./support/remote-clients.ts";
 
 const openAuthorization = "/api/connection/authorization/open";
@@ -61,7 +61,7 @@ it("a client still waiting for host approval cannot open authorization on the ho
   expect(t3.connection.authorizationStarts).toBe(0);
 });
 
-it("an approved client cannot change the host's saved T3 endpoint", async (c) => {
+it("an approved client cannot change the host's saved T3 Code endpoint", async (c) => {
   // Arrange
   const { server, laptop } = await remoteConnection(c);
 

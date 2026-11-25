@@ -10,13 +10,12 @@ import type {
   TriggerDefinition,
   TriggerSave,
   UpdateTriggerInput,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
 import type { ControlledGitHub, ControlledIssue, GitHubCall } from "./controlled-github.ts";
 import { START_INSPECTIONS } from "./controlled-t3.ts";
-import type { ServerOptions } from "../../src/server.ts";
-import type { Factory } from "../../src/index.ts";
+import type { AgentEasel } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
 import { prepared, preparedService } from "./prepared-runner.ts";
@@ -42,12 +41,8 @@ export const movedRepository: GitHubRepository = {
  * The prepared Project and ready Flow, with the Project's folder naming `repository` on GitHub,
  * and the least a client sends to create a GitHub Issues Trigger for them.
  */
-export async function triggerWorld(
-  c: TestContext,
-  repository = atlasRepository,
-  telemetry?: ServerOptions["telemetry"],
-) {
-  const fixture = await prepared(c, undefined, telemetry ? { telemetry } : undefined);
+export async function triggerWorld(c: TestContext, repository = atlasRepository) {
+  const fixture = await prepared(c);
   return { ...fixture, triggerInput: watching(fixture, repository) };
 }
 
@@ -81,7 +76,7 @@ export async function otherProjectWatcher(
 }
 
 /** The prepared Project as T3 lists it once the connection points at a remote T3. */
-export async function remoteProject(f: Factory) {
+export async function remoteProject(f: AgentEasel) {
   assert((await f.configureConnection({ endpoint: "https://t3.example/mcp" })).ok);
   const catalog = await f.recheckProjects();
   assert(catalog.ok);
@@ -156,7 +151,7 @@ export async function reviewingWorld(c: TestContext, settings: TriggerSettings =
 }
 
 export async function remoteCheckingWorld(c: TestContext): Promise<{
-  readonly f: Factory;
+  readonly f: AgentEasel;
   readonly project: FactoryProject;
   readonly trigger: TriggerDefinition;
   readonly runPath: string;
@@ -250,7 +245,7 @@ export async function reopenedAfterCrashedCheck(
 }
 
 /** The issue numbers of the Runs started in the Project, as their origins name them. */
-export async function startedIssues(f: Factory, projectId: string) {
+export async function startedIssues(f: AgentEasel, projectId: string) {
   const runs = await f.listRuns(projectId);
   assert(runs.ok);
   const details = await Promise.all(runs.value.map((run) => f.getRun(run.id)));

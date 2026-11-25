@@ -1,4 +1,8 @@
-import type { AgentEnvironment, AgentProviderCapability, ProjectIcon } from "@t3-factory/contracts";
+import type {
+  AgentEnvironment,
+  AgentProviderCapability,
+  ProjectIcon,
+} from "@agent-easel/contracts";
 import type { T3Endpoint, T3EnvironmentTarget, T3ProjectTarget } from "./connection.ts";
 
 /** A provider as T3's catalog publishes it; Factory adds its own reporting support. */

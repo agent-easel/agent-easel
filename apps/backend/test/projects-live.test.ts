@@ -90,7 +90,7 @@ it("a custom worktree ref that names no commit does not resolve", async (context
   expect(ref).toBeNull();
 });
 
-it("same-host Git refuses a repository when T3 is not on this computer", async () => {
+it("same-host Git refuses a repository when T3 Code is not on this computer", async () => {
   // Arrange
   const git = new LiveGitAdapter();
 

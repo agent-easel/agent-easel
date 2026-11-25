@@ -868,7 +868,7 @@ it("validating a Project Flow's unsaved draft reports an out-of-rule placement n
   });
 });
 
-it("creating a Flow for a Project Factory never discovered is refused and creates no Flow", async (context) => {
+it("creating a Flow for a Project AgentEasel never discovered is refused and creates no Flow", async (context) => {
   // Arrange
   const { factory } = await discoveredClones(context);
 

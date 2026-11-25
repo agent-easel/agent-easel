@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { FINISH_BLOCK_ID, type RunDefinitions } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID, type RunDefinitions } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { fingerprint } from "../../fingerprint.ts";

@@ -4,8 +4,8 @@ import { Agent, request } from "node:https";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ClientKind, FactoryClient, Result, ServerUpdateAction } from "@t3-factory/contracts";
-import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
+import type { ClientKind, FactoryClient, Result, ServerUpdateAction } from "@agent-easel/contracts";
+import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@agent-easel/domain-validation";
 import { loadConfiguration } from "../../src/config.ts";
 import { startServer, type ApplicationUpdates, type ServerOptions } from "../../src/server.ts";
 import { prepared } from "./prepared-runner.ts";
@@ -235,7 +235,7 @@ export async function remoteServer(
     readonly host?: string;
   } = {},
 ) {
-  const home = options.home ?? (await mkdtemp(join(tmpdir(), "t3-factory-remote-")));
+  const home = options.home ?? (await mkdtemp(join(tmpdir(), "agenteasel-remote-")));
   if (!options.home) context.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const { home: _home, remoteDisabled, certificate, host: bindHost, ...serverOptions } = options;
   const config = await loadConfiguration({

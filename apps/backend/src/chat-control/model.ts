@@ -5,8 +5,8 @@ import type {
   ChatModelSettings,
   Result,
   UpdateChatModelInput,
-} from "@t3-factory/contracts";
-import { validateTestChatModel, validateUpdateChatModel } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { validateTestChatModel, validateUpdateChatModel } from "@agent-easel/domain-validation";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import type { ChatCredentials } from "./credentials.ts";

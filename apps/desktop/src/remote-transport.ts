@@ -1,4 +1,4 @@
-import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
+import { clientAccessServerOperations, operationPath } from "@agent-easel/contracts";
 import { X509Certificate, createHash } from "node:crypto";
 import { Agent, request } from "node:https";
 import { isIP } from "node:net";
@@ -201,7 +201,7 @@ export async function probeServer(address: string, signal: AbortSignal): Promise
     value?: { protocol?: unknown };
   };
   if (reply.status !== 200 || body.ok !== true || typeof body.value?.protocol !== "number")
-    throw new Error("That address answered, but not as a Factory server.");
+    throw new Error("That address answered, but not as an AgentEasel server.");
   return {
     url: parsed.url.origin,
     trust,

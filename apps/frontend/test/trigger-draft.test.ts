@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type { TriggerDefinition } from "@agent-easel/contracts";
 import { createTriggerDraft, triggerFlows } from "../src/trigger-draft.ts";
 import { deliveredStudio, savedFlow, studioSnapshot } from "./support/studio-definitions.ts";
 

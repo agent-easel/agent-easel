@@ -12,8 +12,8 @@ import type {
   Result,
   T3Connection,
   ValidationIssue,
-} from "@t3-factory/contracts";
-import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+} from "@agent-easel/contracts";
+import { parseProjectFaviconPath, parseProjectIcon } from "@agent-easel/domain-validation";
 import type { GitAdapter } from "./adapters/git.ts";
 import type { T3Projects, T3Project } from "./t3/projects.ts";
 import { loadProjectFavicon, projectFaviconUrl } from "./project-favicon.ts";
@@ -61,7 +61,7 @@ export const projectUnavailableIssue = (
   code: project ? `project_${project.availability}` : "project_not_found",
   path,
   message:
-    "Project is unavailable for new Runs. Recheck T3 and restore its repository directory; saved history is retained.",
+    "Project is unavailable for new Runs. Recheck T3 Code and restore its repository directory; saved history is retained.",
 });
 const failure = (message: string): Result<never> =>
   operationFailure("validation", message, [
@@ -154,7 +154,7 @@ export const makeProjects = (
       status: Result<T3Connection>,
     ) {
       if (!status.ok || status.value.state !== "ready" || !status.value.authorizationContext) {
-        setProblem("Connect and authorize T3 before using projects.");
+        setProblem("Connect and authorize T3 Code before using projects.");
         return yield* catalog();
       }
       const c = status.value.authorizationContext;
@@ -169,7 +169,7 @@ export const makeProjects = (
               yield* sql`UPDATE projects SET availability = 'connection-unavailable' WHERE endpoint = ${c.endpoint} AND environment_id = ${c.environmentId}`;
               changes.projectsChanged();
               setProblem(
-                "Project discovery failed. Recheck T3 and its project contract. Saved references are retained.",
+                "Project discovery failed. Recheck T3 Code and its project contract. Saved references are retained.",
               );
             }),
         }),
@@ -187,18 +187,18 @@ export const makeProjects = (
         typeof input.path !== "string" ||
         !input.path.trim()
       )
-        return failure("Enter an existing absolute local repository path on the T3 host.");
+        return failure("Enter an existing absolute local repository path on the T3 Code host.");
       const path = input.path.trim();
       const listing = yield* reconcile();
       if (!listing.ok || listing.value.problem)
         return failure("Project discovery must succeed before adding a repository.");
       const status = yield* connection.getConnection();
       if (!status.ok || status.value.state !== "ready" || !status.value.authorizationContext)
-        return failure("T3 is unavailable.");
+        return failure("T3 Code is unavailable.");
       const c = status.value.authorizationContext;
       const uncertain = () =>
         failure(
-          "Repository could not be added or its outcome is uncertain. Recheck projects before trying again; manage paths in T3.",
+          "Repository could not be added or its outcome is uncertain. Recheck projects before trying again; manage paths in T3 Code.",
         );
       return yield* Effect.gen(function* () {
         const root = yield* Effect.tryPromise(() => git.resolveRepository(c.endpoint, path));
@@ -211,12 +211,12 @@ export const makeProjects = (
         );
         if (existing.length > 1)
           return failure(
-            "T3 returned ambiguous project associations. Resolve them in T3 and recheck.",
+            "T3 Code returned ambiguous project associations. Resolve them in T3 Code and recheck.",
           );
         if (existing[0]) return { ok: true as const, value: existing[0] };
         const latest = yield* connection.getConnection();
         if (!latest.ok || latest.value.authorizationContext?.id !== c.id)
-          return failure("T3 authorization changed. Recheck before adding.");
+          return failure("T3 Code authorization changed. Recheck before adding.");
         yield* Effect.tryPromise(() =>
           t3.createProject({
             endpoint: c.endpoint,

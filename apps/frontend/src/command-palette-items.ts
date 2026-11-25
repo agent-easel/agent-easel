@@ -6,7 +6,7 @@ import type {
   FlowDraft,
   RunNavigationEntry,
   StudioDefinitions,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import type { useNavigate } from "@tanstack/react-router";
 import type { LiveScopeView } from "./live/owner.ts";
 import type { useOpenStudio, useSettingsNavigation } from "./settings-navigation.ts";

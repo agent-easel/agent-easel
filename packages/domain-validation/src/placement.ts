@@ -3,7 +3,7 @@ import type {
   FlowDuplicatePlanAgent,
   Result,
   ValidationIssue,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 
 /**
  * The owning Project of a Flow or Agent: the Factory Project id it belongs to, or null for a
@@ -50,7 +50,7 @@ export function duplicateTreatment(
 const ownerIssue = (path: string): ValidationIssue => ({
   code: "invalid_project",
   path,
-  message: `Send a Factory Project id as ${path}, or null for a global definition.`,
+  message: `Send an AgentEasel Project id as ${path}, or null for a global definition.`,
 });
 const invalid = (issues: readonly ValidationIssue[]): Result<never> => ({
   ok: false,

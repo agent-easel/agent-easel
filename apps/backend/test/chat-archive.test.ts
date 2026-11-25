@@ -34,8 +34,8 @@ it("an Archive proposal reviews the Run with final archival, cancelled owed work
       "🗄️ **Archive Run #1 · Improve search?**",
       `📁 ${world.project.title} · \`${world.project.workspaceRoot}\` · 🔀 ${world.flow.name} · 🟢 Active`,
       "⏳ Pending now: 0 Human occurrences, 0 Wait arrivals",
-      "⚠️ Final: the Run can't be restored, reopened, settled or answered. Factory cancels the automatic work it still owes and its pending Human and Wait items, and asks T3 once to interrupt the workers without confirming they stop.",
-      "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in Factory.",
+      "⚠️ Final: the Run can't be restored, reopened, settled or answered. AgentEasel cancels the automatic work it still owes and its pending Human and Wait items, and asks T3 Code once to interrupt the workers without confirming they stop.",
+      "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in AgentEasel.",
     ].join("\n"),
   );
   expect(last!.content).toMatch(
@@ -47,7 +47,7 @@ it("an Archive proposal reviews the Run with final archival, cancelled owed work
   expect(await lifecycleOf(world.factory, world.runId)).toBe("active");
 });
 
-it("the requester's confirmation archives exactly the reviewed Run started in Factory, requests its worker's interruption once and posts the receipt in the request thread without giving the Run an origin", async (c) => {
+it("the requester's confirmation archives exactly the reviewed Run started in AgentEasel, requests its worker's interruption once and posts the receipt in the request thread without giving the Run an origin", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
   const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
@@ -63,12 +63,12 @@ it("the requester's confirmation archives exactly the reviewed Run started in Fa
   expect(world.t3.threads.threadStops).toHaveLength(1);
   await world.discord.createdMessages(3);
   expect(world.discord.created[2]!.content).toBe(
-    "✅ **Run #1 archived** — Improve search\nOwed automatic work and pending Human/Wait items cancelled · T3 asked once to interrupt workers (not confirmed) · nothing rolled back",
+    "✅ **Run #1 archived** — Improve search\nOwed automatic work and pending Human/Wait items cancelled · T3 Code asked once to interrupt workers (not confirmed) · nothing rolled back",
   );
   expect(statusCardsIn(world.discord)).toStrictEqual([]);
 });
 
-it("a Run archived in Factory meanwhile is not this action's Archive: the confirmation is rejected and requests no further interruption", async (c) => {
+it("a Run archived in AgentEasel meanwhile is not this action's Archive: the confirmation is rejected and requests no further interruption", async (c) => {
   // Arrange
   const world = await archivingWorld(c);
   const confirmation = await proposed(world, "600000000000000001", 2, archiveCall(), "archive #1");
@@ -143,7 +143,7 @@ it("after a restart that interrupted an accepted Archive's receipt, the reused c
 
   // Assert
   expect(answer).toBe(
-    "You already confirmed this review. Factory archived Run #1 · Improve search.",
+    "You already confirmed this review. AgentEasel archived Run #1 · Improve search.",
   );
   expect(world.t3.threads.threadStops).toHaveLength(1);
   const settings = await reopened.getDiscordSettings();

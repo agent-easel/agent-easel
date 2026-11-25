@@ -48,6 +48,16 @@ export type DesktopRoute =
     }
   | { readonly kind: "needs-you" };
 
+export interface PreviousInstallation {
+  readonly migratedAt: string;
+  readonly home: "copied" | "kept-existing" | "absent" | "skipped";
+  readonly profile: "copied" | "kept-existing" | "absent" | "skipped";
+  readonly launchAtLogin: boolean;
+  readonly remoteServer: boolean;
+  readonly summaryPending: boolean;
+  readonly oldDataPresent: boolean;
+}
+
 export interface DesktopState {
   readonly version: string;
   readonly role: DesktopRole | null;
@@ -71,6 +81,7 @@ export interface DesktopState {
    * macOS, so live delivery treats this like a hidden document.
    */
   readonly minimized: boolean;
+  readonly previousInstallation: PreviousInstallation | null;
 }
 
 export type DesktopResult =
@@ -170,4 +181,6 @@ export interface FactoryDesktop {
    * opened or relaunched for it) arrives once the listener is added.
    */
   onRoute(listener: (route: DesktopRoute) => void): () => void;
+  dismissMigrationSummary(): Promise<DesktopResult>;
+  removePreviousInstallation(): Promise<DesktopResult>;
 }

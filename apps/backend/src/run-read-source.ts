@@ -5,7 +5,7 @@ import type {
   RunDetail,
   RunNavigationEntry,
   SubflowInvocationPath,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import { runSearch, type RunIdentity } from "./chat-control/run-search.ts";
 import type { RunListExtras } from "./runner/run-store/navigation.ts";
 

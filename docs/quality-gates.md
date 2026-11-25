@@ -40,15 +40,16 @@ tasks in the root `vite.config.ts` `run`):
 | ---- | --- | --- |
 | 1 | `pnpm format:check` | Files not formatted by the Vite+ formatter (`vite.config.ts` `fmt`) |
 | 2 | `pnpm check:e2e-configs` | Any `e2e.*.config.ts` in the working tree other than `e2e.config.ts` and `e2e.explore.config.ts`, tracked or untracked, ignored output directories included (dependency directories excepted) |
-| 3 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
-| 4 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
-| 5 | `pnpm lint` | Vite+ lint rule violations and new JavaScript or TypeScript comments |
-| 6 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
-| 7 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
-| 8 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
+| 3 | `pnpm check:product-name` | "T3 Factory", "t3-factory" or "t3factory" in a tracked file outside the allowlist in `scripts/check-product-name.mjs` (bridge and migration code, old export id, the old data home, repository URLs) |
+| 4 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
+| 5 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
+| 6 | `pnpm lint` | Vite+ lint rule violations and new JavaScript or TypeScript comments |
+| 7 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
+| 8 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
+| 9 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
 
-Steps 1–6 are `pnpm check:static`. They run in parallel and need no build output.
-Steps 7 and 8 start in parallel only after all static steps pass, so the CPU-heavy
+Steps 1–7 are `pnpm check:static`. They run in parallel and need no build output.
+Steps 8 and 9 start in parallel only after all static steps pass, so the CPU-heavy
 backend suite never competes with them and a static failure stops the gate early.
 The gate stops at the first failing step; run it again after the fix to reach the next one.
 
@@ -129,7 +130,7 @@ without visible UI impact, which still triggers the check, states why under `###
 accepts any non-empty reason and leaves its judgment to review. Run the same check locally with
 `pnpm check:ui-evidence --body-file <path>` (`-` for stdin) or
 `pnpm check:ui-evidence --pr <number>`. It does not inspect image content or prove the final UI;
-follow the [verification evidence requirements](../.agents/skills/verify-t3-factory/SKILL.md#evidence).
+follow the [verification evidence requirements](../.agents/skills/verify-agenteasel/SKILL.md#evidence).
 
 `pnpm lint` and `pnpm typecheck` need no build output. Every default
 `tsconfig.json` that imports a workspace package, which editors and the
@@ -284,7 +285,7 @@ Use [`/delete-comment`](../.agents/skills/delete-comment/SKILL.md) to continue t
 - Frontend source imports neither backend nor desktop implementation, and uses no Node built-ins.
 - Backend source imports neither frontend nor desktop implementation.
 - Runner files outside the Run store import neither the SQL client nor store internals; they use only the store entry's transitions and reads.
-- Run store files import neither adapters nor T3 modules. Orchestration owns T3 calls, so store transactions cannot span them.
+- Run store files import neither adapters nor T3 Code modules. Orchestration owns T3 Code calls, so store transactions cannot span them.
 - Desktop source reaches backend code through its public package exports.
 - Shared packages import no application code or Node built-ins; network and browser-storage globals are rejected.
 - Contracts do not depend on validation. Cross-package imports use public exports, not `src` or `dist` files.

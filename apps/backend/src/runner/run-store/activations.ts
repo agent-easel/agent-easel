@@ -1,4 +1,4 @@
-import type { RunDefinitions } from "@t3-factory/contracts";
+import type { RunDefinitions } from "@agent-easel/contracts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";

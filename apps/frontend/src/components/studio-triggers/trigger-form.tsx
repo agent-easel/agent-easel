@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Workflow } from "lucide-react";
-import type { FactoryProject, FlowDraft, TriggerReadiness } from "@t3-factory/contracts";
-import { mayStartFlow } from "@t3-factory/domain-validation";
+import type { FactoryProject, FlowDraft, TriggerReadiness } from "@agent-easel/contracts";
+import { mayStartFlow } from "@agent-easel/domain-validation";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

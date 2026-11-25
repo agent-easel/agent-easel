@@ -3,7 +3,7 @@ import {
   defaultFinishPosition,
   type CanvasGraph,
   type WireSource,
-} from "@t3-factory/flow-layout";
+} from "@agent-easel/flow-layout";
 import {
   CONDITION_OTHERWISE_ID,
   FINISH_BLOCK_ID,
@@ -14,21 +14,21 @@ import {
   type FlowEnding,
   type FlowGraph,
   type RunDefinitions,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
 import {
   connectionKey,
   continuationSources,
   effectiveExits,
   type EffectiveExit,
   type ExitFlows,
-} from "@t3-factory/domain-validation";
+} from "@agent-easel/domain-validation";
 import { randomId } from "@/lib/ids";
 
 export type BlockPosition = FlowBlock["position"];
 
 const uid = randomId;
 
-export { canvasGraph, type CanvasBlock, type CanvasGraph } from "@t3-factory/flow-layout";
+export { canvasGraph, type CanvasBlock, type CanvasGraph } from "@agent-easel/flow-layout";
 /** The exits a Run's block offered: its captured Flow revision with its captured Agent revisions. */
 export function capturedExits(
   definitions: RunDefinitions,

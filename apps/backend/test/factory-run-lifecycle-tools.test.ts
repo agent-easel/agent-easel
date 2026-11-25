@@ -362,5 +362,5 @@ it("the lifecycle tools follow the read tools in tools/list, and their descripti
     "factory_settle_run",
     "factory_archive_run",
   ].map(description);
-  expect(lifecycle.join("\n")).not.toMatch(/inspect-only|changes nothing|while T3 is offline/);
+  expect(lifecycle.join("\n")).not.toMatch(/inspect-only|changes nothing|while T3 Code is offline/);
 });

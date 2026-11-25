@@ -25,7 +25,7 @@ const checkStart = (
     arguments: { projectId: fixture.project.id, flowId: fixture.flow.id },
   });
 
-it("a preflight of a Flow whose harness lacks Factory reporting is blocked by the reporting installation and creates no Run", async (c) => {
+it("a preflight of a Flow whose harness lacks AgentEasel reporting is blocked by the reporting installation and creates no Run", async (c) => {
   // Arrange
   const { fixture, client } = await withoutReporting(c);
 
@@ -59,7 +59,7 @@ it("a preflight of a ready Flow reports ready, creates no Run and says Start rev
   expect(await fixture.f.listRuns(fixture.project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("a preflight while T3 is unreachable is blocked by the connection with the connection's state", async (c) => {
+it("a preflight while T3 Code is unreachable is blocked by the connection with the connection's state", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);
@@ -141,7 +141,7 @@ it("the reporting listing names each target's status and the install action it o
   expect(await readFile(codexConfig(fixture), "utf8")).toBe("");
 });
 
-it("installing a listed target writes Factory MCP into its harness configuration and the next preflight is ready", async (c) => {
+it("installing a listed target writes AgentEasel MCP into its harness configuration and the next preflight is ready", async (c) => {
   // Arrange
   const { fixture, client } = await withoutReporting(c);
   const listed = toolReply(
@@ -208,7 +208,7 @@ it("installing an already installed target is refused and leaves its configurati
   expect(await readFile(codexConfig(fixture), "utf8")).toBe(before);
 });
 
-it("a connection recheck reports T3's current state", async (c) => {
+it("a connection recheck reports T3 Code's current state", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);
@@ -229,7 +229,7 @@ it("a connection recheck reports T3's current state", async (c) => {
   });
 });
 
-it("the connection read without a recheck keeps the connection as Factory last saw it", async (c) => {
+it("the connection read without a recheck keeps the connection as AgentEasel last saw it", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const client = await factoryMcpClient(c, fixture.f);
@@ -257,11 +257,11 @@ it("a connection that needs authorization is reported with the host's approval p
   // Assert
   const reply = toolReply(result);
   expect(reply.state).toBe("authorization-required");
-  expect(reply.next).toMatch(/approves T3 access on the Factory host/);
+  expect(reply.next).toMatch(/approves T3 Code access on the AgentEasel host/);
   expect(Object.keys(reply)).not.toContain("authorizationContext");
 });
 
-it("an outdated Factory skill is listed for repair, blocks the preflight and is restored by installing that target", async (c) => {
+it("an outdated AgentEasel skill is listed for repair, blocks the preflight and is restored by installing that target", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   const skill = join(fixture.h.processHome, "codex-home", "skills", "factory-block", "SKILL.md");

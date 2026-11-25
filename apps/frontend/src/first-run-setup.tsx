@@ -14,7 +14,8 @@ import type {
   FirstRunSetup,
   ReportingInstallation,
   T3Connection,
-} from "@t3-factory/contracts";
+} from "@agent-easel/contracts";
+import { productPositioning, productStatement } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
@@ -75,7 +76,7 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
         label="Setup status unavailable"
         icon={CircleAlert}
         title="Couldn’t read the setup status"
-        description="Check that the Factory server is running, then check again."
+        description="Check that the AgentEasel server is running, then check again."
       >
         <Button onClick={() => void refresh()}>Check again</Button>
       </GateScreen>
@@ -143,8 +144,8 @@ function FirstRunSetupScreen({
       size="wide"
       label="First-run setup"
       icon={Workflow}
-      eyebrow="T3 Factory"
-      title={ready ? "Factory is ready" : "Set up Factory"}
+      eyebrow="AgentEasel"
+      title={ready ? "AgentEasel is ready" : "Set up AgentEasel"}
       description={
         ready
           ? "You can start your first Run."
@@ -179,7 +180,7 @@ function FirstRunSetupScreen({
 
 function ConnectStepHeader({
   connected,
-  detail = "Factory uses T3 on this computer to list projects and start Runs.",
+  detail = "AgentEasel uses T3 Code on this computer to list projects and start Runs.",
 }: {
   connected: boolean;
   /** The current step's sentence. */
@@ -191,16 +192,16 @@ function ConnectStepHeader({
     <SetupStepHeader
       number={1}
       state="done"
-      title={version ? `Connected to T3 ${version}` : "Connected to T3"}
+      title={version ? `Connected to T3 Code ${version}` : "Connected to T3 Code"}
       detail={connection?.endpoint ?? ""}
     />
   ) : (
-    <SetupStepHeader number={1} state="current" title="Connect to T3" detail={detail} />
+    <SetupStepHeader number={1} state="current" title="Connect to T3 Code" detail={detail} />
   );
 }
 
 const installReason =
-  "Workers report back to Factory through its MCP server and the $factory-block skill.";
+  "Workers report back to AgentEasel through its MCP server and the $factory-block skill.";
 
 function InstallStepHeader({
   connected,
@@ -235,7 +236,7 @@ function InstallStepHeader({
         state="upcoming"
         title="Install in your agents"
         detail={
-          waiting?.upcoming ?? "Adds Factory’s MCP server and skills to your agent harnesses."
+          waiting?.upcoming ?? "Adds AgentEasel’s MCP server and skills to your agent harnesses."
         }
       />
     );
@@ -255,7 +256,7 @@ function InstallStepHeader({
       title="Install in your agents"
       detail={
         listed?.length
-          ? `${installReason} Factory found these harnesses enabled in T3:`
+          ? `${installReason} AgentEasel found these harnesses enabled in T3 Code:`
           : installReason
       }
     />
@@ -284,8 +285,8 @@ function HostSetupProgressScreen({
       size="wide"
       label="First-run setup"
       icon={Lock}
-      title="Finish setup on the Factory host"
-      description="This device is approved, but connecting to T3 and installing in agents happen on the computer where Factory runs. Open Factory there; this screen updates by itself."
+      title="Finish setup on the AgentEasel host"
+      description="This device is approved, but connecting to T3 Code and installing in agents happen on the computer where AgentEasel runs. Open AgentEasel there; this screen updates by itself."
     >
       <ol aria-live="polite" className="grid gap-5">
         <li aria-current={connected ? undefined : "step"} className="grid gap-3">
@@ -293,7 +294,7 @@ function HostSetupProgressScreen({
             connected={connected}
             detail={
               connection?.authorizationPending
-                ? "Waiting for approval on the Factory host"
+                ? "Waiting for approval on the AgentEasel host"
                 : "Not connected yet"
             }
           />
@@ -309,8 +310,8 @@ function HostSetupProgressScreen({
             waiting={{
               upcoming: "Waiting for step 1",
               current: manual
-                ? "Factory can’t install here; waiting for the Factory host to open Factory"
-                : "Waiting for the install on the Factory host",
+                ? "AgentEasel can’t install here; waiting for the AgentEasel host to open AgentEasel"
+                : "Waiting for the install on the AgentEasel host",
             }}
           />
           {connected && !installed && !!listed?.length && (
@@ -356,8 +357,8 @@ function InstallStep({
   const caption = !refusal && offInT3.length > 0 && (
     <p className="text-2xs font-medium text-subtle-foreground">
       {offInT3.length === 1
-        ? `${names(offInT3)} is off in T3. Turn it on there to include it.`
-        : `${names(offInT3)} are off in T3. Turn them on there to include them.`}
+        ? `${names(offInT3)} is off in T3 Code. Turn it on there to include it.`
+        : `${names(offInT3)} are off in T3 Code. Turn them on there to include them.`}
     </p>
   );
   let content: ReactNode;
@@ -370,7 +371,7 @@ function InstallStep({
         details={readDetails}
         action={<TextLink onClick={checkAgain}>Check again</TextLink>}
       >
-        Check that Factory is running, then check again.
+        Check that AgentEasel is running, then check again.
       </ProblemCard>
     );
   else if (!listed)
@@ -388,8 +389,8 @@ function InstallStep({
           title="Couldn’t check your harnesses"
           action={<TextLink onClick={checkAgain}>Check again</TextLink>}
         >
-          {refusal.message} Open Factory to continue without reporting. Once this is fixed, install
-          it from Settings → Agent reporting, or{" "}
+          {refusal.message} Open AgentEasel to continue without reporting. Once this is fixed,
+          install it from Settings → Agent reporting, or{" "}
           <TextLink href={MANUAL_REPORTING_URL}>set it up by hand</TextLink>.
         </ProblemCard>
         <ReadyStep reminder={false} current={current} onCompleted={onCompleted} />
@@ -400,12 +401,12 @@ function InstallStep({
       <ProblemCard
         tone="attention"
         density="compact"
-        title="Turn on a harness in T3"
+        title="Turn on a harness in T3 Code"
         details={targets?.find((target) => target.kind === "none-enabled")?.message}
         action={<TextLink onClick={checkAgain}>Check again</TextLink>}
       >
-        None of the harnesses Factory installs into is on in T3. Turn one on in T3’s settings, then
-        check again.
+        None of the harnesses AgentEasel installs into is on in T3 Code. Turn one on in T3 Code’s
+        settings, then check again.
       </ProblemCard>
     );
   else content = <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} />;
@@ -457,7 +458,7 @@ function HarnessInstall({
           <Disclosure label="What gets installed">
             <ul className="grid gap-1 pl-4.5 text-sm text-muted-foreground">
               <li>
-                Factory MCP (<code className="font-mono text-label">factory-runtime</code>) ·
+                AgentEasel MCP (<code className="font-mono text-label">factory-runtime</code>) ·
                 required: workers report Block results through it.
               </li>
               <li>
@@ -470,7 +471,7 @@ function HarnessInstall({
               </li>
               <li>
                 <code className="font-mono text-label">setup-factory</code> skill · optional: set up
-                a repository’s tracker labels for Factory.
+                a repository’s tracker labels for AgentEasel.
               </li>
               <li>
                 <code className="font-mono text-label">factory-configure</code> skill · optional:
@@ -550,18 +551,18 @@ function ReadyStep({
       {reminder && (
         <ProblemCard tone="info" density="compact" title="Open a new agent session">
           Sessions that are already open keep the tools they loaded at start. New sessions see
-          Factory.
+          AgentEasel.
         </ProblemCard>
       )}
       {failure && (
         <ProblemCard tone="error" density="compact" title="Couldn’t finish setup" details={failure}>
-          Factory could not record that setup is complete. Try again.
+          AgentEasel could not record that setup is complete. Try again.
         </ProblemCard>
       )}
       <div className="flex justify-end">
         <MutationGate>
           <Button disabled={busy || !current} onClick={() => void complete()}>
-            Open Factory
+            Open AgentEasel
           </Button>
         </MutationGate>
       </div>
@@ -571,8 +572,8 @@ function ReadyStep({
 
 const runningTitle = (detected: DetectedT3) =>
   detected.serverVersion
-    ? `T3 ${detected.serverVersion} is running on this computer`
-    : "T3 is running on this computer";
+    ? `T3 Code ${detected.serverVersion} is running on this computer`
+    : "T3 Code is running on this computer";
 
 /** One step action at a time, with its failure shown below the step. */
 function useStepOperation() {
@@ -589,7 +590,7 @@ function useStepOperation() {
     <ProblemCard
       tone="error"
       density="compact"
-      title="Couldn’t connect to T3"
+      title="Couldn’t connect to T3 Code"
       details={operationError}
     />
   );
@@ -620,6 +621,8 @@ function ConnectStep({
     return <WaitingForApproval connection={connection} detected={detected} />;
   return (
     <div className="grid gap-3 pl-8.5">
+      <p className="text-2xs font-medium text-subtle-foreground">{productPositioning}</p>
+      <p className="text-2xs font-medium text-subtle-foreground">{productStatement}</p>
       {!busy && <AttemptProblem connection={connection} presentation={presentation} />}
       {errorCard}
       {detected ? (
@@ -632,7 +635,8 @@ function ConnectStep({
             </MutationGate>
           </T3Row>
           <p className="text-2xs font-medium text-subtle-foreground">
-            Connect opens T3’s approval page in your browser. Approve once; Factory remembers it.
+            Connect opens T3 Code’s approval page in your browser. Approve once; AgentEasel
+            remembers it.
           </p>
         </>
       ) : (
@@ -640,7 +644,7 @@ function ConnectStep({
           tone="error"
           density="compact"
           icon={Unplug}
-          title="No running T3 found on this computer"
+          title="No running T3 Code found on this computer"
           action={<TextLink onClick={() => void onCheckAgain()}>Check again</TextLink>}
         >
           Start T3 Code here and this step finds it by itself — or enter its address below.
@@ -687,7 +691,9 @@ function WaitingForApproval({
     <div className="grid gap-3 pl-8.5">
       <T3Row
         title={
-          detected?.endpoint === endpoint ? runningTitle(detected) : "T3 at the entered address"
+          detected?.endpoint === endpoint
+            ? runningTitle(detected)
+            : "T3 Code at the entered address"
         }
         endpoint={endpoint}
       >
@@ -703,7 +709,7 @@ function WaitingForApproval({
       <ProblemCard
         tone={reopenFailed ? "attention" : "info"}
         density="compact"
-        title="Approve Factory in your browser"
+        title="Approve AgentEasel in your browser"
         action={
           <MutationGate>
             <TextLink trailingIcon={ExternalLink} disabled={busy} onClick={() => void reopen()}>
@@ -714,7 +720,7 @@ function WaitingForApproval({
       >
         {reopenFailed
           ? connection.explanation
-          : "T3’s approval page is open in the browser on this computer. This screen moves on by itself once you approve."}
+          : "T3 Code’s approval page is open in the browser on this computer. This screen moves on by itself once you approve."}
       </ProblemCard>
       {errorCard}
     </div>
@@ -738,7 +744,7 @@ function AttemptProblem({
       <ProblemCard
         tone="attention"
         density="compact"
-        title="Update T3"
+        title="Update T3 Code"
         details={connection.contract?.problems.join("\n") || undefined}
       >
         {connection.explanation}
@@ -754,7 +760,9 @@ function AttemptProblem({
       tone="attention"
       density="compact"
       icon={presentation === "unavailable" ? Unplug : TriangleAlert}
-      title={presentation === "unavailable" ? "Factory can’t reach T3" : "Approval didn’t finish"}
+      title={
+        presentation === "unavailable" ? "AgentEasel can’t reach T3 Code" : "Approval didn’t finish"
+      }
     >
       {connection.explanation} Connect again to start over.
     </ProblemCard>

@@ -12,8 +12,8 @@ import {
   type T3Session,
 } from "./connection.ts";
 import { hasEnvironmentIdentity } from "./environment-identity.ts";
-import type { AgentEnvironment } from "@t3-factory/contracts";
-import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+import type { AgentEnvironment } from "@agent-easel/contracts";
+import { parseProjectFaviconPath, parseProjectIcon } from "@agent-easel/domain-validation";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { parseProviderCapabilities } from "./project-capabilities.ts";
 
@@ -90,7 +90,7 @@ export class LiveT3Projects implements T3Projects {
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const answer = await session.call(name, args, 10_000);
-    if (answer.isError) throw new T3Failure("refused", "T3 project operation failed.");
+    if (answer.isError) throw new T3Failure("refused", "T3 Code project operation failed.");
     if (answer.content === undefined) throw new Error("Invalid project result.");
     return answer.content;
   }

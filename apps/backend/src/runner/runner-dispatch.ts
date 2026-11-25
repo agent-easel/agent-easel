@@ -8,7 +8,7 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
-import type { FactoryOperations } from "@t3-factory/contracts";
+import type { FactoryOperations } from "@agent-easel/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Threads } from "../t3/threads.ts";
@@ -246,7 +246,7 @@ export function openRunnerDispatch(
       const { send } = snapshot.support;
       if (!send.supported) return unverified(send.explanation ?? SEND_UNCERTAIN);
       if (payload.value.freshContext && !snapshot.support.freshContextSend)
-        return unverified("T3 send schema does not support fresh-context revisits.");
+        return unverified("T3 Code send schema does not support fresh-context revisits.");
       if (replayUnproven(intent, send.retryScope))
         return unverified(
           "Same-key replay continuity/retention is unproven; operation remains unresolved.",
