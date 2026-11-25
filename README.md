@@ -8,7 +8,7 @@
 
 > AgentEasel requires T3 Code. Every agent task in a Run is carried out in a T3 Code thread, and AgentEasel does not work without a T3 Code installation. AgentEasel is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by T3 Tools, Inc. T3 Code is a trademark of T3 Tools, Inc.
 
-[![Quality](https://github.com/alimek/t3-factory/actions/workflows/quality.yml/badge.svg)](https://github.com/alimek/t3-factory/actions/workflows/quality.yml)
+[![Quality](https://github.com/agent-easel/agent-easel/actions/workflows/quality.yml/badge.svg)](https://github.com/agent-easel/agent-easel/actions/workflows/quality.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 AgentEasel plans, starts and tracks multi-agent Runs. The agent work runs in
@@ -68,7 +68,7 @@ desktop are unsupported release targets. See the full [platform matrix](docs/ins
 Install the pinned Node and pnpm versions, then:
 
 ```sh
-git clone https://github.com/alimek/t3-factory.git
+git clone https://github.com/agent-easel/agent-easel.git
 cd t3-factory
 pnpm install --frozen-lockfile
 pnpm dev

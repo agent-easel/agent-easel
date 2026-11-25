@@ -14,7 +14,7 @@ Run, named by the author, answers "what did this Run produce" for people, the Ru
 machinery instead of adding a second one.
 
 The same ending model is the future Subflow contract. It replaces the plan recorded on
-[#119](https://github.com/alimek/t3-factory/issues/119), in which an invoked Flow marked terminal exits as returns, every
+[#119](https://github.com/agent-easel/agent-easel/issues/119), in which an invoked Flow marked terminal exits as returns, every
 marked message returned separately through one Subflow output, and a completion barrier held those returns until all of
 the invocation's work, private branches included, had finished. When Subflow is built:
 
@@ -63,7 +63,7 @@ No Subflow field is stored by the Finish block delivery.
   outcome across Agent exits, returned several messages through one output, and let a private Human, Wait or failed
   branch hold an already selected result indefinitely. Endings give the invoked Flow and a standalone Run the same
   single, named outcome.
-- **Ending outcome types or colours (success, failure)**: rejected, as [#143](https://github.com/alimek/t3-factory/issues/143)
+- **Ending outcome types or colours (success, failure)**: rejected, as [#143](https://github.com/agent-easel/agent-easel/issues/143)
   removed exit classification and coloured wires; the ending's name carries its meaning.
 
 ## Consequences

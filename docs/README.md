@@ -1,6 +1,6 @@
 # AgentEasel documentation
 
-Use the [glossary](../GLOSSARY.md) for domain terms. Each topic describes user behavior, durable contracts and current limits. Controlled tests do not establish live provider compatibility; [issues](https://github.com/alimek/t3-factory/issues) track proposed work.
+Use the [glossary](../GLOSSARY.md) for domain terms. Each topic describes user behavior, durable contracts and current limits. Controlled tests do not establish live provider compatibility; [issues](https://github.com/agent-easel/agent-easel/issues) track proposed work.
 
 New here? Start with the [project overview and demo](../README.md),
 [contribution guide](../CONTRIBUTING.md), [support](../SUPPORT.md) and

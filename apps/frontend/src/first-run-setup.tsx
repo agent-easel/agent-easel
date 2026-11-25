@@ -40,7 +40,7 @@ const detectionRecheckMs = 2000;
 
 /** Where the documentation describes the reporting entries, for setting them up by hand. */
 const MANUAL_REPORTING_URL =
-  "https://github.com/alimek/t3-factory/blob/main/docs/t3-integration.md#reporting-installation";
+  "https://github.com/agent-easel/agent-easel/blob/main/docs/t3-integration.md#reporting-installation";
 
 /**
  * The last full-window state before the application: until the host records First-run setup

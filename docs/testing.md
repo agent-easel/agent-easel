@@ -212,7 +212,7 @@ Failures upload available reports and traces from `.e2e/ci/` and fixture logs fr
 seven days. Setup failures may occur before those files exist. Download them from
 the Actions run. CI does not replace Before/After UI evidence or prove live provider,
 native desktop or remote-device compatibility. Requiring the check is an owner
-ruleset step tracked in [#203](https://github.com/alimek/t3-factory/issues/203).
+ruleset step tracked in [#203](https://github.com/agent-easel/agent-easel/issues/203).
 
 ## Database upgrade baseline
 
