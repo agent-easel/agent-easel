@@ -48,7 +48,7 @@ jobs:
           PUBLISHED_TAG: ${{ inputs.published-tag }}
           FEED_CHANGED: ${{ inputs.feed-changed }}
         run: |
-          if [[ -z "$PUBLISHED_TAG" && "$FEED_CHANGED" != true ]]; then
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch && -z "$PUBLISHED_TAG" && "$FEED_CHANGED" != true ]]; then
             before_version=$(git show "$BEFORE:package.json" | jq -er .version)
             push_version=$(git show "$PUSH_SHA:package.json" | jq -er .version)
             changes=$(git diff --name-only "$BEFORE" "$PUSH_SHA" -- apps/landing)
