@@ -3,7 +3,6 @@
  * local backend (server role) or one pinned remote server (client role). Business rules
  * stay in the backend's public operations.
  */
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -45,7 +44,6 @@ import type {
   DesktopRoute,
   DesktopState,
   FactoryDesktop,
-  PreviousInstallation,
 } from "@agent-easel/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
 import { AttentionCoordinator } from "./attention-coordinator.ts";
@@ -55,18 +53,6 @@ import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
-import {
-  defaultPreviousInstallationPaths,
-  dismissMigrationSummary,
-  migrationText,
-  migratePreviousInstallation,
-  postponeRemovalReminder,
-  previousInstallation,
-  removalReminderDue,
-  removalDetail,
-  removePreviousInstallation,
-  skipPreviousInstallation,
-} from "./previous-installation.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
@@ -123,7 +109,6 @@ let pendingActivate = false;
 let installingUpdate = false;
 /** An approved client's install request was accepted and starts on the next tick. */
 let serverInstallAccepted = false;
-let previous: PreviousInstallation | null = null;
 
 const updateChannel = (): UpdateChannel => store.get().updateChannel ?? buildChannel();
 
@@ -163,7 +148,6 @@ function desktopState(): DesktopState {
     update: updates.current,
     // macOS keeps a minimized window's document "visible"; live delivery detaches on this.
     minimized: window !== null && !window.isDestroyed() && window.isMinimized(),
-    previousInstallation: previous,
   };
 }
 
@@ -668,13 +652,6 @@ const bridgeHandlers: BridgeHandlers = {
   installUpdate: () => installUpdate(),
   setUpdateChannel: (_frame, channel: unknown) => setUpdateChannel(channel),
   setAppearance: (_frame, preference: unknown) => setAppearance(preference),
-  dismissMigrationSummary: async () => {
-    const paths = previousInstallationPaths();
-    if (paths) await dismissMigrationSummary(paths);
-    await refreshPreviousInstallation();
-    return { ok: true };
-  },
-  removePreviousInstallation: () => confirmPreviousInstallationRemoval(),
   setMenuState: (_frame, state: unknown) => {
     const publication = parseMenuState(state);
     if (!publication.ok) return failed(publication.message);
@@ -777,12 +754,6 @@ async function start() {
     applicationName: "AgentEasel",
     credits: `${productPositioning}\n\n${productStatement}`,
   });
-  if (!(await migrateAtFirstLaunch())) {
-    quitting = true;
-    app.exit(0);
-    return;
-  }
-  await refreshPreviousInstallation();
   store = await SettingsStore.open(app.getPath("userData"));
   windowBounds = new WindowBoundsTracker(store.get().windowBounds);
   applyNativeAppearance(store.get().appearance);
@@ -873,105 +844,4 @@ async function start() {
   if (!background) openWindow();
   if (pendingActivate) void attention.dock(false).then(openRoute);
   if (store.problem) void dialog.showMessageBox({ type: "warning", message: store.problem });
-  void remindAboutPreviousInstallation();
-}
-
-const previousInstallationPaths = () =>
-  defaultPreviousInstallationPaths(
-    process.env,
-    homedir(),
-    app.getPath("appData"),
-    app.getPath("userData"),
-  );
-
-async function refreshPreviousInstallation() {
-  const paths = previousInstallationPaths();
-  previous = paths ? await previousInstallation(paths) : null;
-  if (started) broadcast();
-}
-
-async function migrateAtFirstLaunch(): Promise<boolean> {
-  const paths = previousInstallationPaths();
-  if (!paths) return true;
-  for (;;) {
-    const attempt = await migratePreviousInstallation(paths, () =>
-      app.setLoginItemSettings({ openAtLogin: true }),
-    ).then(
-      (outcome) => outcome,
-      (error: unknown) => ({ kind: "failed" as const, error }),
-    );
-    if (attempt.kind === "none" || attempt.kind === "migrated") return true;
-    if (attempt.kind === "refused") {
-      const { response } = await dialog.showMessageBox({
-        type: "warning",
-        buttons: ["Retry", "Quit"],
-        defaultId: 0,
-        cancelId: 1,
-        message: migrationText.migrating,
-        detail: attempt.reason,
-      });
-      if (response === 1) return false;
-      continue;
-    }
-    const { response } = await dialog.showMessageBox({
-      type: "error",
-      buttons: ["Retry", "Start Without Migrating", "Quit"],
-      defaultId: 0,
-      cancelId: 2,
-      message: migrationText.migrating,
-      detail: `${migrationText.failed}\n\n${String(attempt.error)}`,
-    });
-    if (response === 2) return false;
-    if (response === 1) {
-      await skipPreviousInstallation(paths, new Date());
-      return true;
-    }
-  }
-}
-
-async function confirmPreviousInstallationRemoval(): Promise<DesktopResult> {
-  const paths = previousInstallationPaths();
-  if (!paths || !previous?.oldDataPresent) return failed(migrationText.nothingToRemove);
-  const options = {
-    type: "warning" as const,
-    buttons: ["Move to Trash", "Cancel"],
-    defaultId: 1,
-    cancelId: 1,
-    message: migrationText.removeQuestion,
-    detail: removalDetail(previous),
-  };
-  const { response } = window
-    ? await dialog.showMessageBox(window, options)
-    : await dialog.showMessageBox(options);
-  if (response !== 0) return { ok: true };
-  const refused = await removePreviousInstallation(
-    paths,
-    (path) => shell.trashItem(path),
-    new Date(),
-  ).catch((error: unknown) => ({ refused: `The data could not be moved: ${String(error)}` }));
-  await refreshPreviousInstallation();
-  return refused ? failed(refused.refused) : { ok: true };
-}
-
-async function remindAboutPreviousInstallation() {
-  const paths = previousInstallationPaths();
-  if (!paths || !(await removalReminderDue(paths, new Date()))) return;
-  const { response } = await dialog.showMessageBox({
-    type: "info",
-    buttons: ["Move to Trash…", "Remind Me in 30 Days"],
-    defaultId: 1,
-    cancelId: 1,
-    message: migrationText.reminder,
-    detail: migrationText.reminderDetail,
-  });
-  const result = response === 0 ? await confirmPreviousInstallationRemoval() : null;
-  if (result && !result.ok) {
-    await dialog.showMessageBox({
-      type: "warning",
-      message: migrationText.removalFailed,
-      detail: result.message,
-    });
-    return;
-  }
-  if (previous?.oldDataPresent) await postponeRemovalReminder(paths, new Date());
 }

@@ -40,7 +40,7 @@ tasks in the root `vite.config.ts` `run`):
 | ---- | --- | --- |
 | 1 | `pnpm format:check` | Files not formatted by the Vite+ formatter (`vite.config.ts` `fmt`) |
 | 2 | `pnpm check:e2e-configs` | Any `e2e.*.config.ts` in the working tree other than `e2e.config.ts` and `e2e.explore.config.ts`, tracked or untracked, ignored output directories included (dependency directories excepted) |
-| 3 | `pnpm check:product-name` | "T3 Factory", "t3-factory" or "t3factory" in a tracked file outside the allowlist in `scripts/check-product-name.mjs` (bridge and migration code, old export id, the old data home, repository URLs) |
+| 3 | `pnpm check:product-name` | "T3 Factory", "t3-factory" or "t3factory" in a tracked file outside the allowlist in `scripts/check-product-name.mjs` (frozen bridge metadata, the old-domain redirect, old export id, repository URLs) |
 | 4 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
 | 5 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
 | 6 | `pnpm lint` | Vite+ lint rule violations and new JavaScript or TypeScript comments |

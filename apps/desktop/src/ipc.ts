@@ -17,8 +17,6 @@ export const channels = {
   setUpdateChannel: "factory:set-update-channel",
   setAppearance: "factory:set-appearance",
   openLive: "factory:open-live",
-  dismissMigrationSummary: "factory:dismiss-migration-summary",
-  removePreviousInstallation: "factory:remove-previous-installation",
   /** Main → preload: the live port; the preload forwards it to the page by window message. */
   livePort: "factory:live-port",
   /** Renderer → main: registry labels, bindings and availability for the application menu. */

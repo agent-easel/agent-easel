@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Surface } from "@/components/ui/surface";
 import { fieldLabelClass } from "@/components/page";
-import { MigrationSummary } from "@/components/migration-summary";
 import { useDesktopState } from "./desktop-state.ts";
 import { GateScreen } from "@/components/gate-screen";
 import { runDraft } from "./run-draft.ts";
@@ -40,8 +39,6 @@ export function DesktopShell({ children }: { children: ReactNode }) {
         description="Reading this installation’s role."
       />
     );
-  if (state.previousInstallation?.summaryPending)
-    return <MigrationSummary desktop={desktop} previous={state.previousInstallation} />;
   if (state.role === null) return <RoleChooser desktop={desktop} />;
   if (state.role === "server" && state.backend.state !== "running")
     return <BackendStatus desktop={desktop} backend={state.backend} />;

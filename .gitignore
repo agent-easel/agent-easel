@@ -6,7 +6,6 @@ coverage/
 .env.*
 !.env.example
 # Local data overrides must never be committed.
-.t3-factory/
 .agenteasel/
 *.sqlite
 *.sqlite-*

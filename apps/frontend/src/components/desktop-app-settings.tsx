@@ -12,7 +12,6 @@ import { desktopBridge } from "../desktop-bridge.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useDesktopState } from "../desktop-state.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
-import { PreviousInstallationSettings } from "./previous-installation-settings.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { cn } from "@/lib/utils";
 import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
@@ -107,12 +106,6 @@ function DesktopAppControls({ local }: { local: boolean }) {
           />
         )}
       </SettingsGroup>
-      {state.previousInstallation?.oldDataPresent && (
-        <PreviousInstallationSettings
-          previous={state.previousInstallation}
-          onRemove={() => void run(() => desktop.removePreviousInstallation())}
-        />
-      )}
     </>
   );
   return local ? (
