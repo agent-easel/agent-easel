@@ -80,6 +80,7 @@ jobs:
             curl --fail --silent --show-error --head --location --retry 3 "$download" > /dev/null
           done
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - if: steps.site.outputs.tag != ''
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - if: steps.site.outputs.tag != ''
@@ -108,6 +109,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.site.outputs.tag }}
+          FACTORY_RELEASE_VERSION: ${{ steps.site.outputs.version }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

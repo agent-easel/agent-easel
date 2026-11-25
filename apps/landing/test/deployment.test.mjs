@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-await test("Git deployment is limited to main and the old domain redirects every path", () => {
+await test("Vercel never deploys from Git and the old domain redirects every path", () => {
   // Arrange
   const file = new URL("../vercel.json", import.meta.url);
 
@@ -13,7 +13,7 @@ await test("Git deployment is limited to main and the old domain redirects every
   const config = JSON.parse(readFileSync(file, "utf8"));
 
   // Assert
-  assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false, "**": false });
+  assert.equal(config.git.deploymentEnabled, false);
   assert.deepEqual(config.redirects, [
     {
       source: "/:path*",
@@ -35,14 +35,16 @@ function buildLanding(context, env) {
   return output;
 }
 
-await test("the production canonical URL and root Release download appear in built assets", (context) => {
+await test("a Vercel build links the published Release it is given, not the root manifest version", (context) => {
   // Arrange
-  const { version } = JSON.parse(
-    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
-  );
+  const version = "9.8.7";
 
   // Act
-  const output = buildLanding(context, { FACTORY_SITE_URL: "https://agenteasel.app/" });
+  const output = buildLanding(context, {
+    VERCEL: "1",
+    FACTORY_RELEASE_VERSION: version,
+    FACTORY_SITE_URL: "https://agenteasel.app/",
+  });
 
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
@@ -55,6 +57,7 @@ await test("the production canonical URL and root Release download appear in bui
     html.includes('<meta name="twitter:image" content="https://agenteasel.app/og-image.png"'),
   );
   assert.ok(html.includes(`/releases/download/v${version}/AgentEasel-${version}-arm64.dmg`));
+  assert.ok(html.includes(`/releases/download/v${version}/SHA256SUMS.txt`));
   assert.ok(
     readFileSync(join(output, "robots.txt"), "utf8").includes(
       "Sitemap: https://agenteasel.app/sitemap.xml",
@@ -80,4 +83,15 @@ await test("a build without a site URL uses the production domain", (context) =>
       '<link rel="canonical" href="https://agenteasel.app/"',
     ),
   );
+});
+
+await test("a Vercel build without a published Release version fails instead of linking a draft", (context) => {
+  // Arrange
+  const env = { VERCEL: "1", FACTORY_RELEASE_VERSION: "" };
+
+  // Act
+  const build = () => buildLanding(context, env);
+
+  // Assert
+  assert.throws(build);
 });

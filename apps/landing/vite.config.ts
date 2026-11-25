@@ -2,15 +2,18 @@ import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite-plus";
 import tailwindcss from "@tailwindcss/vite";
 
-// The product version comes from the root manifest that release-please bumps, so a build of
-// a release commit links that Release's DMG.
 const rootManifest: unknown = JSON.parse(
   readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
 );
+const publishedReleaseVersion = process.env.FACTORY_RELEASE_VERSION?.trim();
+if (process.env.VERCEL && !publishedReleaseVersion) {
+  throw new Error("A Vercel build needs FACTORY_RELEASE_VERSION, the latest published Release.");
+}
 const version =
-  typeof rootManifest === "object" && rootManifest !== null && "version" in rootManifest
+  publishedReleaseVersion ||
+  (typeof rootManifest === "object" && rootManifest !== null && "version" in rootManifest
     ? String(rootManifest.version)
-    : "";
+    : "");
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Unexpected product version "${version}".`);
 
 const siteUrl = new URL(
