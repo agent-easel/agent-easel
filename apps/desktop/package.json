@@ -1,6 +1,6 @@
 {
   "name": "@agent-easel/desktop",
-  "version": "0.12.0",
+  "version": "1.0.0",
   "private": true,
   "description": "AgentEasel desktop application for macOS on Apple Silicon",
   "type": "module",
