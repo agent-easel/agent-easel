@@ -3,6 +3,7 @@ name: Landing
 # Deploys agenteasel.app with the AgentEasel update feed. Called after a Release or beta build is
 # published, and on pushes to main that change the landing page.
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       published-tag:
