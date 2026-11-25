@@ -3,10 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing draft release to rebuild and publish (vX.Y.Z)
+        description: Existing draft release tag to rebuild (vX.Y.Z)
         required: true
         type: string
 
@@ -78,18 +80,17 @@ jobs:
             echo "::error::$tag is already published; published releases are never rebuilt or replaced."
             exit 1
           fi
-          # Old beta installations update from the newest semver tag, so the tag appears only when
-          # publication attaches the frozen bridge metadata.
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$(jq -r '.[0].target' <<<"$releases")" --jq .sha)
-          if tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha 2>/dev/null); then
-            echo "::warning::$tag exists before publication; old beta installations fail their update check until it is published."
-            if [[ "$tagged" != "$sha" ]]; then
-              echo "::error::The $tag draft targets $sha, but the tag points to $tagged."
-              exit 1
-            fi
+          sha=$(jq -r '.[0].target' <<<"$releases")
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The $tag draft must target a commit SHA, not '$sha'."
+            exit 1
           fi
           if [[ -n "$CUT_SHA" && "$CUT_SHA" != "$sha" ]]; then
-            echo "::error::$tag points to $sha, not the release commit $CUT_SHA."
+            echo "::error::The $tag draft targets $sha, not the release commit $CUT_SHA."
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --silent 2>/dev/null; then
+            echo "::error::Tag $tag already exists; a draft release stays untagged until it is published."
             exit 1
           fi
           {
@@ -203,7 +204,8 @@ jobs:
             echo "::error::$RELEASE_TAG was published outside this job; its assets are not changed."
             exit 1
           fi
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$(jq -r '.[0].target' <<<"$release")" --jq .sha)" = "$RELEASE_SHA"
+          test "$(jq -r '.[0].target' <<<"$release")" = "$RELEASE_SHA"
+          ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent 2>/dev/null
           echo "RELEASE_ID=$(jq -r '.[0].id' <<<"$release")" >> "$GITHUB_ENV"
       - name: Add GitHub contributor notes
         run: |
@@ -266,26 +268,25 @@ jobs:
             fi
           done
           node scripts/update-feed.mjs check-bridge draft-assets
-      - name: Publish
+      - name: Leave the verified draft for manual publication
         run: |
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           release=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
-          test "$(jq -r .draft <<<"$release")" = false
+          test "$(jq -r .draft <<<"$release")" = true
           test "$(jq -r .tag_name <<<"$release")" = "$RELEASE_TAG"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)" = "$RELEASE_SHA"
-          jq -r '.assets[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' <<<"$release" | sort -k2 > published.txt
-          diff -u local.txt published.txt
-          jq -r '"Published release: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.assets[] | "\(.digest | sub("^sha256:"; ""))  \(.name)"' <<<"$release" | sort -k2 > drafted.txt
+          diff -u local.txt drafted.txt
+          jq -r '"Verified draft release, to be published by the maintainer: " + .html_url' <<<"$release" >> "$GITHUB_STEP_SUMMARY"
 
   landing:
     name: Deploy landing page and update feed
     needs: [source, publish]
+    # A cut leaves its Release a draft, so the site deploys only after the maintainer publishes it.
     if: >-
-      !cancelled() && github.ref == 'refs/heads/main' &&
-      (needs.publish.result == 'success' ||
-      (github.event_name == 'push' && needs.publish.result == 'skipped' && needs.source.result == 'skipped'))
+      !cancelled() &&
+      ((github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.source.result == 'skipped'))
     permissions:
       contents: read
     uses: ./.github/workflows/landing.yml
     with:
-      published-tag: ${{ needs.source.outputs.tag }}
+      published-tag: ${{ github.event.release.tag_name }}
