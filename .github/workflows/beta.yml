@@ -245,5 +245,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/landing.yml
+    secrets: inherit
     with:
       feed-changed: true

@@ -13,8 +13,7 @@
           "path": "apps/desktop/package.json",
           "jsonpath": "$.version"
         }
-      ],
-      "release-as": "1.0.0"
+      ]
     }
   }
 }

@@ -291,5 +291,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/landing.yml
+    secrets: inherit
     with:
       published-tag: ${{ github.event.release.tag_name }}
