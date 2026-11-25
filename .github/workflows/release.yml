@@ -205,7 +205,10 @@ jobs:
             exit 1
           fi
           test "$(jq -r '.[0].target' <<<"$release")" = "$RELEASE_SHA"
-          ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent 2>/dev/null
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent 2>/dev/null; then
+            echo "::error::Tag $RELEASE_TAG exists before publication; old beta installs would break."
+            exit 1
+          fi
           echo "RELEASE_ID=$(jq -r '.[0].id' <<<"$release")" >> "$GITHUB_ENV"
       - name: Add GitHub contributor notes
         run: |
