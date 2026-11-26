@@ -213,7 +213,7 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
       },
     )
       .then(async (attempts) => {
-        if (request === latestRequest.current) await reads.refresh();
+        await reads.refresh();
         return request === latestRequest.current ? attempts : [];
       })
       .finally(() => {
