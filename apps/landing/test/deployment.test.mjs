@@ -95,3 +95,22 @@ await test("a Vercel build without a published Release version fails instead of 
   // Assert
   assert.throws(build);
 });
+
+await test("the built hero screenshot exists and its declared dimensions match the PNG", (context) => {
+  // Arrange
+  const env = { FACTORY_SITE_URL: "" };
+
+  // Act
+  const output = buildLanding(context, env);
+
+  // Assert
+  const html = readFileSync(join(output, "index.html"), "utf8");
+  const hero = html.match(
+    /<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"/,
+  );
+  assert.ok(hero);
+  const png = readFileSync(join(output, "screens/run-detail.png"));
+  assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.equal(Number(hero[1]), png.readUInt32BE(16));
+  assert.equal(Number(hero[2]), png.readUInt32BE(20));
+});
