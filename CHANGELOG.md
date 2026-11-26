@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/agent-easel/agent-easel/compare/v1.0.1...v1.1.0) (2026-11-26)
+
+
+### Features
+
+* **diagnostics:** add the opt-in Diagnostic log ([#801](https://github.com/agent-easel/agent-easel/issues/801)) ([87f3aac](https://github.com/agent-easel/agent-easel/commit/87f3aacf4c0719358182f7794e4d256a6643e5ea))
+
+
+### Bug Fixes
+
+* **desktop:** allow sanitized clipboard writes from the bundled app main frame ([#800](https://github.com/agent-easel/agent-easel/issues/800)) ([d9d79a3](https://github.com/agent-easel/agent-easel/commit/d9d79a322befdf42163e241039cc1fe05c5a844d))
+* **reporting:** hydrate T3 Code default provider instances during discovery ([#792](https://github.com/agent-easel/agent-easel/issues/792)) ([65b0b79](https://github.com/agent-easel/agent-easel/commit/65b0b7930a459bee9e5ebee046b9d4c3efe8b81d))
+
 ## [1.0.1](https://github.com/agent-easel/agent-easel/compare/v1.0.0...v1.0.1) (2026-11-26)
 
 
