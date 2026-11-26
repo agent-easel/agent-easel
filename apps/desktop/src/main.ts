@@ -53,7 +53,12 @@ import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
-import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
+import {
+  allowsUiPermission,
+  appOrigin,
+  factoryProtocolHandler,
+  type ApiTarget,
+} from "./protocol.ts";
 import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
 import { WindowBoundsTracker } from "./window-bounds.ts";
@@ -687,8 +692,12 @@ function registerBridge() {
 
 function registerUi() {
   const ui = session.fromPartition(uiPartition);
-  ui.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  ui.setPermissionCheckHandler(() => false);
+  ui.setPermissionRequestHandler((_contents, permission, callback, details) =>
+    callback(allowsUiPermission(permission, details.requestingUrl, details.isMainFrame)),
+  );
+  ui.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) =>
+    allowsUiPermission(permission, requestingOrigin, details.isMainFrame),
+  );
   ui.protocol.handle(
     "factory",
     factoryProtocolHandler({
