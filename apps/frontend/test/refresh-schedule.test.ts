@@ -193,3 +193,33 @@ it("a failed read is no longer pending", async () => {
   // Assert
   expect(outstanding).toStrictEqual([true, false]);
 });
+
+it("a superseded explicit check cannot give its stale error to the recovery caller", async () => {
+  // Arrange
+  const { schedule, pending, failures } = controlledReads();
+  const cause = new Error("old connection");
+  const explicit = schedule.refreshWith(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+  );
+  void schedule.refresh();
+
+  // Act
+  pending[0]!.reject(cause);
+  const result = await explicit;
+
+  // Assert
+  expect(result).toBeUndefined();
+  expect(failures).toStrictEqual([]);
+});
+
+it("the recovery caller receives the error from its still-current check", async () => {
+  // Arrange
+  const { schedule } = controlledReads();
+  const cause = new Error("current connection");
+
+  // Act
+  const explicit = schedule.refreshWith(() => Promise.reject(cause));
+
+  // Assert
+  await expect(explicit).rejects.toBe(cause);
+});

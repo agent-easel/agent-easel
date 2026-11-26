@@ -1,7 +1,20 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { CircleDashed, type LucideIcon } from "lucide-react";
-import type { AgentDefinition, ReportingInstallation } from "@agent-easel/contracts";
+import type {
+  AgentDefinition,
+  ReportingInstallation,
+  ReportingRecheck,
+} from "@agent-easel/contracts";
 import type { SettingKind } from "./components/status-badge.tsx";
+import { installReportingHomes } from "./reporting-install.ts";
 import { api, ApiError } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
@@ -73,6 +86,7 @@ type ReportingInstallState = {
   failures: Readonly<Record<string, string>>;
   install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
   recheck: () => Promise<readonly string[]>;
+  retryTarget: (target: ReportingInstallation) => Promise<readonly string[]>;
 };
 
 const ReportingStateContext = createContext<
@@ -94,14 +108,27 @@ const ReportingStateContext = createContext<
   | null
 >(null);
 
-/** Shared by Agent definitions, reporting setup and the Settings indicator. */
-export function ReportingStateProvider({ children }: { children: ReactNode }) {
+function useRetryHomes(
+  targets: readonly ReportingInstallation[] | null,
+  failures: Readonly<Record<string, string>>,
+) {
+  const homes = useRef<readonly ReportingInstallation[]>([]);
+  useLayoutEffect(() => {
+    homes.current =
+      targets?.filter(
+        (target) => installable(target) || (target.actions.reinstall && failures[target.id]),
+      ) ?? [];
+    return () => {
+      homes.current = [];
+    };
+  }, [targets, failures]);
+  return homes;
+}
+
+function useReportingList() {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
-  const [running, setRunning] = useState<string | null>(null);
-  const [failures, setFailures] = useState<Record<string, string>>({});
   const [requested, setRequested] = useState<ScopeRequest | null>(null);
   const [answered, setAnswered] = useState<ScopeRequest | null>(null);
-  const installing = useRef(false);
   const latestRequest = useRef<ScopeRequest | null>(null);
   const agents = useLiveStudio().value?.agents ?? null;
   const {
@@ -109,12 +136,13 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
     pending: refreshing,
     refresh,
     supersede,
-  } = useRefreshSchedule({
+    refreshWith,
+  } = useRefreshSchedule<ReportingRecheck & { readFor: ScopeRequest | null }>({
     read: async () => {
       const readFor = latestRequest.current;
-      return { readFor, targets: await api.getReportingInstallations() };
+      return { readFor, installations: await api.getReportingInstallations() };
     },
-    apply: ({ readFor, targets }) => {
+    apply: ({ readFor, installations: targets }) => {
       setTargets(targets);
       setAnswered(readFor === latestRequest.current ? readFor : null);
     },
@@ -126,8 +154,9 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
       latestRequest.current = request;
       setRequested(request);
       if (request) await refresh();
+      else supersede();
     },
-    [refresh],
+    [refresh, supersede],
   );
   const answeredFor = answered !== null && answered === requested ? answered.key : null;
   const reads: ReportingReads = failure
@@ -138,62 +167,93 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
           "AgentEasel could not check Agent reporting. Check that AgentEasel is running, then check again.",
       }
     : { targets, agents, error: "" };
-  const installHome = async (target: ReportingInstallation): Promise<readonly string[]> => {
-    setRunning(target.id);
-    return api.installReporting({ targetId: target.id }).then(
-      (installed) => {
-        supersede();
-        setTargets(
-          (current) =>
-            current?.map((item) => (item.id === installed.id ? installed : item)) ?? current,
-        );
-        setFailures((current) => {
-          const remaining = { ...current };
-          delete remaining[target.id];
-          return remaining;
-        });
-        return installed.diagnosticAttempts ?? [];
-      },
-      (cause: unknown) => {
-        setFailures((current) => ({ ...current, [target.id]: String(cause) }));
-        return cause instanceof ApiError ? (cause.detail.diagnosticAttempts ?? []) : [];
-      },
+  const recheck = async () => {
+    const readFor = latestRequest.current;
+    return (
+      refreshWith(async () => ({ readFor, ...(await api.recheckReporting()) }))?.then(
+        (result) => result?.diagnosticAttempts ?? [],
+        (cause: unknown) => {
+          if (cause instanceof ApiError && cause.detail.diagnosticAttempts)
+            return cause.detail.diagnosticAttempts;
+          throw cause;
+        },
+      ) ?? []
     );
   };
+  const applyInstalled = (installed: ReportingInstallation) => {
+    supersede();
+    setTargets(
+      (current) => current?.map((item) => (item.id === installed.id ? installed : item)) ?? current,
+    );
+  };
+  return {
+    reads: {
+      ...reads,
+      refresh,
+      refreshFor,
+      recheck,
+      answeredFor,
+      refreshing,
+      readDetails: failure ? String(failure.cause) : "",
+    },
+    currentTargets: answered === requested && !refreshing ? reads.targets : null,
+    requested,
+    latestRequest,
+    applyInstalled,
+  };
+}
+
+/** Shared by Agent definitions, reporting setup and the Settings indicator. */
+export function ReportingStateProvider({ children }: { children: ReactNode }) {
+  const [running, setRunning] = useState<string | null>(null);
+  const [failures, setFailures] = useState<Record<string, string>>({});
+  const installing = useRef(false);
+  const { reads, currentTargets, requested, latestRequest, applyInstalled } = useReportingList();
   const install = async (selection: readonly ReportingInstallation[]) => {
     if (installing.current || !selection.length) return [];
     installing.current = true;
-    const run = async () => {
-      const attempts: string[] = [];
-      for (const target of selection) attempts.push(...(await installHome(target)));
-      await refresh();
-      return attempts;
-    };
-    return run().finally(() => {
-      setRunning(null);
-      installing.current = false;
-    });
+    const request = latestRequest.current;
+    return installReportingHomes(
+      selection.map(({ id }) => id),
+      {
+        running: setRunning,
+        installed: (installed) => {
+          if (request !== latestRequest.current) return;
+          applyInstalled(installed);
+          setFailures((current) => {
+            const remaining = { ...current };
+            delete remaining[installed.id];
+            return remaining;
+          });
+        },
+        failed: (id, cause) => {
+          if (request === latestRequest.current)
+            setFailures((current) => ({ ...current, [id]: String(cause) }));
+        },
+      },
+    )
+      .then(async (attempts) => {
+        if (request === latestRequest.current) await reads.refresh();
+        return attempts;
+      })
+      .finally(() => {
+        setRunning(null);
+        installing.current = false;
+      });
   };
-  const recheck = async () => {
-    const rechecked = await api.recheckReporting();
-    supersede();
-    setTargets(rechecked.installations);
-    return rechecked.diagnosticAttempts ?? [];
+  const retryHomes = useRetryHomes(currentTargets, failures);
+  const retryTarget = (requestedTarget: ReportingInstallation) => {
+    const current = retryHomes.current.find((target) => target.id === requestedTarget.id);
+    return current && requested === latestRequest.current ? install([current]) : reads.recheck();
   };
-  const readDetails = failure ? String(failure.cause) : "";
   return (
     <ReportingStateContext.Provider
       value={{
         ...reads,
-        refresh,
-        refreshFor,
-        answeredFor,
-        refreshing,
-        readDetails,
         running,
         failures,
         install,
-        recheck,
+        retryTarget,
       }}
     >
       {children}

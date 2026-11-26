@@ -128,6 +128,8 @@ async function startFreshHost({
       on.codex = true;
       return writeSettings();
     },
+    codexEntryConflicts: () =>
+      writeFile(join(codex, "config.toml"), '[mcp_servers.factory-runtime]\ncommand = "other"\n'),
     async codexInstallBlocked() {
       const skill = join(codex, "skills", "factory-block");
       await mkdir(skill, { recursive: true });
@@ -185,6 +187,7 @@ export function firstRunSetupFixture(
       /** T3 starts on this computer and writes its runtime file. */
       t3Starts: () => running().t3Starts(),
       codexTurnedOn: () => running().codexTurnedOn(),
+      codexEntryConflicts: () => running().codexEntryConflicts(),
       codexInstallBlocked: () => running().codexInstallBlocked(),
       grokTurnedOn: () => running().grokTurnedOn(),
       cursorProjectOverride: (enabled: boolean) => running().cursorProjectOverride(enabled),

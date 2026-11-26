@@ -126,6 +126,8 @@ const conflictReasons = [
   "config_unmanageable",
   "config_invalid",
   "config_unreadable",
+  "permission_denied",
+  "skill_unreadable",
   "skill_outdated",
 ] as const;
 const installWriteReasons = [

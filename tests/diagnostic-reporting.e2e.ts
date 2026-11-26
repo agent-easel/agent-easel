@@ -12,6 +12,19 @@ beforeEach(async ({ browser }) => {
 const recordAndRetry = (screen: Screen) =>
   screen.getByRole("button", "Record diagnostic log and try again").first();
 
+async function holdRecording(browser: Browser) {
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  await browser.route("**/api/settings/diagnostics", async (route) => {
+    if (route.request.method === "PUT") {
+      started.resolve();
+      await release.promise;
+    }
+    await route.continue();
+  });
+  return { started: started.promise, release: release.resolve };
+}
+
 async function holdSecondInstall(browser: Browser) {
   let release = () => {};
   const held = new Promise<void>((resolve) => {
@@ -90,4 +103,147 @@ test("a failed install in First-run setup is recorded by one click and its attem
     "diagnostic-reporting-first-run-viewer",
   );
   await expect(viewer.getByRole("button", "Show whole log")).toBeVisible();
+});
+
+test("Settings Check again records one explicit reporting check while ordinary list reads stay silent", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange
+  await fixture.diagnostics.hostRecords();
+  await app.open("/settings/agent-reporting");
+  const check = screen.getByRole("button", "Check again", { exact: true });
+  await expect(check).toBeEnabled();
+  assert.doesNotMatch(await exportedLog(app), /Check Agent reporting/);
+
+  // Act
+  await check.tap();
+
+  // Assert
+  await expect.poll(() => exportedLog(app)).toMatch(/Check Agent reporting/);
+});
+
+test("Settings can record and recover after only the reporting list read fails", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.route("**/api/reporting", (route) => route.abort());
+  await app.open("/settings/agent-reporting");
+  await expect(screen.getByText("Couldn’t check Agent reporting")).toBeVisible();
+  await app.screenshot("settings-reporting-read-failure");
+
+  // Act
+  await recordAndRetry(screen).tap();
+
+  // Assert
+  await expect(screen.getByRole("button", "View diagnostic log")).toBeVisible();
+  await expect(screen.getByRole("group", "Codex", { exact: true })).toBeVisible();
+});
+
+test("First-run can record and recover after only the reporting list read fails", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await fixture.firstRunSetup.fresh();
+  await browser.route("**/api/reporting", (route) => route.abort());
+  await fixture.firstRunSetup.hostConnects();
+  await app.open("/runs/new");
+  await expect(screen.getByText("Couldn’t check your harnesses")).toBeVisible({ timeout: 8000 });
+  await app.screenshot("first-run-reporting-read-failure");
+
+  // Act
+  await recordAndRetry(screen).tap();
+
+  // Assert
+  await expect(screen.getByRole("button", "View diagnostic log")).toBeVisible();
+  await expect(screen.getByRole("button", /^Install in/)).toBeEnabled();
+});
+
+test("First-run Check again records discovery when the host is already recording", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange
+  await fixture.firstRunSetup.fresh({ harnessesOn: false });
+  await fixture.firstRunSetup.hostConnects();
+  await app.open("/runs/new");
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toBeVisible({ timeout: 8000 });
+  await fixture.firstRunSetup.hostRecordsDiagnostics();
+
+  // Act
+  await screen.getByRole("button", "Check again", { exact: true }).tap();
+
+  // Assert
+  await expect.poll(() => exportedLog(app)).toMatch(/Check Agent reporting/);
+});
+
+test("a delayed recorded recheck cannot replace the newly eligible First-run harness or select stale attempts", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await fixture.firstRunSetup.fresh({ harnessesOn: false });
+  await fixture.firstRunSetup.hostConnects();
+  await app.open("/runs/new");
+  await expect(screen.getByText("Turn on a harness in T3 Code")).toBeVisible();
+  const captured = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  await browser.route("**/api/reporting/recheck", async (route) => {
+    const reply = await route.fetch();
+    const body = await reply.text();
+    captured.resolve();
+    await release.promise;
+    await route.fulfill({ status: reply.status, contentType: "application/json", body });
+  });
+  await recordAndRetry(screen).tap();
+  await captured.promise;
+  await fixture.firstRunSetup.codexTurnedOn();
+  const install = screen.getByRole("button", "Install in 1 harness");
+  await expect(install).toBeVisible({ timeout: 8000 });
+
+  // Act
+  release.resolve();
+
+  // Assert
+  await expect(install).toBeEnabled();
+  await expect(screen.getByRole("button", "View diagnostic log")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
+});
+
+test("a First-run install failure followed by a conflicting entry retries discovery", async ({
+  fixture,
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await fixture.firstRunSetup.fresh();
+  await fixture.firstRunSetup.codexInstallBlocked();
+  await fixture.firstRunSetup.hostConnects();
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Install in/).tap();
+  await expect(screen.getByText("Couldn’t install for Codex")).toBeVisible();
+  const recording = await holdRecording(browser);
+  await recordAndRetry(screen).tap();
+  await recording.started;
+  await fixture.firstRunSetup.codexEntryConflicts();
+  await fixture.firstRunSetup.grokTurnedOn();
+  await expect(screen.getByRole("group", "Grok", { exact: true })).toBeVisible({ timeout: 8000 });
+
+  // Act
+  recording.release();
+
+  // Assert
+  await screen.getByRole("button", "View diagnostic log").tap();
+  await expect(screen.getByRole("region", /^Check Agent reporting at /)).toBeVisible();
+  assert.doesNotMatch(await exportedLog(app), /Install in Codex/);
 });

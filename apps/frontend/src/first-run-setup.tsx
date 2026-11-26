@@ -195,6 +195,11 @@ function FirstRunSetupScreen({
           )}
         </li>
       </ol>
+      {retry.error && (
+        <ProblemCard tone="error" title="Couldn’t record the diagnostic log">
+          {retry.error}
+        </ProblemCard>
+      )}
       {ready && <ReadyStep reminder current={current} onCompleted={onCompleted} />}
     </GateScreen>
   );
@@ -378,9 +383,16 @@ function InstallStep({
   onCompleted: (setup: FirstRunSetup) => void;
   retry: DiagnosticRetry;
 }) {
-  const { targets, error, readDetails, refresh, recheck } = useReportingState();
-  const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
-  const recordedRecheck = <DiagnosticRetryAction retry={retry} recover={recheck} view />;
+  const { targets, error, readDetails, recheck } = useReportingState();
+  const checkAgain = () => void Promise.allSettled([recheck(), onCheckAgain()]);
+  const checkActions = (
+    <span className="inline-flex flex-wrap gap-x-3">
+      <TextLink disabled={retry.busy} onClick={checkAgain}>
+        Check again
+      </TextLink>
+      <DiagnosticRetryAction retry={retry} recover={recheck} view />
+    </span>
+  );
   // Discovery could not read T3's harnesses: turning one on in T3 would not help.
   const refusal = listed && targets?.find((target) => target.kind === "discovery-refused");
   const caption = !refusal && offInT3.length > 0 && (
@@ -398,7 +410,7 @@ function InstallStep({
         density="compact"
         title="Couldn’t check your harnesses"
         details={readDetails}
-        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+        action={checkActions}
       >
         Check that AgentEasel is running, then check again.
       </ProblemCard>
@@ -416,12 +428,7 @@ function InstallStep({
           tone="attention"
           density="compact"
           title="Couldn’t check your harnesses"
-          action={
-            <span className="inline-flex flex-wrap gap-x-3">
-              <TextLink onClick={checkAgain}>Check again</TextLink>
-              {recordedRecheck}
-            </span>
-          }
+          action={checkActions}
         >
           {refusal.message} Open AgentEasel to continue without reporting. Once this is fixed,
           install it from Settings → Agent reporting, or{" "}
@@ -437,12 +444,7 @@ function InstallStep({
         density="compact"
         title="Turn on a harness in T3 Code"
         details={targets?.find((target) => target.kind === "none-enabled")?.message}
-        action={
-          <span className="inline-flex flex-wrap gap-x-3">
-            <TextLink onClick={checkAgain}>Check again</TextLink>
-            {recordedRecheck}
-          </span>
-        }
+        action={checkActions}
       >
         None of the harnesses AgentEasel installs into is on in T3 Code. Turn one on in T3 Code’s
         settings, then check again.
@@ -475,7 +477,7 @@ function HarnessInstall({
   onCompleted: (setup: FirstRunSetup) => void;
   retry: DiagnosticRetry;
 }) {
-  const { running, failures, install, recheck } = useReportingState();
+  const { running, failures, install, retryTarget } = useReportingState();
   const pending = listed.filter(installable);
   const cardShown = listed.some(
     (target) => failures[target.id] || target.status === "needs-attention",
@@ -494,9 +496,7 @@ function HarnessInstall({
               <DiagnosticRetryAction
                 retry={retry}
                 disabled={running !== null}
-                recover={() =>
-                  installable(target) || failures[target.id] ? install([target]) : recheck()
-                }
+                recover={() => retryTarget(target)}
                 view
               />
             )

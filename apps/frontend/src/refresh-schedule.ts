@@ -53,24 +53,31 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
     outstanding = next;
   }
 
-  async function refresh(readOnce = read) {
+  async function runRead(readOnce: () => Promise<T>, propagateFailure: boolean) {
     const ticket = ++latest;
     const current = () => !closed && ticket === latest;
     settle(true);
-    await readOnce().then(
+    return readOnce().then(
       (value) => {
-        if (!current()) return;
+        if (!current()) return undefined;
         apply(value);
         settle(false);
         recovered();
+        return value;
       },
       (cause: unknown) => {
-        if (!current()) return;
+        if (!current()) return undefined;
         failing = true;
         settle(false);
         failed({ cause });
+        if (propagateFailure) throw cause;
+        return undefined;
       },
     );
+  }
+
+  async function refresh(readOnce = read) {
+    await runRead(readOnce, false);
   }
 
   /** Reads now and every `intervalMs` while the page is visible, and again on focus. */
@@ -99,6 +106,7 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
 
   return {
     refresh,
+    refreshWith: (readOnce: () => Promise<T>) => runRead(readOnce, true),
     watch,
     /** A newer answer, such as an action's, applied: drops reads in flight and the failure. */
     supersede: () => {
@@ -156,7 +164,13 @@ export function useRefreshSchedule<T>({
       watching ? schedule.current?.watch(intervalMs, documentPage, () => readWatch()) : undefined,
     [intervalMs, watching],
   );
-  const refresh = useCallback(async () => await schedule.current?.refresh(), []);
+  const refresh = useCallback(async () => {
+    await schedule.current?.refresh();
+  }, []);
+  const refreshWith = useCallback(
+    (read: () => Promise<T>) => schedule.current?.refreshWith(read),
+    [],
+  );
   const supersede = useCallback(() => schedule.current?.supersede(), []);
-  return { failure, pending, refresh, supersede };
+  return { failure, pending, refresh, refreshWith, supersede };
 }

@@ -147,8 +147,9 @@ function registeredVibe(
 async function skillMatches(path: string) {
   try {
     return (await readFile(path, "utf8")) === FACTORY_BLOCK_SKILL;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 /**
@@ -379,13 +380,14 @@ const openReportingInstallation = Effect.fn(function* (
     target: ReportingInstallation,
     paths: ReportingPaths,
     reason: ConflictReason,
+    file = target.path!,
   ) =>
     attempt.record({
       type: "conflict_check",
       outcome: "failed",
       driver: reportingHarnessName(target.provider),
       reason,
-      file: entryPath(paths, target, target.path!),
+      file: entryPath(paths, target, file),
     });
   const checkedConfig = (
     attempt: DiagnosticAttemptHandle,
@@ -463,16 +465,33 @@ const openReportingInstallation = Effect.fn(function* (
       ReportingInstallation,
       never
     > {
-      yield* boundary(() => access(dirname(target.path!), constants.R_OK | constants.W_OK));
+      const directory = dirname(target.path!);
+      yield* boundary(() => access(directory, constants.R_OK | constants.W_OK)).pipe(
+        Effect.tapError((error) =>
+          (error as NodeJS.ErrnoException).code === "ENOENT"
+            ? Effect.void
+            : failedCheck(
+                attempt,
+                target,
+                paths,
+                writeFailureReason(error) === "permission_denied"
+                  ? "permission_denied"
+                  : "config_unreadable",
+                directory,
+              ),
+        ),
+      );
       const { before, after } = yield* checkedConfig(attempt, paths, target, profile, false);
       if (after !== before) return withReportingInstallationActions(target);
-      if (
-        !(yield* boundary(() =>
-          skillMatches(harnessSkillPath(profile, target.path!, "factory-block")),
-        )) ||
-        !(yield* boundary(() => skillMatches(canonicalSkill)))
-      ) {
-        yield* failedCheck(attempt, target, paths, "skill_outdated");
+      for (const file of [
+        harnessSkillPath(profile, target.path!, "factory-block"),
+        canonicalSkill,
+      ]) {
+        const current = yield* boundary(() => skillMatches(file)).pipe(
+          Effect.tapError(() => failedCheck(attempt, target, paths, "skill_unreadable", file)),
+        );
+        if (current) continue;
+        yield* failedCheck(attempt, target, paths, "skill_outdated", file);
         throw new RepairableInstallationError(
           "AgentEasel Block skill missing or outdated. Repair the installation from this backend.",
         );

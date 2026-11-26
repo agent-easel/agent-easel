@@ -315,10 +315,11 @@ interface EnablementVerdict {
   readonly rule: EnablementRule;
 }
 
-function evaluateEnablement(
+const evaluateEnablement = Effect.fn(function* (
   settings: Record<string, unknown>,
   instances: Record<string, unknown>,
-): EnablementVerdict[] {
+  attempt: DiagnosticAttemptHandle = noDiagnosticAttempt,
+) {
   const projectEnabled = new Set(
     Object.values(field(settings, "projectSettingsOverrides") ?? {}).flatMap((overrides) =>
       Object.entries(field(overrides, "providerInstances") ?? {})
@@ -326,13 +327,27 @@ function evaluateEnablement(
         .map(([id]) => id),
     ),
   );
-  return Object.entries(instances).map(([id, instance]) => {
+  const verdicts: EnablementVerdict[] = Object.entries(instances).map(([id, instance]) => {
     const base = enabledInT3(instance);
     return projectEnabled.has(id) && !base.enabled
       ? { id, instance, enabled: true, rule: "project_enabled" }
       : { id, instance, ...base };
   });
-}
+  yield* Effect.forEach(
+    verdicts,
+    ({ id, instance, enabled, rule }) =>
+      attempt.record({
+        type: "enablement",
+        outcome: enabled ? "ok" : "skipped",
+        instance: attempt.hash(id),
+        driver: reportingHarnessName(reportingHarness(instance)),
+        enabled,
+        rule,
+      }),
+    { discard: true },
+  );
+  return verdicts;
+});
 
 /**
  * Reporting drivers with no instance T3 keeps on, by the same settings and enablement rule as
@@ -344,7 +359,9 @@ export async function firstRunReportingState(
   try {
     const { settings } = await readT3Settings(stateDirectory);
     const configured = configuredProviderInstances(settings);
-    const verdicts = evaluateEnablement(settings, hydrateProviderInstances(configured));
+    const verdicts = await Effect.runPromise(
+      evaluateEnablement(settings, hydrateProviderInstances(configured)),
+    );
     const enabled = verdicts
       .filter(({ enabled }) => enabled)
       .map(({ id, instance }): [string, unknown] => [id, instance])
@@ -583,20 +600,8 @@ const enabledLocalReportingInstances = Effect.fn(function* (
   );
   yield* read("settings", "ok", loaded.missing ? "settings_missing" : "read_ok");
   const instances = hydrateProviderInstances(configuredProviderInstances(loaded.settings));
-  const verdicts = evaluateEnablement(loaded.settings, instances);
-  yield* Effect.forEach(
-    verdicts.filter(({ instance }) => isReportingDriver(reportingHarness(instance))),
-    ({ id, instance, enabled, rule }) =>
-      attempt.record({
-        type: "enablement",
-        outcome: enabled ? "ok" : "skipped",
-        instance: attempt.hash(id),
-        driver: reportingHarnessName(reportingHarness(instance)),
-        enabled,
-        rule,
-      }),
-    { discard: true },
-  );
+  const verdicts = yield* evaluateEnablement(loaded.settings, instances, attempt);
+
   return {
     instances: verdicts
       .filter(({ enabled }) => enabled)

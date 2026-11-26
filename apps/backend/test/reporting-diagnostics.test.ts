@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { driverHomes } from "./support/reporting.ts";
+import { driverHomes, installFirstReportingTarget } from "./support/reporting.ts";
 import { throwingRecorder } from "./support/diagnostic-log.ts";
 
 const USER_NAME = "grzegorz.mandziak";
@@ -49,36 +49,77 @@ it("an exported discovery attempt names its verdicts but no username, raw path o
   expect(exported.value).not.toContain(await realpath(state));
 });
 
-it("installing into two homes returns one attempt per home, each named for its harness", async (context) => {
+it("discovery records enabled and disabled unsupported instances in evaluator order without disclosing their identities", async (context) => {
   // Arrange
-  const { factory, home } = await driverHomes(context, {
-    "codex-work": { driver: "codex", config: {} },
-    "claude-work": { driver: "claudeAgent", config: {} },
+  const { factory } = await driverHomes(context, {
+    "private-enabled": { driver: "private-driver", config: {} },
+    "private-disabled": { driver: "private-driver", config: { enabled: false } },
   });
-  await mkdir(join(home, ".codex"));
   assert((await factory.setDiagnosticRecording({ enabled: true })).ok);
-  const targets = await factory.getReportingInstallations();
-  assert(targets.ok);
 
   // Act
-  const codex = await factory.installReporting({ targetId: targets.value[0]!.id });
-  const claude = await factory.installReporting({ targetId: targets.value[1]!.id });
+  const checked = await factory.recheckReporting();
 
   // Assert
-  assert(codex.ok && claude.ok);
-  const attempts = [...codex.value.diagnosticAttempts!, ...claude.value.diagnosticAttempts!];
-  expect(new Set(attempts).size).toBe(2);
-  const page = await factory.listDiagnosticAttempts("", "", attempts.join(","));
+  assert(checked.ok);
+  const page = await factory.listDiagnosticAttempts(
+    "",
+    "",
+    checked.value.diagnosticAttempts!.join(","),
+  );
   assert(page.ok);
-  expect(page.value.attempts.map(({ operation, outcome }) => [operation, outcome])).toStrictEqual([
-    ["reporting_install", "ok"],
-    ["reporting_install", "ok"],
+  const entries = page.value.attempts[0]!.entries.map(({ entry }) => entry);
+  expect(entries.filter((entry) => entry.type === "enablement").slice(2, 4)).toMatchObject([
+    { driver: "unknown", enabled: true, rule: "instance_enabled" },
+    { driver: "unknown", enabled: false, rule: "config_disabled" },
   ]);
+  expect(JSON.stringify(entries)).not.toContain("private-");
+});
+
+it("a read-only configuration directory explains the permissions refusal in the recheck", async (context) => {
+  // Arrange
+  const { factory, home } = await recordedCodexHome(context);
+  const dir = join(home, ".codex");
+  await chmod(dir, 0o500);
+  context.onTestFinished(() => chmod(dir, 0o700));
+
+  // Act
+  const checked = await factory.recheckReporting();
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.installations[0]?.status).toBe("needs-attention");
   const exported = await factory.exportDiagnosticLog();
   assert(exported.ok);
-  expect(exported.value).toContain("Install in Codex");
-  expect(exported.value).toContain("Install in Claude");
-  expect(exported.value).toContain("Write Block skill");
+  expect(exported.value).toContain("permission_denied");
+});
+
+it("a refused required skill read identifies the affected copy in the recheck", async (context) => {
+  // Arrange
+  const { factory, home } = await recordedCodexHome(context);
+  await installFirstReportingTarget(factory);
+  const file = join(home, ".codex", "skills", "factory-block", "SKILL.md");
+  await chmod(file, 0o000);
+  context.onTestFinished(() => chmod(file, 0o600));
+
+  // Act
+  const checked = await factory.recheckReporting();
+
+  // Assert
+  assert(checked.ok);
+  const page = await factory.listDiagnosticAttempts(
+    "",
+    "",
+    checked.value.diagnosticAttempts!.join(","),
+  );
+  assert(page.ok);
+  expect(page.value.attempts[0]?.entries.map(({ entry }) => entry)).toContainEqual({
+    type: "conflict_check",
+    outcome: "failed",
+    driver: "codex",
+    reason: "skill_unreadable",
+    file: "<CODEX_HOME>/skills/factory-block/SKILL.md",
+  });
 });
 
 it("an unwritable skills folder fails the install as before when the recorder fails too", async (context) => {

@@ -19,7 +19,7 @@ import {
 } from "../reporting-state.tsx";
 
 export function RuntimeSettings() {
-  const { targets, refresh, error, readDetails, running, failures, install, recheck } =
+  const { targets, refresh, error, readDetails, running, failures, install, recheck, retryTarget } =
     useReportingState();
   const retry = useDiagnosticRetry();
   const [checking, setChecking] = useState(true);
@@ -66,7 +66,8 @@ export function RuntimeSettings() {
             disabled={busy}
             onClick={() => {
               setChecking(true);
-              void refresh().then(() => setChecking(false));
+              const done = () => setChecking(false);
+              void recheck().then(done, done);
             }}
           >
             Check again
@@ -80,7 +81,12 @@ export function RuntimeSettings() {
       }
     >
       {error && !checking && (
-        <ProblemCard tone="error" title="Couldn’t check Agent reporting" details={readDetails}>
+        <ProblemCard
+          tone="error"
+          title="Couldn’t check Agent reporting"
+          details={readDetails}
+          action={<DiagnosticRetryAction retry={retry} disabled={busy} recover={recheck} />}
+        >
           Check again in a moment. Runs already started aren’t affected.
         </ProblemCard>
       )}
@@ -104,7 +110,7 @@ export function RuntimeSettings() {
           secondary={pending.length > 0}
           instanceNames={instanceNames}
           install={install}
-          recheck={recheck}
+          retryTarget={retryTarget}
           retry={retry}
         />
       )}
@@ -134,7 +140,7 @@ function ReportingResults({
   secondary,
   instanceNames,
   install,
-  recheck,
+  retryTarget,
   retry,
 }: {
   targets: readonly ReportingInstallation[];
@@ -144,7 +150,7 @@ function ReportingResults({
   secondary: boolean;
   instanceNames: ReadonlyMap<string, string | null>;
   install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
-  recheck: () => Promise<readonly string[]>;
+  retryTarget: (target: ReportingInstallation) => Promise<readonly string[]>;
   retry: DiagnosticRetry;
 }) {
   if (!targets.length) return null;
@@ -176,9 +182,7 @@ function ReportingResults({
               <DiagnosticRetryAction
                 retry={retry}
                 disabled={busy}
-                recover={() =>
-                  installable(target) || failures[target.id] ? install([target]) : recheck()
-                }
+                recover={() => retryTarget(target)}
               />
             )
           }

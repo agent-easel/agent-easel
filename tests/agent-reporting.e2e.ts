@@ -142,6 +142,9 @@ test("the Agent reporting attention dot clears once every harness is installed",
   await browser.route("**/api/reporting", (route) =>
     route.fulfill({ json: { ok: true, value: targets } }),
   );
+  await browser.route("**/api/reporting/recheck", (route) =>
+    route.fulfill({ json: { ok: true, value: { installations: targets } } }),
+  );
   await app.open("/settings/agent-reporting");
   await expect(
     screen.getByRole("link", "Agent reporting, Needs attention", { exact: true }),
