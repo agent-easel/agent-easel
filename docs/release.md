@@ -83,7 +83,7 @@ GitHub Actions owns the production deployment at `https://agenteasel.app/`. The 
 
 The old `t3factory.app` domain is attached to the same project, and `vercel.json` permanently redirects every path on that host to `agenteasel.app`. Analytics batches that T3 Factory builds still send to `t3factory.app/ingest` are answered with that redirect, which those builds treat as a dropped batch.
 
-The product screenshots in `apps/landing/public/screens/` are dark-mode captures of the running application (1472×920, 16:10) taken against the isolated demo fixture. The hero is the exception: `run-detail.png` (1500×580) crops the Run header and canvas of the seeded `join-partial` Run, and `run-detail-mobile.png` (680×560) pans the same Run to Review results → Your decision for phone widths. `apps/landing/public/og-image.png` (1200×630) pairs the hero crop with the brand header. Refresh those assets in `apps/landing/public` when major product or UI changes land.
+The product screenshots in `apps/landing/public/screens/` are dark-mode captures of the running application (1472×920, 16:10) taken against the isolated demo fixture. The hero is the exception: `run-detail.png` (2880×1140, a 2× capture of a 1440 px wide Run pane) crops the Run header and canvas of the seeded `join-partial` Run, and `run-detail-mobile.png` (960×800, a 2× capture of a 480 px wide Run pane at 75% canvas zoom) shows the same Run's Review results → Your decision below the `md` breakpoint. `apps/landing/public/og-image.png` (1200×630) pairs the hero crop with the brand header. Refresh those assets in `apps/landing/public` when major product or UI changes land.
 
 #### Vercel setup
 

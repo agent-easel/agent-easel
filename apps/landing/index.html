@@ -28,7 +28,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="AgentEasel: Compose AI development workflows. Keep humans in the loop. Beside it, a Run detail screen where a Coder hands its work to a Code reviewer."
+      content="AgentEasel: Compose AI development workflows. Keep humans in the loop. Beside it, an AgentEasel Run canvas where Implement change branches into parallel Code review and Accessibility review Agents, which feed the Review results Join block before Your decision, a Human step."
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AgentEasel: compose AI development workflows" />
@@ -116,24 +116,27 @@
         <p class="mt-6 text-[13px] text-zinc-500">
           v%FACTORY_VERSION% · Apple Silicon · signed &amp; notarized .dmg · MIT licensed
         </p>
-        <div
-          class="mx-auto mt-20 max-w-[1200px] overflow-hidden rounded-xl border border-zinc-800 bg-[#0c0c0e] shadow-[0_24px_96px_rgb(99_102_242/0.18)]"
-        >
-          <picture>
-            <source
-              media="(max-width: 639px)"
-              srcset="/screens/run-detail-mobile.png"
-              width="680"
-              height="560"
-            />
+        <div class="mt-20 -mx-2 md:-mx-12">
+          <div
+            class="mx-auto max-w-[1200px] overflow-hidden rounded-xl border border-zinc-800 bg-[#0c0c0e] shadow-[0_24px_96px_rgb(99_102_242/0.18)]"
+          >
             <img
               src="/screens/run-detail.png"
-              width="1500"
-              height="580"
+              width="2880"
+              height="1140"
+              loading="lazy"
               alt="An AgentEasel Run in dark mode, with its header above the Run canvas: Implement change branches into parallel Code review and Accessibility review Agents, which feed the Review results Join block, followed by Your decision, a Human step."
-              class="block h-auto w-full"
+              class="hidden h-auto w-full md:block"
             />
-          </picture>
+            <img
+              src="/screens/run-detail-mobile.png"
+              width="960"
+              height="800"
+              loading="lazy"
+              alt="An AgentEasel Run in dark mode, with its header above the end of the Run canvas: the Review results Join block, waiting for 1 of 2 review sources, leads to Your decision, a Human step."
+              class="block h-auto w-full md:hidden"
+            />
+          </div>
         </div>
       </section>
 
