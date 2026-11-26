@@ -493,6 +493,7 @@ function HarnessInstall({
             (retry.offer || retry.attempts) && (
               <DiagnosticRetryAction
                 retry={retry}
+                disabled={running !== null}
                 recover={() =>
                   installable(target) || failures[target.id] ? install([target]) : recheck()
                 }
@@ -506,7 +507,7 @@ function HarnessInstall({
       <div className="flex items-start gap-3">
         {pending.length > 0 && (
           <MutationGate>
-            <Button disabled={running !== null} onClick={() => void install(pending)}>
+            <Button disabled={running !== null || retry.busy} onClick={() => void install(pending)}>
               {pending.length === 1
                 ? "Install in 1 harness"
                 : `Install in ${pending.length} harnesses`}

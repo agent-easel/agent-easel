@@ -128,13 +128,14 @@ export function createDiagnosticRetry(
 export function useDiagnosticRetry() {
   const [retry] = useState(() => createDiagnosticRetry());
   const attempts = useSyncExternalStore(retry.subscribe, retry.getSnapshot);
-  const status = useDiagnosticLogStatus();
-  const host = useClientScope() === "host";
   const [busy, setBusy] = useState(false);
+  const status = useDiagnosticLogStatus(busy);
+  const host = useClientScope() === "host";
   const [error, setError] = useState("");
   return {
     attempts: attempts?.length ? attempts : null,
     offer: host && !busy && status !== null && !status.enabled,
+    busy,
     error,
     start(recover: () => Promise<readonly string[]>) {
       setBusy(true);

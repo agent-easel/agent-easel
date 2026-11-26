@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
+import type { Browser } from "@e2e-dev/web";
 import { exportedLog, openInstallViewer } from "./support/diagnostic-log.ts";
 
 beforeEach(async ({ browser }) => {
@@ -11,6 +12,16 @@ beforeEach(async ({ browser }) => {
 const recordAndRetry = (screen: Screen) =>
   screen.getByRole("button", "Record diagnostic log and try again").first();
 
+async function holdSecondInstall(browser: Browser) {
+  const release = Promise.withResolvers<void>();
+  let requested = 0;
+  await browser.route("**/api/reporting/install", async (route) => {
+    if (++requested === 2) await release.promise;
+    await route.continue();
+  });
+  return release.resolve;
+}
+
 test("a failed Codex install in Agent reporting is recorded by one click and its attempt opens from the pane header", async ({
   fixture,
   app,
@@ -20,9 +31,12 @@ test("a failed Codex install in Agent reporting is recorded by one click and its
   // Arrange
   await fixture.reporting.blockRequiredSkillWrite();
   await app.open("/settings/agent-reporting");
+  const finishInstallAll = await holdSecondInstall(browser);
   await screen.getByRole("button", "Install all", { exact: true }).tap();
   await expect(screen.getByText("Couldn’t install for Codex", { exact: true })).toBeVisible();
-  await expect(recordAndRetry(screen)).toBeVisible();
+  await expect(recordAndRetry(screen)).toBeDisabled();
+  finishInstallAll();
+  await expect(recordAndRetry(screen)).toBeEnabled();
   await app.screenshot("diagnostic-reporting-problem-card");
 
   // Act

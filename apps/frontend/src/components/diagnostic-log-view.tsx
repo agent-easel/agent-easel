@@ -227,16 +227,20 @@ export function DiagnosticRetryAction({
   retry,
   recover,
   view = false,
+  disabled = false,
 }: {
   retry: DiagnosticRetry;
   recover: () => Promise<readonly string[]>;
   view?: boolean;
+  disabled?: boolean;
 }) {
   if (retry.attempts) return view ? <DiagnosticLogViewer attempts={retry.attempts} /> : null;
   if (!retry.offer) return null;
   return (
     <MutationGate>
-      <TextLink onClick={() => retry.start(recover)}>Record diagnostic log and try again</TextLink>
+      <TextLink disabled={disabled} onClick={() => retry.start(recover)}>
+        Record diagnostic log and try again
+      </TextLink>
     </MutationGate>
   );
 }

@@ -53,7 +53,7 @@ export function RuntimeSettings() {
   const needsAction = group.filter(
     (target) => targetNeedsAttention(target) || failures[target.id],
   ).length;
-  const busy = checking || running !== null;
+  const busy = checking || running !== null || retry.busy;
   return (
     <SettingsPage
       title="Agent reporting"
@@ -175,6 +175,7 @@ function ReportingResults({
             retry.offer && (
               <DiagnosticRetryAction
                 retry={retry}
+                disabled={busy}
                 recover={() =>
                   installable(target) || failures[target.id] ? install([target]) : recheck()
                 }
