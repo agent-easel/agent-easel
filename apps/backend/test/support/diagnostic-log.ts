@@ -111,6 +111,22 @@ export const entriesAtCapacity = (sql: SqlClient.SqlClient) =>
       SELECT ${id}, ${at}, ${entry} FROM filler`;
   });
 
+const diagnosticWrites = {
+  step: "BEFORE INSERT ON diagnostic_entries",
+  outcome: "BEFORE UPDATE OF outcome ON diagnostic_attempts",
+};
+
+export const diagnosticWriteRefused = (
+  sql: SqlClient.SqlClient,
+  write: keyof typeof diagnosticWrites,
+) =>
+  Effect.gen(function* () {
+    yield* sql.unsafe(
+      `CREATE TRIGGER refused_diagnostic_write ${diagnosticWrites[write]} BEGIN SELECT RAISE(ABORT, 'storage refused'); END`,
+    );
+    return sql`DROP TRIGGER refused_diagnostic_write`;
+  });
+
 export function diagnosticStateMissing(databasePath: string) {
   using database = new DatabaseSync(databasePath);
   database.exec("DELETE FROM diagnostic_log_state");

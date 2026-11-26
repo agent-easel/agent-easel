@@ -13,7 +13,7 @@ import {
   diagnosticPath,
   validateDiagnosticEntry,
 } from "@agent-easel/domain-validation";
-import type { DiagnosticLog } from "../src/diagnostic-log.ts";
+import type { DiagnosticAttemptHandle, DiagnosticLog } from "../src/diagnostic-log.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
@@ -22,6 +22,7 @@ import {
   diagnosticPruneRefused,
   diagnosticStateMissing,
   diagnosticStore,
+  diagnosticWriteRefused,
   entriesAtCapacity,
   projectStorageRefused,
   recordingConnection,
@@ -909,3 +910,208 @@ it.effect(
       expect(page.value.attempts[0]?.entries).toHaveLength(DIAGNOSTIC_ENTRY_LIMIT);
     }),
 );
+
+const outage: DiagnosticEntry = {
+  type: "t3_connection",
+  outcome: "failed",
+  host: "loopback",
+  reason: "t3_unavailable",
+};
+const connectionVerdicts = {
+  outage: { step: outage, outcome: "failed" },
+  recovery: { step: connected, outcome: "ok" },
+} as const;
+type ConnectionVerdict = (typeof connectionVerdicts)[keyof typeof connectionVerdicts];
+const verdictBefore = { outage: connectionVerdicts.recovery, recovery: connectionVerdicts.outage };
+const connectionChecks = {
+  explicit: (log: DiagnosticLog) => log.attempt("t3_connection"),
+  scheduled: (log: DiagnosticLog) => log.changeAttempt("t3_connection"),
+};
+
+const observedConnection = (
+  check: Effect.Effect<DiagnosticAttemptHandle>,
+  verdict: ConnectionVerdict,
+) =>
+  Effect.gen(function* () {
+    const attempt = yield* check;
+    yield* attempt.record(verdict.step);
+    yield* attempt.finish(verdict.outcome);
+  });
+
+for (const [transition, verdict] of Object.entries(connectionVerdicts)) {
+  for (const [source, check] of Object.entries(connectionChecks)) {
+    for (const write of ["step", "outcome"] as const) {
+      it.effect(
+        `a scheduled check records the ${transition} after storage refused the ${write} of the ${source} check that saw it`,
+        (context) =>
+          Effect.gen(function* () {
+            // Arrange
+            const { open, sql } = yield* diagnosticStore(context);
+            const log = yield* open;
+            yield* log.setDiagnosticRecording({ enabled: true });
+            yield* observedConnection(
+              log.changeAttempt("t3_connection"),
+              verdictBefore[transition as keyof typeof verdictBefore],
+            );
+            yield* TestClock.adjust(1000);
+            const restore = yield* diagnosticWriteRefused(sql, write);
+            yield* observedConnection(check(log), verdict);
+            yield* restore;
+            yield* TestClock.adjust(1000);
+            const later = yield* log.changeAttempt("t3_connection");
+            yield* later.record(verdict.step);
+
+            // Act
+            yield* later.finish(verdict.outcome);
+
+            // Assert
+            const page = yield* log.listDiagnosticAttempts("", "", "");
+            assert(page.ok);
+            expect(page.value.attempts[0]).toMatchObject({
+              startedAt: "1970-01-01T00:00:02.000Z",
+              outcome: verdict.outcome,
+              entries: [{ entry: verdict.step }],
+            });
+          }),
+      );
+    }
+  }
+}
+
+it.effect(
+  "a scheduled check records the connection after the explicit check's attempt was evicted before it finished",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open, sql } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const explicit = yield* log.attempt("t3_connection");
+      yield* explicit.record(connected);
+      yield* entriesAtCapacity(sql);
+      const other = yield* log.attempt("t3_detection");
+      yield* other.record(installTarget);
+      yield* explicit.finish("ok");
+      yield* TestClock.adjust(1000);
+      const later = yield* log.changeAttempt("t3_connection");
+      yield* later.record(connected);
+
+      // Act
+      yield* later.finish("ok");
+
+      // Assert
+      const page = yield* log.listDiagnosticAttempts("", "", "");
+      assert(page.ok);
+      expect(page.value.attempts[0]).toMatchObject({
+        operation: "t3_connection",
+        startedAt: "1970-01-01T00:00:01.000Z",
+        outcome: "ok",
+        entries: [{ entry: connected }],
+      });
+    }),
+);
+
+it.effect(
+  "a scheduled check records the connection after an overlapping explicit check could not store its outcome",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open, sql } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const scheduled = yield* log.changeAttempt("t3_connection");
+      yield* scheduled.record(connected);
+      const explicit = yield* log.attempt("t3_connection");
+      yield* explicit.record(connected);
+      yield* scheduled.finish("ok");
+      const restore = yield* diagnosticWriteRefused(sql, "outcome");
+      yield* explicit.finish("ok");
+      yield* restore;
+      yield* TestClock.adjust(1000);
+      const later = yield* log.changeAttempt("t3_connection");
+      yield* later.record(connected);
+
+      // Act
+      yield* later.finish("ok");
+
+      // Assert
+      const page = yield* log.listDiagnosticAttempts("", "", "");
+      assert(page.ok);
+      expect(page.value.attempts[0]).toMatchObject({
+        startedAt: "1970-01-01T00:00:01.000Z",
+        outcome: "ok",
+        entries: [{ entry: connected }],
+      });
+    }),
+);
+
+for (const [boundary, invalidate] of Object.entries(recordingBoundaries)) {
+  it.effect(
+    `a scheduled check records an unchanged connection again in the recording generation after ${boundary}`,
+    (context) =>
+      Effect.gen(function* () {
+        // Arrange
+        const { open } = yield* diagnosticStore(context);
+        const log = yield* open;
+        yield* log.setDiagnosticRecording({ enabled: true });
+        yield* observedConnection(log.changeAttempt("t3_connection"), connectionVerdicts.recovery);
+        yield* invalidate(log);
+        yield* TestClock.adjust(1000);
+        yield* log.setDiagnosticRecording({ enabled: true });
+        const later = yield* log.changeAttempt("t3_connection");
+        yield* later.record(connected);
+
+        // Act
+        yield* later.finish("ok");
+
+        // Assert
+        const page = yield* log.listDiagnosticAttempts("", "", "");
+        assert(page.ok);
+        expect(page.value.attempts[0]).toMatchObject({
+          operation: "t3_connection",
+          outcome: "ok",
+          entries: [{ entry: connected }],
+        });
+        expect(page.value.attempts[0]?.startedAt).not.toBe("1970-01-01T00:00:00.000Z");
+      }),
+  );
+}
+
+const cyclicStep: Record<string, unknown> = { ...connected };
+cyclicStep.self = cyclicStep;
+const refusedSteps = {
+  bigint: { ...connected, extra: 1n },
+  cyclic: cyclicStep,
+};
+const attemptsWithSteps = {
+  "an explicit connection": connectionChecks.explicit,
+  "a scheduled connection": connectionChecks.scheduled,
+  "a reporting": (log: DiagnosticLog) => log.attempt("reporting_recheck"),
+};
+
+for (const [kind, step] of Object.entries(refusedSteps)) {
+  for (const [source, check] of Object.entries(attemptsWithSteps)) {
+    it.effect(
+      `${source} attempt stores its outcome after its step carrying a ${kind} field was refused`,
+      (context) =>
+        Effect.gen(function* () {
+          // Arrange
+          const { open } = yield* diagnosticStore(context);
+          const log = yield* open;
+          yield* log.setDiagnosticRecording({ enabled: true });
+          const attempt = yield* check(log);
+          yield* attempt.record(step as unknown as DiagnosticEntry);
+
+          // Act
+          yield* attempt.finish("ok");
+
+          // Assert
+          expect(yield* log.listDiagnosticAttempts("", "", "")).toMatchObject({
+            ok: true,
+            value: { attempts: [{ outcome: "ok", entries: [] }] },
+          });
+          expect(yield* log.getDiagnosticLog()).toMatchObject({ ok: true, value: { dropped: 1 } });
+        }),
+    );
+  }
+}
