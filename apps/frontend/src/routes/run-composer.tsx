@@ -55,6 +55,8 @@ import {
 } from "../components/prompt-images.tsx";
 import { PromptEditor, type PromptEditorHandle } from "../components/prompt-editor.tsx";
 import { cn } from "../lib/utils.ts";
+import { useClientScope } from "../client-scope.ts";
+import { useDiagnosticLog } from "../diagnostic-log.ts";
 
 /** A Flow launches when its captured Agents and graph are ready. */
 function flowCanLaunch(flow: FlowDraft) {
@@ -485,7 +487,33 @@ function CauseLink({ cause }: { cause: StartCause }) {
   );
 }
 
-function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
+function RecordStartDiagnostics() {
+  const log = useDiagnosticLog([]);
+  if (log.view?.status.enabled !== false) return null;
+  return (
+    <>
+      <MutationGate>
+        <TextLink disabled={log.busy} onClick={() => void log.setRecording(true)}>
+          Record diagnostic log
+        </TextLink>
+      </MutationGate>
+      {log.error && (
+        <span role="status" className="basis-full">
+          {log.error}
+        </span>
+      )}
+    </>
+  );
+}
+
+function StartCauseList({
+  causes,
+  readinessRejected,
+}: {
+  causes: readonly StartCause[];
+  readinessRejected: boolean;
+}) {
+  const canRecord = useClientScope() === "host" && readinessRejected;
   return (
     <ul aria-label="Start blockers" className="grid gap-1">
       {causes.map((cause, index) => (
@@ -493,8 +521,11 @@ function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
           key={`${cause.destination}:${cause.message}:${index}`}
           className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 break-words"
         >
-          <span>{cause.message}</span>
+          <span className={canRecord && index === 0 ? "basis-full" : undefined}>
+            {cause.message}
+          </span>
           <CauseLink cause={cause} />
+          {canRecord && index === 0 && <RecordStartDiagnostics />}
         </li>
       ))}
     </ul>
@@ -650,7 +681,9 @@ function outcomeLaunchNotice(model: Composer) {
         density="compact"
         tone="error"
         title="Start was not accepted"
-        action={<StartCauseList causes={card.causes} />}
+        action={
+          <StartCauseList causes={card.causes} readinessRejected={draft.startReadinessRejected} />
+        }
       >
         No Run was created.
       </ProblemCard>

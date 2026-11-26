@@ -7,6 +7,7 @@ import type {
   DiagnosticStepOutcome,
   Result,
 } from "@agent-easel/contracts";
+import { diagnosticStartReasons } from "@agent-easel/contracts";
 
 export const DIAGNOSTIC_RECORDING_MS = 24 * 60 * 60 * 1000;
 export const DIAGNOSTIC_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -63,6 +64,10 @@ const host = oneOf("loopback", "non-loopback");
 const steps: readonly DiagnosticStep[] = ["backend_start", "t3_detection", "start_preconditions"];
 
 const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, FieldCheck> } = {
+  start_preconditions: {
+    outcome: oneOf("ok", "failed"),
+    reason: oneOf("ready", ...diagnosticStartReasons),
+  },
   backend_start: {
     outcome: oneOf("ok"),
     applicationVersion: version,
@@ -109,10 +114,14 @@ export function validateDiagnosticEntry(input: unknown): Result<DiagnosticEntry>
     ([key, check]) => !Object.hasOwn(fields, key) || !check(fields[key]),
   );
   if (invalid !== undefined) return refusal(`A ${type} entry needs a valid ${invalid[0]}.`);
+  if (type === "start_preconditions" && (fields.outcome === "ok") !== (fields.reason === "ready"))
+    return refusal("A Start readiness reason must match the verdict.");
   return { ok: true, value: input as DiagnosticEntry };
 }
 
 const operationNames: Record<DiagnosticOperation, string> = {
+  start: "Start",
+  start_preflight: "Start preflight",
   backend_start: "Start backend",
   t3_detection: "Detect T3 Code",
 };
@@ -138,6 +147,13 @@ const joined = (...parts: readonly (string | null)[]) =>
 
 export function describeDiagnosticEntry(entry: DiagnosticEntry): DiagnosticStepLine {
   switch (entry.type) {
+    case "start_preconditions":
+      return {
+        outcome: entry.outcome,
+        name: "Start readiness",
+        detail: null,
+        reason: entry.reason,
+      };
     case "backend_start":
       return {
         outcome: entry.outcome,

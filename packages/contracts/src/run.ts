@@ -3,6 +3,7 @@ import type { AgentExecutionSettings, AgentModelOptionValue, CapturedAgent } fro
 import type { FlowDraft } from "./flow.ts";
 import type { FactoryProject } from "./project.ts";
 import { operation, operationPath } from "./operation.ts";
+import type { OperationError } from "./result.ts";
 
 export interface RunImageInfo {
   readonly sha256: string;
@@ -122,6 +123,10 @@ export interface UpdateRunTitleSettingInput {
   readonly enabled: boolean;
   readonly model: RunTitleModel | null;
 }
+export interface StartReadinessRejection extends OperationError {
+  readonly startReadinessRejected: true;
+}
+
 export interface StartRunInput {
   readonly confirmCompletedIssues?: boolean;
   /** Also the Run's navigation `creationKey`. */

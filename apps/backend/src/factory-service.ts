@@ -441,6 +441,7 @@ export const makeFactoryService = (
           changes,
           images,
           runTitles,
+          diagnostics.attempt,
         );
         yield* runner.initialize();
         // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.

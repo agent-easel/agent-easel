@@ -25,6 +25,8 @@ import { ProblemCard } from "./problem-card.tsx";
 import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
 const succeeded: Record<DiagnosticOperation, string> = {
+  start: "Ready",
+  start_preflight: "Ready",
   backend_start: "Started",
   t3_detection: "Found",
 };

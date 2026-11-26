@@ -1,6 +1,8 @@
 import { operation } from "./operation.ts";
 
-export type DiagnosticOperation = "backend_start" | "t3_detection";
+export type DiagnosticStartOperation = "start" | "start_preflight";
+
+export type DiagnosticOperation = DiagnosticStartOperation | "backend_start" | "t3_detection";
 
 export type DiagnosticStep = "backend_start" | "t3_detection" | "start_preconditions";
 
@@ -18,7 +20,48 @@ export type T3DetectionReason =
   | "runtime_origin_invalid"
   | "runtime_endpoint_refused";
 
+export const diagnosticStartReasons = [
+  "project_connection",
+  "project_unavailable",
+  "flow_project_mismatch",
+  "flow_unavailable",
+  "flow_not_ready",
+  "subflow_revision_unavailable",
+  "workspace_remote_host",
+  "workspace_ref_unreadable",
+  "workspace_default_branch_missing",
+  "workspace_ref_missing",
+  "attachments_unsupported",
+  "launch_unsupported",
+  "fresh_context_unsupported",
+  "agent_unavailable",
+  "agent_model_required",
+  "agent_readiness",
+  "connection_unavailable",
+  "capabilities_unavailable",
+  "environment_unsupported",
+  "harness_unsupported",
+  "settings_unavailable",
+  "contract_missing",
+  "runtime_unavailable",
+  "reporting_installation",
+  "reporting_unsupported",
+  "readiness_blocked",
+] as const;
+
+export type DiagnosticStartReason = (typeof diagnosticStartReasons)[number];
+
 export type DiagnosticEntry =
+  | {
+      readonly type: "start_preconditions";
+      readonly outcome: "ok";
+      readonly reason: "ready";
+    }
+  | {
+      readonly type: "start_preconditions";
+      readonly outcome: "failed";
+      readonly reason: DiagnosticStartReason;
+    }
   | {
       readonly type: "backend_start";
       readonly outcome: "ok";

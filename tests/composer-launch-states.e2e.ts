@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, test } from "./support/test.ts";
-import { describe, expect } from "e2e";
+import { describe, expect, type Screen } from "e2e";
 import {
   blockOnModelLessLaterReview,
   fillReadyComposer,
@@ -118,6 +118,17 @@ test("an unconfirmed Start keeps an Idle row and does not call the outcome Unkno
   await app.screenshot("after-outcome-unknown");
 });
 
+const startButton = (screen: Screen) => screen.getByRole("button", "Start", { exact: true });
+const recordDiagnostics = (screen: Screen) =>
+  screen.getByRole("button", "Record diagnostic log", { exact: true });
+
+async function expectReportingRejection(screen: Screen) {
+  await expect(screen.getByRole("alert")).toContainText("No Run was created.");
+  await expect(
+    screen.getByRole("link", "Open Settings → Agent reporting", { exact: true }).first(),
+  ).toBeVisible();
+}
+
 test("a rejected Start shows one row per cause and only says that no Run was created", async ({
   fixture,
   app,
@@ -125,14 +136,84 @@ test("a rejected Start shows one row per cause and only says that no Run was cre
 }) => {
   await openReadyComposer(app, screen, "Reject this Start");
   await fixture.reporting.breakRequiredSkill();
-  await screen.getByRole("button", "Start", { exact: true }).tap();
-  await expect(screen.getByRole("alert")).toContainText("No Run was created.");
+  await startButton(screen).tap();
+  await expectReportingRejection(screen);
   await expect(screen.getByText(/Your draft is kept. Fix every listed blocker/)).toHaveCount(0);
   await expect(screen.getByRole("list", "Start blockers")).toBeVisible();
-  await expect(
-    screen.getByRole("link", "Open Settings → Agent reporting", { exact: true }).first(),
-  ).toBeVisible();
   await app.screenshot("after-start-rejected");
+});
+
+test("recording from the rejected Start card leaves the next Start to the user", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  let starts = 0;
+  await browser.route("**/api/runs", (route) => {
+    starts += Number(route.request.method === "POST");
+    return route.continue();
+  });
+  await openReadyComposer(app, screen, "Capture the reporting blocker");
+  await fixture.reporting.breakRequiredSkill();
+  const start = startButton(screen);
+  await start.tap();
+  const record = recordDiagnostics(screen);
+  await expect(record).toBeVisible();
+
+  // Act
+  await record.tap();
+
+  // Assert
+  await expect(record).toHaveCount(0);
+  await expect(start).toBeEnabled();
+  await expectReportingRejection(screen);
+  const status = await fetch(new URL("/api/settings/diagnostics", app.baseUrl));
+  expect(await status.json()).toMatchObject({ ok: true, value: { enabled: true } });
+  const exported = await fetch(new URL("/api/settings/diagnostics/export", app.baseUrl));
+  expect(await exported.text()).not.toContain("### Start ·");
+  expect(starts).toBe(1);
+  await app.screenshot("start-rejected-recording-enabled");
+});
+
+test("a rejected Start while recording exports the reporting blocker and omits the recording action", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange
+  await fixture.diagnostics.hostRecords();
+  await openReadyComposer(app, screen, "Capture the next Start");
+  await fixture.reporting.breakRequiredSkill();
+
+  // Act
+  await startButton(screen).tap();
+
+  // Assert
+  await expectReportingRejection(screen);
+  await expect(recordDiagnostics(screen)).toHaveCount(0);
+  const exported = await fetch(new URL("/api/settings/diagnostics/export", app.baseUrl));
+  expect(await exported.text()).toMatch(/### Start · .* UTC · failed[\s\S]*reporting_installation/);
+});
+
+test("an approved device can see a rejected Start's next step while recording is off", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange
+  await openRemoteBrowser(app);
+  await openApproved(app, "/runs/new");
+  await fillReadyComposer(screen, "Diagnose a remote Start rejection");
+  await fixture.reporting.breakRequiredSkill();
+
+  // Act
+  await startButton(screen).tap();
+
+  // Assert
+  await expectReportingRejection(screen);
+  await expect(recordDiagnostics(screen)).toHaveCount(0);
 });
 
 describe("AgentEasel becomes unavailable", () => {

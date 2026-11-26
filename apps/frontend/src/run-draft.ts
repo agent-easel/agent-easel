@@ -93,6 +93,7 @@ interface RunDraft {
   error: string;
   remedy: StartRemedy;
   issues: readonly ValidationIssue[];
+  startReadinessRejected: boolean;
   saveFailed: boolean;
 }
 
@@ -337,6 +338,7 @@ export function createRunDraft(
   let error = "";
   let remedy: StartRemedy = "studio";
   let issues: readonly ValidationIssue[] = [];
+  let startReadinessRejected = false;
   let saveFailed = false;
   /** The owners of the latest current delivery's Flows by id; absent while choices are not current. */
   let currentOwners: ReadonlyMap<string, string | null> | undefined;
@@ -358,6 +360,7 @@ export function createRunDraft(
       error,
       remedy,
       issues,
+      startReadinessRejected,
       saveFailed,
     };
   }
@@ -421,6 +424,7 @@ export function createRunDraft(
     opening += 1;
     currentId = saved?.id;
     issues = [];
+    startReadinessRejected = false;
     error = saved?.submission && !inFlight.has(saved.id) ? unknownOutcome : "";
     imageRejections = [];
     if (saved) current = composition(saved);
@@ -511,6 +515,7 @@ export function createRunDraft(
       current = { ...current, flowId: "" };
     error = "";
     issues = [];
+    startReadinessRejected = false;
     imageRejections = [];
     if (change.projectId !== undefined || change.flowId !== undefined) {
       rememberChoice("project", current.projectId);
@@ -588,6 +593,7 @@ export function createRunDraft(
       current = { ...current, segments: [], images: [] };
       error = "";
       issues = [];
+      startReadinessRejected = false;
       imageRejections = [];
     }
     removeDraft(server, id);
@@ -602,6 +608,9 @@ export function createRunDraft(
     } else if (confirmedRejection(failure)) {
       error = failure.message;
       issues = failure.detail.issues;
+      startReadinessRejected =
+        "startReadinessRejected" in failure.detail &&
+        failure.detail.startReadinessRejected === true;
       remedy = failure.detail.issues.some((issue) => issue.code === "reporting_installation")
         ? "reporting"
         : "studio";
@@ -639,6 +648,7 @@ export function createRunDraft(
     }));
     error = "";
     issues = [];
+    startReadinessRejected = false;
     publish();
     let run;
     try {
