@@ -134,3 +134,7 @@ export function projectStorageRefused(databasePath: string) {
     database.close();
   };
 }
+
+export const afterScheduledChecks = (factory: {
+  readonly listProjects: () => Effect.Effect<unknown, unknown>;
+}) => factory.listProjects();
