@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { versions } from "node:process";
 import { dirname, join } from "node:path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -9,6 +10,8 @@ import type { FactoryOperations, OperationError, Result, RunDetail } from "@agen
 import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";
+import { diagnosticPath, diagnosticVersion } from "@agent-easel/domain-validation";
+import { makeDiagnosticLog } from "./diagnostic-log.ts";
 import { makeFirstRunSetup } from "./first-run-setup.ts";
 import { makeProjects } from "./projects.ts";
 import { makeDefinitions } from "./definitions.ts";
@@ -156,7 +159,19 @@ export const makeFactoryService = (
       ),
     );
     const reporting = Context.get(reportingContext, ReportingInstaller.ReportingInstaller);
-    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
+    const serverId = yield* clients.getServerId();
+    if (!serverId.ok) return yield* Effect.die(serverId.error);
+    const diagnostics = yield* makeDiagnosticLog(
+      {
+        applicationVersion: options.applicationVersion,
+        serverId: serverId.value,
+        connection: connection.getConnection,
+        installations: reporting.getReportingInstallations,
+      },
+      options.diagnosticRecorder,
+    );
+    const backendStart = yield* diagnostics.attempt("backend_start");
+    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory, diagnostics);
     const setupContext = yield* Layer.build(
       RuntimeSetup.RuntimeSetupLayer(
         {
@@ -350,6 +365,12 @@ export const makeFactoryService = (
       recheckConnection: () => connection.recheckConnection(),
       authorizeConnection: () => connection.authorizeConnection(),
       openConnectionAuthorization: () => connection.openConnectionAuthorization(),
+      getDiagnosticLog: () => diagnostics.getDiagnosticLog(),
+      setDiagnosticRecording: (input) => diagnostics.setDiagnosticRecording(input),
+      deleteDiagnosticLog: () => diagnostics.deleteDiagnosticLog(),
+      listDiagnosticAttempts: (cursor, limit, ids) =>
+        diagnostics.listDiagnosticAttempts(cursor, limit, ids),
+      exportDiagnosticLog: () => diagnostics.exportDiagnosticLog(),
       getFirstRunSetup: () => firstRunSetup.getFirstRunSetup(),
       completeFirstRunSetup: () => firstRunSetup.completeFirstRunSetup(),
       requestClientAccess: (input) => clients.requestClientAccess(input),
@@ -404,27 +425,43 @@ export const makeFactoryService = (
             .pipe(Effect.catchTag("SqlError", () => Effect.fail(liveReadError))),
       ),
     };
-    runner = yield* makeRunner(
-      factory,
-      connection.snapshots,
-      projects.refreshProjects,
-      t3.threads,
-      git,
-      github,
-      owner,
-      intervalMs,
-      (projectId, agent, snapshot) => setup.recheckAgent(projectId, agent, snapshot),
-      changes,
-      images,
-      runTitles,
+    yield* backendStart.guard(
+      "backend_start",
+      Effect.gen(function* () {
+        runner = yield* makeRunner(
+          factory,
+          connection.snapshots,
+          projects.refreshProjects,
+          t3.threads,
+          git,
+          github,
+          owner,
+          intervalMs,
+          (projectId, agent, snapshot) => setup.recheckAgent(projectId, agent, snapshot),
+          changes,
+          images,
+          runTitles,
+        );
+        yield* runner.initialize();
+        // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
+        yield* triggers.startSchedule;
+        // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
+        yield* chatActions.recover;
+        // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
+        yield* Effect.forkScoped(reportCapture.run);
+        yield* Effect.forkScoped(runUpdates.run);
+      }),
     );
-    yield* runner.initialize();
-    // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
-    yield* triggers.startSchedule;
-    // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
-    yield* chatActions.recover;
-    // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
-    yield* Effect.forkScoped(reportCapture.run);
-    yield* Effect.forkScoped(runUpdates.run);
+    yield* backendStart.record({
+      type: "backend_start",
+      outcome: "ok",
+      applicationVersion: diagnosticVersion(options.applicationVersion ?? "source"),
+      mode: options.applicationVersion ? "desktop" : "source",
+      nodeVersion: diagnosticVersion(versions.node),
+      dataHome: diagnosticPath(dirname(options.databasePath), [
+        { root: homedir(), placeholder: "~" },
+      ]),
+    });
+    yield* backendStart.finish("ok");
     return factory;
   });

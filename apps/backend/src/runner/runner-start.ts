@@ -51,6 +51,7 @@ import { isLocalEndpoint } from "../endpoint-local.ts";
 import { now } from "../time.ts";
 import { workerPromptText, type RunImages } from "../run-images.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
+import { noDiagnosticAttempt, type DiagnosticAttemptHandle } from "../diagnostic-log.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
   readonly triggerIssue?: StartIssue;
@@ -460,7 +461,7 @@ export function openRunnerStart(
       const snapshot = yield* freshSnapshot();
       return yield* Effect.all(
         [
-          startPreconditions(input, prompt.images.length, snapshot),
+          startPreconditions(input, prompt.images.length, snapshot, noDiagnosticAttempt),
           planTitleGeneration({ titleProvenance: input.titleProvenance, prompt }, snapshot),
         ],
         { concurrency: "unbounded" },
@@ -472,10 +473,11 @@ export function openRunnerStart(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
     snapshot: T3ContractSnapshot,
+    attempt: DiagnosticAttemptHandle,
   ) {
     return Effect.gen(function* () {
       yield* refreshProjects();
-      return yield* launchPreconditions(input, imageCount, snapshot);
+      return yield* launchPreconditions(input, imageCount, snapshot, attempt);
     });
   }
   /**
@@ -485,13 +487,23 @@ export function openRunnerStart(
    */
   function startBlockers(projectId: string, flowId: string) {
     return Effect.gen(function* () {
-      const checked = yield* launchPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
+      const checked = yield* launchPreconditions(
+        { projectId, flowId },
+        0,
+        yield* freshSnapshot(),
+        noDiagnosticAttempt,
+      );
       return checked.ok ? { ok: true as const, value: undefined } : checked;
     });
   }
   function startPreflight(projectId: string, flowId: string) {
     return Effect.gen(function* () {
-      const checked = yield* startPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
+      const checked = yield* startPreconditions(
+        { projectId, flowId },
+        0,
+        yield* freshSnapshot(),
+        noDiagnosticAttempt,
+      );
       return checked.ok ? { ok: true as const, value: undefined } : checked;
     });
   }
@@ -500,32 +512,36 @@ export function openRunnerStart(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
     snapshot: T3ContractSnapshot,
+    attempt: DiagnosticAttemptHandle,
   ) {
-    return Effect.gen(function* () {
-      const [connection, projects, savedFlow] = yield* Effect.all(
-        [ops.getConnection(), ops.listProjects(), ops.getFlow(input.flowId)],
-        { concurrency: "unbounded" },
-      );
-      const owned = savedFlow.ok
-        ? ownershipRefusal(savedFlow.value, projects, input.projectId)
-        : undefined;
-      if (owned) return owned;
-      const target = startTarget(snapshot, connection, projects, input.projectId);
-      if (!target)
-        return failure(
-          "validation",
-          "Connect T3 Code and restore this project's repository before starting.",
-          [
-            {
-              code: "project_connection",
-              path: "projectId",
-              message: "Check project and T3 Code connection settings.",
-            },
-          ],
+    return attempt.guard(
+      "start_preconditions",
+      Effect.gen(function* () {
+        const [connection, projects, savedFlow] = yield* Effect.all(
+          [ops.getConnection(), ops.listProjects(), ops.getFlow(input.flowId)],
+          { concurrency: "unbounded" },
         );
-      if (!savedFlow.ok) return savedFlow;
-      return yield* flowLaunchPreconditions(savedFlow.value, target, imageCount, snapshot);
-    });
+        const owned = savedFlow.ok
+          ? ownershipRefusal(savedFlow.value, projects, input.projectId)
+          : undefined;
+        if (owned) return owned;
+        const target = startTarget(snapshot, connection, projects, input.projectId);
+        if (!target)
+          return failure(
+            "validation",
+            "Connect T3 Code and restore this project's repository before starting.",
+            [
+              {
+                code: "project_connection",
+                path: "projectId",
+                message: "Check project and T3 Code connection settings.",
+              },
+            ],
+          );
+        if (!savedFlow.ok) return savedFlow;
+        return yield* flowLaunchPreconditions(savedFlow.value, target, imageCount, snapshot);
+      }),
+    );
   }
 
   function flowLaunchPreconditions(

@@ -17,6 +17,7 @@ import {
   runOperations,
   chatControlOperations,
   triggerOperations,
+  diagnosticOperations,
   LIVE_PATH,
   type ProtocolDescriptor,
   type Result,
@@ -128,6 +129,7 @@ function apiRoutes(factory: AgentEasel) {
     ...importRoutes(factory),
     ...chatControlRoutes(factory),
     ...triggerRoutes(factory),
+    ...diagnosticRoutes(factory),
   };
 }
 
@@ -509,6 +511,44 @@ function triggerRoutes(factory: AgentEasel): RouteEntries<typeof triggerOperatio
     },
     removeTrigger: {
       handle: ({ parameters }) => answer(() => factory.removeTrigger(parameters.id)),
+    },
+  };
+}
+
+const diagnosticExportHeaders = {
+  "content-type": "text/plain; charset=utf-8",
+  "content-disposition": 'attachment; filename="agenteasel-diagnostic-log.txt"',
+  "cache-control": "no-store",
+} as const;
+
+function diagnosticRoutes(factory: AgentEasel): RouteEntries<typeof diagnosticOperations> {
+  return {
+    getDiagnosticLog: { handle: () => answer(() => factory.getDiagnosticLog()) },
+    setDiagnosticRecording: {
+      hostOnly: true,
+      body: standardBody,
+      handle: ({ input }) => answer(() => factory.setDiagnosticRecording(input)),
+    },
+    deleteDiagnosticLog: {
+      hostOnly: true,
+      handle: () => answer(() => factory.deleteDiagnosticLog()),
+    },
+    listDiagnosticAttempts: {
+      handle: ({ parameters }) =>
+        answer(() =>
+          factory.listDiagnosticAttempts(parameters.cursor, parameters.limit, parameters.ids),
+        ),
+    },
+    exportDiagnosticLog: {
+      handle: () =>
+        Effect.map(Effect.promise(factory.exportDiagnosticLog), (result) =>
+          result.ok
+            ? HttpServerResponse.text(result.value, {
+                status: 200,
+                headers: diagnosticExportHeaders,
+              })
+            : resultResponse(result),
+        ),
     },
   };
 }

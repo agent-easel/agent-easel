@@ -349,3 +349,17 @@ export {
   type TriggerSettings,
   type TriggerUpdateSettings,
 } from "./trigger.ts";
+export {
+  describeDiagnosticEntry,
+  DIAGNOSTIC_ATTEMPT_PAGE_LIMIT,
+  DIAGNOSTIC_ENTRY_LIMIT,
+  DIAGNOSTIC_RECORDING_MS,
+  DIAGNOSTIC_RETENTION_MS,
+  diagnosticHost,
+  diagnosticLogMarkdown,
+  diagnosticOperationName,
+  diagnosticPath,
+  diagnosticVersion,
+  validateDiagnosticEntry,
+  type DiagnosticStepLine,
+} from "./diagnostics.ts";
