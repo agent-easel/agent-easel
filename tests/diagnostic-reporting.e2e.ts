@@ -360,3 +360,71 @@ test("a First-run retry rechecks when an already pending read withdraws the inst
   assert.match(log, /Check Agent reporting/);
   assert.doesNotMatch(log, /Install in Codex/);
 });
+
+test("reopening Agent reporting shows the successful Install all repair completed after Settings closed", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await fixture.reporting.blockRequiredSkillWrite();
+  await app.open("/settings/agent-reporting");
+  const codex = screen.getByRole("group", "Codex", { exact: true });
+  await codex.getByRole("button", "Repair Codex").tap();
+  await expect(codex.getByRole("status")).toHaveText("Install failed");
+  await fixture.reporting.breakRequiredSkill();
+  const repair = await holdResponse(browser, "**/api/reporting/install");
+  await screen.getByRole("button", "Install all", { exact: true }).tap();
+  await repair.started;
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByRole("dialog")).toHaveCount(0);
+  repair.release();
+  const settings = screen.getByRole("link", "Settings, Connected", { exact: true });
+  await expect(settings).toBeVisible();
+  await settings.tap();
+
+  // Act
+  await screen.getByRole("link", /^Agent reporting/).tap();
+
+  // Assert
+  await expect(codex.getByRole("button", "Reinstall Codex")).toBeEnabled();
+  await app.screenshot("completed-repair-reopened");
+  await expect(codex.getByRole("status")).toHaveText("Installed");
+  await expect(screen.getByText("Couldn’t install for Codex")).toHaveCount(0);
+});
+
+test("First-run clears only the successful home’s failure when eligibility changes during a batch retry", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await fixture.firstRunSetup.fresh();
+  await fixture.firstRunSetup.codexInstallBlocked();
+  await fixture.firstRunSetup.hostConnects();
+  await app.open("/runs/new");
+  const install = screen.getByRole("button", /^Install in/);
+  await browser.route("**/api/reporting/install", (route) => route.abort());
+  await install.tap();
+  const claudeFailure = screen.getByText("Couldn’t install for Claude");
+  const codexFailure = screen.getByText("Couldn’t install for Codex");
+  await expect(claudeFailure).toBeVisible();
+  await expect(codexFailure).toBeVisible();
+  await browser.unroute("**/api/reporting/install");
+  const batch = await holdResponse(browser, "**/api/reporting/install");
+  await install.tap();
+  await batch.started;
+  await fixture.firstRunSetup.grokTurnedOn();
+  await expect(screen.getByRole("group", "Grok", { exact: true })).toBeVisible({ timeout: 8000 });
+
+  // Act
+  batch.release();
+
+  // Assert
+  await expect(install).toBeEnabled();
+  await expect(claudeFailure).toHaveCount(0);
+  await expect(codexFailure).toBeVisible();
+  await expect(screen.getByRole("group", "Claude", { exact: true })).toContainText("Installed");
+});

@@ -248,3 +248,22 @@ it("the recovery caller receives its own failure after a same-scope refresh", as
   // Assert
   await expect(explicit).rejects.toBe(cause);
 });
+
+it("a recovery waiting for a slow read gets its answer despite repeated polls and focus", async () => {
+  // Arrange
+  const { schedule, pending } = controlledReads();
+  const page = fakePage();
+  schedule.watch(1000, page.page);
+  const recover = vi.fn(async (answer) => answer);
+  void schedule.withLatest(recover);
+  page.focus();
+  await vi.advanceTimersByTimeAsync(3000);
+  page.focus();
+
+  // Act
+  pending[0]!.resolve("eligible");
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Assert
+  expect(recover).toHaveBeenCalledExactlyOnceWith("eligible");
+});

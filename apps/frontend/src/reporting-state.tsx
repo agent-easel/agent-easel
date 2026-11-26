@@ -198,9 +198,9 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
       {
         running: setRunning,
         installed: (installed) => {
-          if (request !== latestRequest.current) return;
-          applyInstalled(installed);
+          if (request === latestRequest.current) applyInstalled(installed);
           setFailures((current) => {
+            if (!(installed.id in current)) return current;
             const remaining = { ...current };
             delete remaining[installed.id];
             return remaining;

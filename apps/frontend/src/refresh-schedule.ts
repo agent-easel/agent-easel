@@ -110,17 +110,20 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
       clearInterval(timer);
       timer = undefined;
     };
+    const refreshPage = () => {
+      if (!waiters.size) void refresh(readWatch);
+    };
     const resume = () => {
       pause();
       if (!page.visible()) return;
-      void refresh(readWatch);
+      refreshPage();
       timer = setInterval(() => {
-        if (!deferPollingWhilePending || !outstanding) void refresh(readWatch);
+        if (!deferPollingWhilePending || !outstanding) refreshPage();
       }, intervalMs);
     };
     const unsubscribe = page.subscribe({
       visibility: resume,
-      focus: () => void refresh(readWatch),
+      focus: refreshPage,
     });
     resume();
     return () => {
