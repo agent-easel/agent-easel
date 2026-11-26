@@ -350,7 +350,11 @@ export function validateDiagnosticEntry(input: unknown): Result<DiagnosticEntry>
   if (invalid !== undefined) return refusal(`A ${type} entry needs a valid ${invalid[0]}.`);
   if (type === "start_preconditions" && (fields.outcome === "ok") !== (fields.reason === "ready"))
     return refusal("A Start readiness reason must match the verdict.");
-  return { ok: true, value: input as DiagnosticEntry };
+  const closed = Object.fromEntries([
+    ["type", type],
+    ...Object.keys(allowed).map((key) => [key, fields[key]]),
+  ]);
+  return { ok: true, value: closed as DiagnosticEntry };
 }
 
 const operationNames: Record<DiagnosticOperation, string> = {

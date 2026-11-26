@@ -48,11 +48,11 @@ export interface DiagnosticRecorder {
     attempt: DiagnosticAttemptRef,
     entry: DiagnosticEntry,
     at: string,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<boolean, unknown>;
   readonly finish: (
     attempt: DiagnosticAttemptRef,
     outcome: DiagnosticAttemptOutcome,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<boolean, unknown>;
 }
 
 export interface DiagnosticAttemptHandle {
@@ -96,6 +96,9 @@ interface AttemptRow {
   readonly truncated: number;
   readonly environment: string;
 }
+
+type ObservedOperation = Extract<DiagnosticOperation, "t3_connection">;
+const OBSERVED_OPERATION: ObservedOperation = "t3_connection";
 
 interface LatestVerdict {
   readonly order: number;
@@ -236,18 +239,21 @@ const makeSqliteRecorder = (
     append: (attempt, entry, at) =>
       sql.withTransaction(
         Effect.gen(function* () {
-          if (!(yield* live(attempt))) return;
+          if (!(yield* live(attempt))) return false;
           yield* restoreAfterEviction(attempt);
           yield* sql`INSERT INTO diagnostic_entries (attempt_id, at, entry)
             VALUES (${attempt.id}, ${at}, ${JSON.stringify(entry)})`;
           yield* evict;
+          return true;
         }),
       ),
     finish: (attempt, outcome) =>
       sql.withTransaction(
         Effect.gen(function* () {
-          if (!(yield* live(attempt))) return;
-          yield* sql`UPDATE diagnostic_attempts SET outcome = ${outcome} WHERE id = ${attempt.id}`;
+          if (!(yield* live(attempt))) return false;
+          const updated = yield* sql`UPDATE diagnostic_attempts SET outcome = ${outcome}
+            WHERE id = ${attempt.id} RETURNING id`;
+          return updated.length > 0;
         }),
       ),
   };
@@ -361,23 +367,21 @@ export const makeDiagnosticLog = (
           ),
         );
     let observations = 0;
-    const latest = new Map<DiagnosticOperation, LatestVerdict>();
-    const remember = (operation: DiagnosticOperation, verdict: LatestVerdict) => {
-      const last = latest.get(operation);
-      if (last === undefined || last.order <= verdict.order) latest.set(operation, verdict);
+    let latest: LatestVerdict | undefined;
+    const remember = (verdict: LatestVerdict) => {
+      if (latest === undefined || latest.order <= verdict.order) latest = verdict;
     };
-    const handle = (
-      attempt: DiagnosticAttemptRef,
-      operation: DiagnosticOperation,
-      order: number,
-    ) => {
-      const entries: DiagnosticEntry[] = [];
+    const handle = (attempt: DiagnosticAttemptRef, order: number | null) => {
+      const stored: DiagnosticEntry[] = [];
       const recordAt = (entry: DiagnosticEntry, at: string) =>
         contained(() => {
-          entries.push(entry);
           const valid = validateDiagnosticEntry(entry);
           if (!valid.ok) return Effect.fail(valid.error);
-          return recorder.append(attempt, valid.value, at);
+          return recorder.append(attempt, valid.value, at).pipe(
+            Effect.map((committed) => {
+              if (committed && order !== null) stored.push(valid.value);
+            }),
+          );
         }, undefined);
       const record = (entry: DiagnosticEntry) => Effect.flatMap(now, (at) => recordAt(entry, at));
       return {
@@ -386,21 +390,22 @@ export const makeDiagnosticLog = (
         record,
         recordAt,
         finish: (outcome: DiagnosticAttemptOutcome) =>
-          contained(() => recorder.finish(attempt, outcome), undefined).pipe(
-            Effect.map(() =>
-              remember(operation, {
-                order,
-                generation: attempt.generation,
-                observed: observedVerdict(entries, outcome),
-              }),
-            ),
+          contained(() => recorder.finish(attempt, outcome), false).pipe(
+            Effect.map((committed) => {
+              if (committed && order !== null)
+                remember({
+                  order,
+                  generation: attempt.generation,
+                  observed: observedVerdict(stored, outcome),
+                });
+            }),
           ),
         guard: guardWith(record),
       };
     };
     const open = (
       operation: DiagnosticOperation,
-      order: number,
+      order: number | null,
       expectedGeneration?: number,
       startedAt?: string,
     ) =>
@@ -410,14 +415,16 @@ export const makeDiagnosticLog = (
       ).pipe(
         Effect.map((opened) => {
           if (opened === null) return null;
-          remember(operation, { order, generation: opened.generation, observed: null });
-          return handle(opened, operation, order);
+          if (order !== null) remember({ order, generation: opened.generation, observed: null });
+          return handle(opened, order);
         }),
       );
     const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
-      open(operation, ++observations, expectedGeneration).pipe(
-        Effect.map((opened) => opened ?? noDiagnosticAttempt),
-      );
+      open(
+        operation,
+        operation === OBSERVED_OPERATION ? ++observations : null,
+        expectedGeneration,
+      ).pipe(Effect.map((opened) => opened ?? noDiagnosticAttempt));
 
     const prune = Effect.gen(function* () {
       const cutoff = new Date(Date.parse(yield* now) - DIAGNOSTIC_RETENTION_MS).toISOString();
@@ -475,31 +482,47 @@ export const makeDiagnosticLog = (
         }),
       null,
     );
-    const changeAttempt = (operation: DiagnosticOperation) =>
+    const changeAttempt = (operation: ObservedOperation) =>
       Effect.gen(function* (): Effect.fn.Return<DiagnosticAttemptHandle> {
         const generation = yield* recordingGeneration;
         if (generation === null) return noDiagnosticAttempt;
         const order = ++observations;
         const startedAt = yield* now;
         const steps: { entry: DiagnosticEntry; at: string }[] = [];
+        let refused = false;
         const record = (entry: DiagnosticEntry) =>
-          Effect.map(now, (at) => void steps.push({ entry, at }));
+          Effect.flatMap(now, (at) =>
+            contained(() => {
+              const valid = validateDiagnosticEntry(entry);
+              if (!valid.ok) return Effect.fail(valid.error);
+              return Effect.sync(() => {
+                steps.push({ entry: valid.value, at });
+                return true;
+              });
+            }, false).pipe(
+              Effect.map((kept) => {
+                refused ||= !kept;
+              }),
+            ),
+          );
         return {
           id: null,
           hash,
           record,
           finish: (outcome) =>
             Effect.gen(function* () {
-              const observed = observedVerdict(
-                steps.map(({ entry }) => entry),
-                outcome,
-              );
-              const last = latest.get(operation);
+              const observed = refused
+                ? null
+                : observedVerdict(
+                    steps.map(({ entry }) => entry),
+                    outcome,
+                  );
               if (
-                last !== undefined &&
-                last.order < order &&
-                last.generation === generation &&
-                last.observed === observed
+                observed !== null &&
+                latest !== undefined &&
+                latest.order < order &&
+                latest.generation === generation &&
+                latest.observed === observed
               )
                 return;
               const recording = yield* open(operation, order, generation, startedAt);
