@@ -126,27 +126,6 @@ export const makeFactoryService = (
       intervalMs,
       changes,
     );
-    const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
-    yield* projects.recheckProjects();
-    const definitions = yield* makeDefinitions(
-      t3.projects,
-      connection,
-      projects,
-      changes,
-      t3StateDirectory,
-      options.applicationVersion ?? "source",
-    );
-    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
-    const triggers = yield* makeTriggers(
-      github,
-      {
-        listProjects: projects.listProjects,
-        getFlow: definitions.getFlow,
-        startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
-        startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
-      },
-      changes,
-    );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
@@ -171,6 +150,28 @@ export const makeFactoryService = (
       options.diagnosticRecorder,
     );
     const backendStart = yield* diagnostics.attempt("backend_start");
+    yield* connection.start(diagnostics);
+    const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
+    yield* projects.recheckProjects();
+    const definitions = yield* makeDefinitions(
+      t3.projects,
+      connection,
+      projects,
+      changes,
+      t3StateDirectory,
+      options.applicationVersion ?? "source",
+    );
+    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
+    const triggers = yield* makeTriggers(
+      github,
+      {
+        listProjects: projects.listProjects,
+        getFlow: definitions.getFlow,
+        startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
+        startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
+      },
+      changes,
+    );
     const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory, diagnostics);
     const setupContext = yield* Layer.build(
       RuntimeSetup.RuntimeSetupLayer(

@@ -4,6 +4,13 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as Effect from "effect/Effect";
+import type { DiagnosticEntry } from "@agent-easel/contracts";
+import {
+  noDiagnosticAttempt,
+  type DiagnosticAttemptHandle,
+  type DiagnosticLog,
+} from "../diagnostic-log.ts";
 import {
   credentialPath,
   readCredentialFile,
@@ -304,6 +311,8 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
   private endpoint: string | undefined;
   private completing = false;
   private completion: Promise<void> | undefined;
+  private runDiagnostic = Effect.runPromise;
+  private diagnosticAttempt: DiagnosticLog["attempt"] | undefined;
   private readonly connections = new Map<string, Connection>();
   constructor(options: LiveT3ConnectionOptions) {
     this.options = options;
@@ -314,6 +323,24 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     for (const name of readdirSync(options.credentialsDirectory))
       if (/^t3-appearance-[0-9a-f]{64}\.json$/.test(name))
         removeCredentialFile(join(options.credentialsDirectory, name));
+  }
+  setOAuthDiagnostics(attempt: DiagnosticLog["attempt"], run: typeof Effect.runPromise) {
+    this.diagnosticAttempt = attempt;
+    this.runDiagnostic = run;
+  }
+  private oauthStep(
+    attempt: DiagnosticAttemptHandle,
+    step: Extract<DiagnosticEntry, { type: "t3_oauth" }>["step"],
+    reason: Extract<DiagnosticEntry, { type: "t3_oauth" }>["reason"] = null,
+  ) {
+    return this.runDiagnostic(
+      attempt.record({
+        type: "t3_oauth",
+        step,
+        outcome: reason === null ? "ok" : "failed",
+        reason,
+      }),
+    );
   }
   private path(endpoint: string) {
     return credentialPath(this.options.credentialsDirectory, "t3", endpoint);
@@ -334,7 +361,11 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
   private save(data: Credentials) {
     writeCredentialFile(this.path(data.endpoint), data);
   }
-  private provider(endpoint: string, interactive: boolean): OAuthClientProvider {
+  private provider(
+    endpoint: string,
+    interactive: boolean,
+    attempt = noDiagnosticAttempt,
+  ): OAuthClientProvider {
     const update = (change: (data: Credentials) => void) => {
       const data = this.dispatchCredentials(endpoint);
       change(data);
@@ -393,11 +424,13 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
         try {
           await (this.options.openBrowser ?? browser)(url.href);
         } catch {
+          await this.oauthStep(attempt, "t3_oauth_browser", "browser_unavailable");
           update((data) => {
             data.reason = "browser-unavailable";
           });
           throw new UnauthorizedError("Backend browser unavailable");
         }
+        await this.oauthStep(attempt, "t3_oauth_browser");
       },
       invalidateCredentials: (scope) =>
         update((data) => {
@@ -541,7 +574,28 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     this.timer.unref();
     return listener.redirectUrl;
   }
-  private async answerCallback(endpoint: string, request: CallbackRequest): Promise<CallbackReply> {
+  private answerCallback(endpoint: string, request: CallbackRequest): Promise<CallbackReply> {
+    const open =
+      this.diagnosticAttempt?.("t3_oauth_callback") ?? Effect.succeed(noDiagnosticAttempt);
+    return this.runDiagnostic(
+      Effect.flatMap(open, (attempt) =>
+        attempt
+          .guard(
+            "t3_oauth_callback",
+            Effect.tryPromise(() => this.acceptCallback(endpoint, request, attempt)),
+          )
+          .pipe(
+            Effect.tap((reply) => attempt.finish(reply.status === 200 ? "ok" : "failed")),
+            Effect.onError(() => attempt.finish("failed")),
+          ),
+      ),
+    );
+  }
+  private async acceptCallback(
+    endpoint: string,
+    request: CallbackRequest,
+    attempt: DiagnosticAttemptHandle,
+  ): Promise<CallbackReply> {
     const { url } = request;
     const data = this.read(endpoint);
     const state = url.searchParams.get("state");
@@ -555,10 +609,12 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       !state ||
       !equalState(data.state, state)
     ) {
+      await this.oauthStep(attempt, "t3_oauth_callback", "oauth_callback_invalid");
       return { status: 400, body: "Invalid or expired OAuth callback." };
     }
     if (!url.searchParams.get("code") || url.searchParams.has("error")) {
       this.expire(endpoint, "approval-expired");
+      await this.oauthStep(attempt, "t3_oauth_callback", "oauth_approval_denied");
       return {
         status: 400,
         body: "Authorization was not granted. Return to AgentEasel and authorize again.",
@@ -570,25 +626,40 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     // Claim the callback durably. State/verifier/discovery stay private until exchange completes.
     delete data.state;
     this.save(data);
-    const completion = this.completeAuthorization(endpoint, url.searchParams);
+    const completion = this.completeAuthorization(endpoint, url.searchParams, attempt);
     this.completion = completion.then(() => {});
     return completion;
   }
   private async completeAuthorization(
     endpoint: string,
     params: URLSearchParams,
+    attempt: DiagnosticAttemptHandle,
   ): Promise<CallbackReply> {
     const transport = this.transport(endpoint, this.provider(endpoint, false));
     try {
-      await transport.finishAuth(params);
-      const complete = this.read(endpoint);
-      delete complete.pending;
-      delete complete.state;
-      delete complete.verifier;
-      delete complete.reason;
-      this.save(complete);
-      // Calls continue with the new grant, never on the previous grant's connection.
-      await this.dropConnection(endpoint);
+      await this.oauthStep(attempt, "t3_oauth_callback");
+      await transport.finishAuth(params).then(
+        () => this.oauthStep(attempt, "t3_oauth_exchange"),
+        async (cause: unknown) => {
+          await this.oauthStep(attempt, "t3_oauth_exchange", "oauth_exchange_failed");
+          throw cause;
+        },
+      );
+      await this.runDiagnostic(
+        attempt.guard(
+          "t3_oauth_callback",
+          Effect.tryPromise(async () => {
+            const complete = this.read(endpoint);
+            delete complete.pending;
+            delete complete.state;
+            delete complete.verifier;
+            delete complete.reason;
+            this.save(complete);
+            // Calls continue with the new grant, never on the previous grant's connection.
+            await this.dropConnection(endpoint);
+          }),
+        ),
+      );
       return {
         status: 200,
         body: "T3 Code authorization complete. Return to AgentEasel; it will recheck automatically.",
@@ -612,10 +683,10 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.stopCallback();
     }
   }
-  authorize(target: T3Endpoint) {
-    return classifiedCall(() => this.startAuthorization(target.endpoint));
+  authorize(target: T3Endpoint, attempt = noDiagnosticAttempt) {
+    return classifiedCall(() => this.startAuthorization(target.endpoint, attempt));
   }
-  private async startAuthorization(endpoint: string) {
+  private async startAuthorization(endpoint: string, attempt: DiagnosticAttemptHandle) {
     await this.completion;
     this.stopCallback();
     this.changeEndpoint(endpoint);
@@ -639,9 +710,11 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.save(data);
     } catch {
       this.expire(endpoint, "callback-unavailable");
+      await this.oauthStep(attempt, "t3_oauth_listener", "callback_unavailable");
       return;
     }
-    const transport = this.transport(endpoint, this.provider(endpoint, true));
+    await this.oauthStep(attempt, "t3_oauth_listener");
+    const transport = this.transport(endpoint, this.provider(endpoint, true, attempt));
     const client = new Client({ name: "agenteasel", version: "0.0.0" });
     try {
       await client.connect(transport, { timeout: 10_000 });
@@ -658,10 +731,16 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       await client.close().catch(() => {});
     }
   }
-  resumeAuthorization(target: T3Endpoint): Promise<AuthorizationResumption> {
-    return classifiedCall(() => this.reopenAuthorization(target.endpoint));
+  resumeAuthorization(
+    target: T3Endpoint,
+    attempt = noDiagnosticAttempt,
+  ): Promise<AuthorizationResumption> {
+    return classifiedCall(() => this.reopenAuthorization(target.endpoint, attempt));
   }
-  private async reopenAuthorization(endpoint: string): Promise<AuthorizationResumption> {
+  private async reopenAuthorization(
+    endpoint: string,
+    attempt: DiagnosticAttemptHandle,
+  ): Promise<AuthorizationResumption> {
     await this.completion;
     if (this.endpoint !== endpoint) this.stopCallback();
     this.changeEndpoint(endpoint);
@@ -669,7 +748,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     await this.dropConnection(endpoint);
     // Consent may finish after the caller inspected pending status. Preserve that grant.
     if (this.read(endpoint).tokens) return "completing";
-    const pending = await this.resumePendingApproval(endpoint);
+    const pending = await this.resumePendingApproval(endpoint, attempt);
     if (this.completing) return "completing";
     // An expired, denied, completed or unbound attempt is gone; only a new attempt can follow.
     if (!pending || !isApprovalPending(pending.reason)) return "none";
@@ -688,31 +767,35 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       await (this.options.openBrowser ?? browser)(page);
     } catch {
       this.markReopen(endpoint, true);
+      await this.oauthStep(attempt, "t3_oauth_browser", "browser_unavailable");
       throw new T3Failure("unavailable", "Backend browser unavailable");
     }
     this.markReopen(endpoint, false);
+    await this.oauthStep(attempt, "t3_oauth_browser");
     return "reopened";
   }
   probe<A, B>(
     target: T3Endpoint,
     read: (session: T3Session) => Promise<A>,
     finish: (probe: T3Probe<A>) => Promise<B>,
+    attempt = noDiagnosticAttempt,
   ): Promise<B> {
     return classifiedCall(async (record) =>
-      finish(await this.probeEndpoint(target.endpoint, read, record)),
+      finish(await this.probeEndpoint(target.endpoint, read, record, attempt)),
     );
   }
   private async probeEndpoint<A>(
     endpoint: string,
     read: (session: T3Session) => Promise<A>,
     record: CallRecord,
+    attempt: DiagnosticAttemptHandle,
   ): Promise<T3Probe<A>> {
     if (this.endpoint !== endpoint) {
       await this.completion;
       this.stopCallback();
       this.changeEndpoint(endpoint);
     }
-    const pending = await this.resumePendingApproval(endpoint);
+    const pending = await this.resumePendingApproval(endpoint, attempt);
     if (pending) return pending;
     const latest = this.read(endpoint);
     if (!latest.tokens) return this.probeWithoutGrant(endpoint, read, latest.reason, record);
@@ -757,6 +840,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
   /** Keeps a pending approval's callback listening; an expired approval falls through to inspection. */
   private async resumePendingApproval(
     endpoint: string,
+    attempt: DiagnosticAttemptHandle,
   ): Promise<{ status: "authorization-required"; reason: T3ConnectionReason } | undefined> {
     const pending = this.read(endpoint).pending;
     if (!pending) return undefined;
@@ -764,11 +848,15 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.expire(endpoint, "approval-expired");
       return undefined;
     }
-    try {
-      await this.listen(endpoint, Number(new URL(pending.redirectUrl).port));
-    } catch {
-      this.expire(endpoint, "callback-unavailable");
-      return { status: "authorization-required", reason: "callback-unavailable" };
+    if (!this.callback) {
+      try {
+        await this.listen(endpoint, Number(new URL(pending.redirectUrl).port));
+      } catch {
+        this.expire(endpoint, "callback-unavailable");
+        await this.oauthStep(attempt, "t3_oauth_listener", "callback_unavailable");
+        return { status: "authorization-required", reason: "callback-unavailable" };
+      }
+      await this.oauthStep(attempt, "t3_oauth_listener");
     }
     return {
       status: "authorization-required",

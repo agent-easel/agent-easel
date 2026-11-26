@@ -1,8 +1,9 @@
 import type { ConnectionState, FlowWorkspace, T3Contract } from "@agent-easel/contracts";
+import type { DiagnosticAttemptHandle } from "../diagnostic-log.ts";
 import type { T3ConnectionReason, T3Endpoint } from "./connection.ts";
 
 export interface T3ContractReader {
-  inspect(target: T3Endpoint): Promise<T3Inspection>;
+  inspect(target: T3Endpoint, attempt?: DiagnosticAttemptHandle): Promise<T3Inspection>;
 }
 
 export interface T3Inspection {

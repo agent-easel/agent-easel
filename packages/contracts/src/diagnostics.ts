@@ -2,9 +2,25 @@ import { operation } from "./operation.ts";
 
 export type DiagnosticStartOperation = "start" | "start_preflight";
 
-export type DiagnosticOperation = DiagnosticStartOperation | "backend_start" | "t3_detection";
+export type DiagnosticOAuthOperation = "t3_oauth_open" | "t3_oauth_resume" | "t3_oauth_callback";
+export type DiagnosticOperation =
+  | DiagnosticStartOperation
+  | "backend_start"
+  | "t3_detection"
+  | "t3_connection"
+  | DiagnosticOAuthOperation;
 
-export type DiagnosticStep = "backend_start" | "t3_detection" | "start_preconditions";
+export type DiagnosticOAuthStep =
+  | DiagnosticOAuthOperation
+  | "t3_oauth_listener"
+  | "t3_oauth_browser"
+  | "t3_oauth_exchange";
+export type DiagnosticStep =
+  | "backend_start"
+  | "t3_detection"
+  | "t3_connection"
+  | "start_preconditions"
+  | DiagnosticOAuthStep;
 
 export type DiagnosticStepOutcome = "ok" | "failed" | "skipped";
 
@@ -51,6 +67,21 @@ export const diagnosticStartReasons = [
 
 export type DiagnosticStartReason = (typeof diagnosticStartReasons)[number];
 
+export type DiagnosticConnectionReason =
+  | "connected"
+  | "approval-required"
+  | "approval-pending"
+  | "approval-reopen-failed"
+  | "browser-unavailable"
+  | "callback-unavailable"
+  | "approval-expired"
+  | "contract-missing"
+  | "authorization_context_missing"
+  | "t3_unavailable"
+  | "t3_authorization_required"
+  | "t3_refused"
+  | "t3_invalid_response";
+
 export type DiagnosticEntry =
   | {
       readonly type: "start_preconditions";
@@ -77,6 +108,41 @@ export type DiagnosticEntry =
       readonly file: string;
       readonly host: DiagnosticHost | null;
       readonly t3Version: string | null;
+    }
+  | {
+      readonly type: "t3_connection";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly host: DiagnosticHost;
+      readonly reason: DiagnosticConnectionReason;
+    }
+  | {
+      readonly type: "t3_connection_contract";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly t3Version: string;
+      readonly reason: "contract-missing" | null;
+    }
+  | {
+      readonly type: "t3_connection_identity";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly environment: string | null;
+      readonly grant: string | null;
+      readonly reason: "authorization_context_missing" | null;
+    }
+  | {
+      readonly type: "t3_oauth";
+      readonly step: DiagnosticOAuthStep;
+      readonly outcome: DiagnosticStepOutcome;
+      readonly reason:
+        | "callback_unavailable"
+        | "browser_unavailable"
+        | "approval_not_pending"
+        | "approval_completing"
+        | "approval_not_started"
+        | "oauth_request_failed"
+        | "oauth_callback_invalid"
+        | "oauth_approval_denied"
+        | "oauth_exchange_failed"
+        | null;
     }
   | {
       readonly type: "unexpected_error";

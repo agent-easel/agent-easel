@@ -31,8 +31,8 @@ export async function openOAuthFactory(context: TestContext) {
   // exercises the adapter boundary between that stale observation and reopening.
   let approveAfterInspection = false;
   const inspect = live.contract.inspect.bind(live.contract);
-  live.contract.inspect = async (target) => {
-    const observation = await inspect(target);
+  live.contract.inspect = async (target, attempt) => {
+    const observation = await inspect(target, attempt);
     if (approveAfterInspection && observation.reason === "approval-pending") {
       approveAfterInspection = false;
       const reply = await fetch(external.approvalUrl(authorizationUrl));

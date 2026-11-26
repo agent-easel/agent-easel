@@ -88,7 +88,7 @@ export function useDiagnosticLog(ids: readonly string[] | null) {
   };
 }
 
-export function useDiagnosticLogStatus() {
+export function useDiagnosticLogStatus(refreshKey: unknown = null) {
   const [status, setStatus] = useState<DiagnosticLogStatus | null>(null);
   const { refresh } = useRefreshSchedule({
     read: api.getDiagnosticLog,
@@ -97,7 +97,7 @@ export function useDiagnosticLogStatus() {
   });
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, refreshKey]);
   return status;
 }
 

@@ -3,6 +3,7 @@ import type {
   DiagnosticEntry,
   DiagnosticEnvironment,
   DiagnosticOperation,
+  DiagnosticOAuthStep,
   DiagnosticStep,
   DiagnosticStepOutcome,
   Result,
@@ -60,8 +61,23 @@ const placeholderPath: FieldCheck = (value) =>
   !value.split("/").some((segment) => segment === "." || segment === "..");
 const stepOutcome = oneOf("ok", "failed", "skipped");
 const host = oneOf("loopback", "non-loopback");
+const shortHash: FieldCheck = (value) => typeof value === "string" && /^[a-f0-9]{8}$/.test(value);
 
-const steps: readonly DiagnosticStep[] = ["backend_start", "t3_detection", "start_preconditions"];
+const oauthSteps: Record<DiagnosticOAuthStep, string> = {
+  t3_oauth_open: "Open T3 Code approval",
+  t3_oauth_resume: "Reopen T3 Code approval",
+  t3_oauth_callback: "Validate OAuth callback",
+  t3_oauth_listener: "Listen for OAuth callback",
+  t3_oauth_browser: "Open approval in host browser",
+  t3_oauth_exchange: "Exchange OAuth authorization code",
+};
+const steps: readonly DiagnosticStep[] = [
+  "backend_start",
+  "t3_detection",
+  "t3_connection",
+  "start_preconditions",
+  ...(Object.keys(oauthSteps) as DiagnosticOAuthStep[]),
+];
 
 const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, FieldCheck> } = {
   start_preconditions: {
@@ -88,6 +104,53 @@ const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, Fie
     file: placeholderPath,
     host: nullable(host),
     t3Version: nullable(version),
+  },
+  t3_connection: {
+    outcome: stepOutcome,
+    host,
+    reason: oneOf(
+      "connected",
+      "approval-required",
+      "approval-pending",
+      "approval-reopen-failed",
+      "browser-unavailable",
+      "callback-unavailable",
+      "approval-expired",
+      "contract-missing",
+      "authorization_context_missing",
+      "t3_unavailable",
+      "t3_authorization_required",
+      "t3_refused",
+      "t3_invalid_response",
+    ),
+  },
+  t3_connection_contract: {
+    outcome: stepOutcome,
+    t3Version: version,
+    reason: nullable(oneOf("contract-missing")),
+  },
+  t3_connection_identity: {
+    outcome: stepOutcome,
+    environment: nullable(shortHash),
+    grant: nullable(shortHash),
+    reason: nullable(oneOf("authorization_context_missing")),
+  },
+  t3_oauth: {
+    step: oneOf(...Object.keys(oauthSteps)),
+    outcome: stepOutcome,
+    reason: nullable(
+      oneOf(
+        "callback_unavailable",
+        "browser_unavailable",
+        "approval_not_pending",
+        "approval_completing",
+        "approval_not_started",
+        "oauth_request_failed",
+        "oauth_callback_invalid",
+        "oauth_approval_denied",
+        "oauth_exchange_failed",
+      ),
+    ),
   },
   unexpected_error: {
     outcome: oneOf("failed"),
@@ -124,12 +187,18 @@ const operationNames: Record<DiagnosticOperation, string> = {
   start_preflight: "Start preflight",
   backend_start: "Start backend",
   t3_detection: "Detect T3 Code",
+  t3_connection: "Check T3 Code connection",
+  t3_oauth_open: oauthSteps.t3_oauth_open,
+  t3_oauth_resume: oauthSteps.t3_oauth_resume,
+  t3_oauth_callback: "Complete T3 Code approval",
 };
 
 const stepNames: Record<DiagnosticStep, string> = {
   backend_start: "backend start",
   t3_detection: "T3 Code detection",
+  t3_connection: "T3 Code connection check",
   start_preconditions: "Start readiness checks",
+  ...oauthSteps,
 };
 
 export const diagnosticOperationName = (operation: DiagnosticOperation) =>
@@ -181,6 +250,37 @@ export function describeDiagnosticEntry(entry: DiagnosticEntry): DiagnosticStepL
       return {
         outcome: entry.outcome,
         name: `Unexpected error during ${stepNames[entry.step]}`,
+        detail: null,
+        reason: entry.reason,
+      };
+    case "t3_connection":
+      return {
+        outcome: entry.outcome,
+        name: "Check MCP endpoint",
+        detail: entry.host,
+        reason: entry.reason,
+      };
+    case "t3_connection_contract":
+      return {
+        outcome: entry.outcome,
+        name: "Check connection compatibility",
+        detail: `T3 Code ${entry.t3Version}`,
+        reason: entry.reason,
+      };
+    case "t3_connection_identity":
+      return {
+        outcome: entry.outcome,
+        name: "Verify authorization context",
+        detail: joined(
+          entry.environment && `environment ${entry.environment}`,
+          entry.grant && `grant ${entry.grant}`,
+        ),
+        reason: entry.reason,
+      };
+    case "t3_oauth":
+      return {
+        outcome: entry.outcome,
+        name: oauthSteps[entry.step],
         detail: null,
         reason: entry.reason,
       };

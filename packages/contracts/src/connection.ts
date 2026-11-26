@@ -104,6 +104,9 @@ export interface FirstRunSetup {
 export interface ConfigureConnectionInput {
   readonly endpoint: string;
 }
+export interface T3ConnectionRecovery extends T3Connection {
+  readonly diagnosticAttemptIds?: readonly string[];
+}
 export interface InstallReportingInput {
   readonly targetId: string;
 }
@@ -125,16 +128,16 @@ export const connectionOperations = {
     body: "json",
   }),
   getConnection: operation<never, T3Connection>()({ method: "GET", path: "/api/connection" }),
-  configureConnection: operation<ConfigureConnectionInput, T3Connection>()({
+  configureConnection: operation<ConfigureConnectionInput, T3ConnectionRecovery>()({
     method: "PUT",
     path: "/api/connection",
     body: "json",
   }),
-  recheckConnection: operation<never, T3Connection>()({
+  recheckConnection: operation<never, T3ConnectionRecovery>()({
     method: "POST",
     path: "/api/connection/recheck",
   }),
-  authorizeConnection: operation<never, T3Connection>()({
+  authorizeConnection: operation<never, T3ConnectionRecovery>()({
     method: "POST",
     path: "/api/connection/authorize",
   }),
@@ -143,7 +146,7 @@ export const connectionOperations = {
    * pending approval, or starts one when none exists. Never edits the endpoint and never
    * replaces a grant that is ready or incompatible. Allowed for approved remote clients.
    */
-  openConnectionAuthorization: operation<never, T3Connection>()({
+  openConnectionAuthorization: operation<never, T3ConnectionRecovery>()({
     method: "POST",
     path: "/api/connection/authorization/open",
   }),

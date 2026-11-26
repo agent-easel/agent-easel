@@ -29,6 +29,10 @@ const succeeded: Record<DiagnosticOperation, string> = {
   start_preflight: "Ready",
   backend_start: "Started",
   t3_detection: "Found",
+  t3_connection: "Connected",
+  t3_oauth_open: "Opened",
+  t3_oauth_resume: "Reopened",
+  t3_oauth_callback: "Approved",
 };
 
 function attemptBadge(

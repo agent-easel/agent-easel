@@ -67,40 +67,54 @@ test("after turning on Record diagnostic log, the next T3 Code detection is reco
   await app.screenshot("diagnostic-log-recording");
 });
 
-test("Copy previews exactly the redacted log it copies, the same text Export downloads", async ({
+test("Copy writes the reviewed redacted excerpt and Export includes it", async ({
   fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await openRecordedDetection(fixture, app, screen);
-
-  // Act
+  await fixture.diagnostics.t3Running();
+  await fixture.diagnostics.hostRecords();
+  const setup = await fetch(new URL("/api/setup", app.baseUrl));
+  assert.equal(setup.status, 200);
+  const stopped = await fetch(new URL("/api/settings/diagnostics", app.baseUrl), {
+    method: "PUT",
+    headers: { "content-type": "application/json", "X-Factory-Request": "1" },
+    body: JSON.stringify({ enabled: false }),
+  });
+  assert.equal(stopped.status, 200);
+  await openDiagnosticLog(app, screen);
   await screen.getByRole("button", "Copy", { exact: true }).tap();
-
-  // Assert
   await expect(screen.getByRole("dialog", "Copy diagnostic log")).toBeVisible();
   await expect(screen.getByText(/Review it before posting publicly/)).toBeVisible();
   await expect(
-    screen.getByText("1 attempt on screen · paths and identities already redacted"),
+    screen.getByText(/^\d+ attempts? on screen · paths and identities already redacted$/),
   ).toBeVisible();
   const preview = await browser.evaluate(
     `document.querySelector('[aria-label="Diagnostic log excerpt"]').textContent`,
   );
+  assert(typeof preview === "string");
+  await expectDialogSettled(browser);
+  await app.screenshot("diagnostic-log-copy-preview");
+
+  // Act
+  await screen.getByRole("button", "Copy to clipboard", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Copy diagnostic log")).toHaveCount(0);
+  assert.equal(await browser.evaluate("navigator.clipboard.readText()"), preview);
   const exported = await exportedLog(app);
-  assert.equal(preview, exported);
-  assert.match(exported, /<T3_STATE>\/server-runtime\.json/);
-  assert.match(exported, /runtime_file_found/);
-  assert.doesNotMatch(exported, /factory-e2e-/);
+  assert.ok(exported.startsWith(preview));
+  assert.match(preview, /<T3_STATE>\/server-runtime\.json/);
+  assert.match(preview, /runtime_file_found/);
+  assert.doesNotMatch(preview, /factory-e2e-/);
   assert.equal(
     await browser.evaluate(
       `[...document.querySelectorAll("a")].find((a) => a.textContent === "Export").getAttribute("download")`,
     ),
     "agenteasel-diagnostic-log.txt",
   );
-  await expectDialogSettled(browser);
-  await app.screenshot("diagnostic-log-copy-preview");
 });
 
 test("Delete clears the log at once while recording stays on", async ({
@@ -112,9 +126,7 @@ test("Delete clears the log at once while recording stays on", async ({
   // Arrange
   await openRecordedDetection(fixture, app, screen);
   await screen.getByRole("button", "Delete", { exact: true }).tap();
-  await expect(
-    screen.getByText(/^The recorded attempt is removed now\. Recording stays on until /),
-  ).toBeVisible();
+  await expect(screen.getByText(/removed now\. Recording stays on until /)).toBeVisible();
   await expectDialogSettled(browser);
   await app.screenshot("diagnostic-log-delete");
 
@@ -122,9 +134,9 @@ test("Delete clears the log at once while recording stays on", async ({
   await screen.getByRole("button", "Delete log").tap();
 
   // Assert
-  await expect(screen.getByText("Nothing recorded", { exact: true })).toBeVisible();
+  await expect(detection(screen)).toHaveCount(0);
   await expect(screen.getByRole("switch", "Record diagnostic log")).toBeChecked();
-  assert.match(await exportedLog(app), /Nothing recorded\./);
+  assert.doesNotMatch(await exportedLog(app), /runtime_file_found/);
 });
 
 test("an approved device reads the host's Diagnostic log but cannot change it", async ({

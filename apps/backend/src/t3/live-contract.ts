@@ -7,6 +7,7 @@ import {
   type T3Support,
 } from "./contract.ts";
 import { readEnvironmentIdentity } from "./environment-identity.ts";
+import type { DiagnosticAttemptHandle } from "../diagnostic-log.ts";
 
 export interface LiveT3ContractOptions {
   /** Integration-only proof of server continuity and request-key retention. No proof = no replay.
@@ -88,11 +89,16 @@ export class LiveT3Contract implements T3ContractReader {
 
   /** Support is derived from T3's advertised schemas within the probe's call, so a schema Factory
    * cannot evaluate is classified with what that inspection's requests met. */
-  inspect(target: T3Endpoint): Promise<T3Inspection> {
-    return this.calls.probe(target, readContract, async (probe) => {
-      const inspected = inspection(probe);
-      return { ...inspected, support: await this.support(target.endpoint, inspected) };
-    });
+  inspect(target: T3Endpoint, attempt?: DiagnosticAttemptHandle): Promise<T3Inspection> {
+    return this.calls.probe(
+      target,
+      readContract,
+      async (probe) => {
+        const inspected = inspection(probe);
+        return { ...inspected, support: await this.support(target.endpoint, inspected) };
+      },
+      attempt,
+    );
   }
   /** Replay scopes are asked for only when the answer they would qualify is supported. A proof
    * that cannot be established leaves only that answer unknown, never the whole inspection. */

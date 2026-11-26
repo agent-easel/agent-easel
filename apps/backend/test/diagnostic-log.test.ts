@@ -1,6 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
+import type { DiagnosticAttemptPage, T3ConnectionRecovery } from "@agent-easel/contracts";
 import { validateDiagnosticEntry } from "@agent-easel/domain-validation";
 import { remoteServer } from "./support/remote-clients.ts";
+import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
   diagnosticHome,
   recordingHome,
@@ -8,6 +10,66 @@ import {
   throwingRecorder,
 } from "./support/diagnostic-log.ts";
 import { shiftedClock } from "./support/seed-clock.ts";
+
+it("a failed connection recheck returns its attempt and exports the reason without the endpoint", async (c) => {
+  // Arrange
+  const t3 = new ControlledT3();
+  const server = await remoteServer(c, { t3 });
+  const client = await server.approved("Laptop");
+  const endpoint = "https://private-device.example/mcp";
+  t3.connection.available = false;
+  assert((await server.factory.configureConnection({ endpoint })).ok);
+  assert((await server.factory.setDiagnosticRecording({ enabled: true })).ok);
+
+  // Act
+  const recheck = await server.host<T3ConnectionRecovery>("POST", "/api/connection/recheck");
+
+  // Assert
+  expect(recheck.body).toMatchObject({
+    ok: true,
+    value: { state: "unavailable", diagnosticAttemptIds: [expect.any(String)] },
+  });
+  assert(recheck.body.ok);
+  const ids = recheck.body.value.diagnosticAttemptIds?.join(",");
+  assert(ids);
+  const filtered = await server.host<DiagnosticAttemptPage>(
+    "GET",
+    `/api/settings/diagnostics/attempts?cursor=&limit=20&ids=${encodeURIComponent(ids)}`,
+  );
+  expect(filtered.body).toMatchObject({
+    ok: true,
+    value: { attempts: [{ id: ids, operation: "t3_connection" }] },
+  });
+  const reply = await client.sendBytes("GET", "/api/settings/diagnostics/export");
+  const exported = reply.data.toString("utf8");
+  expect(exported).toContain("Check T3 Code connection");
+  expect(exported).toContain("non-loopback");
+  expect(exported).toContain("t3_unavailable");
+  expect(exported).not.toContain("private-device.example");
+  expect(exported).not.toContain("External failure containing secret material");
+});
+
+it("an unexpected inspection exception leaves the connection unavailable and exports only its step", async (c) => {
+  // Arrange
+  const t3 = new ControlledT3();
+  const server = await remoteServer(c, { t3 });
+  assert((await server.factory.configureConnection({ endpoint: "http://127.0.0.1:0/mcp" })).ok);
+  assert((await server.factory.setDiagnosticRecording({ enabled: true })).ok);
+  t3.contract.beforeInspection = () => {
+    throw new Error("private inspection exception");
+  };
+
+  // Act
+  const recheck = await server.factory.recheckConnection();
+
+  // Assert
+  expect(recheck).toMatchObject({ ok: true, value: { state: "unavailable" } });
+  const exported = await server.factory.exportDiagnosticLog();
+  assert(exported.ok);
+  expect(exported.value).toContain("Unexpected error during T3 Code connection check");
+  expect(exported.value).toContain("unexpected_error");
+  expect(exported.value).not.toContain("private inspection exception");
+});
 
 it("a diagnostic entry carrying a field outside its allowlist is refused", () => {
   // Arrange
