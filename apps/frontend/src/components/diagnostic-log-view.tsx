@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleCheck, CircleDashed, X, type LucideIcon } from "lucide-react";
+import { CircleCheck, CircleDashed, Copy, X, type LucideIcon } from "lucide-react";
 import type {
   DiagnosticAttempt,
   DiagnosticAttemptOutcome,
@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { MutationGate } from "@/client-gate";
 import { diagnosticExportPath, useDiagnosticLog, type DiagnosticRetry } from "../diagnostic-log.ts";
 import { clockTime, clockTimeWithSeconds } from "../time-format.ts";
-import { CopyButton } from "./copy-button.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
@@ -85,9 +84,16 @@ function DiagnosticStepLine({ at, outcome, name, detail, reason }: StepLineProps
 
 type StepLineProps = ReturnType<typeof describeDiagnosticEntry> & { at: string };
 
-function DiagnosticAttemptSection({ attempt }: { attempt: DiagnosticAttempt }) {
+function DiagnosticAttemptSection({
+  attempt,
+  onCopy,
+}: {
+  attempt: DiagnosticAttempt;
+  onCopy: () => void;
+}) {
   const name = diagnosticAttemptName(attempt);
   const badge = attemptBadge(attempt.operation, attempt.outcome);
+  const copyLabel = `Copy ${name} attempt`;
   return (
     <section aria-label={`${name} at ${clockTime(attempt.startedAt)}`}>
       <header className="flex min-h-9 items-center gap-2 border-b bg-card px-3 py-1">
@@ -96,7 +102,14 @@ function DiagnosticAttemptSection({ attempt }: { attempt: DiagnosticAttempt }) {
         <StatusBadge kind={badge.kind} className="ml-auto">
           {badge.label}
         </StatusBadge>
-        <CopyButton text={diagnosticLogMarkdown([attempt])} label={`Copy ${name} attempt`} />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label={copyLabel} onClick={onCopy}>
+              <Copy aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{copyLabel}</TooltipContent>
+        </Tooltip>
       </header>
       {attempt.truncated && (
         <p className="px-3 pt-2 text-2xs text-muted-foreground">
@@ -115,14 +128,20 @@ function DiagnosticAttemptSection({ attempt }: { attempt: DiagnosticAttempt }) {
 export function DiagnosticAttemptList({
   attempts,
   missing,
+  onCopy,
 }: {
   attempts: readonly DiagnosticAttempt[];
   missing: readonly string[];
+  onCopy: (attempts: readonly DiagnosticAttempt[]) => void;
 }) {
   return (
     <Surface tone="group">
       {attempts.map((attempt) => (
-        <DiagnosticAttemptSection key={attempt.id} attempt={attempt} />
+        <DiagnosticAttemptSection
+          key={attempt.id}
+          attempt={attempt}
+          onCopy={() => onCopy([attempt])}
+        />
       ))}
       {missing.length > 0 && (
         <p role="status" className="px-3 py-2.5 text-sm text-muted-foreground">
@@ -234,14 +253,19 @@ export function DiagnosticRetryAction({
   view?: boolean;
   disabled?: boolean;
 }) {
-  if (retry.attempts) return view ? <DiagnosticLogViewer attempts={retry.attempts} /> : null;
-  if (!retry.offer) return null;
+  const previous = view && retry.attempts;
+  if (!retry.offer && !previous) return null;
   return (
-    <MutationGate>
-      <TextLink disabled={disabled} onClick={() => retry.start(recover)}>
-        Record diagnostic log and try again
-      </TextLink>
-    </MutationGate>
+    <span className="inline-flex flex-wrap items-center gap-x-3">
+      {retry.offer && (
+        <MutationGate>
+          <TextLink disabled={disabled} onClick={() => retry.start(recover)}>
+            Record diagnostic log and try again
+          </TextLink>
+        </MutationGate>
+      )}
+      {previous && <DiagnosticLogViewer attempts={previous} />}
+    </span>
   );
 }
 
@@ -254,7 +278,7 @@ function DiagnosticLogDialog({
 }) {
   const [whole, setWhole] = useState(attempts === null);
   const log = useDiagnosticLog(whole ? null : attempts);
-  const [copying, setCopying] = useState(false);
+  const [copying, setCopying] = useState<readonly DiagnosticAttempt[] | null>(null);
   const shown = log.view?.attempts ?? [];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -277,8 +301,18 @@ function DiagnosticLogDialog({
                 Show whole log
               </TextLink>
             )}
+            {log.showOlder && (
+              <TextLink
+                tone="neutral"
+                className="mr-auto self-center"
+                disabled={log.pending}
+                onClick={log.showOlder}
+              >
+                Show older attempts
+              </TextLink>
+            )}
             <DiagnosticExportButton />
-            <Button disabled={shown.length === 0} onClick={() => setCopying(true)}>
+            <Button disabled={shown.length === 0} onClick={() => setCopying(shown)}>
               Copy
             </Button>
           </>
@@ -289,12 +323,16 @@ function DiagnosticLogDialog({
         )}
         {log.view &&
           (shown.length || log.view.missing.length ? (
-            <DiagnosticAttemptList attempts={shown} missing={log.view.missing} />
+            <DiagnosticAttemptList
+              attempts={shown}
+              missing={log.view.missing}
+              onCopy={setCopying}
+            />
           ) : (
             <DiagnosticLogEmpty />
           ))}
       </DialogContent>
-      {copying && <DiagnosticCopyPreview attempts={shown} onClose={() => setCopying(false)} />}
+      {copying && <DiagnosticCopyPreview attempts={copying} onClose={() => setCopying(null)} />}
     </Dialog>
   );
 }
