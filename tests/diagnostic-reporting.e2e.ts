@@ -13,13 +13,16 @@ const recordAndRetry = (screen: Screen) =>
   screen.getByRole("button", "Record diagnostic log and try again").first();
 
 async function holdSecondInstall(browser: Browser) {
-  const release = Promise.withResolvers<void>();
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let requested = 0;
   await browser.route("**/api/reporting/install", async (route) => {
-    if (++requested === 2) await release.promise;
+    if (++requested === 2) await held;
     await route.continue();
   });
-  return release.resolve;
+  return release;
 }
 
 test("a failed Codex install in Agent reporting is recorded by one click and its attempt opens from the pane header", async ({
