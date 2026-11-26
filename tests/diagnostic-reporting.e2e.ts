@@ -12,9 +12,17 @@ beforeEach(async ({ browser }) => {
 const recordAndRetry = (screen: Screen) =>
   screen.getByRole("button", "Record diagnostic log and try again").first();
 
+function signal() {
+  let resolve = () => {};
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 async function holdRecording(browser: Browser) {
-  const started = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
+  const started = signal();
+  const release = signal();
   await browser.route("**/api/settings/diagnostics", async (route) => {
     if (route.request.method === "PUT") {
       started.resolve();
@@ -195,8 +203,8 @@ test("a delayed recorded recheck cannot replace the newly eligible First-run har
   await fixture.firstRunSetup.hostConnects();
   await app.open("/runs/new");
   await expect(screen.getByText("Turn on a harness in T3 Code")).toBeVisible();
-  const captured = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
+  const captured = signal();
+  const release = signal();
   await browser.route("**/api/reporting/recheck", async (route) => {
     const reply = await route.fetch();
     const body = await reply.text();
