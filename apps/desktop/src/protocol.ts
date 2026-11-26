@@ -7,6 +7,28 @@ import type { ApprovedConnection } from "./approved-client.ts";
 /** Bundled UI origin. Remote servers supply data only; they never provide executable content. */
 export const appOrigin = "factory://app";
 
+function isAppUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "factory:" &&
+      url.host === "app" &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function allowsUiPermission(
+  permission: string,
+  requestingUrl: string,
+  isMainFrame: boolean,
+): boolean {
+  return permission === "clipboard-sanitized-write" && isMainFrame && isAppUrl(requestingUrl);
+}
+
 export type ApiTarget =
   | { readonly kind: "host"; readonly base: string }
   | {
