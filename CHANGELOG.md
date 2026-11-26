@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1](https://github.com/agent-easel/agent-easel/compare/v1.0.0...v1.0.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **landing:** show the Run header and canvas hero without scrolling, with a phone crop ([#790](https://github.com/agent-easel/agent-easel/issues/790)) ([2ea0b2f](https://github.com/agent-easel/agent-easel/commit/2ea0b2f4b556e8a83879ee46d5ca872cb567920b))
+* **landing:** zoom hero screenshot onto the Run execution canvas ([#787](https://github.com/agent-easel/agent-easel/issues/787)) ([804a545](https://github.com/agent-easel/agent-easel/commit/804a5454c87401de69fdcdf6fa65b5fce4f805a2))
+* **release:** let a manual Landing run deploy the latest Release ([#784](https://github.com/agent-easel/agent-easel/issues/784)) ([14d9a0d](https://github.com/agent-easel/agent-easel/commit/14d9a0df30050db8f234e738a23459e0ecfc57c4))
+* **release:** pass deploy secrets to the landing workflow ([#782](https://github.com/agent-easel/agent-easel/issues/782)) ([7a87fd9](https://github.com/agent-easel/agent-easel/commit/7a87fd97ef8c0ba9547c909c95c74076812d8fab))
+
 ## [1.0.0](https://github.com/alimek/t3-factory/compare/v0.12.0...v1.0.0) (2026-11-25)
 
 
