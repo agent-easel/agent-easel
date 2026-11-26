@@ -203,7 +203,6 @@ export const makeConnection = (
       observation: T3Inspection,
       invalidReady: boolean,
     ) {
-      if (attempt.id === null || !diagnostics) return;
       const environment = observation.contract?.environmentId;
       const contextMissing = !observation.authorizationIdentity || !environment;
       yield* attempt.record({
@@ -223,20 +222,25 @@ export const makeConnection = (
       yield* attempt.record({
         type: "t3_connection_identity",
         outcome: contextMissing ? "failed" : "ok",
-        environment: environment ? diagnostics.hash(environment) : null,
-        grant: grant ? diagnostics.hash(grant) : null,
+        environment: environment ? attempt.hash(environment) : null,
+        grant: grant ? attempt.hash(grant) : null,
         reason: contextMissing ? "authorization_context_missing" : null,
       });
     });
     const check = Effect.fn("Connection.check")(function* ({
       ids = [],
-      record = true,
-    }: { ids?: string[]; record?: boolean } = {}) {
+      record = "always",
+    }: { ids?: string[]; record?: "always" | "changes" | "never" } = {}) {
       if (!saved || closed) return value(ids);
       const savedRow = saved;
       const endpoint = savedRow.endpoint;
       const before = status;
-      const attempt = record ? yield* begin("t3_connection", ids) : noDiagnosticAttempt;
+      const attempt =
+        record === "always"
+          ? yield* begin("t3_connection", ids)
+          : record === "changes" && diagnostics
+            ? yield* diagnostics.changeAttempt("t3_connection")
+            : noDiagnosticAttempt;
       const unavailable = Effect.gen(function* () {
         support = NO_T3_SUPPORT;
         status = {
@@ -392,13 +396,18 @@ export const makeConnection = (
             log.attempt,
             Effect.runPromiseWith(yield* Effect.context()),
           );
-          yield* check();
-          stopWorker = yield* periodicWorker(intervalMs, serial(check()), serial(Effect.void));
+          yield* check({ record: "changes" });
+          stopWorker = yield* periodicWorker(
+            intervalMs,
+            serial(check({ record: "changes" })),
+            serial(Effect.void),
+          );
         }),
       getConnection: () => Effect.sync(() => value()),
       recheckConnection: () => serial(check()),
+      observeConnection: () => serial(check({ record: "changes" })),
       snapshots: {
-        fresh: () => serial(Effect.map(check({ record: false }), snapshot)),
+        fresh: () => serial(Effect.map(check({ record: "never" }), snapshot)),
         latest: () => Effect.sync(snapshot),
       } satisfies ContractSnapshots,
       configureConnection: (input: unknown) =>

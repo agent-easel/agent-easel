@@ -74,6 +74,7 @@ export const makeProjects = (
   connection: {
     getConnection(): Effect.Effect<Result<T3Connection>, unknown>;
     recheckConnection(): Effect.Effect<Result<T3Connection>, unknown>;
+    observeConnection(): Effect.Effect<Result<T3Connection>, unknown>;
   },
   intervalMs: number,
   changes: LiveChanges,
@@ -238,7 +239,11 @@ export const makeProjects = (
         return uncertain();
       }).pipe(Effect.catch(() => reconcile().pipe(Effect.as(uncertain()))));
     });
-    const stopWorker = yield* periodicWorker(intervalMs, serial(reconcile()), serial(Effect.void));
+    const stopWorker = yield* periodicWorker(
+      intervalMs,
+      serial(Effect.flatMap(connection.observeConnection(), reconcileUnder)),
+      serial(Effect.void),
+    );
     const close = Effect.gen(function* () {
       if (closed) return;
       closed = true;

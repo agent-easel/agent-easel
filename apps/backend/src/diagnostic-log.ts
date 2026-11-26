@@ -150,17 +150,29 @@ function diagnosticEnvironment(
   });
 }
 
+interface AttemptOpening {
+  readonly sequence: number;
+  readonly operation: DiagnosticOperation;
+  readonly startedAt: string;
+  readonly environment: string;
+}
+
 const makeSqliteRecorder = (
   sql: SqlClient.SqlClient,
   readState: Effect.Effect<StateRow, unknown>,
 ) => {
+  const openings = new WeakMap<DiagnosticAttemptRef, AttemptOpening>();
   const live = (attempt: DiagnosticAttemptRef) =>
     Effect.gen(function* () {
       const state = yield* readState;
       if (!recording(state, yield* now) || state.generation !== attempt.generation) return false;
       const owner =
         yield* sql`SELECT 1 AS present FROM diagnostic_attempts WHERE id = ${attempt.id}`;
-      return owner.length > 0;
+      if (owner.length > 0) return true;
+      const opening = openings.get(attempt)!;
+      yield* sql`INSERT INTO diagnostic_attempts (sequence, id, generation, operation, started_at, truncated, environment)
+        VALUES (${opening.sequence}, ${attempt.id}, ${attempt.generation}, ${opening.operation}, ${opening.startedAt}, 1, ${opening.environment})`;
+      return true;
     });
   const evict = Effect.gen(function* () {
     const [counted] = yield* sql<{
@@ -191,9 +203,18 @@ const makeSqliteRecorder = (
             const state = yield* readState;
             if (!recording(state, yield* now) || state.generation !== before.generation)
               return null;
-            yield* sql`INSERT INTO diagnostic_attempts (id, generation, operation, started_at, environment)
-              VALUES (${id}, ${state.generation}, ${operation}, ${startedAt}, ${snapshot})`;
-            return { id, generation: state.generation };
+            const [inserted] = yield* sql<{ sequence: number }>`
+              INSERT INTO diagnostic_attempts (id, generation, operation, started_at, environment)
+              VALUES (${id}, ${state.generation}, ${operation}, ${startedAt}, ${snapshot})
+              RETURNING sequence`;
+            const attempt = { id, generation: state.generation };
+            openings.set(attempt, {
+              sequence: inserted!.sequence,
+              operation,
+              startedAt,
+              environment: snapshot,
+            });
+            return attempt;
           }),
         );
       }),
@@ -257,15 +278,29 @@ export const makeDiagnosticLog = (
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    let salt: string | undefined;
     const readState = sql<StateRow>`
       SELECT enabled_until, generation, salt FROM diagnostic_log_state WHERE singleton = 1`.pipe(
-      Effect.map((rows) => rows[0]!),
+      Effect.flatMap(([state]) =>
+        state === undefined
+          ? Effect.fail(new Error("The Diagnostic log state is missing."))
+          : Effect.sync(() => {
+              salt = state.salt;
+              return state;
+            }),
+      ),
     );
-    const { salt } = yield* readState;
-    const hash = (value: string) => shortHash(salt, value);
+    const hash = (value: string) =>
+      salt === undefined ? noDiagnosticAttempt.hash(value) : shortHash(salt, value);
     const recorder = injected ?? makeSqliteRecorder(sql, readState);
     const environment = diagnosticEnvironment(sources, hash);
     let dropped = 0;
+    const upkeep = (work: Effect.Effect<unknown, unknown>) =>
+      work.pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.void,
+        ),
+      );
     const contained = <A>(work: () => Effect.Effect<A, unknown>, fallback: A): Effect.Effect<A> =>
       Effect.suspend(work).pipe(
         Effect.catchCause((cause) =>
@@ -277,6 +312,21 @@ export const makeDiagnosticLog = (
               }),
         ),
       );
+    const guardWith =
+      (record: DiagnosticAttemptHandle["record"]): DiagnosticAttemptHandle["guard"] =>
+      (step, work) =>
+        work.pipe(
+          Effect.onError((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : record({
+                  type: "unexpected_error",
+                  outcome: "failed",
+                  step,
+                  reason: "unexpected_error",
+                }),
+          ),
+        );
     const handle = (attempt: DiagnosticAttemptRef): DiagnosticAttemptHandle => {
       const record = (entry: DiagnosticEntry) =>
         contained(() => {
@@ -289,19 +339,7 @@ export const makeDiagnosticLog = (
         hash,
         record,
         finish: (outcome) => contained(() => recorder.finish(attempt, outcome), undefined),
-        guard: (step, work) =>
-          work.pipe(
-            Effect.onError((cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? Effect.void
-                : record({
-                    type: "unexpected_error",
-                    outcome: "failed",
-                    step,
-                    reason: "unexpected_error",
-                  }),
-            ),
-          ),
+        guard: guardWith(record),
       };
     };
     const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
@@ -311,8 +349,15 @@ export const makeDiagnosticLog = (
 
     const prune = Effect.gen(function* () {
       const cutoff = new Date(Date.parse(yield* now) - DIAGNOSTIC_RETENTION_MS).toISOString();
-      yield* sql`DELETE FROM diagnostic_entries WHERE at < ${cutoff}`;
-      yield* sql`DELETE FROM diagnostic_attempts WHERE started_at < ${cutoff}`;
+      yield* sql.withTransaction(
+        Effect.gen(function* () {
+          yield* sql`UPDATE diagnostic_attempts SET truncated = 1 WHERE id IN (
+            SELECT attempt_id FROM diagnostic_entries WHERE at < ${cutoff})`;
+          yield* sql`DELETE FROM diagnostic_entries WHERE at < ${cutoff}`;
+          yield* sql`DELETE FROM diagnostic_attempts WHERE started_at < ${cutoff} AND NOT EXISTS (
+            SELECT 1 FROM diagnostic_entries WHERE attempt_id = diagnostic_attempts.id)`;
+        }),
+      );
     });
     const status = Effect.gen(function* (): Effect.fn.Return<Result<DiagnosticLogStatus>, unknown> {
       const state = yield* readState;
@@ -350,19 +395,47 @@ export const makeDiagnosticLog = (
         }));
       });
 
-    yield* prune;
-    yield* periodicWorker(PRUNE_INTERVAL_MS, prune, Effect.void);
+    const recordingGeneration = contained(
+      () =>
+        Effect.gen(function* () {
+          const state = yield* readState;
+          return recording(state, yield* now) ? state.generation : null;
+        }),
+      null,
+    );
+    const persisted = new Map<DiagnosticOperation, { generation: number; observed: string }>();
+    const changeAttempt = (operation: DiagnosticOperation) =>
+      Effect.gen(function* (): Effect.fn.Return<DiagnosticAttemptHandle> {
+        const generation = yield* recordingGeneration;
+        if (generation === null) return noDiagnosticAttempt;
+        const steps: DiagnosticEntry[] = [];
+        const record = (entry: DiagnosticEntry) => Effect.sync(() => void steps.push(entry));
+        return {
+          id: null,
+          hash,
+          record,
+          finish: (outcome) =>
+            Effect.gen(function* () {
+              const observed = JSON.stringify([steps, outcome]);
+              const last = persisted.get(operation);
+              if (last?.generation === generation && last.observed === observed) return;
+              const opened = yield* attempt(operation, generation);
+              for (const step of steps) yield* opened.record(step);
+              yield* opened.finish(outcome);
+              if (opened.id !== null) persisted.set(operation, { generation, observed });
+            }),
+          guard: guardWith(record),
+        };
+      });
+
+    yield* upkeep(readState);
+    yield* upkeep(prune);
+    yield* periodicWorker(PRUNE_INTERVAL_MS, upkeep(prune), Effect.void);
 
     return {
       attempt,
-      recordingGeneration: contained(
-        () =>
-          Effect.gen(function* () {
-            const state = yield* readState;
-            return recording(state, yield* now) ? state.generation : null;
-          }),
-        null,
-      ),
+      changeAttempt,
+      recordingGeneration,
       hash,
       getDiagnosticLog: () =>
         Effect.gen(function* () {

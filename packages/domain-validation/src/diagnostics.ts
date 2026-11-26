@@ -18,8 +18,32 @@ export const DIAGNOSTIC_ENTRY_LIMIT = 10_000;
 export const DIAGNOSTIC_ATTEMPT_PAGE_LIMIT = 100;
 
 const VERSION = /^(?:\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.]{1,32})?|source|unrecognized)$/;
-const PLACEHOLDER_PATH =
-  /^(?:(?:~|<T3_STATE>|<CODEX_HOME>)(?:\/[A-Za-z0-9._-]{1,64}){0,8}|(?:~|<T3_STATE>|<CODEX_HOME>)\/<REDACTED>|<OTHER>)$/;
+const installSkills = ["factory-block", "factory-start-run", "setup-factory", "factory-configure"];
+const FIXED_PATH_NAMES_AGENTEASEL_CHOOSES: ReadonlySet<string> = new Set([
+  ".agenteasel",
+  ".t3",
+  "userdata",
+  "server-runtime.json",
+  "providers",
+  "antigravity",
+  "config",
+  ".codex",
+  ".claude",
+  ".claude.json",
+  ".cursor",
+  ".grok",
+  ".vibe",
+  "config.toml",
+  "mcp.json",
+  "mcp_config.json",
+  "reporting",
+  "skills",
+  "SKILL.md",
+  ...installSkills,
+]);
+const PATH_PLACEHOLDERS: ReadonlySet<string> = new Set(["~", "<T3_STATE>", "<CODEX_HOME>"]);
+const REDACTED_SEGMENT = "<REDACTED>";
+const PATH_SEGMENT_LIMIT = 8;
 
 export function diagnosticVersion(value: unknown): string {
   return typeof value === "string" && VERSION.test(value) ? value : "unrecognized";
@@ -36,8 +60,19 @@ export function diagnosticPath(
     .filter(({ root }) => normalized === root || normalized.startsWith(`${root}/`))
     .toSorted((left, right) => right.root.length - left.root.length)[0];
   if (match === undefined) return "<OTHER>";
-  const candidate = match.placeholder + normalized.slice(match.root.length);
-  return placeholderPath(candidate) ? candidate : `${match.placeholder}/<REDACTED>`;
+  const segments = normalized
+    .slice(match.root.length)
+    .split("/")
+    .filter((segment) => segment !== "")
+    .map((segment) =>
+      FIXED_PATH_NAMES_AGENTEASEL_CHOOSES.has(segment) ? segment : REDACTED_SEGMENT,
+    )
+    .filter(
+      (segment, index, all) => segment !== REDACTED_SEGMENT || all[index - 1] !== REDACTED_SEGMENT,
+    );
+  return segments.length > PATH_SEGMENT_LIMIT
+    ? `${match.placeholder}/${REDACTED_SEGMENT}`
+    : [match.placeholder, ...segments].join("/");
 }
 
 const LOOPBACK_HOST =
@@ -57,10 +92,20 @@ const nullable =
   (value) =>
     value === null || check(value);
 const version: FieldCheck = (value) => typeof value === "string" && VERSION.test(value);
-const placeholderPath: FieldCheck = (value) =>
-  typeof value === "string" &&
-  PLACEHOLDER_PATH.test(value) &&
-  !value.split("/").some((segment) => segment === "." || segment === "..");
+const placeholderPath: FieldCheck = (value) => {
+  if (value === "<OTHER>") return true;
+  if (typeof value !== "string") return false;
+  const [placeholder, ...segments] = value.split("/");
+  return (
+    PATH_PLACEHOLDERS.has(placeholder!) &&
+    segments.length <= PATH_SEGMENT_LIMIT &&
+    segments.every(
+      (segment, index) =>
+        FIXED_PATH_NAMES_AGENTEASEL_CHOOSES.has(segment) ||
+        (segment === REDACTED_SEGMENT && segments[index - 1] !== REDACTED_SEGMENT),
+    )
+  );
+};
 const stepOutcome = oneOf("ok", "failed", "skipped");
 const host = oneOf("loopback", "non-loopback");
 const shortHash: FieldCheck = (value) => typeof value === "string" && /^[a-f0-9]{8}$/.test(value);
@@ -139,8 +184,6 @@ const installWriteReasons = [
   "verification_failed",
   "write_failed",
 ] as const;
-const installSkills = ["factory-block", "factory-start-run", "setup-factory", "factory-configure"];
-
 const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, FieldCheck> } = {
   start_preconditions: {
     outcome: oneOf("ok", "failed"),
