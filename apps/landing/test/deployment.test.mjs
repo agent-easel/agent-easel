@@ -96,7 +96,19 @@ await test("a Vercel build without a published Release version fails instead of 
   assert.throws(build);
 });
 
-await test("the built hero screenshot exists, matches its PNG dimensions and preserves readable width on narrow viewports", (context) => {
+function heroAttributeAndPngSizes(html, output, name) {
+  const tag = html.match(
+    new RegExp(`<img\\s+src="\\./screens/${name}\\.png"\\s+width="(\\d+)"\\s+height="(\\d+)"`),
+  );
+  const png = readFileSync(join(output, `screens/${name}.png`));
+  const isPng = png.subarray(0, 8).toString("hex") === "89504e470d0a1a0a";
+  return {
+    attributes: tag && [Number(tag[1]), Number(tag[2])],
+    png: isPng && [png.readUInt32BE(16), png.readUInt32BE(20)],
+  };
+}
+
+await test("the built hero images, desktop and phone, exist and match their PNG dimensions", (context) => {
   // Arrange
   const env = { FACTORY_SITE_URL: "" };
 
@@ -105,12 +117,10 @@ await test("the built hero screenshot exists, matches its PNG dimensions and pre
 
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
-  const hero = html.match(
-    /<div[^>]*overflow-x-auto[^>]*>\s*<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"[^>]*class="[^"]*min-w-\[1040px\][^"]*max-w-none[^"]*"/,
-  );
-  assert.ok(hero);
-  const png = readFileSync(join(output, "screens/run-detail.png"));
-  assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-  assert.equal(Number(hero[1]), png.readUInt32BE(16));
-  assert.equal(Number(hero[2]), png.readUInt32BE(20));
+  const desktop = heroAttributeAndPngSizes(html, output, "run-detail");
+  const phone = heroAttributeAndPngSizes(html, output, "run-detail-mobile");
+  assert.ok(desktop.attributes && desktop.png);
+  assert.deepEqual(desktop.attributes, desktop.png);
+  assert.ok(phone.attributes && phone.png);
+  assert.deepEqual(phone.attributes, phone.png);
 });
