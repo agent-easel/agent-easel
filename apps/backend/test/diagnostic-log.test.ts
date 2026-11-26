@@ -8,11 +8,16 @@ import type {
   DiagnosticEntry,
   T3ConnectionRecovery,
 } from "@agent-easel/contracts";
-import { diagnosticPath, validateDiagnosticEntry } from "@agent-easel/domain-validation";
+import {
+  DIAGNOSTIC_ENTRY_LIMIT,
+  diagnosticPath,
+  validateDiagnosticEntry,
+} from "@agent-easel/domain-validation";
 import type { DiagnosticLog } from "../src/diagnostic-log.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
+  afterScheduledChecks,
   diagnosticHome,
   diagnosticPruneRefused,
   diagnosticStateMissing,
@@ -420,7 +425,7 @@ it("a diagnostic entry whose path keeps an unrecognized folder name is refused",
 });
 
 it.effect(
-  "an attempt still running after its earlier steps were evicted records its later failure",
+  "an attempt still running after its earlier steps were evicted records its later failed step",
   (context) =>
     Effect.gen(function* () {
       // Arrange
@@ -435,20 +440,13 @@ it.effect(
       yield* other.record(installTarget);
 
       // Act
-      yield* running.record(deniedWrite).pipe(Effect.andThen(running.finish("failed")));
+      yield* running.record(deniedWrite);
 
       // Assert
       expect(yield* log.listDiagnosticAttempts("", "", running.id)).toMatchObject({
         ok: true,
         value: {
-          attempts: [
-            {
-              id: running.id,
-              truncated: true,
-              outcome: "failed",
-              entries: [{ entry: deniedWrite }],
-            },
-          ],
+          attempts: [{ id: running.id, truncated: true, entries: [{ entry: deniedWrite }] }],
         },
       });
     }),
@@ -510,7 +508,7 @@ it("AgentEasel starts when its storage refuses to prune the Diagnostic log", asy
   expect(await factory.getFirstRunSetup("")).toMatchObject({ ok: true });
 });
 
-it("a recorded startup that fails before the backend is ready records its unexpected error", async (c) => {
+it("the start after a recorded startup failed before the backend was ready shows its unexpected error", async (c) => {
   // Arrange
   const home = await diagnosticHome(c);
   const t3 = new ControlledT3();
@@ -525,14 +523,13 @@ it("a recorded startup that fails before the backend is ready records its unexpe
   await first.close();
   const restore = projectStorageRefused(home.harness.databasePath);
   t3.projects.listProjects = () => Promise.reject(new Error("Project discovery failed."));
+  await expect(home.open({ t3 })).rejects.toBeDefined();
+  restore();
 
   // Act
-  const failed = home.open({ t3 });
+  const reopened = await home.open({ t3 });
 
   // Assert
-  await expect(failed).rejects.toBeDefined();
-  restore();
-  const reopened = await home.open({ t3 });
   const exported = await reopened.exportDiagnosticLog();
   assert(exported.ok);
   expect(exported.value).toMatch(
@@ -634,6 +631,7 @@ it.effect(
       yield* TestClock.adjust(1000);
 
       // Assert
+      yield* afterScheduledChecks(factory);
       expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
         ok: true,
         value: {
@@ -656,6 +654,7 @@ it.effect(
       yield* TestClock.adjust(1000);
 
       // Assert
+      yield* afterScheduledChecks(factory);
       expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
         ok: true,
         value: {
@@ -666,5 +665,247 @@ it.effect(
           ],
         },
       });
+    }),
+);
+
+it.effect(
+  "a scheduled check records the connection's recovery after an explicit check recorded an outage",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { harness, t3 } = yield* Effect.promise(() => recordingConnection(context));
+      const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
+      t3.connection.available = false;
+      yield* factory.recheckConnection();
+      t3.connection.available = true;
+
+      // Act
+      yield* TestClock.adjust(1000);
+
+      // Assert
+      yield* afterScheduledChecks(factory);
+      expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "t3_connection", outcome: "failed" },
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "backend_start" },
+          ],
+        },
+      });
+    }),
+);
+
+it.effect(
+  "a scheduled check records a renewed outage after an explicit check recorded the recovery",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { harness, t3 } = yield* Effect.promise(() => recordingConnection(context));
+      const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
+      t3.connection.available = false;
+      yield* TestClock.adjust(1000);
+      yield* afterScheduledChecks(factory);
+      t3.connection.available = true;
+      yield* factory.recheckConnection();
+      t3.connection.available = false;
+
+      // Act
+      yield* TestClock.adjust(1000);
+
+      // Assert
+      yield* afterScheduledChecks(factory);
+      expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { operation: "t3_connection", outcome: "failed" },
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "t3_connection", outcome: "failed" },
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "backend_start" },
+          ],
+        },
+      });
+    }),
+);
+
+it.effect(
+  "a scheduled check of an unchanged connection adds no attempt after an explicit check with the same verdict",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { harness, t3 } = yield* Effect.promise(() => recordingConnection(context));
+      const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
+      yield* factory.recheckConnection();
+
+      // Act
+      yield* TestClock.adjust(1000);
+
+      // Assert
+      yield* afterScheduledChecks(factory);
+      expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "backend_start" },
+          ],
+        },
+      });
+    }),
+);
+
+it.effect(
+  "an unchanged automatic observation that starts while an explicit check is still running is recorded after it",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const first = yield* log.changeAttempt("t3_connection");
+      yield* first.record(connected);
+      yield* first.finish("ok");
+      yield* TestClock.adjust(1000);
+      const explicit = yield* log.attempt("t3_connection");
+      yield* TestClock.adjust(1000);
+      const later = yield* log.changeAttempt("t3_connection");
+      yield* later.record(connected);
+
+      // Act
+      yield* later.finish("ok");
+
+      // Assert
+      expect(yield* log.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { startedAt: "1970-01-01T00:00:02.000Z", outcome: "ok" },
+            { id: explicit.id, outcome: null },
+            { startedAt: "1970-01-01T00:00:00.000Z", outcome: "ok" },
+          ],
+        },
+      });
+    }),
+);
+
+const interleavedObservation = (log: DiagnosticLog) =>
+  Effect.gen(function* () {
+    const connection = yield* log.changeAttempt("t3_connection");
+    yield* connection.record(connected);
+    yield* TestClock.adjust(1000);
+    const reporting = yield* log.attempt("reporting_recheck");
+    yield* reporting.record(installTarget);
+    yield* reporting.finish("ok");
+    yield* TestClock.adjust(1000);
+    return { connection, reporting };
+  });
+
+it.effect(
+  "a buffered observation that flushes after a later attempt is listed by when it was observed",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const { connection, reporting } = yield* interleavedObservation(log);
+
+      // Act
+      yield* connection.finish("ok");
+
+      // Assert
+      expect(yield* log.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { id: reporting.id, startedAt: "1970-01-01T00:00:01.000Z" },
+            { operation: "t3_connection", startedAt: "1970-01-01T00:00:00.000Z" },
+          ],
+          nextCursor: null,
+        },
+      });
+    }),
+);
+
+it.effect(
+  "the next filtered page after a later attempt continues with the earlier buffered observation",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const { connection, reporting } = yield* interleavedObservation(log);
+      yield* connection.finish("ok");
+      const all = yield* log.listDiagnosticAttempts("", "", "");
+      assert(all.ok);
+      const ids = all.value.attempts.map((attempt) => attempt.id).join(",");
+      const first = yield* log.listDiagnosticAttempts("", "1", ids);
+      assert(first.ok);
+      expect(first.value.attempts).toMatchObject([{ id: reporting.id }]);
+      assert(first.value.nextCursor !== null);
+
+      // Act
+      const next = yield* log.listDiagnosticAttempts(first.value.nextCursor, "1", ids);
+
+      // Assert
+      expect(next).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [{ operation: "t3_connection", startedAt: "1970-01-01T00:00:00.000Z" }],
+          nextCursor: null,
+        },
+      });
+    }),
+);
+
+it.effect(
+  "Export lists a buffered observation by when it was observed, after a later attempt",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const { connection } = yield* interleavedObservation(log);
+      yield* connection.finish("ok");
+
+      // Act
+      const exported = yield* log.exportDiagnosticLog();
+
+      // Assert
+      assert(exported.ok);
+      expect(exported.value).toMatch(
+        /### Check Agent reporting[\s\S]*### Check T3 Code connection/,
+      );
+    }),
+);
+
+it.effect(
+  "the entry cap evicts a buffered step observed before the entries already stored",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open, sql } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const connection = yield* log.changeAttempt("t3_connection");
+      yield* connection.record(connected);
+      yield* TestClock.adjust(1000);
+      yield* entriesAtCapacity(sql);
+
+      // Act
+      yield* connection.finish("ok");
+
+      // Assert
+      const page = yield* log.listDiagnosticAttempts("", "", "");
+      assert(page.ok);
+      expect(page.value.attempts).toMatchObject([{ operation: "t3_detection", truncated: false }]);
+      expect(page.value.attempts[0]?.entries).toHaveLength(DIAGNOSTIC_ENTRY_LIMIT);
     }),
 );

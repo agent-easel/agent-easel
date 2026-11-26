@@ -97,6 +97,15 @@ interface AttemptRow {
   readonly environment: string;
 }
 
+interface LatestVerdict {
+  readonly order: number;
+  readonly generation: number;
+  readonly observed: string | null;
+}
+
+const observedVerdict = (entries: readonly DiagnosticEntry[], outcome: DiagnosticAttemptOutcome) =>
+  JSON.stringify([entries, outcome]);
+
 const HARNESS_LIMIT = 16;
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_PAGE_SIZE = 20;
@@ -184,10 +193,11 @@ const makeSqliteRecorder = (
     }>`SELECT count(*) AS count FROM diagnostic_entries`;
     const excess = (counted?.count ?? 0) - DIAGNOSTIC_ENTRY_LIMIT;
     if (excess <= 0) return;
-    const evicted = yield* sql<{ sequence: number; attempt_id: string }>`
-      SELECT sequence, attempt_id FROM diagnostic_entries ORDER BY sequence LIMIT ${excess}`;
-    const ids = [...new Set(evicted.map((row) => row.attempt_id))];
-    yield* sql`DELETE FROM diagnostic_entries WHERE sequence <= ${evicted.at(-1)!.sequence}`;
+    const oldest = sql`SELECT sequence FROM diagnostic_entries ORDER BY at, sequence LIMIT ${excess}`;
+    const evicted = yield* sql<{ attempt_id: string }>`
+      SELECT DISTINCT attempt_id FROM diagnostic_entries WHERE sequence IN (${oldest})`;
+    const ids = evicted.map((row) => row.attempt_id);
+    yield* sql`DELETE FROM diagnostic_entries WHERE sequence IN (${oldest})`;
     yield* sql`UPDATE diagnostic_attempts SET truncated = 1 WHERE id IN ${sql.in(ids)}`;
     yield* sql`DELETE FROM diagnostic_attempts WHERE id IN ${sql.in(ids)} AND NOT EXISTS (
       SELECT 1 FROM diagnostic_entries WHERE attempt_id = diagnostic_attempts.id)`;
@@ -254,12 +264,25 @@ function validRecordingInput(input: unknown): input is { enabled: boolean } {
   );
 }
 
-type PageQuery = { cursor: number | null; limit: number; ids: readonly string[] | null };
+interface PagePosition {
+  readonly startedAt: string;
+  readonly sequence: number;
+}
+
+type PageQuery = { cursor: PagePosition | null; limit: number; ids: readonly string[] | null };
+
+const PAGE_CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(\d{1,15})$/;
+const FIRST_PAGE: PagePosition = {
+  startedAt: "9999-12-31T23:59:59.999Z",
+  sequence: Number.MAX_SAFE_INTEGER,
+};
+const pageCursor = (row: AttemptRow) => `${row.started_at}_${row.sequence}`;
 
 function pageQuery(cursor: string, limit: string, ids: string): Result<PageQuery> {
   const requested = ids === "" ? null : ids.split(",");
   const size = limit === "" ? DEFAULT_PAGE_SIZE : Number(limit);
-  if (cursor !== "" && !/^\d{1,15}$/.test(cursor))
+  const position = PAGE_CURSOR.exec(cursor);
+  if (cursor !== "" && position === null)
     return failure("validation", "Send the cursor of an earlier page.");
   if (!Number.isInteger(size) || size < 1 || size > DIAGNOSTIC_ATTEMPT_PAGE_LIMIT)
     return failure("validation", `Ask for 1–${DIAGNOSTIC_ATTEMPT_PAGE_LIMIT} attempts.`);
@@ -274,7 +297,11 @@ function pageQuery(cursor: string, limit: string, ids: string): Result<PageQuery
     );
   return {
     ok: true,
-    value: { cursor: cursor === "" ? null : Number(cursor), limit: size, ids: requested },
+    value: {
+      cursor: position === null ? null : { startedAt: position[1]!, sequence: Number(position[2]) },
+      limit: size,
+      ids: requested,
+    },
   };
 }
 
@@ -333,9 +360,21 @@ export const makeDiagnosticLog = (
                 }),
           ),
         );
-    const handle = (attempt: DiagnosticAttemptRef) => {
+    let observations = 0;
+    const latest = new Map<DiagnosticOperation, LatestVerdict>();
+    const remember = (operation: DiagnosticOperation, verdict: LatestVerdict) => {
+      const last = latest.get(operation);
+      if (last === undefined || last.order <= verdict.order) latest.set(operation, verdict);
+    };
+    const handle = (
+      attempt: DiagnosticAttemptRef,
+      operation: DiagnosticOperation,
+      order: number,
+    ) => {
+      const entries: DiagnosticEntry[] = [];
       const recordAt = (entry: DiagnosticEntry, at: string) =>
         contained(() => {
+          entries.push(entry);
           const valid = validateDiagnosticEntry(entry);
           if (!valid.ok) return Effect.fail(valid.error);
           return recorder.append(attempt, valid.value, at);
@@ -347,19 +386,37 @@ export const makeDiagnosticLog = (
         record,
         recordAt,
         finish: (outcome: DiagnosticAttemptOutcome) =>
-          contained(() => recorder.finish(attempt, outcome), undefined),
+          contained(() => recorder.finish(attempt, outcome), undefined).pipe(
+            Effect.map(() =>
+              remember(operation, {
+                order,
+                generation: attempt.generation,
+                observed: observedVerdict(entries, outcome),
+              }),
+            ),
+          ),
         guard: guardWith(record),
       };
     };
     const open = (
       operation: DiagnosticOperation,
+      order: number,
       expectedGeneration?: number,
       startedAt?: string,
     ) =>
-      contained(() => recorder.open(operation, environment, expectedGeneration, startedAt), null);
+      contained(
+        () => recorder.open(operation, environment, expectedGeneration, startedAt),
+        null,
+      ).pipe(
+        Effect.map((opened) => {
+          if (opened === null) return null;
+          remember(operation, { order, generation: opened.generation, observed: null });
+          return handle(opened, operation, order);
+        }),
+      );
     const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
-      open(operation, expectedGeneration).pipe(
-        Effect.map((opened) => (opened === null ? noDiagnosticAttempt : handle(opened))),
+      open(operation, ++observations, expectedGeneration).pipe(
+        Effect.map((opened) => opened ?? noDiagnosticAttempt),
       );
 
     const prune = Effect.gen(function* () {
@@ -395,7 +452,7 @@ export const makeDiagnosticLog = (
         const entries = ids.length
           ? yield* sql<{ attempt_id: string; at: string; entry: string }>`
               SELECT attempt_id, at, entry FROM diagnostic_entries
-              WHERE attempt_id IN ${sql.in(ids)} ORDER BY sequence`
+              WHERE attempt_id IN ${sql.in(ids)} ORDER BY at, sequence`
           : [];
         return rows.map((row): DiagnosticAttempt => ({
           id: row.id,
@@ -418,11 +475,11 @@ export const makeDiagnosticLog = (
         }),
       null,
     );
-    const persisted = new Map<DiagnosticOperation, { generation: number; observed: string }>();
     const changeAttempt = (operation: DiagnosticOperation) =>
       Effect.gen(function* (): Effect.fn.Return<DiagnosticAttemptHandle> {
         const generation = yield* recordingGeneration;
         if (generation === null) return noDiagnosticAttempt;
+        const order = ++observations;
         const startedAt = yield* now;
         const steps: { entry: DiagnosticEntry; at: string }[] = [];
         const record = (entry: DiagnosticEntry) =>
@@ -433,15 +490,22 @@ export const makeDiagnosticLog = (
           record,
           finish: (outcome) =>
             Effect.gen(function* () {
-              const observed = JSON.stringify([steps.map(({ entry }) => entry), outcome]);
-              const last = persisted.get(operation);
-              if (last?.generation === generation && last.observed === observed) return;
-              const opened = yield* open(operation, generation, startedAt);
-              if (opened === null) return;
-              const recording = handle(opened);
+              const observed = observedVerdict(
+                steps.map(({ entry }) => entry),
+                outcome,
+              );
+              const last = latest.get(operation);
+              if (
+                last !== undefined &&
+                last.order < order &&
+                last.generation === generation &&
+                last.observed === observed
+              )
+                return;
+              const recording = yield* open(operation, order, generation, startedAt);
+              if (recording === null) return;
               for (const { entry, at } of steps) yield* recording.recordAt(entry, at);
               yield* recording.finish(outcome);
-              persisted.set(operation, { generation, observed });
             }),
           guard: guardWith(record),
         };
@@ -497,22 +561,24 @@ export const makeDiagnosticLog = (
         Effect.gen(function* (): Effect.fn.Return<Result<DiagnosticAttemptPage>, unknown> {
           const query = pageQuery(cursor, limit, ids);
           if (!query.ok) return query;
-          const { cursor: before, limit: size, ids: requested } = query.value;
+          const { cursor: position, limit: size, ids: requested } = query.value;
+          const before = position ?? FIRST_PAGE;
+          const older = sql`(started_at < ${before.startedAt}
+            OR (started_at = ${before.startedAt} AND sequence < ${before.sequence}))`;
           yield* prune;
           const rows =
             requested === null
-              ? yield* sql<AttemptRow>`SELECT * FROM diagnostic_attempts
-                  WHERE ${before ?? Number.MAX_SAFE_INTEGER} > sequence
-                  ORDER BY sequence DESC LIMIT ${size + 1}`
+              ? yield* sql<AttemptRow>`SELECT * FROM diagnostic_attempts WHERE ${older}
+                  ORDER BY started_at DESC, sequence DESC LIMIT ${size + 1}`
               : yield* sql<AttemptRow>`SELECT * FROM diagnostic_attempts
-                  WHERE id IN ${sql.in(requested)} AND ${before ?? Number.MAX_SAFE_INTEGER} > sequence
-                  ORDER BY sequence DESC LIMIT ${size + 1}`;
+                  WHERE id IN ${sql.in(requested)} AND ${older}
+                  ORDER BY started_at DESC, sequence DESC LIMIT ${size + 1}`;
           const page = rows.slice(0, size);
           return {
             ok: true,
             value: {
               attempts: yield* attempts(page),
-              nextCursor: rows.length > size ? String(page.at(-1)!.sequence) : null,
+              nextCursor: rows.length > size ? pageCursor(page.at(-1)!) : null,
             },
           };
         }),
@@ -520,7 +586,7 @@ export const makeDiagnosticLog = (
         Effect.gen(function* (): Effect.fn.Return<Result<string>, unknown> {
           yield* prune;
           const rows =
-            yield* sql<AttemptRow>`SELECT * FROM diagnostic_attempts ORDER BY sequence DESC`;
+            yield* sql<AttemptRow>`SELECT * FROM diagnostic_attempts ORDER BY started_at DESC, sequence DESC`;
           return { ok: true, value: diagnosticLogMarkdown(yield* attempts(rows)) };
         }),
     };
