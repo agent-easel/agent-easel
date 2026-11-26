@@ -96,7 +96,7 @@ await test("a Vercel build without a published Release version fails instead of 
   assert.throws(build);
 });
 
-await test("the built hero screenshot exists, matches its PNG dimensions and preserves readable width on narrow viewports", (context) => {
+await test("the built hero images, desktop and phone, exist and match their PNG dimensions", (context) => {
   // Arrange
   const env = { FACTORY_SITE_URL: "" };
 
@@ -106,11 +106,15 @@ await test("the built hero screenshot exists, matches its PNG dimensions and pre
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
   const hero = html.match(
-    /<div[^>]*overflow-x-auto[^>]*>\s*<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"[^>]*class="[^"]*min-w-\[1040px\][^"]*max-w-none[^"]*"/,
+    /<picture>\s*<source\s+media="[^"]+"\s+srcset="(?:\.\/)?screens\/run-detail-mobile\.png"\s+width="(\d+)"\s+height="(\d+)"[^>]*>\s*<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"/,
   );
   assert.ok(hero);
-  const png = readFileSync(join(output, "screens/run-detail.png"));
-  assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-  assert.equal(Number(hero[1]), png.readUInt32BE(16));
-  assert.equal(Number(hero[2]), png.readUInt32BE(20));
+  const phone = readFileSync(join(output, "screens/run-detail-mobile.png"));
+  const desktop = readFileSync(join(output, "screens/run-detail.png"));
+  assert.equal(phone.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.equal(desktop.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.equal(Number(hero[1]), phone.readUInt32BE(16));
+  assert.equal(Number(hero[2]), phone.readUInt32BE(20));
+  assert.equal(Number(hero[3]), desktop.readUInt32BE(16));
+  assert.equal(Number(hero[4]), desktop.readUInt32BE(20));
 });
