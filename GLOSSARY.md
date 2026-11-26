@@ -13,7 +13,7 @@ One AgentEasel product version, identified by a `vX.Y.Z` tag on a fixed commit a
 The host's one-time checklist (connect to T3 Code, install in agents) that must be completed before the application opens; once completed it is never shown again. See [First-run setup](docs/t3-integration.md#first-run-setup).
 
 **Diagnostic log**:
-The host's opt-in, local record of the setup and integration steps AgentEasel ran, redacted when written and grouped into **attempts**: one recorded setup or integration operation, such as Detect T3 Code, with the environment it ran in. Recording turns itself off 24 hours after it is turned on; nothing leaves the host unless the user copies or exports it. Lowercase "diagnostic" keeps its existing meaning of one failure's explanation, such as a Run title setting's latest diagnostic. An attempt here is unrelated to Condition arrivals. See [Diagnostic log](docs/t3-integration.md#diagnostic-log).
+The host's opt-in, local record of the setup and integration steps AgentEasel ran, redacted when written and grouped into **attempts**: one recorded setup or integration operation, such as Detect T3 Code, with the environment it ran in. Recording turns itself off 24 hours after it is turned on. The log is stored on the host and can be viewed, copied and exported from an approved device. Lowercase "diagnostic" keeps its existing meaning of one failure's explanation, such as a Run title setting's latest diagnostic. An attempt here is unrelated to Condition arrivals. See [Diagnostic log](docs/t3-integration.md#diagnostic-log).
 _Avoid_: debug log, logs, telemetry.
 
 **Beta build**:
