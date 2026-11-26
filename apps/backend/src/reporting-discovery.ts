@@ -172,11 +172,46 @@ function reportingHarness(instance: unknown): unknown {
 const DEFAULT_DISABLED_DRIVERS: readonly unknown[] = [
   "cursor",
   "grok",
+  "fx",
+  "kiro",
   "muse",
   "pi",
   "opencode",
   "antigravity",
 ];
+
+const BUILT_IN_DEFAULT_DRIVERS: readonly string[] = [
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "grok",
+  "fx",
+  "opencode",
+  "antigravity",
+  "kiro",
+  "pi",
+  "muse",
+];
+
+async function readT3Settings(stateDirectory: string): Promise<Record<string, unknown>> {
+  const raw = await readFile(join(stateDirectory, "settings.json"), "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "{}";
+    throw error;
+  });
+  return record(JSON.parse(raw));
+}
+
+function configuredProviderInstances(settings: Record<string, unknown>): Record<string, unknown> {
+  return settings.providerInstances === undefined ? {} : record(settings.providerInstances);
+}
+
+function hydrateProviderInstances(configured: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...configured };
+  for (const driver of BUILT_IN_DEFAULT_DRIVERS) {
+    if (!Object.hasOwn(merged, driver)) merged[driver] = { driver };
+  }
+  return merged;
+}
 
 /**
  * T3's own rule: an explicit `false` on the instance or inside its config (where older settings
@@ -194,7 +229,10 @@ function enabledInT3(instance: unknown): boolean {
  * The provider instances T3 keeps off. A project that turns an instance on keeps it running in T3
  * even when the machine has it off, so it is not among them.
  */
-function disabledInstances(settings: Record<string, unknown>): Set<string> {
+function disabledInstances(
+  settings: Record<string, unknown>,
+  instances: Record<string, unknown>,
+): Set<string> {
   const projectEnabled = new Set(
     Object.values(field(settings, "projectSettingsOverrides") ?? {}).flatMap((overrides) =>
       Object.entries(field(overrides, "providerInstances") ?? {})
@@ -203,7 +241,7 @@ function disabledInstances(settings: Record<string, unknown>): Set<string> {
     ),
   );
   return new Set(
-    Object.entries(record(settings.providerInstances))
+    Object.entries(instances)
       .filter(([id, instance]) => !projectEnabled.has(id) && !enabledInT3(instance))
       .map(([id]) => id),
   );
@@ -215,19 +253,18 @@ function disabledInstances(settings: Record<string, unknown>): Set<string> {
  */
 export async function reportingDriversOffInT3(stateDirectory: string): Promise<string[]> {
   try {
-    const settings = record(
-      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
-    );
-    const disabled = disabledInstances(settings);
-    const instances = Object.entries(record(settings.providerInstances));
+    const settings = await readT3Settings(stateDirectory);
+    const configured = configuredProviderInstances(settings);
+    const hydrated = hydrateProviderInstances(configured);
+    const disabled = disabledInstances(settings, hydrated);
     const on = new Set(
-      instances
+      Object.entries(hydrated)
         .filter(([id]) => !disabled.has(id))
         .map(([, instance]) => reportingHarness(instance)),
     );
     return [
       ...new Set(
-        instances
+        Object.entries(configured)
           .map(([, instance]) => reportingHarness(instance))
           .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
       ),
@@ -374,14 +411,11 @@ const enabledLocalReportingInstances = Effect.fn(function* (
         "Cannot discover local T3 Code configuration: Connected T3 Code identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 Code state directory; remote provisioning is unsupported.",
     } as const;
   return yield* boundary(async () => {
-    const settings = record(
-      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
-    );
-    const disabled = disabledInstances(settings);
+    const settings = await readT3Settings(stateDirectory);
+    const instances = hydrateProviderInstances(configuredProviderInstances(settings));
+    const disabled = disabledInstances(settings, instances);
     return {
-      instances: Object.entries(record(settings.providerInstances)).filter(
-        ([id]) => !disabled.has(id),
-      ),
+      instances: Object.entries(instances).filter(([id]) => !disabled.has(id)),
     } as const;
   });
 });

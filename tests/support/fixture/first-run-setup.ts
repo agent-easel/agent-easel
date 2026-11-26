@@ -72,6 +72,8 @@ async function startFreshHost({
               "codex-main": { driver: "codex", enabled: on.codex, config: { homePath: codex } },
               "setup-cursor": { driver: "cursor" },
               "setup-grok": { driver: "grok", enabled: on.grok, config: { homePath: grok } },
+              codex: { driver: "codex", enabled: false },
+              claudeAgent: { driver: "claudeAgent", enabled: false },
             },
           })
         : "{ not json",
