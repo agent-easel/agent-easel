@@ -30,36 +30,56 @@ const diagnosticErrorMessage = (cause: unknown) =>
       ? cause.message
       : "AgentEasel could not change the Diagnostic log.";
 
-async function readDiagnosticLog(
-  ids: readonly string[] | null,
-  limit: number,
-): Promise<DiagnosticLogView> {
+async function readWholeLog(windowSize: number) {
+  const attempts: DiagnosticAttempt[] = [];
+  let cursor: string | null = "";
+  while (cursor !== null && attempts.length < windowSize) {
+    const wholePageLimit = cursor === "" ? attemptPageSize : DIAGNOSTIC_ATTEMPT_PAGE_LIMIT;
+    const size = Math.min(windowSize - attempts.length, wholePageLimit);
+    const page = await api.listDiagnosticAttempts(cursor, String(size), "");
+    attempts.push(...page.attempts);
+    cursor = page.nextCursor;
+  }
+  return { attempts, missing: [], more: cursor !== null };
+}
+
+async function readFilteredLog(filter: string) {
+  const remaining = new Set(filter ? filter.split(",") : []);
+  const scan = remaining.size > DIAGNOSTIC_ATTEMPT_PAGE_LIMIT;
+  const query = scan ? "" : [...remaining].join(",");
+  const size = String(scan ? DIAGNOSTIC_ATTEMPT_PAGE_LIMIT : attemptPageSize);
+  const attempts: DiagnosticAttempt[] = [];
+  let cursor: string | null = "";
+  while (cursor !== null && remaining.size > 0) {
+    const page = await api.listDiagnosticAttempts(cursor, size, query);
+    attempts.push(...page.attempts.filter((attempt) => remaining.delete(attempt.id)));
+    cursor = page.nextCursor;
+  }
+  return { attempts, missing: [...remaining], more: false };
+}
+
+async function readDiagnosticLog(filter: string | null, pages: number): Promise<DiagnosticLogView> {
   const status = await api.getDiagnosticLog();
-  if (ids?.length === 0) return { status, attempts: [], missing: [], more: false };
-  const page = await api.listDiagnosticAttempts("", String(limit), ids?.join(",") ?? "");
-  const listed = new Set(page.attempts.map((attempt) => attempt.id));
-  return {
-    status,
-    attempts: page.attempts,
-    missing: ids?.filter((id) => !listed.has(id)) ?? [],
-    more: page.nextCursor !== null,
-  };
+  const selection =
+    filter === null ? await readWholeLog(pages * attemptPageSize) : await readFilteredLog(filter);
+  return { status, ...selection };
 }
 
 export function useDiagnosticLog(ids: readonly string[] | null) {
-  const [limit, setLimit] = useState(attemptPageSize);
-  const [view, setView] = useState<DiagnosticLogView | null>(null);
+  const [pages, setPages] = useState(1);
+  const [answer, setAnswer] = useState<{ filter: string | null; view: DiagnosticLogView }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const filter = ids?.join(",") ?? null;
-  const { failure, refresh, supersede } = useRefreshSchedule({
-    read: () => readDiagnosticLog(ids, limit),
-    apply: setView,
+  const view = answer?.filter === filter ? answer.view : null;
+  const { failure, pending, refresh, supersede } = useRefreshSchedule({
+    read: async () => ({ filter, view: await readDiagnosticLog(filter, pages) }),
+    apply: setAnswer,
     intervalMs: view?.status.enabled ? recordingRefreshMs : idleRefreshMs,
   });
   useEffect(() => {
     void refresh();
-  }, [refresh, filter, limit]);
+  }, [refresh, filter, pages]);
   const change = (mutation: () => Promise<DiagnosticLogStatus>) => {
     setBusy(true);
     setError("");
@@ -74,18 +94,13 @@ export function useDiagnosticLog(ids: readonly string[] | null) {
   return {
     view,
     failure,
+    pending,
     busy,
     error,
     refresh,
     setRecording: (enabled: boolean) => change(() => api.setDiagnosticRecording({ enabled })),
     deleteLog: () => change(() => api.deleteDiagnosticLog()),
-    showOlder:
-      view?.more && limit < DIAGNOSTIC_ATTEMPT_PAGE_LIMIT
-        ? () =>
-            setLimit((current) =>
-              Math.min(current + attemptPageSize, DIAGNOSTIC_ATTEMPT_PAGE_LIMIT),
-            )
-        : undefined,
+    showOlder: view?.more ? () => setPages(pages + 1) : undefined,
   };
 }
 

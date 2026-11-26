@@ -309,17 +309,31 @@ it.for([
   },
 );
 
-it("an approved remote client exports the host's whole Diagnostic log as text", async (c) => {
+it("an approved browser exports the host's whole Diagnostic log without application headers", async (c) => {
   // Arrange
   const server = await remoteServer(c);
-  const laptop = await server.approved("Laptop");
+  const laptop = await server.approved("Laptop", "browser");
 
   // Act
-  const reply = await laptop.sendBytes("GET", "/api/settings/diagnostics/export");
+  const reply = await laptop.asset("/api/settings/diagnostics/export");
 
   // Assert
   expect(reply.status).toBe(200);
+  expect(reply.contentType).toBe("text/plain; charset=utf-8");
+  expect(reply.cacheControl).toBe("no-store");
   expect(reply.data.toString("utf8")).toContain("## AgentEasel Diagnostic log");
+});
+
+it("an unapproved browser cannot export the host's Diagnostic log", async (c) => {
+  // Arrange
+  const server = await remoteServer(c);
+  const browser = server.client("browser");
+
+  // Act
+  const reply = await browser.asset("/api/settings/diagnostics/export");
+
+  // Assert
+  expect(reply.status).toBe(401);
 });
 
 it.for([

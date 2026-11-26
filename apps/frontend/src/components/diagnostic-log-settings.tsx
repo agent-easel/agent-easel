@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import type { DiagnosticAttempt } from "@agent-easel/contracts";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
@@ -39,7 +40,7 @@ type DiagnosticLog = ReturnType<typeof useDiagnosticLog>;
 export function DiagnosticLogSettings() {
   const host = useClientScope() === "host";
   const log = useDiagnosticLog(null);
-  const [copying, setCopying] = useState(false);
+  const [copying, setCopying] = useState<readonly DiagnosticAttempt[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { view } = log;
   const recorded = !!view && (view.status.enabled || view.status.hasEntries);
@@ -50,7 +51,7 @@ export function DiagnosticLogSettings() {
       action={
         recorded && (
           <>
-            <Button variant="outline" onClick={() => setCopying(true)}>
+            <Button variant="outline" onClick={() => setCopying(view.attempts)}>
               Copy
             </Button>
             <DiagnosticExportButton />
@@ -69,10 +70,8 @@ export function DiagnosticLogSettings() {
       {view && (
         <>
           <RecordingGroup log={log} view={view} host={host} />
-          <LogSection log={log} view={view} />
-          {copying && (
-            <DiagnosticCopyPreview attempts={view.attempts} onClose={() => setCopying(false)} />
-          )}
+          <LogSection log={log} view={view} onCopy={setCopying} />
+          {copying && <DiagnosticCopyPreview attempts={copying} onClose={() => setCopying(null)} />}
           <DeleteConfirmation log={log} view={view} open={deleting} onOpenChange={setDeleting} />
         </>
       )}
@@ -162,7 +161,15 @@ function RecordingGroup({
   );
 }
 
-function LogSection({ log, view }: { log: DiagnosticLog; view: DiagnosticLogView }) {
+function LogSection({
+  log,
+  view,
+  onCopy,
+}: {
+  log: DiagnosticLog;
+  view: DiagnosticLogView;
+  onCopy: (attempts: readonly DiagnosticAttempt[]) => void;
+}) {
   const heading = useId();
   return (
     <section aria-labelledby={heading} className="grid gap-2">
@@ -170,12 +177,12 @@ function LogSection({ log, view }: { log: DiagnosticLog; view: DiagnosticLogView
         Log · newest first
       </h3>
       {view.attempts.length ? (
-        <DiagnosticAttemptList attempts={view.attempts} missing={[]} />
+        <DiagnosticAttemptList attempts={view.attempts} missing={[]} onCopy={onCopy} />
       ) : (
         <DiagnosticLogEmpty />
       )}
       {log.showOlder && (
-        <TextLink tone="neutral" className="w-fit" onClick={log.showOlder}>
+        <TextLink tone="neutral" className="w-fit" disabled={log.pending} onClick={log.showOlder}>
           Show older attempts
         </TextLink>
       )}

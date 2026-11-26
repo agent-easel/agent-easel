@@ -543,6 +543,7 @@ function diagnosticRoutes(factory: AgentEasel): RouteEntries<typeof diagnosticOp
         ),
     },
     exportDiagnosticLog: {
+      protocolOptional: true,
       handle: () =>
         Effect.map(Effect.promise(factory.exportDiagnosticLog), (result) =>
           result.ok
