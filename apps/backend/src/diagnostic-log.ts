@@ -42,10 +42,12 @@ export interface DiagnosticRecorder {
     operation: DiagnosticOperation,
     environment: Effect.Effect<DiagnosticEnvironment>,
     expectedGeneration?: number,
+    startedAt?: string,
   ) => Effect.Effect<DiagnosticAttemptRef | null, unknown>;
   readonly append: (
     attempt: DiagnosticAttemptRef,
     entry: DiagnosticEntry,
+    at: string,
   ) => Effect.Effect<void, unknown>;
   readonly finish: (
     attempt: DiagnosticAttemptRef,
@@ -165,14 +167,16 @@ const makeSqliteRecorder = (
   const live = (attempt: DiagnosticAttemptRef) =>
     Effect.gen(function* () {
       const state = yield* readState;
-      if (!recording(state, yield* now) || state.generation !== attempt.generation) return false;
+      return recording(state, yield* now) && state.generation === attempt.generation;
+    });
+  const restoreAfterEviction = (attempt: DiagnosticAttemptRef) =>
+    Effect.gen(function* () {
       const owner =
         yield* sql`SELECT 1 AS present FROM diagnostic_attempts WHERE id = ${attempt.id}`;
-      if (owner.length > 0) return true;
+      if (owner.length > 0) return;
       const opening = openings.get(attempt)!;
       yield* sql`INSERT INTO diagnostic_attempts (sequence, id, generation, operation, started_at, truncated, environment)
         VALUES (${opening.sequence}, ${attempt.id}, ${attempt.generation}, ${opening.operation}, ${opening.startedAt}, 1, ${opening.environment})`;
-      return true;
     });
   const evict = Effect.gen(function* () {
     const [counted] = yield* sql<{
@@ -189,11 +193,12 @@ const makeSqliteRecorder = (
       SELECT 1 FROM diagnostic_entries WHERE attempt_id = diagnostic_attempts.id)`;
   });
   const recorder: DiagnosticRecorder = {
-    open: (operation, environment, expectedGeneration) =>
+    open: (operation, environment, expectedGeneration, observedStart) =>
       Effect.gen(function* () {
         const before = yield* readState;
-        const startedAt = yield* now;
-        if (!recording(before, startedAt)) return null;
+        const at = yield* now;
+        if (!recording(before, at)) return null;
+        const startedAt = observedStart ?? at;
         if (expectedGeneration !== undefined && before.generation !== expectedGeneration)
           return null;
         const snapshot = JSON.stringify(yield* environment);
@@ -218,12 +223,13 @@ const makeSqliteRecorder = (
           }),
         );
       }),
-    append: (attempt, entry) =>
+    append: (attempt, entry, at) =>
       sql.withTransaction(
         Effect.gen(function* () {
           if (!(yield* live(attempt))) return;
+          yield* restoreAfterEviction(attempt);
           yield* sql`INSERT INTO diagnostic_entries (attempt_id, at, entry)
-            VALUES (${attempt.id}, ${yield* now}, ${JSON.stringify(entry)})`;
+            VALUES (${attempt.id}, ${at}, ${JSON.stringify(entry)})`;
           yield* evict;
         }),
       ),
@@ -327,23 +333,32 @@ export const makeDiagnosticLog = (
                 }),
           ),
         );
-    const handle = (attempt: DiagnosticAttemptRef): DiagnosticAttemptHandle => {
-      const record = (entry: DiagnosticEntry) =>
+    const handle = (attempt: DiagnosticAttemptRef) => {
+      const recordAt = (entry: DiagnosticEntry, at: string) =>
         contained(() => {
           const valid = validateDiagnosticEntry(entry);
           if (!valid.ok) return Effect.fail(valid.error);
-          return recorder.append(attempt, valid.value);
+          return recorder.append(attempt, valid.value, at);
         }, undefined);
+      const record = (entry: DiagnosticEntry) => Effect.flatMap(now, (at) => recordAt(entry, at));
       return {
         id: attempt.id,
         hash,
         record,
-        finish: (outcome) => contained(() => recorder.finish(attempt, outcome), undefined),
+        recordAt,
+        finish: (outcome: DiagnosticAttemptOutcome) =>
+          contained(() => recorder.finish(attempt, outcome), undefined),
         guard: guardWith(record),
       };
     };
-    const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
-      contained(() => recorder.open(operation, environment, expectedGeneration), null).pipe(
+    const open = (
+      operation: DiagnosticOperation,
+      expectedGeneration?: number,
+      startedAt?: string,
+    ) =>
+      contained(() => recorder.open(operation, environment, expectedGeneration, startedAt), null);
+    const attempt = (operation: DiagnosticOperation) =>
+      open(operation).pipe(
         Effect.map((opened) => (opened === null ? noDiagnosticAttempt : handle(opened))),
       );
 
@@ -408,21 +423,25 @@ export const makeDiagnosticLog = (
       Effect.gen(function* (): Effect.fn.Return<DiagnosticAttemptHandle> {
         const generation = yield* recordingGeneration;
         if (generation === null) return noDiagnosticAttempt;
-        const steps: DiagnosticEntry[] = [];
-        const record = (entry: DiagnosticEntry) => Effect.sync(() => void steps.push(entry));
+        const startedAt = yield* now;
+        const steps: { entry: DiagnosticEntry; at: string }[] = [];
+        const record = (entry: DiagnosticEntry) =>
+          Effect.map(now, (at) => void steps.push({ entry, at }));
         return {
           id: null,
           hash,
           record,
           finish: (outcome) =>
             Effect.gen(function* () {
-              const observed = JSON.stringify([steps, outcome]);
+              const observed = JSON.stringify([steps.map(({ entry }) => entry), outcome]);
               const last = persisted.get(operation);
               if (last?.generation === generation && last.observed === observed) return;
-              const opened = yield* attempt(operation, generation);
-              for (const step of steps) yield* opened.record(step);
-              yield* opened.finish(outcome);
-              if (opened.id !== null) persisted.set(operation, { generation, observed });
+              const opened = yield* open(operation, generation, startedAt);
+              if (opened === null) return;
+              const recording = handle(opened);
+              for (const { entry, at } of steps) yield* recording.recordAt(entry, at);
+              yield* recording.finish(outcome);
+              persisted.set(operation, { generation, observed });
             }),
           guard: guardWith(record),
         };

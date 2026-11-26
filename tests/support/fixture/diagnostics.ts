@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 
-export function diagnosticsFixture({ factory, home }: Host) {
+export function diagnosticsFixture({ factory, home, time }: Host) {
   const runtimeFile = join(home, "reporting-t3-state", "server-runtime.json");
   return {
     actions: {
@@ -19,6 +19,11 @@ export function diagnosticsFixture({ factory, home }: Host) {
             serverVersion: "0.1.11",
           }),
         );
+      },
+      async expireRecording() {
+        const status = requireSuccess(await factory.getDiagnosticLog());
+        if (!status.until) throw new Error("Recording is off");
+        time.advanceTo(Date.parse(status.until) + 1);
       },
       async hostRecords() {
         requireSuccess(await factory.setDiagnosticRecording({ enabled: true }));

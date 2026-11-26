@@ -113,6 +113,45 @@ test("a failed install in First-run setup is recorded by one click and its attem
   await expect(viewer.getByRole("button", "Show whole log")).toBeVisible();
 });
 
+test("a recorded reporting retry after expiry opens only the new attempt", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await fixture.reporting.blockRequiredSkillWrite();
+  await app.open("/settings/agent-reporting");
+  await screen.getByRole("button", "Install all", { exact: true }).tap();
+  await recordAndRetry(screen).tap();
+  const view = screen.getByRole("button", "View diagnostic log");
+  await expect(view).toBeVisible();
+  const first = await exportedLog(app);
+  const firstHeading = first.match(/^### Install in Codex · .*$/m)?.[0];
+  assert(firstHeading);
+  await fixture.diagnostics.expireRecording();
+  await expect(recordAndRetry(screen)).toBeEnabled();
+
+  // Act
+  await recordAndRetry(screen).tap();
+
+  // Assert
+  const viewer = await openInstallViewer(
+    { app, screen, browser },
+    "diagnostic-reporting-after-expiry",
+  );
+  await expect(viewer.getByRole("region", /^Install in Codex at /)).toHaveCount(1);
+  const log = await exportedLog(app);
+  assert.equal(log.match(/### Install in Codex/g)?.length, 2);
+  const preview = viewer.getByRole("button", "Copy", { exact: true });
+  await preview.tap();
+  const excerpt = screen
+    .getByRole("dialog", "Copy diagnostic log")
+    .getByLabel("Diagnostic log excerpt");
+  await expect(excerpt).toContainText("Install in Codex");
+  await expect(excerpt).not.toContainText(firstHeading);
+});
+
 test("Settings Check again records one explicit reporting check while ordinary list reads stay silent", async ({
   fixture,
   app,

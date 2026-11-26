@@ -528,6 +528,43 @@ it("a recorded startup that fails before the backend is ready records its unexpe
 });
 
 it.effect(
+  "a buffered connection observation keeps the timestamps of its start and steps",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const attempt = yield* log.changeAttempt("t3_connection");
+      const step: DiagnosticEntry = {
+        type: "t3_connection",
+        outcome: "ok",
+        host: "loopback",
+        reason: "connected",
+      };
+      yield* TestClock.adjust(1000);
+      yield* attempt.record(step);
+      yield* TestClock.adjust(1000);
+
+      // Act
+      yield* attempt.finish("ok");
+
+      // Assert
+      expect(yield* log.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            {
+              startedAt: "1970-01-01T00:00:00.000Z",
+              entries: [{ at: "1970-01-01T00:00:01.000Z", entry: step }],
+            },
+          ],
+        },
+      });
+    }),
+);
+
+it.effect(
   "a scheduled check of an unchanged connection adds no attempt to the startup check's",
   (context) =>
     Effect.gen(function* () {
