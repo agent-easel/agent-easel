@@ -33,6 +33,8 @@ import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
 import { useConnectionState, type ConnectionPresentation } from "./connection-state.tsx";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
+import { useDiagnosticLogStatus } from "./diagnostic-log.ts";
+import { DiagnosticLogViewer } from "@/components/diagnostic-log-view";
 import { installable, providerName, targetStatus, useReportingState } from "./reporting-state.tsx";
 
 /** How often a step without a detected T3 looks for one again. */
@@ -282,6 +284,7 @@ function HostSetupProgressScreen({
   const { connected, targets, listed, current } = useSetupProgress(setup);
   const installed = installedEverywhere(listed);
   const manual = current && !!targets && !!listed && nothingToInstall(targets, listed);
+  const diagnostics = useDiagnosticLogStatus();
   return (
     <GateScreen
       size="wide"
@@ -321,7 +324,10 @@ function HostSetupProgressScreen({
           )}
         </li>
       </ol>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {diagnostics && (diagnostics.enabled || diagnostics.hasEntries) && (
+          <DiagnosticLogViewer attempts={null} />
+        )}
         <Button
           variant="outline"
           onClick={() => void Promise.all([onCheckAgain(), connected && refresh()])}

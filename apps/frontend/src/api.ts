@@ -12,6 +12,7 @@ import {
   clientAccessOperations,
   clientAccessServerOperations,
   serverUpdateOperations,
+  diagnosticOperations,
   operationPath,
   type OperationDefinition,
   type OperationInput,
@@ -138,6 +139,7 @@ export const api = {
   ...operationCalls(clientAccessOperations),
   ...operationCalls(clientAccessServerOperations),
   ...operationCalls(serverUpdateOperations),
+  ...operationCalls(diagnosticOperations),
   /** Whether Factory already holds this image; any answer but held or absent is a failure. */
   async hasRunImage(sha256: string) {
     const response = await factoryRequest(operationPath(runOperations.getRunImageInfo, sha256), {

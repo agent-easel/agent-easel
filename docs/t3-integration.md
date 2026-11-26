@@ -90,6 +90,8 @@ Redaction happens when an entry is written, and an entry with any field outside 
 
 The host and approved clients read the log: `GET /api/settings/diagnostics` answers whether recording is on, until when, whether entries exist and the dropped count; `GET /api/settings/diagnostics/attempts` pages attempts newest first (`cursor`, `limit` up to 100, and `ids`, a comma-separated attempt filter); `GET /api/settings/diagnostics/export` answers the whole log as Markdown text. Turning recording on or off and Delete are host-only and refuse approved clients with `host_only`. Every response is sent with `Cache-Control: no-store`. Copy and Export output begins with the environment and is meant to be reviewed before it is posted publicly.
 
+**Settings → AgentEasel → Diagnostic log** shows the switch, the recording end time with **Turn off now**, and the attempts newest first, read again every 3 seconds while recording and the window is visible. **Copy** opens a preview of exactly the Markdown it copies: the environment and the attempts on screen. **Export** downloads the whole log as `agenteasel-diagnostic-log.txt`, and **Delete** asks once, then clears it. Approved clients get Copy and Export only and see the switch locked as managed on the host. On an approved client's First-run waiting screen, **View diagnostic log** opens the same log read-only while it has entries or recording is on.
+
 ## Credentials and reauthorization
 
 OAuth registration, tokens, discovery, PKCE and pending callback state live in `credentials/t3-<endpoint SHA-256>.json`

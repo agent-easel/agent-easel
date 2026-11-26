@@ -215,6 +215,11 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Shortcut hint**: the key chip.
 - **Dialog**: the shared dialog in its standard or wide size, with the shared header.
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
+- **Diagnostic log**: DiagnosticAttemptList, the bordered list of recorded attempts. Each attempt
+  opens with a divider row (operation name · local time, an outcome StatusBadge and a Copy button
+  for that attempt), then its step lines: a monospaced time, an ok, fail or skip icon, the step
+  name, the redacted detail in monospace that wraps, and the reason code at the right, red on
+  failure. Settings and the viewer dialog show the same list; an empty log is a compact EmptyState.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
 - **Studio editor header**: StudioEditorHeader in three layouts. Toolbar is the Flow editor's
   52 px row above the canvas: owner, name, save status, controls, More actions, Save. Stacked is the

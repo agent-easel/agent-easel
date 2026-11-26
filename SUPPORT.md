@@ -22,6 +22,10 @@ pnpm versions for a source install, and whether you used the demo, source produc
 or desktop. For integration problems, include T3 Code/harness versions and the relevant
 permission mode. Give the shortest reproduction and the expected and actual result.
 
+For a setup or integration failure, turn on **Settings → AgentEasel → Diagnostic log**, repeat the
+step that failed, then use **Copy** and paste its output into the bug report's Diagnostic log
+excerpt. The preview shows exactly what is copied; review it before posting.
+
 Share only a small, redacted error excerpt. Remove tokens, OAuth callback URLs,
 credentials, private prompts, repository paths and host/device identifiers. Do not
 upload an AgentEasel database, data home or complete trace by default.

@@ -230,6 +230,9 @@ export function firstRunSetupFixture(
         await recheck();
       },
       authorizationStarts: () => running().t3.connection.authorizationStarts,
+      async hostRecordsDiagnostics() {
+        requireSuccess(await running().server.factory.setDiagnosticRecording({ enabled: true }));
+      },
     },
     reset: stop,
     /** While reporting reads are held, when a browser's reporting read may go on; else null. */

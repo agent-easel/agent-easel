@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
 import { definitionsFixture } from "./fixture/definitions.ts";
+import { diagnosticsFixture } from "./fixture/diagnostics.ts";
 import { firstRunSetupFixture } from "./fixture/first-run-setup.ts";
 import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
 import { githubFixture, startJourneyGitHub } from "./fixture/github.ts";
@@ -41,6 +42,7 @@ const modules = {
   definitions: definitionsFixture(host),
   projects: projectsFixture(host),
   reporting: reportingFixture(host),
+  diagnostics: diagnosticsFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),
   scenarios,
 } satisfies Record<string, FixtureModule>;

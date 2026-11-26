@@ -4,6 +4,7 @@ const settingsTabs = [
   "connection",
   "agent-reporting",
   "devices",
+  "diagnostics",
   "run-titles",
   "run-images",
   "appearance",
