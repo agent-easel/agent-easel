@@ -578,6 +578,24 @@ const recordingBoundaries = {
   expiry: () => TestClock.adjust(24 * HOUR),
 };
 
+it.effect("a delayed detection cannot open an attempt after Delete", (context) =>
+  Effect.gen(function* () {
+    // Arrange
+    const { open } = yield* diagnosticStore(context);
+    const log = yield* open;
+    yield* log.setDiagnosticRecording({ enabled: true });
+    const observedGeneration = yield* log.recordingGeneration;
+    assert(observedGeneration !== null);
+    yield* log.deleteDiagnosticLog();
+
+    // Act
+    const attempt = yield* log.attempt("t3_detection", observedGeneration);
+
+    // Assert
+    expect(attempt.id).toBeNull();
+  }),
+);
+
 for (const [boundary, invalidate] of Object.entries(recordingBoundaries)) {
   it.effect(
     `a buffered observation from before ${boundary} cannot write into a new recording generation`,

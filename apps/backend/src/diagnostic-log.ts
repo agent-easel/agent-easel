@@ -357,8 +357,8 @@ export const makeDiagnosticLog = (
       startedAt?: string,
     ) =>
       contained(() => recorder.open(operation, environment, expectedGeneration, startedAt), null);
-    const attempt = (operation: DiagnosticOperation) =>
-      open(operation).pipe(
+    const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
+      open(operation, expectedGeneration).pipe(
         Effect.map((opened) => (opened === null ? noDiagnosticAttempt : handle(opened))),
       );
 
