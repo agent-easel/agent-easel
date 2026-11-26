@@ -9,7 +9,31 @@ import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parse } from "smol-toml";
-import type { ReportingInstallation, Result, T3Connection } from "@agent-easel/contracts";
+import type {
+  ConflictReason,
+  InstalledReporting,
+  InstallSkillName,
+  InstallWriteKind,
+  ReportingInstallation,
+  ReportingRecheck,
+  Result,
+  T3Connection,
+} from "@agent-easel/contracts";
+import {
+  noDiagnosticAttempt,
+  type DiagnosticAttemptHandle,
+  type DiagnosticLog,
+} from "./diagnostic-log.ts";
+import {
+  ConfigRefusal,
+  configFailureReason,
+  isRecorded,
+  markRecorded,
+  reportingHarnessName,
+  reportingPaths,
+  writeFailureReason,
+  type ReportingPaths,
+} from "./reporting-diagnostics.ts";
 import { FACTORY_BLOCK_SKILL } from "./factory-block-skill.ts";
 import { FACTORY_CONFIGURE_SKILL } from "./factory-configure-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "./factory-start-run-skill.ts";
@@ -53,13 +77,17 @@ function vibeMcpServers(config: Record<string, unknown>) {
 function vibeMcpEntry(config: Record<string, unknown>) {
   const entries = vibeMcpServers(config).filter(({ name }) => name === "factory-runtime");
   if (entries.length > 1)
-    throw Error("Vibe has multiple factory-runtime MCP entries. Review them manually.");
+    throw new ConfigRefusal(
+      "Vibe has multiple factory-runtime MCP entries. Review them manually.",
+      "entry_duplicated",
+    );
   return entries[0];
 }
 
 const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/gm;
 const EDITED_REGISTRATION =
   "The AgentEasel registration was edited. Review the factory-runtime entry manually.";
+const editedRegistration = () => new ConfigRefusal(EDITED_REGISTRATION, "entry_edited");
 
 function* vibeInsertions(
   before: string,
@@ -89,7 +117,7 @@ function registeredVibe(
   const servers = vibeMcpServers(config);
   const inline = (value: string) => "{ " + value.trim().split("\n").slice(1).join(", ") + " }";
   if (previous !== undefined && !before.includes(previous) && !before.includes(inline(previous)))
-    throw Error(EDITED_REGISTRATION);
+    throw editedRegistration();
   const candidates =
     previous === undefined
       ? vibeInsertions(before, block, inline(block), servers, entry)
@@ -110,8 +138,9 @@ function registeredVibe(
       continue;
     }
   }
-  throw Error(
+  throw new ConfigRefusal(
     "AgentEasel could not update Vibe's mcp_servers without changing other settings. Review the factory-runtime entry manually.",
+    "config_invalid",
   );
 }
 
@@ -253,7 +282,7 @@ function registered(
     const entry = tomlEntry(profile, url);
     if (profile.config.format === "toml-array")
       return registeredVibe(before, config, entry, profile.entry(url), previous);
-    if (previous !== undefined && !before.includes(previous)) throw Error(EDITED_REGISTRATION);
+    if (previous !== undefined && !before.includes(previous)) throw editedRegistration();
     const after = previous !== undefined ? before.replace(previous, () => entry) : before + entry;
     parse(after);
     return after;
@@ -272,14 +301,20 @@ function registered(
  * The harness configuration after registering Factory MCP at `url`. Factory's own entry
  * for another address is replaced only on `repair`; any other entry is left for review.
  */
-function configChange(profile: HarnessProfile, before: string, url: string, repair = false) {
+function configChange(
+  profile: HarnessProfile,
+  before: string,
+  url: string,
+  repair = false,
+): { text: string; verdict: ConflictReason } {
   const toml = profile.config.format !== "json";
   const config = toml ? parse(before) : record(JSON.parse(before || "{}"));
   const existing =
     profile.config.format === "toml-array"
       ? vibeMcpEntry(config)
       : record(config[toml ? "mcp_servers" : "mcpServers"] ?? {})["factory-runtime"];
-  if (existing === undefined) return registered(profile, before, config, url);
+  if (existing === undefined)
+    return { text: registered(profile, before, config, url), verdict: "no_entry" };
   const saved = record(existing);
   const urlKey = profile.config.urlKey ?? "url";
   const savedUrl = saved[urlKey];
@@ -289,16 +324,22 @@ function configChange(profile: HarnessProfile, before: string, url: string, repa
     Object.keys(saved).length !== Object.keys(entry).length ||
     !Object.entries(entry).every(([key, value]) => saved[key] === value)
   )
-    throw Error(
+    throw new ConfigRefusal(
       "Conflicting factory-runtime MCP entry. Remove it from this file and install again; AgentEasel does not overwrite another definition.",
+      "entry_conflicting",
     );
-  if (savedUrl === url) return before;
+  if (savedUrl === url) return { text: before, verdict: "entry_current" };
   if (!repair)
     throw new RepairableInstallationError(
       "AgentEasel MCP is registered for another backend address. Repair the installation.",
     );
-  return registered(profile, before, config, url, savedUrl);
+  return {
+    text: registered(profile, before, config, url, savedUrl),
+    verdict: "entry_other_address",
+  };
 }
+
+type Diagnostics = Pick<DiagnosticLog, "attempt">;
 
 const openReportingInstallation = Effect.fn(function* (
   directory: string,
@@ -324,13 +365,87 @@ const openReportingInstallation = Effect.fn(function* (
       yield* semaphore.withPermits(1)(Effect.void);
     }),
   );
-  const targets = Effect.fn(function* () {
+  const targets = Effect.fn(function* (attempt: DiagnosticAttemptHandle) {
     const current = yield* connection();
     if (!current.ok) throw Error("Connection unavailable.");
-    return yield* discoverReporting(stateDirectory, current.value);
+    return yield* discoverReporting(stateDirectory, current.value, attempt);
   });
+  const entryPath = (paths: ReportingPaths, target: ReportingInstallation, path: string) =>
+    target.provider === "codex" && target.path
+      ? paths.codexPath(path, dirname(target.path))
+      : paths.path(path);
+  const failedCheck = (
+    attempt: DiagnosticAttemptHandle,
+    target: ReportingInstallation,
+    paths: ReportingPaths,
+    reason: ConflictReason,
+  ) =>
+    attempt.record({
+      type: "conflict_check",
+      outcome: "failed",
+      driver: reportingHarnessName(target.provider),
+      reason,
+      file: entryPath(paths, target, target.path!),
+    });
+  const checkedConfig = (
+    attempt: DiagnosticAttemptHandle,
+    paths: ReportingPaths,
+    target: ReportingInstallation,
+    profile: HarnessProfile,
+    repair: boolean,
+  ) =>
+    Effect.gen(function* () {
+      const before = yield* boundary(() => readConfig(target.path!));
+      const change = yield* Effect.try({
+        try: () => configChange(profile, before, mcpUrl(), repair),
+        catch: (error) => error,
+      });
+      yield* attempt.record({
+        type: "conflict_check",
+        outcome: "ok",
+        driver: reportingHarnessName(target.provider),
+        reason: change.verdict,
+        file: entryPath(paths, target, target.path!),
+      });
+      return { before, after: change.text };
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => markRecorded(error)).pipe(
+          Effect.andThen(failedCheck(attempt, target, paths, configFailureReason(error))),
+        ),
+      ),
+    );
+  const recordedWrite = <A>(
+    attempt: DiagnosticAttemptHandle,
+    paths: ReportingPaths,
+    target: ReportingInstallation,
+    write: InstallWriteKind,
+    skill: InstallSkillName | null,
+    file: string,
+    work: Effect.Effect<A, unknown>,
+  ) => {
+    const entry = {
+      type: "install_write",
+      driver: reportingHarnessName(target.provider),
+      write,
+      skill,
+      file: entryPath(paths, target, file),
+    } as const;
+    return work.pipe(
+      Effect.tap(() => attempt.record({ ...entry, outcome: "ok", reason: "written" })),
+      Effect.tapError((error) =>
+        Effect.sync(() => markRecorded(error)).pipe(
+          Effect.andThen(
+            attempt.record({ ...entry, outcome: "failed", reason: writeFailureReason(error) }),
+          ),
+        ),
+      ),
+    );
+  };
   const inspect = Effect.fn(function* (
     target: ReportingInstallation,
+    attempt: DiagnosticAttemptHandle,
+    paths: ReportingPaths,
   ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation, never> {
     if (!target.path) return target;
     const profile = harnessProfile(target);
@@ -349,18 +464,19 @@ const openReportingInstallation = Effect.fn(function* (
       never
     > {
       yield* boundary(() => access(dirname(target.path!), constants.R_OK | constants.W_OK));
-      const before = yield* boundary(() => readConfig(target.path!));
-      const after = configChange(profile, before, mcpUrl());
+      const { before, after } = yield* checkedConfig(attempt, paths, target, profile, false);
       if (after !== before) return withReportingInstallationActions(target);
       if (
         !(yield* boundary(() =>
           skillMatches(harnessSkillPath(profile, target.path!, "factory-block")),
         )) ||
         !(yield* boundary(() => skillMatches(canonicalSkill)))
-      )
+      ) {
+        yield* failedCheck(attempt, target, paths, "skill_outdated");
         throw new RepairableInstallationError(
           "AgentEasel Block skill missing or outdated. Repair the installation from this backend.",
         );
+      }
       return withReportingInstallationActions({
         ...target,
         status: "installed",
@@ -392,96 +508,229 @@ const openReportingInstallation = Effect.fn(function* (
       }),
     );
   });
+  const listInstallations = Effect.fn(function* (
+    attempt: DiagnosticAttemptHandle,
+  ): Generator<Effect.Effect<unknown, unknown>, readonly ReportingInstallation[], never> {
+    const manual = `AgentEasel has no installer for this provider and cannot accept its reports yet. When support exists, add a Streamable HTTP MCP server named factory-runtime with URL ${mcpUrl()} in the file this harness reads for user MCP servers, then start a fresh session.`;
+    const paths = yield* boundary(() => reportingPaths(stateDirectory));
+    return yield* Effect.forEach(
+      (yield* targets(attempt)).map((target) =>
+        target.path || target.kind !== "instance" || isReportingDriver(target.provider)
+          ? target
+          : { ...target, message: manual },
+      ),
+      (target) => inspect(target, attempt, paths),
+      { concurrency: 1 },
+    );
+  });
+  const withAttempt = <A extends object>(value: A, attempt: DiagnosticAttemptHandle) =>
+    attempt.id === null ? value : { ...value, diagnosticAttempts: [attempt.id] };
   return {
     getReportingInstallations: Effect.fn(function* (): Generator<
       Effect.Effect<unknown, unknown>,
       Result<readonly ReportingInstallation[]>,
       never
     > {
-      const manual = `AgentEasel has no installer for this provider and cannot accept its reports yet. When support exists, add a Streamable HTTP MCP server named factory-runtime with URL ${mcpUrl()} in the file this harness reads for user MCP servers, then start a fresh session.`;
-      return {
-        ok: true,
-        value: yield* Effect.forEach(
-          (yield* targets()).map((target) =>
-            target.path || target.kind !== "instance" || isReportingDriver(target.provider)
-              ? target
-              : { ...target, message: manual },
-          ),
-          inspect,
-          { concurrency: "unbounded" },
-        ),
-      };
+      return { ok: true, value: yield* listInstallations(noDiagnosticAttempt) };
     }),
-    installReporting: (input: unknown) =>
+    recheckReporting: (diagnostics: Diagnostics) =>
+      Effect.gen(function* (): Generator<
+        Effect.Effect<unknown, unknown>,
+        Result<ReportingRecheck>,
+        never
+      > {
+        const attempt = yield* diagnostics.attempt("reporting_recheck");
+        const installations = yield* listInstallations(attempt).pipe(
+          Effect.tapError(() => attempt.record(unexpectedStep("reporting_discovery"))),
+          Effect.onError(() => attempt.finish("failed")),
+        );
+        const healthy = installations.filter(
+          (target) => target.kind === "instance" && target.status !== "needs-attention",
+        );
+        yield* attempt.finish(
+          healthy.length === installations.length
+            ? "ok"
+            : healthy.length > 0
+              ? "partial"
+              : "failed",
+        );
+        return { ok: true, value: withAttempt({ installations }, attempt) };
+      }),
+    installReporting: (input: unknown, diagnostics: Diagnostics) =>
       Effect.suspend(() =>
         closed
           ? Effect.fail(new Error("Reporting installation closed"))
           : semaphore.withPermits(1)(
               Effect.gen(function* (): Generator<
                 Effect.Effect<unknown, unknown>,
-                Result<ReportingInstallation>,
+                Result<InstalledReporting>,
                 never
               > {
-                const id = record(input).targetId;
-                const target = (yield* targets()).find((target) => target.id === id);
-                if (!target?.path)
-                  throw Error(
-                    "Target unavailable. Recheck the local T3 Code environment and configuration home.",
+                const attempt = yield* diagnostics.attempt("reporting_install");
+                let optionalFailed = false;
+                return yield* Effect.gen(function* (): Generator<
+                  Effect.Effect<unknown, unknown>,
+                  Result<ReportingInstallation>,
+                  never
+                > {
+                  const id = record(input).targetId;
+                  const paths = yield* boundary(() => reportingPaths(stateDirectory));
+                  const target = (yield* targets(attempt)).find((target) => target.id === id);
+                  if (!target?.path) {
+                    const error = Error(
+                      "Target unavailable. Recheck the local T3 Code environment and configuration home.",
+                    );
+                    markRecorded(error);
+                    yield* attempt.record({
+                      type: "install_target",
+                      outcome: "failed",
+                      driver: reportingHarnessName(target?.provider),
+                      reason: "target_unavailable",
+                    });
+                    throw error;
+                  }
+                  yield* attempt.record({
+                    type: "install_target",
+                    outcome: "ok",
+                    driver: reportingHarnessName(target.provider),
+                    reason: "target_found",
+                  });
+                  const profile = harnessProfile(target);
+                  const { before, after } = yield* checkedConfig(
+                    attempt,
+                    paths,
+                    target,
+                    profile,
+                    true,
                   );
-                const profile = harnessProfile(target);
-                const before = yield* boundary(() => readConfig(target.path!));
-                const after = configChange(profile, before, mcpUrl(), true);
-                yield* boundary(() =>
-                  writeSkill(
-                    harnessSkillPath(profile, target.path!, "factory-block"),
-                    FACTORY_BLOCK_SKILL,
+                  const harnessSkill = harnessSkillPath(profile, target.path, "factory-block");
+                  yield* recordedWrite(
+                    attempt,
+                    paths,
+                    target,
+                    "block_skill",
+                    "factory-block",
+                    harnessSkill,
+                    boundary(() => writeSkill(harnessSkill, FACTORY_BLOCK_SKILL)),
+                  );
+                  yield* recordedWrite(
+                    attempt,
+                    paths,
+                    target,
+                    "canonical_block_skill",
+                    "factory-block",
+                    canonicalSkill,
+                    boundary(() => writeSkill(canonicalSkill, FACTORY_BLOCK_SKILL)),
+                  );
+                  if (after === before)
+                    yield* attempt.record({
+                      type: "install_write",
+                      outcome: "skipped",
+                      driver: reportingHarnessName(target.provider),
+                      write: "config",
+                      skill: null,
+                      reason: "unchanged",
+                      file: entryPath(paths, target, target.path),
+                    });
+                  else
+                    yield* recordedWrite(
+                      attempt,
+                      paths,
+                      target,
+                      "config",
+                      null,
+                      target.path,
+                      Effect.gen(function* () {
+                        yield* boundary(() =>
+                          mkdir(dirname(target.path!), { recursive: true, mode: 0o700 }),
+                        );
+                        yield* boundary(() => replace(target.path!, before, after));
+                      }),
+                    );
+                  for (const { name, text, path } of optionalSkillCopies(profile, target.path)) {
+                    const failure = yield* recordedWrite(
+                      attempt,
+                      paths,
+                      target,
+                      "optional_skill",
+                      name as InstallSkillName,
+                      path,
+                      boundary(() => writeSkill(path, text)),
+                    ).pipe(
+                      Effect.as(undefined),
+                      Effect.catch((error) =>
+                        Effect.succeed(error instanceof Error ? error.message : String(error)),
+                      ),
+                    );
+                    if (failure) {
+                      optionalFailed = true;
+                      optionalWriteFailures.set(
+                        path,
+                        `The optional ${name} skill at ${path} could not be replaced (${failure}). Fix that file manually, for example its permissions or file flags, then Reinstall.`,
+                      );
+                    } else optionalWriteFailures.delete(path);
+                  }
+                  const checked = yield* inspect(target, attempt, paths);
+                  const verification = {
+                    type: "install_write",
+                    driver: reportingHarnessName(target.provider),
+                    write: "verification",
+                    skill: null,
+                    file: entryPath(paths, target, target.path),
+                  } as const;
+                  if (checked.status !== "installed") {
+                    const error = Error(checked.message);
+                    markRecorded(error);
+                    yield* attempt.record({
+                      ...verification,
+                      outcome: "failed",
+                      reason: "verification_failed",
+                    });
+                    throw error;
+                  }
+                  yield* attempt.record({ ...verification, outcome: "ok", reason: "written" });
+                  return { ok: true, value: checked };
+                }).pipe(
+                  Effect.tap(() => attempt.finish(optionalFailed ? "partial" : "ok")),
+                  Effect.uninterruptible,
+                  Effect.catchCause((cause) => {
+                    const error = Cause.squash(cause);
+                    return (
+                      Cause.hasInterruptsOnly(cause) || isRecorded(error)
+                        ? Effect.void
+                        : attempt.record(unexpectedStep("reporting_install"))
+                    ).pipe(
+                      Effect.andThen(attempt.finish("failed")),
+                      Effect.as(
+                        failure(
+                          "validation",
+                          error instanceof Error
+                            ? error.message
+                            : "Installation failed; recheck permissions.",
+                        ),
+                      ),
+                    );
+                  }),
+                  Effect.map((result): Result<InstalledReporting> =>
+                    result.ok
+                      ? { ok: true, value: withAttempt(result.value, attempt) }
+                      : attempt.id === null
+                        ? result
+                        : {
+                            ok: false,
+                            error: { ...result.error, diagnosticAttempts: [attempt.id] },
+                          },
                   ),
                 );
-                yield* boundary(() => writeSkill(canonicalSkill, FACTORY_BLOCK_SKILL));
-                if (after !== before) {
-                  yield* boundary(() =>
-                    mkdir(dirname(target.path!), { recursive: true, mode: 0o700 }),
-                  );
-                  yield* boundary(() => replace(target.path!, before, after));
-                }
-                // The optional skills never block required reporting. Each copy is written on
-                // its own; writeSkill refuses linked and special files without reading them, and a
-                // failed copy stays as it is, explained by inspection until a later write succeeds.
-                for (const { name, text, path } of optionalSkillCopies(profile, target.path)) {
-                  const failure = yield* boundary(() => writeSkill(path, text)).pipe(
-                    Effect.as(undefined),
-                    Effect.catch((error) =>
-                      Effect.succeed(error instanceof Error ? error.message : String(error)),
-                    ),
-                  );
-                  if (failure)
-                    optionalWriteFailures.set(
-                      path,
-                      `The optional ${name} skill at ${path} could not be replaced (${failure}). Fix that file manually, for example its permissions or file flags, then Reinstall.`,
-                    );
-                  else optionalWriteFailures.delete(path);
-                }
-                const checked = yield* inspect(target);
-                if (checked.status !== "installed") throw Error(checked.message);
-                return { ok: true, value: checked };
-              }).pipe(
-                Effect.uninterruptible,
-                Effect.catchCause((cause) => {
-                  const error = Cause.squash(cause);
-                  return Effect.succeed(
-                    failure(
-                      "validation",
-                      error instanceof Error
-                        ? error.message
-                        : "Installation failed; recheck permissions.",
-                    ),
-                  );
-                }),
-              ),
+              }),
             ),
       ),
   };
 });
+
+const unexpectedStep = (step: "reporting_discovery" | "reporting_install") =>
+  ({ type: "unexpected_error", outcome: "failed", step, reason: "unexpected_error" }) as const;
+
 export class ReportingInstaller extends Context.Service<
   ReportingInstaller,
   Effect.Success<ReturnType<typeof openReportingInstallation>>

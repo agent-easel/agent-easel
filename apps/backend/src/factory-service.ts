@@ -297,7 +297,8 @@ export const makeFactoryService = (
       reviewImport: definitions.reviewImport,
       commitImport: definitions.commitImport,
       getReportingInstallations: () => reporting.getReportingInstallations(),
-      installReporting: (input) => reporting.installReporting(input),
+      recheckReporting: () => reporting.recheckReporting(diagnostics),
+      installReporting: (input) => reporting.installReporting(input, diagnostics),
       answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),
       continueWaitArrival: (id) => runner.continueWaitArrival(id),
       getSubflowInvocation: (runId, invocationId) =>

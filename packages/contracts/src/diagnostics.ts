@@ -1,8 +1,17 @@
 import { operation } from "./operation.ts";
 
-export type DiagnosticOperation = "backend_start" | "t3_detection";
+export type DiagnosticOperation =
+  | "backend_start"
+  | "t3_detection"
+  | "reporting_recheck"
+  | "reporting_install";
 
-export type DiagnosticStep = "backend_start" | "t3_detection" | "start_preconditions";
+export type DiagnosticStep =
+  | "backend_start"
+  | "t3_detection"
+  | "start_preconditions"
+  | "reporting_discovery"
+  | "reporting_install";
 
 export type DiagnosticStepOutcome = "ok" | "failed" | "skipped";
 
@@ -17,6 +26,100 @@ export type T3DetectionReason =
   | "runtime_file_malformed"
   | "runtime_origin_invalid"
   | "runtime_endpoint_refused";
+
+export type ReportingHarnessName =
+  | "codex"
+  | "claudeAgent"
+  | "cursor"
+  | "grok"
+  | "antigravity"
+  | "mistral-vibe"
+  | "unknown";
+
+export type T3ReadStage = "connection" | "endpoint" | "policy" | "identity" | "settings";
+
+export type T3ReadReason =
+  | "read_ok"
+  | "settings_missing"
+  | "connection_not_ready"
+  | "remote_endpoint"
+  | "managed_host"
+  | "identity_mismatch"
+  | "identity_unreadable"
+  | "settings_unreadable"
+  | "settings_malformed"
+  | "none_enabled";
+
+export type EnablementRule =
+  | "instance_disabled"
+  | "config_disabled"
+  | "instance_enabled"
+  | "config_enabled"
+  | "project_enabled"
+  | "driver_default_off"
+  | "driver_default_on";
+
+export type HomeSource =
+  | "configured_path"
+  | "environment"
+  | "default"
+  | "fixed"
+  | "t3_profile"
+  | "vibe_home"
+  | "not_evaluated";
+
+export type HomeReason =
+  | "chosen"
+  | "candidate_unused"
+  | "managed_setup"
+  | "custom_launch_args"
+  | "shadow_home"
+  | "relative_path"
+  | "redacted_environment"
+  | "environment_override"
+  | "not_a_directory"
+  | "home_missing"
+  | "home_unreadable"
+  | "profile_missing"
+  | "profile_unsupported";
+
+export type ConflictReason =
+  | "no_entry"
+  | "entry_current"
+  | "entry_other_address"
+  | "entry_conflicting"
+  | "entry_edited"
+  | "entry_duplicated"
+  | "config_unmanageable"
+  | "config_invalid"
+  | "config_unreadable"
+  | "skill_outdated";
+
+export type InstallTargetReason = "target_found" | "target_unavailable";
+
+export type InstallWriteKind =
+  | "config"
+  | "block_skill"
+  | "canonical_block_skill"
+  | "optional_skill"
+  | "verification";
+
+export type InstallSkillName =
+  | "factory-block"
+  | "factory-start-run"
+  | "setup-factory"
+  | "factory-configure";
+
+export type InstallWriteReason =
+  | "written"
+  | "unchanged"
+  | "permission_denied"
+  | "missing_directory"
+  | "no_space"
+  | "changed_during_install"
+  | "unmanageable_file"
+  | "verification_failed"
+  | "write_failed";
 
 export type DiagnosticEntry =
   | {
@@ -34,6 +137,51 @@ export type DiagnosticEntry =
       readonly file: string;
       readonly host: DiagnosticHost | null;
       readonly t3Version: string | null;
+    }
+  | {
+      readonly type: "t3_state_read";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly stage: T3ReadStage;
+      readonly reason: T3ReadReason;
+    }
+  | {
+      readonly type: "enablement";
+      readonly outcome: "ok" | "skipped";
+      readonly instance: string;
+      readonly driver: ReportingHarnessName;
+      readonly enabled: boolean;
+      readonly rule: EnablementRule;
+    }
+  | {
+      readonly type: "home";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly instance: string;
+      readonly driver: ReportingHarnessName;
+      readonly homeSource: HomeSource;
+      readonly reason: HomeReason;
+      readonly path: string | null;
+    }
+  | {
+      readonly type: "conflict_check";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly driver: ReportingHarnessName;
+      readonly reason: ConflictReason;
+      readonly file: string;
+    }
+  | {
+      readonly type: "install_target";
+      readonly outcome: "ok" | "failed";
+      readonly driver: ReportingHarnessName;
+      readonly reason: InstallTargetReason;
+    }
+  | {
+      readonly type: "install_write";
+      readonly outcome: DiagnosticStepOutcome;
+      readonly driver: ReportingHarnessName;
+      readonly write: InstallWriteKind;
+      readonly skill: InstallSkillName | null;
+      readonly reason: InstallWriteReason;
+      readonly file: string;
     }
   | {
       readonly type: "unexpected_error";

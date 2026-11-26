@@ -3,6 +3,8 @@ import { useEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@agent-easel/contracts";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
+import { DiagnosticLogViewer, DiagnosticRetryAction } from "../components/diagnostic-log-view.tsx";
+import { useDiagnosticRetry, type DiagnosticRetry } from "../diagnostic-log.ts";
 import { ProblemCard } from "../components/problem-card.tsx";
 import { ReportingTargetProblem } from "../components/reporting-target-problem.tsx";
 import { TechnicalDetails } from "../components/technical-details.tsx";
@@ -17,7 +19,9 @@ import {
 } from "../reporting-state.tsx";
 
 export function RuntimeSettings() {
-  const { targets, refresh, error, readDetails, running, failures, install } = useReportingState();
+  const { targets, refresh, error, readDetails, running, failures, install, recheck } =
+    useReportingState();
+  const retry = useDiagnosticRetry();
   const [checking, setChecking] = useState(true);
   const [instanceNames, setInstanceNames] = useState<ReadonlyMap<string, string | null>>(new Map());
   useEffect(() => {
@@ -56,6 +60,7 @@ export function RuntimeSettings() {
       badge={!checking && needsAction > 0 && <ReportingCount count={needsAction} />}
       action={
         <MutationGate>
+          <RetryViewer retry={retry} />
           <Button
             variant={pending.length || (!error && !needsAction) ? "outline" : "default"}
             disabled={busy}
@@ -79,6 +84,7 @@ export function RuntimeSettings() {
           Check again in a moment. Runs already started aren’t affected.
         </ProblemCard>
       )}
+      <RetryError retry={retry} />
       {checking && !targets ? (
         <SettingsGroup label="Harnesses">
           <SettingsRow
@@ -98,9 +104,25 @@ export function RuntimeSettings() {
           secondary={pending.length > 0}
           instanceNames={instanceNames}
           install={install}
+          recheck={recheck}
+          retry={retry}
         />
       )}
     </SettingsPage>
+  );
+}
+
+function RetryViewer({ retry }: { retry: DiagnosticRetry }) {
+  return retry.attempts && <DiagnosticLogViewer attempts={retry.attempts} />;
+}
+
+function RetryError({ retry }: { retry: DiagnosticRetry }) {
+  return (
+    retry.error && (
+      <ProblemCard tone="error" title="Couldn’t record the diagnostic log">
+        {retry.error}
+      </ProblemCard>
+    )
   );
 }
 
@@ -112,6 +134,8 @@ function ReportingResults({
   secondary,
   instanceNames,
   install,
+  recheck,
+  retry,
 }: {
   targets: readonly ReportingInstallation[];
   failures: Readonly<Record<string, string>>;
@@ -119,7 +143,9 @@ function ReportingResults({
   busy: boolean;
   secondary: boolean;
   instanceNames: ReadonlyMap<string, string | null>;
-  install: (targets: readonly ReportingInstallation[]) => Promise<void>;
+  install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
+  recheck: () => Promise<readonly string[]>;
+  retry: DiagnosticRetry;
 }) {
   if (!targets.length) return null;
   const homes = new Map<string, number>();
@@ -141,7 +167,21 @@ function ReportingResults({
         ))}
       </SettingsGroup>
       {targets.map((target) => (
-        <ReportingTargetProblem key={target.id} target={target} failure={failures[target.id]} />
+        <ReportingTargetProblem
+          key={target.id}
+          target={target}
+          failure={failures[target.id]}
+          action={
+            retry.offer && (
+              <DiagnosticRetryAction
+                retry={retry}
+                recover={() =>
+                  installable(target) || failures[target.id] ? install([target]) : recheck()
+                }
+              />
+            )
+          }
+        />
       ))}
     </>
   );

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
-import type { Browser } from "@e2e-dev/web";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import type { Fixture } from "./support/fixture/handle.ts";
+import { exportedLog, expectDialogSettled } from "./support/diagnostic-log.ts";
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 900 });
@@ -22,22 +22,6 @@ async function openRecordedDetection(fixture: Fixture, app: App, screen: Screen)
   await fixture.diagnostics.t3Running();
   await openDiagnosticLog(app, screen);
   await expect(detection(screen)).toBeVisible();
-}
-
-async function expectDialogSettled(browser: Browser) {
-  await expect
-    .poll(() =>
-      browser.evaluate(
-        `getComputedStyle([...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].at(-1)).opacity`,
-      ),
-    )
-    .toBe("1");
-}
-
-async function exportedLog(app: App) {
-  const response = await fetch(new URL("/api/settings/diagnostics/export", app.baseUrl));
-  assert.equal(response.status, 200);
-  return await response.text();
 }
 
 test("after turning on Record diagnostic log, the next T3 Code detection is recorded", async ({

@@ -9,7 +9,7 @@ import type {
 import {
   describeDiagnosticEntry,
   diagnosticLogMarkdown,
-  diagnosticOperationName,
+  diagnosticAttemptName,
 } from "@agent-easel/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -18,7 +18,8 @@ import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { diagnosticExportPath, useDiagnosticLog } from "../diagnostic-log.ts";
+import { MutationGate } from "@/client-gate";
+import { diagnosticExportPath, useDiagnosticLog, type DiagnosticRetry } from "../diagnostic-log.ts";
 import { clockTime, clockTimeWithSeconds } from "../time-format.ts";
 import { CopyButton } from "./copy-button.tsx";
 import { ProblemCard } from "./problem-card.tsx";
@@ -27,6 +28,8 @@ import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 const succeeded: Record<DiagnosticOperation, string> = {
   backend_start: "Started",
   t3_detection: "Found",
+  reporting_recheck: "Checked",
+  reporting_install: "Installed",
 };
 
 function attemptBadge(
@@ -77,7 +80,7 @@ function DiagnosticStepLine({ at, outcome, name, detail, reason }: StepLineProps
 type StepLineProps = ReturnType<typeof describeDiagnosticEntry> & { at: string };
 
 function DiagnosticAttemptSection({ attempt }: { attempt: DiagnosticAttempt }) {
-  const name = diagnosticOperationName(attempt.operation);
+  const name = diagnosticAttemptName(attempt);
   const badge = attemptBadge(attempt.operation, attempt.outcome);
   return (
     <section aria-label={`${name} at ${clockTime(attempt.startedAt)}`}>
@@ -211,6 +214,24 @@ export function DiagnosticLogViewer({ attempts }: { attempts: readonly string[] 
       <TextLink onClick={() => setOpen(true)}>View diagnostic log</TextLink>
       {open && <DiagnosticLogDialog attempts={attempts} onClose={() => setOpen(false)} />}
     </>
+  );
+}
+
+export function DiagnosticRetryAction({
+  retry,
+  recover,
+  view = false,
+}: {
+  retry: DiagnosticRetry;
+  recover: () => Promise<readonly string[]>;
+  view?: boolean;
+}) {
+  if (retry.attempts) return view ? <DiagnosticLogViewer attempts={retry.attempts} /> : null;
+  if (!retry.offer) return null;
+  return (
+    <MutationGate>
+      <TextLink onClick={() => retry.start(recover)}>Record diagnostic log and try again</TextLink>
+    </MutationGate>
   );
 }
 

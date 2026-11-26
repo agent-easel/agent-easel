@@ -357,7 +357,7 @@ export {
   DIAGNOSTIC_RETENTION_MS,
   diagnosticHost,
   diagnosticLogMarkdown,
-  diagnosticOperationName,
+  diagnosticAttemptName,
   diagnosticPath,
   diagnosticVersion,
   validateDiagnosticEntry,

@@ -1,6 +1,6 @@
 import type { TestContext } from "@effect/vitest";
 import { tmpdir } from "node:os";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /** Only caller-owned disposable directories are passed by test fixtures. */
@@ -35,9 +35,11 @@ export function overrideEnvironment(context: TestContext, name: string, value: s
   });
 }
 
-export async function isolatedUserHome(context: TestContext) {
-  const home = await mkdtemp(join(tmpdir(), "agenteasel-user-home-"));
-  context.onTestFinished(() => rm(home, { recursive: true, force: true }));
+export async function isolatedUserHome(context: TestContext, userName?: string) {
+  const base = await mkdtemp(join(tmpdir(), "agenteasel-user-home-"));
+  context.onTestFinished(() => rm(base, { recursive: true, force: true }));
+  const home = userName === undefined ? base : join(base, userName);
+  if (userName !== undefined) await mkdir(home);
   overrideEnvironment(context, "HOME", home);
   return home;
 }
