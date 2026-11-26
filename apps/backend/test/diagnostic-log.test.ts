@@ -1,17 +1,46 @@
 import { assert, expect, it } from "@effect/vitest";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { DiagnosticAttemptPage, T3ConnectionRecovery } from "@agent-easel/contracts";
-import { validateDiagnosticEntry } from "@agent-easel/domain-validation";
+import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
+import type {
+  DiagnosticAttemptPage,
+  DiagnosticEntry,
+  T3ConnectionRecovery,
+} from "@agent-easel/contracts";
+import { diagnosticPath, validateDiagnosticEntry } from "@agent-easel/domain-validation";
 import { remoteServer } from "./support/remote-clients.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
   diagnosticHome,
+  diagnosticPruneRefused,
+  diagnosticStateMissing,
+  diagnosticStore,
+  entriesAtCapacity,
+  projectStorageRefused,
+  recordingConnection,
   recordingHome,
   runtimeFile,
   throwingRecorder,
 } from "./support/diagnostic-log.ts";
 import { shiftedClock } from "./support/seed-clock.ts";
+
+const HOUR = 60 * 60 * 1000;
+const installTarget: DiagnosticEntry = {
+  type: "install_target",
+  outcome: "ok",
+  driver: "claudeAgent",
+  reason: "target_found",
+};
+const deniedWrite: DiagnosticEntry = {
+  type: "install_write",
+  outcome: "failed",
+  driver: "claudeAgent",
+  write: "config",
+  skill: null,
+  reason: "permission_denied",
+  file: "~/.claude.json",
+};
 
 it("a failed connection recheck returns its attempt and exports the reason without the endpoint", async (c) => {
   // Arrange
@@ -344,4 +373,189 @@ it.for([
       value: { enabled: false },
     });
   },
+);
+
+it("a configured home's own folder names are recorded as redacted, keeping only known path labels", () => {
+  // Arrange
+  const roots = [{ root: "/Users/owner", placeholder: "~" as const }];
+
+  // Act
+  const recorded = diagnosticPath("/Users/owner/profiles/alice.smith/.claude.json", roots);
+
+  // Assert
+  expect(recorded).toBe("~/<REDACTED>/.claude.json");
+});
+
+it("a diagnostic entry whose path keeps an unrecognized folder name is refused", () => {
+  // Arrange
+  const entry = { ...deniedWrite, file: "~/profiles/alice.smith/.claude.json" };
+
+  // Act
+  const result = validateDiagnosticEntry(entry);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.message).toBe("A install_write entry needs a valid file.");
+});
+
+it.effect(
+  "an attempt still running after its earlier steps were evicted records its later failure",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open, sql } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const running = yield* log.attempt("reporting_install");
+      assert(running.id !== null);
+      yield* running.record(installTarget);
+      yield* entriesAtCapacity(sql);
+      const other = yield* log.attempt("t3_detection");
+      yield* other.record(installTarget);
+
+      // Act
+      yield* running.record(deniedWrite);
+
+      // Assert
+      expect(yield* log.listDiagnosticAttempts("", "", running.id)).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [{ id: running.id, truncated: true, entries: [{ entry: deniedWrite }] }],
+        },
+      });
+    }),
+);
+
+it.effect(
+  "retention keeps the steps younger than seven days of an attempt that started earlier",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { open } = yield* diagnosticStore(context);
+      const log = yield* open;
+      yield* log.setDiagnosticRecording({ enabled: true });
+      const attempt = yield* log.attempt("reporting_install");
+      yield* attempt.record(installTarget);
+      yield* TestClock.adjust(23 * HOUR);
+      yield* attempt.record(deniedWrite);
+      yield* attempt.finish("failed");
+
+      // Act
+      yield* TestClock.adjust(7 * 24 * HOUR - 22 * HOUR);
+
+      // Assert
+      expect(yield* log.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [{ id: attempt.id, truncated: true, entries: [{ entry: deniedWrite }] }],
+        },
+      });
+    }),
+);
+
+it("AgentEasel starts when its Diagnostic log state cannot be read", async (c) => {
+  // Arrange
+  const home = await diagnosticHome(c);
+  await (await home.open()).close();
+  diagnosticStateMissing(home.harness.databasePath);
+
+  // Act
+  const factory = await home.open();
+
+  // Assert
+  expect(await factory.getFirstRunSetup("")).toMatchObject({ ok: true });
+});
+
+it("AgentEasel starts when its storage refuses to prune the Diagnostic log", async (c) => {
+  // Arrange
+  const home = await diagnosticHome(c);
+  const first = await home.open();
+  assert((await first.setDiagnosticRecording({ enabled: true })).ok);
+  assert((await first.getFirstRunSetup("")).ok);
+  await first.close();
+  diagnosticPruneRefused(home.harness.databasePath);
+
+  // Act
+  const factory = await home.open();
+
+  // Assert
+  expect(await factory.getFirstRunSetup("")).toMatchObject({ ok: true });
+});
+
+it("a recorded startup that fails before the backend is ready records its unexpected error", async (c) => {
+  // Arrange
+  const home = await diagnosticHome(c);
+  const t3 = new ControlledT3();
+  t3.connection.authorized = true;
+  t3.projects.catalog = [
+    { projectId: "app", title: "App", workspaceRoot: "/tmp/app", available: true },
+  ];
+  const first = await home.open({ t3 });
+  assert((await first.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
+  assert((await first.recheckProjects()).ok);
+  assert((await first.setDiagnosticRecording({ enabled: true })).ok);
+  await first.close();
+  const restore = projectStorageRefused(home.harness.databasePath);
+  t3.projects.listProjects = () => Promise.reject(new Error("Project discovery failed."));
+
+  // Act
+  const failed = home.open({ t3 });
+
+  // Assert
+  await expect(failed).rejects.toBeDefined();
+  restore();
+  const reopened = await home.open({ t3 });
+  const exported = await reopened.exportDiagnosticLog();
+  assert(exported.ok);
+  expect(exported.value).toMatch(
+    /### Start backend · .* UTC · failed[\s\S]*Unexpected error during backend start/,
+  );
+  expect(exported.value).not.toContain("storage refused");
+});
+
+it.effect(
+  "a scheduled check of an unchanged connection adds no attempt to the startup check's",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { harness, t3 } = yield* Effect.promise(() => recordingConnection(context));
+      const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
+
+      // Act
+      yield* TestClock.adjust(1000);
+
+      // Assert
+      expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [{ operation: "t3_connection", outcome: "ok" }, { operation: "backend_start" }],
+        },
+      });
+    }),
+);
+
+it.effect(
+  "a scheduled check records the connection when it changed since the startup check",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { harness, t3 } = yield* Effect.promise(() => recordingConnection(context));
+      const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
+      t3.connection.available = false;
+
+      // Act
+      yield* TestClock.adjust(1000);
+
+      // Assert
+      expect(yield* factory.listDiagnosticAttempts("", "", "")).toMatchObject({
+        ok: true,
+        value: {
+          attempts: [
+            { operation: "t3_connection", outcome: "failed" },
+            { operation: "t3_connection", outcome: "ok" },
+            { operation: "backend_start" },
+          ],
+        },
+      });
+    }),
 );
