@@ -72,9 +72,13 @@ export async function driverHomes(
   await writeFile(
     join(fixture.state, "settings.json"),
     JSON.stringify({
-      providerInstances: Object.fromEntries(
-        Object.entries(instances).map(([id, instance]) => [id, { ...instance, enabled: true }]),
-      ),
+      providerInstances: {
+        codex: { driver: "codex", enabled: false },
+        claudeAgent: { driver: "claudeAgent", enabled: false },
+        ...Object.fromEntries(
+          Object.entries(instances).map(([id, instance]) => [id, { ...instance, enabled: true }]),
+        ),
+      },
     }),
   );
   return { ...fixture, home: userHome };

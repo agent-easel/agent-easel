@@ -98,6 +98,7 @@ export interface FirstRunSetup {
   readonly detectedT3: DetectedT3 | null;
   /** Provider drivers Factory can install into that T3 keeps off, for the install step's caption. */
   readonly harnessesOffInT3: readonly string[];
+  readonly reportingEligibility: string;
 }
 
 export interface ConfigureConnectionInput {

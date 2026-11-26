@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { DetectedT3, FirstRunSetup, Result } from "@agent-easel/contracts";
 import { parseEndpoint } from "./connection.ts";
-import { reportingDriversOffInT3 } from "./reporting-discovery.ts";
+import { firstRunReportingState } from "./reporting-discovery.ts";
 
 /**
  * T3's runtime file is T3's internal state, not a published contract, and may be stale or drift:
@@ -40,12 +40,17 @@ export const makeFirstRunSetup = (stateDirectory: string) =>
       const rows = yield* sql<{
         completed: number;
       }>`SELECT completed FROM first_run_setup WHERE singleton = 1`;
-      const [detectedT3, harnessesOffInT3] = yield* Effect.promise(() =>
-        Promise.all([detectT3(stateDirectory), reportingDriversOffInT3(stateDirectory)]),
+      const [detectedT3, reporting] = yield* Effect.promise(() =>
+        Promise.all([detectT3(stateDirectory), firstRunReportingState(stateDirectory)]),
       );
       return {
         ok: true,
-        value: { completed: rows[0]?.completed === 1, detectedT3, harnessesOffInT3 },
+        value: {
+          completed: rows[0]?.completed === 1,
+          detectedT3,
+          harnessesOffInT3: reporting.harnessesOffInT3,
+          reportingEligibility: reporting.reportingEligibility,
+        },
       };
     });
     return {

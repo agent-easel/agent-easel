@@ -26,6 +26,7 @@ export interface FreshOptions {
   codexHome?: boolean;
   /** `false` leaves T3's settings file unreadable, so discovery refuses with its generic reason. */
   t3Settings?: boolean;
+  includeCursor?: boolean;
 }
 
 /**
@@ -42,6 +43,7 @@ async function startFreshHost({
   sameT3 = true,
   codexHome = true,
   t3Settings = true,
+  includeCursor = true,
 }: FreshOptions) {
   const home = await mkdtemp(join(tmpdir(), "factory-first-run-"));
   const state = join(home, "t3-state");
@@ -57,7 +59,7 @@ async function startFreshHost({
     join(state, "environment-id"),
     sameT3 ? t3.connection.environmentId : "another-environment",
   );
-  const on = { codex: harnessesOn, grok: false };
+  const on = { codex: harnessesOn, grok: false, cursorProjectOverride: false };
   const writeSettings = () =>
     writeFile(
       join(state, "settings.json"),
@@ -70,9 +72,18 @@ async function startFreshHost({
                 config: { homePath: claude },
               },
               "codex-main": { driver: "codex", enabled: on.codex, config: { homePath: codex } },
-              "setup-cursor": { driver: "cursor" },
+              ...(includeCursor ? { "setup-cursor": { driver: "cursor" } } : {}),
               "setup-grok": { driver: "grok", enabled: on.grok, config: { homePath: grok } },
+              codex: { driver: "codex", enabled: false },
+              claudeAgent: { driver: "claudeAgent", enabled: false },
             },
+            ...(on.cursorProjectOverride
+              ? {
+                  projectSettingsOverrides: {
+                    "project-1": { providerInstances: { cursor: { enabled: true } } },
+                  },
+                }
+              : {}),
           })
         : "{ not json",
     );
@@ -122,6 +133,10 @@ async function startFreshHost({
       on.grok = true;
       return writeSettings();
     },
+    cursorProjectOverride: (enabled: boolean) => {
+      on.cursorProjectOverride = enabled;
+      return writeSettings();
+    },
     async close() {
       await server.close();
       await rm(home, { recursive: true, force: true });
@@ -166,6 +181,7 @@ export function firstRunSetupFixture(
       t3Starts: () => running().t3Starts(),
       codexTurnedOn: () => running().codexTurnedOn(),
       grokTurnedOn: () => running().grokTurnedOn(),
+      cursorProjectOverride: (enabled: boolean) => running().cursorProjectOverride(enabled),
       /** Browsers' reporting list reads wait, unanswered, until `releaseReportingReads`. */
       holdReportingReads() {
         if (releaseReads) return;

@@ -638,6 +638,7 @@ it("provider instances disabled in T3 Code are neither listed nor inspected", as
     JSON.stringify({
       providerInstances: {
         claude: { driver: "claudeAgent", enabled: true, config: {} },
+        claudeAgent: { driver: "claudeAgent", enabled: false, config: {} },
         codex: { driver: "codex", enabled: false, config: {} },
         grok: { driver: "grok", config: {} },
         opencode: { driver: "opencode", config: { enabled: false } },
@@ -662,7 +663,11 @@ it("a provider instance a T3 Code project enables stays listed while the machine
   await writeFile(
     join(state, "settings.json"),
     JSON.stringify({
-      providerInstances: { claude: { driver: "claudeAgent", enabled: false, config: {} } },
+      providerInstances: {
+        claude: { driver: "claudeAgent", enabled: false, config: {} },
+        claudeAgent: { driver: "claudeAgent", enabled: false, config: {} },
+        codex: { driver: "codex", enabled: false, config: {} },
+      },
       projectSettingsOverrides: {
         "project-1": { providerInstances: { claude: { enabled: true } } },
       },
@@ -710,11 +715,15 @@ it("a provider without reporting shows the MCP address and no install action", a
 
 it("an unresolvable Codex home keeps its discovery message", async (context) => {
   // Arrange
+  await isolatedUserHome(context);
   const { factory, state } = await reportingFixture(context);
   await writeFile(
     join(state, "settings.json"),
     JSON.stringify({
-      providerInstances: { codex: { driver: "codex", config: { homePath: "relative/codex" } } },
+      providerInstances: {
+        codex: { driver: "codex", config: { homePath: "relative/codex" } },
+        claudeAgent: { driver: "claudeAgent", enabled: false, config: {} },
+      },
     }),
   );
 
@@ -1231,4 +1240,81 @@ it("missing optional skills do not block Start", async (context) => {
   // Assert
   assert(result.ok);
   expect(result.value.id).toBeTruthy();
+});
+
+it("unconfigured default Codex and Claude instances are discovered alongside persisted providers", async (context) => {
+  // Arrange
+  const home = await isolatedUserHome(context);
+  const { factory, state } = await reportingFixture(context);
+  await mkdir(join(home, ".codex"));
+  await writeFile(
+    join(state, "settings.json"),
+    JSON.stringify({
+      providerInstances: {
+        cursor: { driver: "cursor", enabled: true },
+      },
+    }),
+  );
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.map(({ provider, instances }) => ({ provider, instances }))).toStrictEqual([
+    { provider: "cursor", instances: ["cursor"] },
+    { provider: "codex", instances: ["codex"] },
+    { provider: "claudeAgent", instances: ["claudeAgent"] },
+  ]);
+  expect(result.value.find((target) => target.provider === "codex")?.path).toBe(
+    join(await realpath(join(home, ".codex")), "config.toml"),
+  );
+  expect(result.value.find((target) => target.provider === "claudeAgent")?.path).toBe(
+    join(await realpath(home), ".claude.json"),
+  );
+});
+
+it("fresh T3 Code state without settings.json or providerInstances still discovers default Codex and Claude", async (context) => {
+  // Arrange
+  const home = await isolatedUserHome(context);
+  const { factory, state } = await reportingFixture(context);
+  await mkdir(join(home, ".codex"));
+  await rm(join(state, "settings.json"));
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.map(({ provider, instances }) => ({ provider, instances }))).toStrictEqual([
+    { provider: "codex", instances: ["codex"] },
+    { provider: "claudeAgent", instances: ["claudeAgent"] },
+  ]);
+});
+
+it("a project override enables an unconfigured default-disabled provider instance", async (context) => {
+  // Arrange
+  await isolatedUserHome(context);
+  const { factory, state } = await reportingFixture(context);
+  await writeFile(
+    join(state, "settings.json"),
+    JSON.stringify({
+      providerInstances: {
+        codex: { driver: "codex", enabled: false },
+        claudeAgent: { driver: "claudeAgent", enabled: false },
+      },
+      projectSettingsOverrides: {
+        "project-1": { providerInstances: { cursor: { enabled: true } } },
+      },
+    }),
+  );
+
+  // Act
+  const result = await factory.getReportingInstallations();
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.map(({ provider, instances }) => ({ provider, instances }))).toStrictEqual([
+    { provider: "cursor", instances: ["cursor"] },
+  ]);
 });

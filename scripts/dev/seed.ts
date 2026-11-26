@@ -149,6 +149,8 @@ async function createDemoReporting(home: string, environmentId: string) {
           config: { homePath: join(home, "reporting-missing-claude") },
         },
         "demo-cursor": { driver: "cursor", enabled: true },
+        codex: { driver: "codex", enabled: false },
+        claudeAgent: { driver: "claudeAgent", enabled: false },
       },
     }),
   );

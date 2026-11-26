@@ -49,6 +49,7 @@ it("a running T3 Code's runtime file proposes its MCP address and version, and u
       completed: false,
       detectedT3: { endpoint: "http://127.0.0.1:3773/mcp", serverVersion: "0.1.11" },
       harnessesOffInT3: [],
+      reportingEligibility: expect.any(String),
     },
   });
 });
@@ -90,7 +91,12 @@ it.for([
   // Assert
   expect(setup).toStrictEqual({
     ok: true,
-    value: { completed: false, detectedT3: null, harnessesOffInT3: [] },
+    value: {
+      completed: false,
+      detectedT3: null,
+      harnessesOffInT3: [],
+      reportingEligibility: expect.any(String),
+    },
   });
 });
 
@@ -144,6 +150,32 @@ it("installable harnesses T3 Code keeps off are named, by T3 Code's enablement r
   expect(setup.value.harnessesOffInT3).toStrictEqual(["cursor", "grok"]);
 });
 
+it("enabling and removing a project override for an omitted built-in driver changes reportingEligibility", async (c) => {
+  // Arrange
+  const { state, open } = await freshHome(c);
+  await writeFile(join(state, "settings.json"), JSON.stringify({ providerInstances: {} }));
+  const factory = await open();
+  const initial = await factory.getFirstRunSetup();
+  assert(initial.ok);
+  await writeFile(
+    join(state, "settings.json"),
+    JSON.stringify({
+      providerInstances: {},
+      projectSettingsOverrides: {
+        "project-1": { providerInstances: { cursor: { enabled: true } } },
+      },
+    }),
+  );
+
+  // Act
+  const overridden = await factory.getFirstRunSetup();
+
+  // Assert
+  assert(overridden.ok);
+  expect(overridden.value.harnessesOffInT3).toStrictEqual([]);
+  expect(overridden.value.reportingEligibility).not.toBe(initial.value.reportingEligibility);
+});
+
 it("recorded completion persists across a backend restart", async (c) => {
   // Arrange
   const { harness, open } = await freshHome(c);
@@ -157,7 +189,12 @@ it("recorded completion persists across a backend restart", async (c) => {
   // Assert
   expect(await second.getFirstRunSetup()).toStrictEqual({
     ok: true,
-    value: { completed: true, detectedT3: null, harnessesOffInT3: [] },
+    value: {
+      completed: true,
+      detectedT3: null,
+      harnessesOffInT3: [],
+      reportingEligibility: expect.any(String),
+    },
   });
   expect(harness.databasePath).toContain("factory.sqlite");
 });
@@ -187,6 +224,7 @@ it("an approved client reads the host's setup status", async (c) => {
     completed: false,
     detectedT3: { endpoint: "http://127.0.0.1:3773/mcp", serverVersion: "0.1.11" },
     harnessesOffInT3: [],
+    reportingEligibility: expect.any(String),
   });
 });
 
