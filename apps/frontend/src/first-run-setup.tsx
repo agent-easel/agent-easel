@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   CircleAlert,
   ExternalLink,
@@ -128,8 +128,9 @@ function useSetupProgress(setup: FirstRunSetup) {
   const key = generation
     ? JSON.stringify([generation, setup.harnessesOffInT3, setup.reportingEligibility])
     : null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     void refreshFor(key);
+    return () => void refreshFor(null);
   }, [key, refreshFor]);
   const answered = key !== null && answeredFor === key;
   const listed = answered && targets ? targets.filter(listedTarget) : null;
@@ -496,7 +497,7 @@ function HarnessInstall({
               <DiagnosticRetryAction
                 retry={retry}
                 disabled={running !== null}
-                recover={() => retryTarget(target)}
+                recover={(signal) => retryTarget(target, signal)}
                 view
               />
             )

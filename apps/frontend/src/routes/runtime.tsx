@@ -1,6 +1,7 @@
 import { MutationGate } from "@/client-gate";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@agent-easel/contracts";
+import { useConnectionState } from "../connection-state.tsx";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { DiagnosticLogViewer, DiagnosticRetryAction } from "../components/diagnostic-log-view.tsx";
@@ -18,17 +19,40 @@ import {
   useReportingState,
 } from "../reporting-state.tsx";
 
-export function RuntimeSettings() {
-  const { targets, refresh, error, readDetails, running, failures, install, recheck, retryTarget } =
-    useReportingState();
-  const retry = useDiagnosticRetry();
+function useReportingCheck(refreshFor: (key: string | null) => Promise<void>) {
+  const { connection, presentation } = useConnectionState();
+  const scope = JSON.stringify([presentation, connection?.endpoint, connection?.readyGeneration]);
   const [checking, setChecking] = useState(true);
+  useLayoutEffect(() => {
+    let active = true;
+    void refreshFor(scope).then(() => {
+      if (active) setChecking(false);
+    });
+    return () => {
+      active = false;
+      void refreshFor(null);
+    };
+  }, [refreshFor, scope]);
+  return { checking, setChecking };
+}
+
+export function RuntimeSettings() {
+  const {
+    targets,
+    refreshFor,
+    error,
+    readDetails,
+    running,
+    failures,
+    install,
+    recheck,
+    retryTarget,
+  } = useReportingState();
+  const retry = useDiagnosticRetry();
+  const { checking, setChecking } = useReportingCheck(refreshFor);
   const [instanceNames, setInstanceNames] = useState<ReadonlyMap<string, string | null>>(new Map());
   useEffect(() => {
     let active = true;
-    void refresh().then(() => {
-      if (active) setChecking(false);
-    });
     void api.getAgentCapabilities().then(
       (value) => {
         if (active && value.state === "ready")
@@ -46,7 +70,7 @@ export function RuntimeSettings() {
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, []);
 
   const group = targets ?? [];
   const pending = group.filter(installable);
@@ -150,7 +174,7 @@ function ReportingResults({
   secondary: boolean;
   instanceNames: ReadonlyMap<string, string | null>;
   install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
-  retryTarget: (target: ReportingInstallation) => Promise<readonly string[]>;
+  retryTarget: (target: ReportingInstallation, signal: AbortSignal) => Promise<readonly string[]>;
   retry: DiagnosticRetry;
 }) {
   if (!targets.length) return null;
@@ -182,7 +206,7 @@ function ReportingResults({
               <DiagnosticRetryAction
                 retry={retry}
                 disabled={busy}
-                recover={() => retryTarget(target)}
+                recover={(signal) => retryTarget(target, signal)}
               />
             )
           }

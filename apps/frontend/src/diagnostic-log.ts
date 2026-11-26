@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import {
   diagnosticOperations,
   operationPath,
@@ -122,6 +122,7 @@ export function createDiagnosticRetry(
   enable: () => Promise<unknown> = () => api.setDiagnosticRecording({ enabled: true }),
 ) {
   let attempts: readonly string[] | null = null;
+  let active: AbortController | undefined;
   const listeners = new Set<() => void>();
   const keep = (next: readonly string[]) => {
     attempts = next;
@@ -133,16 +134,31 @@ export function createDiagnosticRetry(
       listeners.add(notify);
       return () => listeners.delete(notify);
     },
-    async retry(recover: () => Promise<readonly string[]>) {
+    cancel: () => active?.abort(),
+    pending: () => active !== undefined,
+    async retry(recover: (signal: AbortSignal) => Promise<readonly string[]>) {
+      active?.abort();
+      const operation = new AbortController();
+      active = operation;
+      const { signal } = operation;
       keep([]);
-      await enable();
-      keep(await recover());
+      try {
+        await enable();
+        if (signal.aborted) return;
+        const result = await recover(signal);
+        if (!signal.aborted) keep(result);
+      } catch (cause) {
+        if (!signal.aborted) throw cause;
+      } finally {
+        if (active === operation) active = undefined;
+      }
     },
   };
 }
 
 export function useDiagnosticRetry() {
   const [retry] = useState(() => createDiagnosticRetry());
+  useLayoutEffect(() => retry.cancel, [retry]);
   const attempts = useSyncExternalStore(retry.subscribe, retry.getSnapshot);
   const [busy, setBusy] = useState(false);
   const status = useDiagnosticLogStatus(busy);
@@ -153,13 +169,13 @@ export function useDiagnosticRetry() {
     offer: host && !busy && status !== null && !status.enabled,
     busy,
     error,
-    start(recover: () => Promise<readonly string[]>) {
+    start(recover: (signal: AbortSignal) => Promise<readonly string[]>) {
       setBusy(true);
       setError("");
       retry
         .retry(recover)
         .catch((cause: unknown) => setError(diagnosticErrorMessage(cause)))
-        .finally(() => setBusy(false));
+        .finally(() => setBusy(retry.pending()));
     },
   };
 }

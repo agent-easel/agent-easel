@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { CircleDashed, type LucideIcon } from "lucide-react";
 import type {
   AgentDefinition,
@@ -86,7 +78,7 @@ type ReportingInstallState = {
   failures: Readonly<Record<string, string>>;
   install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
   recheck: () => Promise<readonly string[]>;
-  retryTarget: (target: ReportingInstallation) => Promise<readonly string[]>;
+  retryTarget: (target: ReportingInstallation, signal: AbortSignal) => Promise<readonly string[]>;
 };
 
 const ReportingStateContext = createContext<
@@ -108,23 +100,6 @@ const ReportingStateContext = createContext<
   | null
 >(null);
 
-function useRetryHomes(
-  targets: readonly ReportingInstallation[] | null,
-  failures: Readonly<Record<string, string>>,
-) {
-  const homes = useRef<readonly ReportingInstallation[]>([]);
-  useLayoutEffect(() => {
-    homes.current =
-      targets?.filter(
-        (target) => installable(target) || (target.actions.reinstall && failures[target.id]),
-      ) ?? [];
-    return () => {
-      homes.current = [];
-    };
-  }, [targets, failures]);
-  return homes;
-}
-
 function useReportingList() {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
   const [requested, setRequested] = useState<ScopeRequest | null>(null);
@@ -137,6 +112,7 @@ function useReportingList() {
     refresh,
     supersede,
     refreshWith,
+    withLatest,
   } = useRefreshSchedule<ReportingRecheck & { readFor: ScopeRequest | null }>({
     read: async () => {
       const readFor = latestRequest.current;
@@ -167,10 +143,13 @@ function useReportingList() {
           "AgentEasel could not check Agent reporting. Check that AgentEasel is running, then check again.",
       }
     : { targets, agents, error: "" };
-  const recheck = async () => {
-    const readFor = latestRequest.current;
+  const recheck = async (readFor: ScopeRequest | null) => {
+    if (!readFor || readFor !== latestRequest.current) return [];
     return (
-      refreshWith(async () => ({ readFor, ...(await api.recheckReporting()) }))?.then(
+      refreshWith(
+        async () => ({ readFor, ...(await api.recheckReporting()) }),
+        () => readFor === latestRequest.current,
+      )?.then(
         (result) => result?.diagnosticAttempts ?? [],
         (cause: unknown) => {
           if (cause instanceof ApiError && cause.detail.diagnosticAttempts)
@@ -191,12 +170,12 @@ function useReportingList() {
       ...reads,
       refresh,
       refreshFor,
-      recheck,
       answeredFor,
       refreshing,
       readDetails: failure ? String(failure.cause) : "",
     },
-    currentTargets: answered === requested && !refreshing ? reads.targets : null,
+    withLatest,
+    recheck,
     requested,
     latestRequest,
     applyInstalled,
@@ -208,7 +187,8 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
   const installing = useRef(false);
-  const { reads, currentTargets, requested, latestRequest, applyInstalled } = useReportingList();
+  const { reads, withLatest, recheck, requested, latestRequest, applyInstalled } =
+    useReportingList();
   const install = async (selection: readonly ReportingInstallation[]) => {
     if (installing.current || !selection.length) return [];
     installing.current = true;
@@ -234,18 +214,25 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
     )
       .then(async (attempts) => {
         if (request === latestRequest.current) await reads.refresh();
-        return attempts;
+        return request === latestRequest.current ? attempts : [];
       })
       .finally(() => {
         setRunning(null);
         installing.current = false;
       });
   };
-  const retryHomes = useRetryHomes(currentTargets, failures);
-  const retryTarget = (requestedTarget: ReportingInstallation) => {
-    const current = retryHomes.current.find((target) => target.id === requestedTarget.id);
-    return current && requested === latestRequest.current ? install([current]) : reads.recheck();
-  };
+  const retryTarget = async (target: ReportingInstallation, signal: AbortSignal) =>
+    (await withLatest(async (answer) => {
+      if (signal.aborted) return [];
+      const current =
+        answer?.readFor === requested && requested === latestRequest.current
+          ? answer?.installations.find((item) => item.id === target.id)
+          : undefined;
+      return current &&
+        (installable(current) || (current.actions.reinstall && failures[current.id]))
+        ? install([current])
+        : recheck(latestRequest.current);
+    })) ?? [];
   return (
     <ReportingStateContext.Provider
       value={{
@@ -254,6 +241,7 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
         failures,
         install,
         retryTarget,
+        recheck: () => recheck(requested),
       }}
     >
       {children}

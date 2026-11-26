@@ -42,6 +42,19 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
   let closed = false;
   let failing = false;
   let outstanding = false;
+  let answer: T | undefined;
+  const waiters = new Set<() => void>();
+
+  async function withLatest<R>(act: (answer: T | undefined) => Promise<R>) {
+    while (outstanding && !closed) await new Promise<void>((resolve) => waiters.add(resolve));
+    if (!closed) return act(answer);
+    return undefined;
+  }
+
+  function wakeWaiters() {
+    for (const wake of waiters) wake();
+    waiters.clear();
+  }
 
   function recovered() {
     if (failing) failed(null);
@@ -51,33 +64,38 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
   function settle(next: boolean) {
     if (outstanding !== next) pending(next);
     outstanding = next;
+    if (!next) wakeWaiters();
   }
 
-  async function runRead(readOnce: () => Promise<T>, propagateFailure: boolean) {
+  async function runRead(readOnce: () => Promise<T>, acceptResult?: () => boolean) {
     const ticket = ++latest;
     const current = () => !closed && ticket === latest;
     settle(true);
     return readOnce().then(
       (value) => {
-        if (!current()) return undefined;
-        apply(value);
-        settle(false);
-        recovered();
-        return value;
+        if (current()) {
+          answer = value;
+          apply(value);
+          settle(false);
+          recovered();
+        }
+        return !closed && acceptResult?.() ? value : undefined;
       },
       (cause: unknown) => {
-        if (!current()) return undefined;
-        failing = true;
-        settle(false);
-        failed({ cause });
-        if (propagateFailure) throw cause;
+        if (current()) {
+          answer = undefined;
+          failing = true;
+          settle(false);
+          failed({ cause });
+        }
+        if (!closed && acceptResult?.()) throw cause;
         return undefined;
       },
     );
   }
 
   async function refresh(readOnce = read) {
-    await runRead(readOnce, false);
+    await runRead(readOnce);
   }
 
   /** Reads now and every `intervalMs` while the page is visible, and again on focus. */
@@ -113,16 +131,19 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
 
   return {
     refresh,
-    refreshWith: (readOnce: () => Promise<T>) => runRead(readOnce, true),
+    refreshWith: runRead,
+    withLatest,
     watch,
     /** A newer answer, such as an action's, applied: drops reads in flight and the failure. */
     supersede: () => {
       latest++;
+      answer = undefined;
       settle(false);
       recovered();
     },
     close: () => {
       closed = true;
+      wakeWaiters();
     },
   };
 }
@@ -184,9 +205,14 @@ export function useRefreshSchedule<T>({
     await schedule.current?.refresh();
   }, []);
   const refreshWith = useCallback(
-    (read: () => Promise<T>) => schedule.current?.refreshWith(read),
+    (read: () => Promise<T>, acceptResult: () => boolean) =>
+      schedule.current?.refreshWith(read, acceptResult),
     [],
   );
   const supersede = useCallback(() => schedule.current?.supersede(), []);
-  return { failure, pending, refresh, refreshWith, supersede };
+  const withLatest = useCallback(
+    <R>(act: (value: T | undefined) => Promise<R>) => schedule.current?.withLatest(act),
+    [],
+  );
+  return { failure, pending, refresh, refreshWith, supersede, withLatest };
 }

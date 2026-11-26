@@ -77,18 +77,19 @@ it("focusing the window reads at once without waiting for the interval", () => {
   expect(pending).toHaveLength(2);
 });
 
-it("a poll can wait for a slow read to finish before starting another", async () => {
+it("polling resumes on the first interval after a slow read completes", async () => {
   // Arrange
   const { schedule, pending, applied } = controlledReads();
   schedule.watch(1000, fakePage().page, undefined, true);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(pending).toHaveLength(1);
+  pending[0]!.resolve("complete");
+  await vi.advanceTimersByTimeAsync(0);
 
   // Act
-  await vi.advanceTimersByTimeAsync(3000);
+  await vi.advanceTimersByTimeAsync(1000);
 
   // Assert
-  expect(pending).toHaveLength(1);
-  pending[0]?.resolve("complete");
-  await vi.advanceTimersByTimeAsync(1000);
   expect(applied).toStrictEqual(["complete"]);
   expect(pending).toHaveLength(2);
 });
@@ -210,13 +211,16 @@ it("a failed read is no longer pending", async () => {
   expect(outstanding).toStrictEqual([true, false]);
 });
 
-it("a superseded explicit check cannot give its stale error to the recovery caller", async () => {
+it("an invalidated scope cannot give its stale error to the recovery caller", async () => {
   // Arrange
   const { schedule, pending, failures } = controlledReads();
   const cause = new Error("old connection");
+  let scope = "original";
   const explicit = schedule.refreshWith(
     () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    () => scope === "original",
   );
+  scope = "replacement";
   void schedule.refresh();
 
   // Act
@@ -228,13 +232,18 @@ it("a superseded explicit check cannot give its stale error to the recovery call
   expect(failures).toStrictEqual([]);
 });
 
-it("the recovery caller receives the error from its still-current check", async () => {
+it("the recovery caller receives its own failure after a same-scope refresh", async () => {
   // Arrange
-  const { schedule } = controlledReads();
+  const { schedule, pending } = controlledReads();
   const cause = new Error("current connection");
+  const explicit = schedule.refreshWith(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    () => true,
+  );
+  void schedule.refresh();
 
   // Act
-  const explicit = schedule.refreshWith(() => Promise.reject(cause));
+  pending[0]!.reject(cause);
 
   // Assert
   await expect(explicit).rejects.toBe(cause);

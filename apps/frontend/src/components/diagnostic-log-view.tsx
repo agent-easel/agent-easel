@@ -249,7 +249,7 @@ export function DiagnosticRetryAction({
   disabled = false,
 }: {
   retry: DiagnosticRetry;
-  recover: () => Promise<readonly string[]>;
+  recover: (signal: AbortSignal) => Promise<readonly string[]>;
   view?: boolean;
   disabled?: boolean;
 }) {
