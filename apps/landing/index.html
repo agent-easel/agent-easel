@@ -116,13 +116,23 @@
         <p class="mt-6 text-[13px] text-zinc-500">
           v%FACTORY_VERSION% · Apple Silicon · signed &amp; notarized .dmg · MIT licensed
         </p>
-        <img
-          src="/screens/run-detail.png"
-          width="2400"
-          height="1280"
-          alt="A zoomed-in AgentEasel Run canvas showing Implement change branching into parallel Code review and Accessibility review Agents, converging into a Review results Join block before Your decision, with the Run header and Timeline bar."
-          class="mx-auto mt-20 w-full max-w-[1200px] rounded-xl border border-zinc-800 shadow-[0_24px_96px_rgb(99_102_242/0.18)]"
-        />
+        <div
+          class="mx-auto mt-20 max-w-[1200px] overflow-x-auto rounded-xl border border-zinc-800 bg-[#0c0c0e] shadow-[0_24px_96px_rgb(99_102_242/0.18)]"
+          tabindex="0"
+          role="region"
+          aria-label="AgentEasel Run execution canvas"
+        >
+          <img
+            src="/screens/run-detail.png"
+            width="2400"
+            height="1280"
+            alt="A zoomed-in AgentEasel Run canvas showing Implement change branching into parallel Code review and Accessibility review Agents, converging into a Review results Join block before Your decision, with the Run header and Timeline bar."
+            class="block h-auto w-full min-w-[1040px] max-w-none"
+          />
+        </div>
+        <p class="mt-3 text-xs text-zinc-500 min-[1168px]:hidden">
+          Scroll horizontally to follow the full Flow from implementation to human decision.
+        </p>
       </section>
 
       <section id="features" class="px-6 pt-40 pb-30 md:px-16">

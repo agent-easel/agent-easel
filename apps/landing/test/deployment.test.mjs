@@ -96,7 +96,7 @@ await test("a Vercel build without a published Release version fails instead of 
   assert.throws(build);
 });
 
-await test("the built hero screenshot exists and its declared dimensions match the PNG", (context) => {
+await test("the built hero screenshot exists, matches its PNG dimensions and preserves readable width on narrow viewports", (context) => {
   // Arrange
   const env = { FACTORY_SITE_URL: "" };
 
@@ -106,7 +106,7 @@ await test("the built hero screenshot exists and its declared dimensions match t
   // Assert
   const html = readFileSync(join(output, "index.html"), "utf8");
   const hero = html.match(
-    /<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"/,
+    /<div[^>]*overflow-x-auto[^>]*>\s*<img\s+src="\.\/screens\/run-detail\.png"\s+width="(\d+)"\s+height="(\d+)"[^>]*class="[^"]*min-w-\[1040px\][^"]*max-w-none[^"]*"/,
   );
   assert.ok(hero);
   const png = readFileSync(join(output, "screens/run-detail.png"));
