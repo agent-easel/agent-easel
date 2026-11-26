@@ -9,6 +9,7 @@ import type {
   T3ConnectionRecovery,
 } from "@agent-easel/contracts";
 import { diagnosticPath, validateDiagnosticEntry } from "@agent-easel/domain-validation";
+import type { DiagnosticLog } from "../src/diagnostic-log.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
@@ -40,6 +41,12 @@ const deniedWrite: DiagnosticEntry = {
   skill: null,
   reason: "permission_denied",
   file: "~/.claude.json",
+};
+const connected: DiagnosticEntry = {
+  type: "t3_connection",
+  outcome: "ok",
+  host: "loopback",
+  reason: "connected",
 };
 
 it("a failed connection recheck returns its attempt and exports the reason without the endpoint", async (c) => {
@@ -428,13 +435,20 @@ it.effect(
       yield* other.record(installTarget);
 
       // Act
-      yield* running.record(deniedWrite);
+      yield* running.record(deniedWrite).pipe(Effect.andThen(running.finish("failed")));
 
       // Assert
       expect(yield* log.listDiagnosticAttempts("", "", running.id)).toMatchObject({
         ok: true,
         value: {
-          attempts: [{ id: running.id, truncated: true, entries: [{ entry: deniedWrite }] }],
+          attempts: [
+            {
+              id: running.id,
+              truncated: true,
+              outcome: "failed",
+              entries: [{ entry: deniedWrite }],
+            },
+          ],
         },
       });
     }),
@@ -536,14 +550,8 @@ it.effect(
       const log = yield* open;
       yield* log.setDiagnosticRecording({ enabled: true });
       const attempt = yield* log.changeAttempt("t3_connection");
-      const step: DiagnosticEntry = {
-        type: "t3_connection",
-        outcome: "ok",
-        host: "loopback",
-        reason: "connected",
-      };
       yield* TestClock.adjust(1000);
-      yield* attempt.record(step);
+      yield* attempt.record(connected);
       yield* TestClock.adjust(1000);
 
       // Act
@@ -556,13 +564,45 @@ it.effect(
           attempts: [
             {
               startedAt: "1970-01-01T00:00:00.000Z",
-              entries: [{ at: "1970-01-01T00:00:01.000Z", entry: step }],
+              entries: [{ at: "1970-01-01T00:00:01.000Z", entry: connected }],
             },
           ],
         },
       });
     }),
 );
+
+const recordingBoundaries = {
+  Delete: (log: DiagnosticLog) => log.deleteDiagnosticLog(),
+  disable: (log: DiagnosticLog) => log.setDiagnosticRecording({ enabled: false }),
+  expiry: () => TestClock.adjust(24 * HOUR),
+};
+
+for (const [boundary, invalidate] of Object.entries(recordingBoundaries)) {
+  it.effect(
+    `a buffered observation from before ${boundary} cannot write into a new recording generation`,
+    (context) =>
+      Effect.gen(function* () {
+        // Arrange
+        const { open } = yield* diagnosticStore(context);
+        const log = yield* open;
+        yield* log.setDiagnosticRecording({ enabled: true });
+        const old = yield* log.changeAttempt("t3_connection");
+        yield* old.record(connected);
+        yield* invalidate(log);
+        yield* log.setDiagnosticRecording({ enabled: true });
+
+        // Act
+        yield* old.finish("ok");
+
+        // Assert
+        expect(yield* log.listDiagnosticAttempts("", "", "")).toStrictEqual({
+          ok: true,
+          value: { attempts: [], nextCursor: null },
+        });
+      }),
+  );
+}
 
 it.effect(
   "a scheduled check of an unchanged connection adds no attempt to the startup check's",
