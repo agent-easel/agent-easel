@@ -217,7 +217,7 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Diagnostic log**: DiagnosticAttemptList, the bordered list of recorded attempts. Each attempt
   opens with a divider row (operation name · local time, an outcome StatusBadge and a Copy button
-  for that attempt), then its step lines: a monospaced time, an ok, fail or skip icon, the step
+  for that attempt), then its [step lines](https://www.figma.com/design/quYma33EdiIQnYOzyVj7Tp/T3-Factory?node-id=898-8162): a monospaced time, an ok, fail or skip icon, the step
   name, the redacted detail in monospace that wraps, and the reason code at the right, red on
   failure. Settings and the viewer dialog show the same list; an empty log is a compact EmptyState.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.

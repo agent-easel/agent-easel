@@ -41,6 +41,7 @@ export interface DiagnosticRecorder {
   readonly open: (
     operation: DiagnosticOperation,
     environment: Effect.Effect<DiagnosticEnvironment>,
+    expectedGeneration?: number,
   ) => Effect.Effect<DiagnosticAttemptRef | null, unknown>;
   readonly append: (
     attempt: DiagnosticAttemptRef,
@@ -176,11 +177,13 @@ const makeSqliteRecorder = (
       SELECT 1 FROM diagnostic_entries WHERE attempt_id = diagnostic_attempts.id)`;
   });
   const recorder: DiagnosticRecorder = {
-    open: (operation, environment) =>
+    open: (operation, environment, expectedGeneration) =>
       Effect.gen(function* () {
         const before = yield* readState;
         const startedAt = yield* now;
         if (!recording(before, startedAt)) return null;
+        if (expectedGeneration !== undefined && before.generation !== expectedGeneration)
+          return null;
         const snapshot = JSON.stringify(yield* environment);
         const id = yield* newId;
         return yield* sql.withTransaction(
@@ -301,8 +304,8 @@ export const makeDiagnosticLog = (
           ),
       };
     };
-    const attempt = (operation: DiagnosticOperation) =>
-      contained(() => recorder.open(operation, environment), null).pipe(
+    const attempt = (operation: DiagnosticOperation, expectedGeneration?: number) =>
+      contained(() => recorder.open(operation, environment, expectedGeneration), null).pipe(
         Effect.map((opened) => (opened === null ? noDiagnosticAttempt : handle(opened))),
       );
 
@@ -352,6 +355,14 @@ export const makeDiagnosticLog = (
 
     return {
       attempt,
+      recordingGeneration: contained(
+        () =>
+          Effect.gen(function* () {
+            const state = yield* readState;
+            return recording(state, yield* now) ? state.generation : null;
+          }),
+        null,
+      ),
       hash,
       getDiagnosticLog: () =>
         Effect.gen(function* () {

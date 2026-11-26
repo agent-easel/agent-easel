@@ -61,7 +61,8 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
   const remote = useClientScope() === "remote";
   const [setup, setSetup] = useState<FirstRunSetup | null>(null);
   const { failure, refresh, supersede } = useRefreshSchedule({
-    read: api.getFirstRunSetup,
+    read: () => api.getFirstRunSetup(""),
+    readWhileWatching: () => api.getFirstRunSetup("1"),
     apply: setSetup,
     intervalMs: detectionRecheckMs,
     watching: setup !== null && !setup.completed,

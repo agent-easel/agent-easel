@@ -162,7 +162,11 @@ export const connectionOperations = {
     path: "/api/connection/authorization/open",
   }),
   /** Whether First-run setup is completed, and the T3 running on this computer, if any. */
-  getFirstRunSetup: operation<never, FirstRunSetup>()({ method: "GET", path: "/api/setup" }),
+  getFirstRunSetup: operation<never, FirstRunSetup>()({
+    method: "GET",
+    path: "/api/setup",
+    query: ["poll"],
+  }),
   /** Host only: records that First-run setup is completed. */
   completeFirstRunSetup: operation<never, FirstRunSetup>()({
     method: "POST",

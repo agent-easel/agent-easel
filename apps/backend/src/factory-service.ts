@@ -373,7 +373,7 @@ export const makeFactoryService = (
       listDiagnosticAttempts: (cursor, limit, ids) =>
         diagnostics.listDiagnosticAttempts(cursor, limit, ids),
       exportDiagnosticLog: () => diagnostics.exportDiagnosticLog(),
-      getFirstRunSetup: () => firstRunSetup.getFirstRunSetup(),
+      getFirstRunSetup: (poll) => firstRunSetup.getFirstRunSetup(poll === "1"),
       completeFirstRunSetup: () => firstRunSetup.completeFirstRunSetup(),
       requestClientAccess: (input) => clients.requestClientAccess(input),
       getClientAccess: (credential) => clients.getClientAccess(credential),

@@ -296,7 +296,9 @@ function connectionRoutes(factory: AgentEasel): RouteEntries<typeof connectionOp
       handle: () => answer(() => factory.openConnectionAuthorization()),
     },
     // Approved clients poll the status while the host's setup is incomplete.
-    getFirstRunSetup: { handle: () => answer(() => factory.getFirstRunSetup()) },
+    getFirstRunSetup: {
+      handle: ({ parameters }) => answer(() => factory.getFirstRunSetup(parameters.poll)),
+    },
     completeFirstRunSetup: {
       hostOnly: true,
       handle: () => answer(() => factory.completeFirstRunSetup()),

@@ -53,11 +53,11 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
     outstanding = next;
   }
 
-  async function refresh() {
+  async function refresh(readOnce = read) {
     const ticket = ++latest;
     const current = () => !closed && ticket === latest;
     settle(true);
-    await read().then(
+    await readOnce().then(
       (value) => {
         if (!current()) return;
         apply(value);
@@ -74,7 +74,7 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
   }
 
   /** Reads now and every `intervalMs` while the page is visible, and again on focus. */
-  function watch(intervalMs: number, page: RefreshPage) {
+  function watch(intervalMs: number, page: RefreshPage, readWatch = read) {
     let timer: ReturnType<typeof setInterval> | undefined;
     const pause = () => {
       clearInterval(timer);
@@ -83,10 +83,13 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
     const resume = () => {
       pause();
       if (!page.visible()) return;
-      void refresh();
-      timer = setInterval(() => void refresh(), intervalMs);
+      void refresh(readWatch);
+      timer = setInterval(() => void refresh(readWatch), intervalMs);
     };
-    const unsubscribe = page.subscribe({ visibility: resume, focus: () => void refresh() });
+    const unsubscribe = page.subscribe({
+      visibility: resume,
+      focus: () => void refresh(readWatch),
+    });
     resume();
     return () => {
       pause();
@@ -109,7 +112,7 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
   };
 }
 
-type RefreshSchedule = ReturnType<typeof createRefreshSchedule>;
+type RefreshSchedule<T> = ReturnType<typeof createRefreshSchedule<T>>;
 
 /**
  * Holds a refresh schedule while the calling component is mounted. It reads every `intervalMs`
@@ -118,11 +121,13 @@ type RefreshSchedule = ReturnType<typeof createRefreshSchedule>;
  */
 export function useRefreshSchedule<T>({
   read,
+  readWhileWatching = read,
   apply,
   intervalMs,
   watching = true,
 }: {
   read: () => Promise<T>;
+  readWhileWatching?: () => Promise<T>;
   apply: (value: T) => void;
   intervalMs: number;
   watching?: boolean;
@@ -130,8 +135,9 @@ export function useRefreshSchedule<T>({
   const [failure, setFailure] = useState<RefreshFailure | null>(null);
   const [pending, setPending] = useState(false);
   const readNow = useEffectEvent(read);
+  const readWatch = useEffectEvent(readWhileWatching);
   const applyAnswer = useEffectEvent(apply);
-  const schedule = useRef<RefreshSchedule | null>(null);
+  const schedule = useRef<RefreshSchedule<T> | null>(null);
   useEffect(() => {
     const created = createRefreshSchedule({
       read: () => readNow(),
@@ -146,7 +152,8 @@ export function useRefreshSchedule<T>({
     };
   }, []);
   useEffect(
-    () => (watching ? schedule.current?.watch(intervalMs, documentPage) : undefined),
+    () =>
+      watching ? schedule.current?.watch(intervalMs, documentPage, () => readWatch()) : undefined,
     [intervalMs, watching],
   );
   const refresh = useCallback(async () => await schedule.current?.refresh(), []);

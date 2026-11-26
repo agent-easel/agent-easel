@@ -1,4 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { DiagnosticAttemptPage, T3ConnectionRecovery } from "@agent-easel/contracts";
 import { validateDiagnosticEntry } from "@agent-easel/domain-validation";
 import { remoteServer } from "./support/remote-clients.ts";
@@ -96,7 +98,7 @@ it("nothing is recorded while recording is off", async (c) => {
   const factory = await (await diagnosticHome(c)).open();
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   assert(setup.ok);
@@ -111,7 +113,7 @@ it("while recording, T3 Code detection is recorded as a redacted attempt with it
   const { factory } = await recordingHome(c);
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   assert(setup.ok);
@@ -139,13 +141,84 @@ it("while recording, T3 Code detection is recorded as a redacted attempt with it
   ]);
 });
 
+it("an unchanged First-run poll returns the setup status without adding another detection attempt", async (c) => {
+  // Arrange
+  const server = await remoteServer(c);
+  const client = await server.approved("Laptop");
+  assert((await server.factory.setDiagnosticRecording({ enabled: true })).ok);
+  const first = await client.send("GET", "/api/setup?poll=1");
+  expect(first.status).toBe(200);
+
+  // Act
+  const second = await client.send("GET", "/api/setup?poll=1");
+
+  // Assert
+  expect(second).toEqual(first);
+  const page = await server.factory.listDiagnosticAttempts("", "", "");
+  assert(page.ok);
+  expect(page.value.attempts).toMatchObject([{ operation: "t3_detection" }]);
+});
+
+it("a First-run poll records the new result when T3 Code detection changes", async (c) => {
+  // Arrange
+  const { factory, state } = await recordingHome(c);
+  assert((await factory.getFirstRunSetup("1")).ok);
+  await writeFile(join(state, "server-runtime.json"), runtimeFile({ serverVersion: "0.1.12" }));
+
+  // Act
+  const status = await factory.getFirstRunSetup("1");
+
+  // Assert
+  assert(status.ok);
+  expect(status.value.detectedT3?.serverVersion).toBe("0.1.12");
+  const page = await factory.listDiagnosticAttempts("", "", "");
+  assert(page.ok);
+  expect(page.value.attempts).toMatchObject([
+    { entries: [{ entry: { t3Version: "0.1.12" } }] },
+    { entries: [{ entry: { t3Version: "0.1.11" } }] },
+  ]);
+});
+
+it("a poll can record the same First-run detection again after the log is deleted", async (c) => {
+  // Arrange
+  const { factory } = await recordingHome(c);
+  assert((await factory.getFirstRunSetup("1")).ok);
+  assert((await factory.deleteDiagnosticLog()).ok);
+
+  // Act
+  await factory.getFirstRunSetup("1");
+
+  // Assert
+  const page = await factory.listDiagnosticAttempts("", "", "");
+  assert(page.ok);
+  expect(page.value.attempts).toMatchObject([{ operation: "t3_detection" }]);
+});
+
+it("an explicit First-run status check records a detection even when a previous poll saw it", async (c) => {
+  // Arrange
+  const { factory } = await recordingHome(c);
+  assert((await factory.getFirstRunSetup("1")).ok);
+
+  // Act
+  const setup = await factory.getFirstRunSetup("");
+
+  // Assert
+  assert(setup.ok);
+  const page = await factory.listDiagnosticAttempts("", "", "");
+  assert(page.ok);
+  expect(page.value.attempts).toMatchObject([
+    { operation: "t3_detection" },
+    { operation: "t3_detection" },
+  ]);
+});
+
 it("the export of a refused runtime file names its reason but never its credentials, host or state path", async (c) => {
   // Arrange
   const { factory, state } = await recordingHome(
     c,
     runtimeFile({ origin: "https://owner-name:secret-canary@t3.example" }),
   );
-  assert((await factory.getFirstRunSetup()).ok);
+  assert((await factory.getFirstRunSetup("")).ok);
 
   // Act
   const exported = await factory.exportDiagnosticLog();
@@ -164,7 +237,7 @@ it("recording turns itself off 24 hours after it was turned on, across a restart
   const home = await diagnosticHome(c);
   const first = await home.open();
   assert((await first.setDiagnosticRecording({ enabled: true })).ok);
-  assert((await first.getFirstRunSetup()).ok);
+  assert((await first.getFirstRunSetup("")).ok);
   await first.close();
 
   // Act
@@ -183,7 +256,7 @@ it("a recorder that fails during detection leaves the detection outcome unchange
   assert((await factory.setDiagnosticRecording({ enabled: true })).ok);
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   expect(setup).toStrictEqual({
@@ -203,7 +276,7 @@ it("a recorder that fails during detection leaves the detection outcome unchange
 it("Delete clears the log at once while recording stays on", async (c) => {
   // Arrange
   const { factory } = await recordingHome(c);
-  assert((await factory.getFirstRunSetup()).ok);
+  assert((await factory.getFirstRunSetup("")).ok);
 
   // Act
   const deleted = await factory.deleteDiagnosticLog();

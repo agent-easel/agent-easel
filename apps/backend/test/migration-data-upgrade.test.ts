@@ -79,7 +79,7 @@ it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, 
     ok: true,
     value: { enabled: false, model: null, diagnostic: null },
   });
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
   assert(setup.ok);
   expect(setup.value.completed).toBe(true);
   expect(await factory.getChatModelSettings()).toStrictEqual({

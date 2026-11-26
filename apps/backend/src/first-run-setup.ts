@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import type {
   DetectedT3,
@@ -11,7 +14,7 @@ import type {
 } from "@agent-easel/contracts";
 import { diagnosticHost, diagnosticVersion } from "@agent-easel/domain-validation";
 import { parseEndpoint } from "./connection.ts";
-import type { DiagnosticLog } from "./diagnostic-log.ts";
+import { noDiagnosticAttempt, type DiagnosticLog } from "./diagnostic-log.ts";
 import { firstRunReportingState } from "./reporting-discovery.ts";
 
 type Detection = {
@@ -94,22 +97,48 @@ async function detectT3(stateDirectory: string): Promise<Detection> {
 export const makeFirstRunSetup = (stateDirectory: string, diagnostics: DiagnosticLog) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const detect = Effect.gen(function* () {
-      const attempt = yield* diagnostics.attempt("t3_detection");
-      const detection = yield* attempt.guard(
-        "t3_detection",
-        Effect.promise(() => detectT3(stateDirectory)),
+    const detections = yield* Semaphore.make(1);
+    let previous: { generation: number; detection: Detection } | undefined;
+    const detect = (poll: boolean) =>
+      detections.withPermit(
+        Effect.gen(function* () {
+          const generation = yield* diagnostics.recordingGeneration;
+          const detection = yield* Effect.promise(() => detectT3(stateDirectory)).pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.failCause(cause)
+                : Effect.gen(function* () {
+                    previous = undefined;
+                    const attempt =
+                      generation === null
+                        ? noDiagnosticAttempt
+                        : yield* diagnostics.attempt("t3_detection", generation);
+                    return yield* attempt.guard("t3_detection", Effect.failCause(cause));
+                  }),
+            ),
+          );
+          if (generation === null) return detection.detected;
+          if (
+            poll &&
+            previous?.generation === generation &&
+            isDeepStrictEqual(previous.detection, detection)
+          )
+            return detection.detected;
+          const attempt = yield* diagnostics.attempt("t3_detection", generation);
+          yield* attempt.record(detection.entry);
+          yield* attempt.finish(detection.detected === null ? "failed" : "ok");
+          if (attempt.id !== null) previous = { generation, detection };
+          return detection.detected;
+        }),
       );
-      yield* attempt.record(detection.entry);
-      yield* attempt.finish(detection.detected === null ? "failed" : "ok");
-      return detection.detected;
-    });
-    const read = Effect.gen(function* (): Effect.fn.Return<Result<FirstRunSetup>, unknown> {
+    const read = Effect.fnUntraced(function* (
+      poll: boolean,
+    ): Effect.fn.Return<Result<FirstRunSetup>, unknown> {
       const rows = yield* sql<{
         completed: number;
       }>`SELECT completed FROM first_run_setup WHERE singleton = 1`;
       const [detectedT3, reporting] = yield* Effect.all(
-        [detect, Effect.promise(() => firstRunReportingState(stateDirectory))],
+        [detect(poll), Effect.promise(() => firstRunReportingState(stateDirectory))],
         { concurrency: "unbounded" },
       );
       return {
@@ -123,12 +152,12 @@ export const makeFirstRunSetup = (stateDirectory: string, diagnostics: Diagnosti
       };
     });
     return {
-      getFirstRunSetup: () => read,
+      getFirstRunSetup: read,
       /** Host only (enforced by the route). */
       completeFirstRunSetup: () =>
         Effect.gen(function* () {
           yield* sql`UPDATE first_run_setup SET completed = 1 WHERE singleton = 1`;
-          return yield* read;
+          return yield* read(false);
         }),
     };
   });
