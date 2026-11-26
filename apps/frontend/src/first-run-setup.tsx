@@ -116,7 +116,9 @@ function useSetupProgress(setup: FirstRunSetup) {
   const { targets, refreshFor, answeredFor, refreshing } = useReportingState();
   const connected = presentation === "ready";
   const generation = connected ? connection?.readyGeneration : null;
-  const key = generation ? JSON.stringify([generation, setup.harnessesOffInT3]) : null;
+  const key = generation
+    ? JSON.stringify([generation, setup.harnessesOffInT3, setup.reportingEligibility])
+    : null;
   useEffect(() => {
     void refreshFor(key);
   }, [key, refreshFor]);

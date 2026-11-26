@@ -715,11 +715,15 @@ it("a provider without reporting shows the MCP address and no install action", a
 
 it("an unresolvable Codex home keeps its discovery message", async (context) => {
   // Arrange
+  await isolatedUserHome(context);
   const { factory, state } = await reportingFixture(context);
   await writeFile(
     join(state, "settings.json"),
     JSON.stringify({
-      providerInstances: { codex: { driver: "codex", config: { homePath: "relative/codex" } } },
+      providerInstances: {
+        codex: { driver: "codex", config: { homePath: "relative/codex" } },
+        claudeAgent: { driver: "claudeAgent", enabled: false, config: {} },
+      },
     }),
   );
 

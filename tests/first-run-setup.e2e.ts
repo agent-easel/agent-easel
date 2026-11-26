@@ -91,6 +91,14 @@ async function expectListBeingRead(screen: Screen) {
   await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
 }
 
+async function expectPendingHarness(screen: Screen, name: string) {
+  await expect(screen.getByRole("group", name, { exact: true }).getByRole("status")).toHaveText(
+    "Not installed",
+  );
+  await expect(screen.getByRole("button", "Install in 1 harness")).toBeVisible();
+  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
+}
+
 /** A host API call that must succeed: a refused or failed call fails the journey here. */
 async function hostCall<T>(baseUrl: string | undefined, path: string, init?: RequestInit) {
   const response = await fetch(new URL(path, baseUrl), init);
@@ -531,11 +539,7 @@ test("a harness turned on in T3 Code beside one needing manual setup withholds O
   await app.screenshot("first-run-setup-list-refreshing");
   // The read answers: Grok is installable, so Install comes back and Open Factory stays away.
   await fixture.firstRunSetup.releaseReportingReads();
-  await expect(screen.getByRole("group", "Grok", { exact: true }).getByRole("status")).toHaveText(
-    "Not installed",
-  );
-  await expect(screen.getByRole("button", "Install in 1 harness")).toBeVisible();
-  await expect(screen.getByRole("button", "Open AgentEasel")).toHaveCount(0);
+  await expectPendingHarness(screen, "Grok");
 });
 
 test("after T3 Code grants a new authorization with the same harnesses off, Open AgentEasel waits for a list read for it", async ({
@@ -709,4 +713,30 @@ test("an approved client shows no harnesses read before T3 Code disconnected unt
   await expectInstallStepOpen(screen);
   await expect(screen.getByText("Waiting for the install on the AgentEasel host")).toBeVisible();
   await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
+});
+
+test("enabling and removing a project override for an omitted built-in harness refreshes First-run setup", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openInstallStep({ fixture, app, browser, screen }, { includeCursor: false });
+  await screen.getByRole("button", "Install in 2 harnesses").tap();
+  await expect(screen.getByRole("heading", "AgentEasel is ready")).toBeVisible({ timeout: 8_000 });
+  await expectActionShown(browser, "Open AgentEasel");
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.cursorProjectOverride(true);
+
+  // Assert
+  await expectListBeingRead(screen);
+  await fixture.firstRunSetup.releaseReportingReads();
+  await expectPendingHarness(screen, "Cursor");
+  await fixture.firstRunSetup.cursorProjectOverride(false);
+  await expect(screen.getByRole("heading", "AgentEasel is ready")).toBeVisible({ timeout: 8_000 });
+  await expect(screen.getByRole("group", "Cursor", { exact: true })).toHaveCount(0);
+  await expectActionShown(browser, "Open AgentEasel");
 });

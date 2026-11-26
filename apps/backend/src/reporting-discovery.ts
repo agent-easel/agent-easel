@@ -251,26 +251,31 @@ function disabledInstances(
  * Reporting drivers with no instance T3 keeps on, by the same settings and enablement rule as
  * discovery. A missing or unreadable settings file names none.
  */
-export async function reportingDriversOffInT3(stateDirectory: string): Promise<string[]> {
+export async function firstRunReportingState(
+  stateDirectory: string,
+): Promise<{ harnessesOffInT3: string[]; reportingEligibility: string }> {
   try {
     const settings = await readT3Settings(stateDirectory);
     const configured = configuredProviderInstances(settings);
     const hydrated = hydrateProviderInstances(configured);
     const disabled = disabledInstances(settings, hydrated);
-    const on = new Set(
-      Object.entries(hydrated)
-        .filter(([id]) => !disabled.has(id))
-        .map(([, instance]) => reportingHarness(instance)),
-    );
-    return [
+    const enabled = Object.entries(hydrated)
+      .filter(([id]) => !disabled.has(id))
+      .sort(([left], [right]) => left.localeCompare(right));
+    const on = new Set(enabled.map(([, instance]) => reportingHarness(instance)));
+    const harnessesOffInT3 = [
       ...new Set(
         Object.entries(configured)
           .map(([, instance]) => reportingHarness(instance))
           .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
       ),
     ].map(String);
+    return {
+      harnessesOffInT3,
+      reportingEligibility: createHash("sha256").update(JSON.stringify(enabled)).digest("hex"),
+    };
   } catch {
-    return [];
+    return { harnessesOffInT3: [], reportingEligibility: "unreadable" };
   }
 }
 
