@@ -76,6 +76,7 @@ export function useDiagnosticLog(ids: readonly string[] | null) {
     read: async () => ({ filter, view: await readDiagnosticLog(filter, pages) }),
     apply: setAnswer,
     intervalMs: view?.status.enabled ? recordingRefreshMs : idleRefreshMs,
+    deferPollingWhilePending: true,
   });
   useEffect(() => {
     void refresh();

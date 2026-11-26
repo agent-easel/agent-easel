@@ -77,6 +77,22 @@ it("focusing the window reads at once without waiting for the interval", () => {
   expect(pending).toHaveLength(2);
 });
 
+it("a poll can wait for a slow read to finish before starting another", async () => {
+  // Arrange
+  const { schedule, pending, applied } = controlledReads();
+  schedule.watch(1000, fakePage().page, undefined, true);
+
+  // Act
+  await vi.advanceTimersByTimeAsync(3000);
+
+  // Assert
+  expect(pending).toHaveLength(1);
+  pending[0]?.resolve("complete");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(applied).toStrictEqual(["complete"]);
+  expect(pending).toHaveLength(2);
+});
+
 it("a slower earlier read never replaces the answer of a later read", async () => {
   // Arrange
   const { schedule, pending, applied } = controlledReads();

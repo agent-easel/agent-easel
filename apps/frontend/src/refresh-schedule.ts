@@ -81,7 +81,12 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
   }
 
   /** Reads now and every `intervalMs` while the page is visible, and again on focus. */
-  function watch(intervalMs: number, page: RefreshPage, readWatch = read) {
+  function watch(
+    intervalMs: number,
+    page: RefreshPage,
+    readWatch = read,
+    deferPollingWhilePending = false,
+  ) {
     let timer: ReturnType<typeof setInterval> | undefined;
     const pause = () => {
       clearInterval(timer);
@@ -91,7 +96,9 @@ export function createRefreshSchedule<T>({ read, apply, failed, pending }: Refre
       pause();
       if (!page.visible()) return;
       void refresh(readWatch);
-      timer = setInterval(() => void refresh(readWatch), intervalMs);
+      timer = setInterval(() => {
+        if (!deferPollingWhilePending || !outstanding) void refresh(readWatch);
+      }, intervalMs);
     };
     const unsubscribe = page.subscribe({
       visibility: resume,
@@ -133,12 +140,14 @@ export function useRefreshSchedule<T>({
   apply,
   intervalMs,
   watching = true,
+  deferPollingWhilePending = false,
 }: {
   read: () => Promise<T>;
   readWhileWatching?: () => Promise<T>;
   apply: (value: T) => void;
   intervalMs: number;
   watching?: boolean;
+  deferPollingWhilePending?: boolean;
 }) {
   const [failure, setFailure] = useState<RefreshFailure | null>(null);
   const [pending, setPending] = useState(false);
@@ -161,8 +170,15 @@ export function useRefreshSchedule<T>({
   }, []);
   useEffect(
     () =>
-      watching ? schedule.current?.watch(intervalMs, documentPage, () => readWatch()) : undefined,
-    [intervalMs, watching],
+      watching
+        ? schedule.current?.watch(
+            intervalMs,
+            documentPage,
+            () => readWatch(),
+            deferPollingWhilePending,
+          )
+        : undefined,
+    [deferPollingWhilePending, intervalMs, watching],
   );
   const refresh = useCallback(async () => {
     await schedule.current?.refresh();
