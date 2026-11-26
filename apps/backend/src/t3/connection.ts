@@ -61,8 +61,9 @@ export type AuthorizationResumption = "reopened" | "completing" | "none";
 
 /** Backend-host OAuth approval of Factory by one T3 endpoint. Calls reject only with a `T3Failure`. */
 export interface T3Authorization {
+  setOAuthDiagnostics?(attempt: DiagnosticLog["attempt"], run: typeof Effect.runPromise): void;
   /** Starts backend-host approval; returns without waiting for the human. */
-  authorize(target: T3Endpoint): Promise<void>;
+  authorize(target: T3Endpoint, attempt?: DiagnosticAttemptHandle): Promise<void>;
   /**
    * Reopens a live pending approval's own authorization page in the backend-host browser,
    * keeping its state and verifier. `completing`: a callback is being exchanged; `none`:
@@ -70,7 +71,10 @@ export interface T3Authorization {
    * the browser cannot open, and the attempt then inspects as `approval-reopen-failed` until a
    * later reopen opens its page. The page address never leaves the connection.
    */
-  resumeAuthorization(target: T3Endpoint): Promise<AuthorizationResumption>;
+  resumeAuthorization(
+    target: T3Endpoint,
+    attempt?: DiagnosticAttemptHandle,
+  ): Promise<AuthorizationResumption>;
 }
 
 export type T3ListedTool = Pick<ListToolsResult["tools"][number], "name" | "inputSchema">;
@@ -129,5 +133,8 @@ export interface T3Calls {
     target: T3Endpoint,
     read: (session: T3Session) => Promise<A>,
     finish: (probe: T3Probe<A>) => Promise<B>,
+    attempt?: DiagnosticAttemptHandle,
   ): Promise<B>;
 }
+import type * as Effect from "effect/Effect";
+import type { DiagnosticAttemptHandle, DiagnosticLog } from "../diagnostic-log.ts";

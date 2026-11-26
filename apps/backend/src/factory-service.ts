@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { versions } from "node:process";
 import { dirname, join } from "node:path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -9,6 +10,8 @@ import type { FactoryOperations, OperationError, Result, RunDetail } from "@agen
 import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";
+import { diagnosticPath, diagnosticVersion } from "@agent-easel/domain-validation";
+import { makeDiagnosticLog } from "./diagnostic-log.ts";
 import { makeFirstRunSetup } from "./first-run-setup.ts";
 import { makeProjects } from "./projects.ts";
 import { makeDefinitions } from "./definitions.ts";
@@ -123,27 +126,6 @@ export const makeFactoryService = (
       intervalMs,
       changes,
     );
-    const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
-    yield* projects.recheckProjects();
-    const definitions = yield* makeDefinitions(
-      t3.projects,
-      connection,
-      projects,
-      changes,
-      t3StateDirectory,
-      options.applicationVersion ?? "source",
-    );
-    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
-    const triggers = yield* makeTriggers(
-      github,
-      {
-        listProjects: projects.listProjects,
-        getFlow: definitions.getFlow,
-        startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
-        startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
-      },
-      changes,
-    );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
@@ -156,275 +138,356 @@ export const makeFactoryService = (
       ),
     );
     const reporting = Context.get(reportingContext, ReportingInstaller.ReportingInstaller);
-    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
-    const setupContext = yield* Layer.build(
-      RuntimeSetup.RuntimeSetupLayer(
-        {
-          getReportingInstallations: reporting.getReportingInstallations,
-          getConnection: connection.getConnection,
-          listProjects: projects.listProjects,
-          getAgent: definitions.getAgent,
-          getAgentCapabilities: definitions.getAgentCapabilities,
-        },
-        connection.snapshots.fresh,
-        projects.refreshProjects,
-        git,
-      ),
-    );
-    const setup = Context.get(setupContext, RuntimeSetup.RuntimeSetup);
-    const runTitles = yield* makeRunTitles(
-      t3.threads,
+    const serverId = yield* clients.getServerId();
+    if (!serverId.ok) return yield* Effect.die(serverId.error);
+    const diagnostics = yield* makeDiagnosticLog(
       {
-        getAgentCapabilities: definitions.getAgentCapabilities,
-        getReportingInstallations: reporting.getReportingInstallations,
+        applicationVersion: options.applicationVersion,
+        serverId: serverId.value,
+        connection: connection.getConnection,
+        installations: reporting.getReportingInstallations,
       },
-      connection.snapshots,
-      changes,
+      options.diagnosticRecorder,
     );
-    const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
-    const discordGateway = yield* makeDiscordGateway(options.discordApiUrl ?? DISCORD_API_URL);
-    const chatStart = startAction({
-      listProjects: projects.listProjects,
-      getFlow: definitions.getFlow,
-      listFlows: definitions.listFlows,
-      startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
-      acceptedStart: (requestId) => runner.acceptedStart(requestId),
-    });
-    const chatHumanAnswer = humanAnswerAction(sql, {
-      getRun: (id) => guard(runner.getRun(id)),
-      answerHumanOccurrence: (id, input, requestId) =>
-        guard(runner.answerHumanOccurrence(id, input, requestId)),
-      acceptedHumanAnswer: (requestId) => runner.acceptedHumanAnswer(requestId),
-    });
-    const chatArchive = archiveAction(sql, {
-      getRun: (id) => guard(runner.getRun(id)),
-      archiveRun: (id, requestId) => guard(runner.archiveRun(id, requestId)),
-      acceptedArchive: (requestId) => runner.acceptedArchive(requestId),
-    });
-    const chatDeliveries = yield* makeChatDeliveries(sql, (runId): void =>
-      reportCapture.changed(runId),
-    );
-    const reportCapture = yield* makeReportCapture(
-      sql,
-      { getRun: (id) => guard(runner.getRun(id)) },
-      [statusCards(sql), reportNotices(sql)],
-      chatDeliveries.wake,
-    );
-    yield* changes.onRunChanged(reportCapture.changed);
-    const runUpdates = yield* makeRunUpdates(
-      sql,
-      () => runner.listRunNavigation(),
-      connection.snapshots,
-      t3.threads,
-      intervalMs,
-    );
-    yield* changes.onRunChanged(runUpdates.changed);
-    const botGuards = makeBotGuards();
-    const chatActions = makeChatActions(
-      sql,
-      [chatStart.operation, chatHumanAnswer.operation, chatArchive.operation],
-      chatDeliveries,
-      reportCapture.changed,
-      changes.runChanged,
-      botGuards,
-    );
-    const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
-      model: conversationalModel(sql, chatCredentials),
-      tools: [
-        ...discoveryTools({
-          listProjects: projects.listProjects,
-          listFlows: definitions.listFlows,
-        }),
-        ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }),
-        chatStart.tool,
-        chatHumanAnswer.tool,
-        chatArchive.tool,
-      ],
-      actions: chatActions,
-      deliveries: chatDeliveries,
-      botGuards,
-    });
-    const chatModel = yield* makeChatModel(chatCredentials, discordOperation.modelSaved);
-    const chatDiscord = yield* makeChatDiscord(chatCredentials, discordGateway, discordOperation, {
-      actions: chatActions,
-      deliveries: chatDeliveries,
-      reportingRescan: reportCapture.rescan,
-    });
-    const runtimeReports = createRuntime(
-      (publicId, report) => runner.consumeBlockUpdate(publicId, report),
-      (kind, input) => runner.readFactoryTool(kind, input),
-      runTitles.setRunTitle,
-    );
-    // A literal without spreads: guardOperations and the Promise facade expose exactly these keys.
-    const operations: FactoryEffectOperations = {
-      createFlow: definitions.createFlow,
-      validateFlow: definitions.validateFlow,
-      updateFlow: definitions.updateFlow,
-      changeFlowOwner: definitions.changeFlowOwner,
-      removeFlow: definitions.removeFlow,
-      previewFlowDuplicate: definitions.previewFlowDuplicate,
-      duplicateFlow: definitions.duplicateFlow,
-      listFlows: definitions.listFlows,
-      getFlow: definitions.getFlow,
-      listFlowFindings: definitions.listFlowFindings,
-      getAgentCapabilities: definitions.getAgentCapabilities,
-      listAgents: definitions.listAgents,
-      getAgent: definitions.getAgent,
-      reserveAgentCreate: definitions.reserveAgentCreate,
-      createAgent: definitions.createAgent,
-      getAgentCreateOutcome: definitions.getAgentCreateOutcome,
-      updateAgent: definitions.updateAgent,
-      changeAgentOwner: definitions.changeAgentOwner,
-      duplicateAgent: definitions.duplicateAgent,
-      removeAgent: definitions.removeAgent,
-      exportAgent: definitions.exportAgent,
-      exportFlow: definitions.exportFlow,
-      reviewImport: definitions.reviewImport,
-      commitImport: definitions.commitImport,
-      getReportingInstallations: () => reporting.getReportingInstallations(),
-      installReporting: (input) => reporting.installReporting(input),
-      answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),
-      continueWaitArrival: (id) => runner.continueWaitArrival(id),
-      getSubflowInvocation: (runId, invocationId) =>
-        runner.getSubflowInvocation(runId, invocationId),
-      listSubflowInvocations: (runId, blockId, limit, cursor) =>
-        runner.listSubflowInvocations(runId, blockId, limit, cursor),
-      retrySubflowStop: (runId, invocationId) => runner.retrySubflowStop(runId, invocationId),
-      listConditionArrivals: (runId, blockId, limit, cursor) =>
-        runner.listConditionArrivals(runId, blockId, limit, cursor),
-      getRunJoin: (runId, blockId) => runner.getRunJoin(runId, blockId),
-      listAttention: () => runner.listAttention(),
-      requestReport: (id, input) => runner.requestReport(id, input),
-      archiveRun: (id) => runner.archiveRun(id),
-      settleRun: (id, input) => runner.settleRun(id, input),
-      getRunCreationPolicy: () => runner.getRunCreationPolicy(),
-      getRunTitleSetting: () => runTitles.getRunTitleSetting(),
-      updateRunTitleSetting: (input) => runTitles.updateRunTitleSetting(input),
-      getChatModelSettings: () => chatModel.getChatModelSettings(),
-      updateChatModelSettings: (input) => chatModel.updateChatModelSettings(input),
-      testChatModel: (input) => chatModel.testChatModel(input),
-      getDiscordSettings: () => chatDiscord.getDiscordSettings(),
-      updateDiscordConnection: (input) => chatDiscord.updateDiscordConnection(input),
-      checkDiscordConnection: (input) => chatDiscord.checkDiscordConnection(input),
-      updateDiscordAccess: (input) => chatDiscord.updateDiscordAccess(input),
-      sendDiscordAccessTest: () => chatDiscord.sendDiscordAccessTest(),
-      setChatControlEnabled: (input) => chatDiscord.setChatControlEnabled(input),
-      retryChatDelivery: (input) => chatDiscord.retryChatDelivery(input),
-      getTriggerReadiness: (projectId, flowId, triggerId) =>
-        triggers.getTriggerReadiness(projectId, flowId, triggerId),
-      listTriggers: () => triggers.listTriggers(),
-      createTrigger: (input) => triggers.createTrigger(input),
-      getTrigger: (id) => triggers.getTrigger(id),
-      updateTrigger: (id, input) => triggers.updateTrigger(id, input),
-      setTriggerEnabled: (id, input) => triggers.setTriggerEnabled(id, input),
-      runTrigger: (id, input) => triggers.runTrigger(id, input),
-      previewNewTrigger: (input) => triggers.previewNewTrigger(input),
-      previewTrigger: (id, input) => triggers.previewTrigger(id, input),
-      removeTrigger: (id) => triggers.removeTrigger(id),
-      startRun: (i) => runner.startRun(i),
-      getRunImageInfo: (sha256) => images.getRunImageInfo(sha256),
-      stageRunImage: (sha256, input) => images.stageRunImage(sha256, input),
-      getRunImage: (sha256) => images.getRunImage(sha256),
-      listEligibleRunImages: (projectId) => images.listEligibleRunImages(projectId),
-      deleteRunImages: (input) => images.deleteRunImages(input),
-      listRunNavigation: () => runner.listRunNavigation(),
-      searchArchivedRuns: (query) => runner.searchArchivedRuns(query),
-      renameRun: (id, input) => runner.renameRun(id, input),
-      snoozeRun: (id) => runner.snoozeRun(id),
-      restoreRun: (id) => runner.restoreRun(id),
-      markRunWokeSeen: (id) => runner.markRunWokeSeen(id),
-      getRun: (id) => runner.getRun(id),
-      listRuns: (id) => runner.listRuns(id),
-      listTasks: (id) => runner.listTasks(id),
-      updateTask: (id, input) => runner.updateTask(id, input),
-      reconcileRuns: () => runner.reconcileRuns(),
-      recheckRuntime: (i) => setup.recheckRuntime(i),
-      listProjects: () => projects.listProjects(),
-      recheckProjects: () => projects.recheckProjects(),
-      addRepository: (input) => projects.addRepository(input),
-      selectProject: (input) => projects.selectProject(input),
-      getProjectReadiness: (id) => projects.getProjectReadiness(id),
-      getProjectFavicon: (id) => projects.getProjectFavicon(id),
-      getConnection: () => connection.getConnection(),
-      configureConnection: (input) => connection.configureConnection(input),
-      recheckConnection: () => connection.recheckConnection(),
-      authorizeConnection: () => connection.authorizeConnection(),
-      openConnectionAuthorization: () => connection.openConnectionAuthorization(),
-      getFirstRunSetup: () => firstRunSetup.getFirstRunSetup(),
-      completeFirstRunSetup: () => firstRunSetup.completeFirstRunSetup(),
-      requestClientAccess: (input) => clients.requestClientAccess(input),
-      getClientAccess: (credential) => clients.getClientAccess(credential),
-      getServerId: () => clients.getServerId(),
-      authenticateClient: (credential) => clients.authenticateClient(credential),
-      listClients: () => clients.listClients(),
-      approveClient: (id) => clients.approveClient(id),
-      denyClient: (id) => clients.denyClient(id),
-      revokeClient: (id) => clients.revokeClient(id),
-      getHostLifecycle: () => clients.getHostLifecycle(),
-    };
-    const guarded = guardOperations(operations);
-    const inspectRun = <A>(read: Effect.Effect<Result<A>, unknown>) =>
-      guard(
-        sql.withTransaction(read).pipe(Effect.provideService(SqlClient.BeginTransaction, "BEGIN")),
-      );
-    const factory: FactoryService["Service"] = {
-      ...guarded,
-      awaitWorkerTitles: () => runner.awaitWorkerTitles(),
-      runtime: runtimeReports,
-      startTextRun: (input) => guard(runner.startTextRun(input)),
-      checkStart: (projectId, flowId) => guard(runner.startPreflight(projectId, flowId)),
-      subscribeRunUpdates: (input) => guard(runUpdates.subscribe(input)),
-      listRunReadSnapshot: (words) =>
-        inspectRun(runListSource(runner.listRunNavigation(), runner.listRunListExtras(words))),
-      readRunByReference: (reference) =>
-        inspectRun(runReadSource(sql, runner.getRun, runner.getSubflowInvocation)(reference)),
-      setRuntimeBackendUrl: (url) => {
-        runtimeBackendUrl = url;
-      },
-      live: makeLiveStreams(
-        changes,
-        {
-          ...guarded,
-          readProjectCatalog: () => guard(projects.readCatalog()),
-          readStudio: () =>
-            guard(
-              sql.withTransaction(
-                Effect.gen(function* () {
-                  const studio = yield* definitions.readStudio();
-                  if (!studio.ok) return studio;
-                  const triggerList = yield* triggers.readStudioTriggers();
-                  return { ok: true as const, value: { ...studio.value, triggers: triggerList } };
-                }),
-              ),
+    const backendStart = yield* diagnostics.attempt("backend_start");
+    const factory = yield* backendStart
+      .guard(
+        "backend_start",
+        Effect.gen(function* () {
+          yield* connection.start(diagnostics);
+          const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
+          yield* projects.refreshProjects();
+          const definitions = yield* makeDefinitions(
+            t3.projects,
+            connection,
+            projects,
+            changes,
+            t3StateDirectory,
+            options.applicationVersion ?? "source",
+          );
+          let runner: Effect.Success<ReturnType<typeof makeRunner>>;
+          const triggers = yield* makeTriggers(
+            github,
+            {
+              listProjects: projects.listProjects,
+              getFlow: definitions.getFlow,
+              startTextRun: (input, authorization) =>
+                guard(runner.startTextRun(input, authorization)),
+              startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
+            },
+            changes,
+          );
+          const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory, diagnostics);
+          const setupContext = yield* Layer.build(
+            RuntimeSetup.RuntimeSetupLayer(
+              {
+                getReportingInstallations: reporting.getReportingInstallations,
+                getConnection: connection.getConnection,
+                listProjects: projects.listProjects,
+                getAgent: definitions.getAgent,
+                getAgentCapabilities: definitions.getAgentCapabilities,
+              },
+              connection.snapshots.fresh,
+              projects.refreshProjects,
+              git,
             ),
-        },
-        (read) =>
-          sql
-            .withTransaction(read)
-            .pipe(Effect.catchTag("SqlError", () => Effect.fail(liveReadError))),
-      ),
-    };
-    runner = yield* makeRunner(
-      factory,
-      connection.snapshots,
-      projects.refreshProjects,
-      t3.threads,
-      git,
-      github,
-      owner,
-      intervalMs,
-      (projectId, agent, snapshot) => setup.recheckAgent(projectId, agent, snapshot),
-      changes,
-      images,
-      runTitles,
-    );
-    yield* runner.initialize();
-    // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
-    yield* triggers.startSchedule;
-    // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
-    yield* chatActions.recover;
-    // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
-    yield* Effect.forkScoped(reportCapture.run);
-    yield* Effect.forkScoped(runUpdates.run);
+          );
+          const setup = Context.get(setupContext, RuntimeSetup.RuntimeSetup);
+          const runTitles = yield* makeRunTitles(
+            t3.threads,
+            {
+              getAgentCapabilities: definitions.getAgentCapabilities,
+              getReportingInstallations: reporting.getReportingInstallations,
+            },
+            connection.snapshots,
+            changes,
+          );
+          const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
+          const discordGateway = yield* makeDiscordGateway(
+            options.discordApiUrl ?? DISCORD_API_URL,
+          );
+          const chatStart = startAction({
+            listProjects: projects.listProjects,
+            getFlow: definitions.getFlow,
+            listFlows: definitions.listFlows,
+            startTextRun: (input, authorization) =>
+              guard(runner.startTextRun(input, authorization)),
+            acceptedStart: (requestId) => runner.acceptedStart(requestId),
+          });
+          const chatHumanAnswer = humanAnswerAction(sql, {
+            getRun: (id) => guard(runner.getRun(id)),
+            answerHumanOccurrence: (id, input, requestId) =>
+              guard(runner.answerHumanOccurrence(id, input, requestId)),
+            acceptedHumanAnswer: (requestId) => runner.acceptedHumanAnswer(requestId),
+          });
+          const chatArchive = archiveAction(sql, {
+            getRun: (id) => guard(runner.getRun(id)),
+            archiveRun: (id, requestId) => guard(runner.archiveRun(id, requestId)),
+            acceptedArchive: (requestId) => runner.acceptedArchive(requestId),
+          });
+          const chatDeliveries = yield* makeChatDeliveries(sql, (runId): void =>
+            reportCapture.changed(runId),
+          );
+          const reportCapture = yield* makeReportCapture(
+            sql,
+            { getRun: (id) => guard(runner.getRun(id)) },
+            [statusCards(sql), reportNotices(sql)],
+            chatDeliveries.wake,
+          );
+          yield* changes.onRunChanged(reportCapture.changed);
+          const runUpdates = yield* makeRunUpdates(
+            sql,
+            () => runner.listRunNavigation(),
+            connection.snapshots,
+            t3.threads,
+            intervalMs,
+          );
+          yield* changes.onRunChanged(runUpdates.changed);
+          const botGuards = makeBotGuards();
+          const chatActions = makeChatActions(
+            sql,
+            [chatStart.operation, chatHumanAnswer.operation, chatArchive.operation],
+            chatDeliveries,
+            reportCapture.changed,
+            changes.runChanged,
+            botGuards,
+          );
+          const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
+            model: conversationalModel(sql, chatCredentials),
+            tools: [
+              ...discoveryTools({
+                listProjects: projects.listProjects,
+                listFlows: definitions.listFlows,
+              }),
+              ...runTools(sql, { getRun: (id) => guard(runner.getRun(id)) }),
+              chatStart.tool,
+              chatHumanAnswer.tool,
+              chatArchive.tool,
+            ],
+            actions: chatActions,
+            deliveries: chatDeliveries,
+            botGuards,
+          });
+          const chatModel = yield* makeChatModel(chatCredentials, discordOperation.modelSaved);
+          const chatDiscord = yield* makeChatDiscord(
+            chatCredentials,
+            discordGateway,
+            discordOperation,
+            {
+              actions: chatActions,
+              deliveries: chatDeliveries,
+              reportingRescan: reportCapture.rescan,
+            },
+          );
+          const runtimeReports = createRuntime(
+            (publicId, report) => runner.consumeBlockUpdate(publicId, report),
+            (kind, input) => runner.readFactoryTool(kind, input),
+            runTitles.setRunTitle,
+          );
+          // A literal without spreads: guardOperations and the Promise facade expose exactly these keys.
+          const operations: FactoryEffectOperations = {
+            createFlow: definitions.createFlow,
+            validateFlow: definitions.validateFlow,
+            updateFlow: definitions.updateFlow,
+            changeFlowOwner: definitions.changeFlowOwner,
+            removeFlow: definitions.removeFlow,
+            previewFlowDuplicate: definitions.previewFlowDuplicate,
+            duplicateFlow: definitions.duplicateFlow,
+            listFlows: definitions.listFlows,
+            getFlow: definitions.getFlow,
+            listFlowFindings: definitions.listFlowFindings,
+            getAgentCapabilities: definitions.getAgentCapabilities,
+            listAgents: definitions.listAgents,
+            getAgent: definitions.getAgent,
+            reserveAgentCreate: definitions.reserveAgentCreate,
+            createAgent: definitions.createAgent,
+            getAgentCreateOutcome: definitions.getAgentCreateOutcome,
+            updateAgent: definitions.updateAgent,
+            changeAgentOwner: definitions.changeAgentOwner,
+            duplicateAgent: definitions.duplicateAgent,
+            removeAgent: definitions.removeAgent,
+            exportAgent: definitions.exportAgent,
+            exportFlow: definitions.exportFlow,
+            reviewImport: definitions.reviewImport,
+            commitImport: definitions.commitImport,
+            getReportingInstallations: () => reporting.getReportingInstallations(),
+            recheckReporting: () => reporting.recheckReporting(diagnostics),
+            installReporting: (input) => reporting.installReporting(input, diagnostics),
+            answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),
+            continueWaitArrival: (id) => runner.continueWaitArrival(id),
+            getSubflowInvocation: (runId, invocationId) =>
+              runner.getSubflowInvocation(runId, invocationId),
+            listSubflowInvocations: (runId, blockId, limit, cursor) =>
+              runner.listSubflowInvocations(runId, blockId, limit, cursor),
+            retrySubflowStop: (runId, invocationId) => runner.retrySubflowStop(runId, invocationId),
+            listConditionArrivals: (runId, blockId, limit, cursor) =>
+              runner.listConditionArrivals(runId, blockId, limit, cursor),
+            getRunJoin: (runId, blockId) => runner.getRunJoin(runId, blockId),
+            listAttention: () => runner.listAttention(),
+            requestReport: (id, input) => runner.requestReport(id, input),
+            archiveRun: (id) => runner.archiveRun(id),
+            settleRun: (id, input) => runner.settleRun(id, input),
+            getRunCreationPolicy: () => runner.getRunCreationPolicy(),
+            getRunTitleSetting: () => runTitles.getRunTitleSetting(),
+            updateRunTitleSetting: (input) => runTitles.updateRunTitleSetting(input),
+            getChatModelSettings: () => chatModel.getChatModelSettings(),
+            updateChatModelSettings: (input) => chatModel.updateChatModelSettings(input),
+            testChatModel: (input) => chatModel.testChatModel(input),
+            getDiscordSettings: () => chatDiscord.getDiscordSettings(),
+            updateDiscordConnection: (input) => chatDiscord.updateDiscordConnection(input),
+            checkDiscordConnection: (input) => chatDiscord.checkDiscordConnection(input),
+            updateDiscordAccess: (input) => chatDiscord.updateDiscordAccess(input),
+            sendDiscordAccessTest: () => chatDiscord.sendDiscordAccessTest(),
+            setChatControlEnabled: (input) => chatDiscord.setChatControlEnabled(input),
+            retryChatDelivery: (input) => chatDiscord.retryChatDelivery(input),
+            getTriggerReadiness: (projectId, flowId, triggerId) =>
+              triggers.getTriggerReadiness(projectId, flowId, triggerId),
+            listTriggers: () => triggers.listTriggers(),
+            createTrigger: (input) => triggers.createTrigger(input),
+            getTrigger: (id) => triggers.getTrigger(id),
+            updateTrigger: (id, input) => triggers.updateTrigger(id, input),
+            setTriggerEnabled: (id, input) => triggers.setTriggerEnabled(id, input),
+            runTrigger: (id, input) => triggers.runTrigger(id, input),
+            previewNewTrigger: (input) => triggers.previewNewTrigger(input),
+            previewTrigger: (id, input) => triggers.previewTrigger(id, input),
+            removeTrigger: (id) => triggers.removeTrigger(id),
+            startRun: (i) => runner.startRun(i),
+            getRunImageInfo: (sha256) => images.getRunImageInfo(sha256),
+            stageRunImage: (sha256, input) => images.stageRunImage(sha256, input),
+            getRunImage: (sha256) => images.getRunImage(sha256),
+            listEligibleRunImages: (projectId) => images.listEligibleRunImages(projectId),
+            deleteRunImages: (input) => images.deleteRunImages(input),
+            listRunNavigation: () => runner.listRunNavigation(),
+            searchArchivedRuns: (query) => runner.searchArchivedRuns(query),
+            renameRun: (id, input) => runner.renameRun(id, input),
+            snoozeRun: (id) => runner.snoozeRun(id),
+            restoreRun: (id) => runner.restoreRun(id),
+            markRunWokeSeen: (id) => runner.markRunWokeSeen(id),
+            getRun: (id) => runner.getRun(id),
+            listRuns: (id) => runner.listRuns(id),
+            listTasks: (id) => runner.listTasks(id),
+            updateTask: (id, input) => runner.updateTask(id, input),
+            reconcileRuns: () => runner.reconcileRuns(),
+            recheckRuntime: (i) => setup.recheckRuntime(i),
+            listProjects: () => projects.listProjects(),
+            recheckProjects: () => projects.recheckProjects(),
+            addRepository: (input) => projects.addRepository(input),
+            selectProject: (input) => projects.selectProject(input),
+            getProjectReadiness: (id) => projects.getProjectReadiness(id),
+            getProjectFavicon: (id) => projects.getProjectFavicon(id),
+            getConnection: () => connection.getConnection(),
+            configureConnection: (input) => connection.configureConnection(input),
+            recheckConnection: () => connection.recheckConnection(),
+            authorizeConnection: () => connection.authorizeConnection(),
+            openConnectionAuthorization: () => connection.openConnectionAuthorization(),
+            getDiagnosticLog: () => diagnostics.getDiagnosticLog(),
+            setDiagnosticRecording: (input) => diagnostics.setDiagnosticRecording(input),
+            deleteDiagnosticLog: () => diagnostics.deleteDiagnosticLog(),
+            listDiagnosticAttempts: (cursor, limit, ids) =>
+              diagnostics.listDiagnosticAttempts(cursor, limit, ids),
+            exportDiagnosticLog: () => diagnostics.exportDiagnosticLog(),
+            getFirstRunSetup: (poll) => firstRunSetup.getFirstRunSetup(poll === "1"),
+            completeFirstRunSetup: () => firstRunSetup.completeFirstRunSetup(),
+            requestClientAccess: (input) => clients.requestClientAccess(input),
+            getClientAccess: (credential) => clients.getClientAccess(credential),
+            getServerId: () => clients.getServerId(),
+            authenticateClient: (credential) => clients.authenticateClient(credential),
+            listClients: () => clients.listClients(),
+            approveClient: (id) => clients.approveClient(id),
+            denyClient: (id) => clients.denyClient(id),
+            revokeClient: (id) => clients.revokeClient(id),
+            getHostLifecycle: () => clients.getHostLifecycle(),
+          };
+          const guarded = guardOperations(operations);
+          const inspectRun = <A>(read: Effect.Effect<Result<A>, unknown>) =>
+            guard(
+              sql
+                .withTransaction(read)
+                .pipe(Effect.provideService(SqlClient.BeginTransaction, "BEGIN")),
+            );
+          const factory: FactoryService["Service"] = {
+            ...guarded,
+            awaitWorkerTitles: () => runner.awaitWorkerTitles(),
+            runtime: runtimeReports,
+            startTextRun: (input) => guard(runner.startTextRun(input)),
+            checkStart: (projectId, flowId) => guard(runner.startPreflight(projectId, flowId)),
+            subscribeRunUpdates: (input) => guard(runUpdates.subscribe(input)),
+            listRunReadSnapshot: (words) =>
+              inspectRun(
+                runListSource(runner.listRunNavigation(), runner.listRunListExtras(words)),
+              ),
+            readRunByReference: (reference) =>
+              inspectRun(runReadSource(sql, runner.getRun, runner.getSubflowInvocation)(reference)),
+            setRuntimeBackendUrl: (url) => {
+              runtimeBackendUrl = url;
+            },
+            live: makeLiveStreams(
+              changes,
+              {
+                ...guarded,
+                readProjectCatalog: () => guard(projects.readCatalog()),
+                readStudio: () =>
+                  guard(
+                    sql.withTransaction(
+                      Effect.gen(function* () {
+                        const studio = yield* definitions.readStudio();
+                        if (!studio.ok) return studio;
+                        const triggerList = yield* triggers.readStudioTriggers();
+                        return {
+                          ok: true as const,
+                          value: { ...studio.value, triggers: triggerList },
+                        };
+                      }),
+                    ),
+                  ),
+              },
+              (read) =>
+                sql
+                  .withTransaction(read)
+                  .pipe(Effect.catchTag("SqlError", () => Effect.fail(liveReadError))),
+            ),
+          };
+          runner = yield* makeRunner(
+            factory,
+            connection.snapshots,
+            projects.refreshProjects,
+            t3.threads,
+            git,
+            github,
+            owner,
+            intervalMs,
+            (projectId, agent, snapshot) => setup.recheckAgent(projectId, agent, snapshot),
+            changes,
+            images,
+            runTitles,
+            diagnostics.attempt,
+          );
+          yield* runner.initialize();
+          // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
+          yield* triggers.startSchedule;
+          // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
+          yield* chatActions.recover;
+          // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
+          yield* Effect.forkScoped(reportCapture.run);
+          yield* Effect.forkScoped(runUpdates.run);
+          return factory;
+        }),
+      )
+      .pipe(
+        Effect.onError((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : backendStart.finish("failed"),
+        ),
+      );
+    yield* backendStart.record({
+      type: "backend_start",
+      outcome: "ok",
+      applicationVersion: diagnosticVersion(options.applicationVersion ?? "source"),
+      mode: options.applicationVersion ? "desktop" : "source",
+      nodeVersion: diagnosticVersion(versions.node),
+      dataHome: diagnosticPath(dirname(options.databasePath), [
+        { root: homedir(), placeholder: "~" },
+      ]),
+    });
+    yield* backendStart.finish("ok");
     return factory;
   });

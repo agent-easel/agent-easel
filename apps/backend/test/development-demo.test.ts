@@ -15,7 +15,7 @@ it("restored demo keeps a worker waiting on its running subagents as normal prog
   // Assert
   assert(reconciled.ok);
   const after = await f.getRun(before.id);
-  expect(await f.getFirstRunSetup()).toMatchObject({ ok: true, value: { completed: true } });
+  expect(await f.getFirstRunSetup("")).toMatchObject({ ok: true, value: { completed: true } });
   const flow = await f.getFlow(edited.id);
   const runs = await f.listRuns(projectId);
   assert(after.ok);

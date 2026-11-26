@@ -210,7 +210,7 @@ export function raceReads<A, E>(
 export function failSecondRead<A, E>(read: () => Effect.Effect<Result<A>, E>) {
   let reads = 0;
   return () =>
-    Effect.suspend(() =>
+    Effect.suspend((): Effect.Effect<Result<A>, E> =>
       ++reads === 2
         ? Effect.succeed({
             ok: false as const,

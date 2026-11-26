@@ -9,6 +9,7 @@ export * from "./appearance.ts";
 export * from "./run.ts";
 export * from "./chat-control.ts";
 export * from "./trigger.ts";
+export * from "./diagnostics.ts";
 export * from "./client-access.ts";
 export * from "./update.ts";
 

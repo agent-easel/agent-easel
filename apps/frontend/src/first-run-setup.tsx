@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   CircleAlert,
   ExternalLink,
@@ -14,6 +14,7 @@ import type {
   FirstRunSetup,
   ReportingInstallation,
   T3Connection,
+  T3ConnectionRecovery,
 } from "@agent-easel/contracts";
 import { productPositioning, productStatement } from "@agent-easel/contracts";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,13 @@ import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
 import { useConnectionState, type ConnectionPresentation } from "./connection-state.tsx";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
+import {
+  createDiagnosticRetry,
+  useDiagnosticLogStatus,
+  useDiagnosticRetry,
+  type DiagnosticRetry,
+} from "./diagnostic-log.ts";
+import { DiagnosticLogViewer, DiagnosticRetryAction } from "@/components/diagnostic-log-view";
 import { installable, providerName, targetStatus, useReportingState } from "./reporting-state.tsx";
 
 /** How often a step without a detected T3 looks for one again. */
@@ -53,7 +61,8 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
   const remote = useClientScope() === "remote";
   const [setup, setSetup] = useState<FirstRunSetup | null>(null);
   const { failure, refresh, supersede } = useRefreshSchedule({
-    read: api.getFirstRunSetup,
+    read: () => api.getFirstRunSetup(""),
+    readWhileWatching: () => api.getFirstRunSetup("1"),
     apply: setSetup,
     intervalMs: detectionRecheckMs,
     watching: setup !== null && !setup.completed,
@@ -119,8 +128,9 @@ function useSetupProgress(setup: FirstRunSetup) {
   const key = generation
     ? JSON.stringify([generation, setup.harnessesOffInT3, setup.reportingEligibility])
     : null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     void refreshFor(key);
+    return () => void refreshFor(null);
   }, [key, refreshFor]);
   const answered = key !== null && answeredFor === key;
   const listed = answered && targets ? targets.filter(listedTarget) : null;
@@ -141,6 +151,7 @@ function FirstRunSetupScreen({
 }) {
   const { connected, listed, current } = useSetupProgress(setup);
   const ready = installedEverywhere(listed);
+  const retry = useDiagnosticRetry();
   return (
     <GateScreen
       size="wide"
@@ -157,7 +168,11 @@ function FirstRunSetupScreen({
       <ol className="grid gap-5">
         <li aria-current={connected ? undefined : "step"} className="grid gap-3">
           <ConnectStepHeader connected={connected} />
-          {!connected && <ConnectStep detected={setup.detectedT3} onCheckAgain={onCheckAgain} />}
+          <ConnectStep
+            connected={connected}
+            detected={setup.detectedT3}
+            onCheckAgain={onCheckAgain}
+          />
         </li>
         <li
           aria-current={connected && !ready ? "step" : undefined}
@@ -171,10 +186,21 @@ function FirstRunSetupScreen({
               offInT3={setup.harnessesOffInT3}
               onCheckAgain={onCheckAgain}
               onCompleted={onCompleted}
+              retry={retry}
             />
+          )}
+          {ready && retry.attempts && (
+            <div className="pl-8.5">
+              <DiagnosticLogViewer attempts={retry.attempts} />
+            </div>
           )}
         </li>
       </ol>
+      {retry.error && (
+        <ProblemCard tone="error" title="Couldn’t record the diagnostic log">
+          {retry.error}
+        </ProblemCard>
+      )}
       {ready && <ReadyStep reminder current={current} onCompleted={onCompleted} />}
     </GateScreen>
   );
@@ -282,6 +308,7 @@ function HostSetupProgressScreen({
   const { connected, targets, listed, current } = useSetupProgress(setup);
   const installed = installedEverywhere(listed);
   const manual = current && !!targets && !!listed && nothingToInstall(targets, listed);
+  const diagnostics = useDiagnosticLogStatus();
   return (
     <GateScreen
       size="wide"
@@ -321,7 +348,10 @@ function HostSetupProgressScreen({
           )}
         </li>
       </ol>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {diagnostics && (diagnostics.enabled || diagnostics.hasEntries) && (
+          <DiagnosticLogViewer attempts={null} />
+        )}
         <Button
           variant="outline"
           onClick={() => void Promise.all([onCheckAgain(), connected && refresh()])}
@@ -343,6 +373,7 @@ function InstallStep({
   offInT3,
   onCheckAgain,
   onCompleted,
+  retry,
 }: {
   /** Null until a reporting read requested for the ready connection and its caption has applied. */
   listed: readonly ReportingInstallation[] | null;
@@ -351,9 +382,18 @@ function InstallStep({
   offInT3: readonly string[];
   onCheckAgain: () => Promise<void>;
   onCompleted: (setup: FirstRunSetup) => void;
+  retry: DiagnosticRetry;
 }) {
-  const { targets, error, readDetails, refresh } = useReportingState();
-  const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
+  const { targets, error, readDetails, recheck } = useReportingState();
+  const checkAgain = () => void Promise.allSettled([recheck(), onCheckAgain()]);
+  const checkActions = (
+    <span className="inline-flex flex-wrap gap-x-3">
+      <TextLink disabled={retry.busy} onClick={checkAgain}>
+        Check again
+      </TextLink>
+      <DiagnosticRetryAction retry={retry} recover={recheck} view />
+    </span>
+  );
   // Discovery could not read T3's harnesses: turning one on in T3 would not help.
   const refusal = listed && targets?.find((target) => target.kind === "discovery-refused");
   const caption = !refusal && offInT3.length > 0 && (
@@ -371,7 +411,7 @@ function InstallStep({
         density="compact"
         title="Couldn’t check your harnesses"
         details={readDetails}
-        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+        action={checkActions}
       >
         Check that AgentEasel is running, then check again.
       </ProblemCard>
@@ -389,7 +429,7 @@ function InstallStep({
           tone="attention"
           density="compact"
           title="Couldn’t check your harnesses"
-          action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+          action={checkActions}
         >
           {refusal.message} Open AgentEasel to continue without reporting. Once this is fixed,
           install it from Settings → Agent reporting, or{" "}
@@ -405,13 +445,16 @@ function InstallStep({
         density="compact"
         title="Turn on a harness in T3 Code"
         details={targets?.find((target) => target.kind === "none-enabled")?.message}
-        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+        action={checkActions}
       >
         None of the harnesses AgentEasel installs into is on in T3 Code. Turn one on in T3 Code’s
         settings, then check again.
       </ProblemCard>
     );
-  else content = <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} />;
+  else
+    content = (
+      <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} retry={retry} />
+    );
   return (
     <div className="grid gap-3 pl-8.5">
       {content}
@@ -428,13 +471,18 @@ function HarnessInstall({
   listed,
   current,
   onCompleted,
+  retry,
 }: {
   listed: readonly ReportingInstallation[];
   current: boolean;
   onCompleted: (setup: FirstRunSetup) => void;
+  retry: DiagnosticRetry;
 }) {
-  const { running, failures, install } = useReportingState();
+  const { running, failures, install, retryTarget } = useReportingState();
   const pending = listed.filter(installable);
+  const cardShown = listed.some(
+    (target) => failures[target.id] || target.status === "needs-attention",
+  );
   return (
     <>
       <HarnessList listed={listed} />
@@ -444,12 +492,23 @@ function HarnessInstall({
           target={target}
           failure={failures[target.id]}
           density="compact"
+          action={
+            (retry.offer || retry.attempts) && (
+              <DiagnosticRetryAction
+                retry={retry}
+                disabled={running !== null}
+                recover={(signal) => retryTarget(target, signal)}
+                view
+              />
+            )
+          }
         />
       ))}
+      {!cardShown && retry.attempts && <DiagnosticLogViewer attempts={retry.attempts} />}
       <div className="flex items-start gap-3">
         {pending.length > 0 && (
           <MutationGate>
-            <Button disabled={running !== null} onClick={() => void install(pending)}>
+            <Button disabled={running !== null || retry.busy} onClick={() => void install(pending)}>
               {pending.length === 1
                 ? "Install in 1 harness"
                 : `Install in ${pending.length} harnesses`}
@@ -577,17 +636,52 @@ const runningTitle = (detected: DetectedT3) =>
     ? `T3 Code ${detected.serverVersion} is running on this computer`
     : "T3 Code is running on this computer";
 
-/** One step action at a time, with its failure shown below the step. */
-function useStepOperation() {
+function useConnectRecovery(setConnection: (value: T3Connection) => void) {
   const [busy, setBusy] = useState(false);
   const [operationError, setOperationError] = useState("");
-  const run = async (operation: () => Promise<void>) => {
+  const [retry] = useState(createDiagnosticRetry);
+  const attempts = useSyncExternalStore(retry.subscribe, retry.getSnapshot);
+  const canRecord = useDiagnosticLogStatus(attempts)?.enabled === false;
+  const run = (recover: () => Promise<readonly string[]>, record = false) => {
     setBusy(true);
     setOperationError("");
-    await operation()
+    return (record ? retry.retry(recover) : recover())
       .catch((cause: unknown) => setOperationError(String(cause)))
       .finally(() => setBusy(false));
   };
+  const update = async (result: Promise<T3ConnectionRecovery>) => {
+    const value = await result;
+    setConnection(value);
+    return value.diagnosticAttemptIds ?? [];
+  };
+  const connect = async (endpoint: string) => {
+    const checked = await update(api.configureConnection({ endpoint }));
+    return [...checked, ...(await update(api.authorizeConnection()))];
+  };
+  return { attempts, busy, canRecord, connect, operationError, run, update };
+}
+
+/**
+ * Connect saves the address through the existing configure operation, then starts the existing
+ * host authorization; waiting, reopening and advancing follow the live connection.
+ */
+function ConnectStep({
+  connected,
+  detected,
+  onCheckAgain,
+}: {
+  connected: boolean;
+  detected: DetectedT3 | null;
+  onCheckAgain: () => Promise<void>;
+}) {
+  const { connection, presentation, setConnection } = useConnectionState();
+  const { attempts, busy, canRecord, connect, operationError, run, update } =
+    useConnectRecovery(setConnection);
+  const [draft, setDraft] = useState("");
+  const viewLog = attempts !== null && <DiagnosticLogViewer attempts={attempts} />;
+  if (connected) return viewLog && <div className="pl-8.5">{viewLog}</div>;
+
+  const reopen = () => update(api.openConnectionAuthorization());
   const errorCard = operationError && (
     <ProblemCard
       tone="error"
@@ -596,42 +690,112 @@ function useStepOperation() {
       details={operationError}
     />
   );
-  return { busy, run, errorCard };
-}
-
-/**
- * Connect saves the address through the existing configure operation, then starts the existing
- * host authorization; waiting, reopening and advancing follow the live connection.
- */
-function ConnectStep({
-  detected,
-  onCheckAgain,
-}: {
-  detected: DetectedT3 | null;
-  onCheckAgain: () => Promise<void>;
-}) {
-  const { connection, presentation, setConnection } = useConnectionState();
-  const { busy, run, errorCard } = useStepOperation();
-  const [draft, setDraft] = useState("");
-  const invalid = !!draft.trim() && !allowedAddress(draft);
-  const connect = (endpoint: string) =>
-    run(async () => {
-      setConnection(await api.configureConnection({ endpoint }));
-      setConnection(await api.authorizeConnection());
-    });
   if (presentation === "authorization-required" && connection?.authorizationPending)
-    return <WaitingForApproval connection={connection} detected={detected} />;
+    return (
+      <WaitingForApproval
+        connection={connection}
+        detected={detected}
+        disabled={busy}
+        diagnosticAction={
+          <ConnectDiagnosticActions
+            viewer={viewLog}
+            disabled={busy}
+            canRecord={canRecord && connection.authorizationOpenFailed}
+            onRecord={() => void run(reopen, true)}
+          />
+        }
+        onReopen={() => void run(reopen)}
+      >
+        {errorCard}
+      </WaitingForApproval>
+    );
+
+  const endpoint = connection?.endpoint;
+  const authorize = () => update(api.authorizeConnection());
+  const needsApproval = presentation === "authorization-required";
+  const recheck = () => update(api.recheckConnection());
+  const retryConnection = needsApproval ? authorize : recheck;
+  const actions = endpoint && (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <MutationGate>
+        <TextLink disabled={busy} onClick={() => void run(retryConnection)}>
+          {needsApproval ? "Connect again" : "Recheck connection"}
+        </TextLink>
+      </MutationGate>
+      <ConnectDiagnosticActions
+        viewer={viewLog}
+        disabled={busy}
+        canRecord={canRecord}
+        onRecord={() => void run(retryConnection, true)}
+      />
+    </div>
+  );
   return (
     <div className="grid gap-3 pl-8.5">
       <p className="text-2xs font-medium text-subtle-foreground">{productPositioning}</p>
       <p className="text-2xs font-medium text-subtle-foreground">{productStatement}</p>
-      {!busy && <AttemptProblem connection={connection} presentation={presentation} />}
+      <AttemptProblem connection={connection} presentation={presentation} action={actions} />
       {errorCard}
+      <ConnectAddress
+        detected={detected}
+        busy={busy}
+        draft={draft}
+        onDraftChange={setDraft}
+        onConnect={(endpoint) => void run(() => connect(endpoint))}
+        onCheckAgain={onCheckAgain}
+      />
+    </div>
+  );
+}
+
+function ConnectDiagnosticActions({
+  viewer,
+  disabled,
+  canRecord,
+  onRecord,
+}: {
+  viewer: ReactNode;
+  disabled: boolean;
+  canRecord: boolean;
+  onRecord: () => void;
+}) {
+  return (
+    <>
+      {canRecord && (
+        <MutationGate>
+          <TextLink disabled={disabled} onClick={onRecord}>
+            Record diagnostic log and try again
+          </TextLink>
+        </MutationGate>
+      )}
+      {viewer}
+    </>
+  );
+}
+
+function ConnectAddress({
+  detected,
+  busy,
+  draft,
+  onDraftChange,
+  onConnect,
+  onCheckAgain,
+}: {
+  detected: DetectedT3 | null;
+  busy: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onConnect: (endpoint: string) => void;
+  onCheckAgain: () => Promise<void>;
+}) {
+  const invalid = !!draft.trim() && !allowedAddress(draft);
+  return (
+    <>
       {detected ? (
         <>
           <T3Row title={runningTitle(detected)} endpoint={detected.endpoint}>
             <MutationGate>
-              <Button disabled={busy} onClick={() => void connect(detected.endpoint)}>
+              <Button disabled={busy} onClick={() => onConnect(detected.endpoint)}>
                 Connect
               </Button>
             </MutationGate>
@@ -665,13 +829,13 @@ function ConnectStep({
               invalid={invalid}
               disabled={busy}
               submitLabel="Save and connect"
-              onChange={setDraft}
-              onSave={() => void connect(draft.trim())}
+              onChange={onDraftChange}
+              onSave={() => onConnect(draft.trim())}
             />
           </T3AddressHelp>
         </div>
       </Disclosure>
-    </div>
+    </>
   );
 }
 
@@ -679,13 +843,18 @@ function ConnectStep({
 function WaitingForApproval({
   connection,
   detected,
+  disabled,
+  diagnosticAction,
+  onReopen,
+  children,
 }: {
   connection: T3Connection;
   detected: DetectedT3 | null;
+  disabled: boolean;
+  diagnosticAction: ReactNode;
+  onReopen: () => void;
+  children: ReactNode;
 }) {
-  const { setConnection } = useConnectionState();
-  const { busy, run, errorCard } = useStepOperation();
-  const reopen = () => run(async () => setConnection(await api.openConnectionAuthorization()));
   // The host reports a failed open to every window until an open succeeds or approval ends.
   const reopenFailed = connection.authorizationOpenFailed;
   const endpoint = connection.endpoint ?? "";
@@ -713,18 +882,21 @@ function WaitingForApproval({
         density="compact"
         title="Approve AgentEasel in your browser"
         action={
-          <MutationGate>
-            <TextLink trailingIcon={ExternalLink} disabled={busy} onClick={() => void reopen()}>
-              Reopen approval page
-            </TextLink>
-          </MutationGate>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <MutationGate>
+              <TextLink trailingIcon={ExternalLink} disabled={disabled} onClick={onReopen}>
+                Reopen approval page
+              </TextLink>
+            </MutationGate>
+            {diagnosticAction}
+          </div>
         }
       >
         {reopenFailed
           ? connection.explanation
           : "T3 Code’s approval page is open in the browser on this computer. This screen moves on by itself once you approve."}
       </ProblemCard>
-      {errorCard}
+      {children}
     </div>
   );
 }
@@ -736,9 +908,11 @@ function WaitingForApproval({
 function AttemptProblem({
   connection,
   presentation,
+  action,
 }: {
   connection: T3Connection | null;
   presentation: ConnectionPresentation;
+  action: ReactNode;
 }) {
   if (!connection) return null;
   if (presentation === "incompatible")
@@ -747,6 +921,7 @@ function AttemptProblem({
         tone="attention"
         density="compact"
         title="Update T3 Code"
+        action={action}
         details={connection.contract?.problems.join("\n") || undefined}
       >
         {connection.explanation}
@@ -765,6 +940,7 @@ function AttemptProblem({
       title={
         presentation === "unavailable" ? "AgentEasel can’t reach T3 Code" : "Approval didn’t finish"
       }
+      action={action}
     >
       {connection.explanation} Connect again to start over.
     </ProblemCard>

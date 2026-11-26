@@ -30,6 +30,7 @@ import { openWorkerTitleDispatch } from "./worker-title-dispatch.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import type { RunImages } from "../run-images.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
+import type { DiagnosticLog } from "../diagnostic-log.ts";
 
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
 export const makeRunner = Effect.fn("Runner.make")(function* (
@@ -46,6 +47,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   changes: LiveChanges,
   images: RunImages,
   titles: RunnerTitleGeneration,
+  diagnosticAttempt: DiagnosticLog["attempt"],
 ) {
   const freshSnapshot = snapshots.fresh;
   const scope = yield* Effect.scope;
@@ -99,6 +101,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     titles.planTitleGeneration,
     followTitleGeneration,
     images,
+    diagnosticAttempt,
   );
   const ownedThreads = openOwnedThreads(t3);
   const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads);

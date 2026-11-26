@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @agent-easel/backend schema:update
--- Newest applied migration: drop_installed_update_receipts
+-- Newest applied migration: diagnostic_log
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -509,6 +509,40 @@ CREATE TABLE definition_import_receipts (
 CREATE TRIGGER immutable_definition_import_receipt_delete BEFORE DELETE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
 CREATE TRIGGER immutable_definition_import_receipt_update BEFORE UPDATE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TABLE diagnostic_attempts (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  generation INTEGER NOT NULL,
+  operation TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  outcome TEXT CHECK (outcome IN ('ok', 'failed', 'partial')),
+  truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0, 1)),
+  environment TEXT NOT NULL
+);
+
+CREATE INDEX diagnostic_attempts_started ON diagnostic_attempts(started_at)
+;
+
+CREATE TABLE diagnostic_entries (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  attempt_id TEXT NOT NULL REFERENCES diagnostic_attempts(id) ON DELETE CASCADE,
+  at TEXT NOT NULL,
+  entry TEXT NOT NULL
+);
+
+CREATE INDEX diagnostic_entries_at ON diagnostic_entries(at)
+;
+
+CREATE INDEX diagnostic_entries_attempt ON diagnostic_entries(attempt_id, sequence)
+;
+
+CREATE TABLE diagnostic_log_state (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  enabled_until TEXT,
+  generation INTEGER NOT NULL,
+  salt TEXT NOT NULL
+);
 
 CREATE TABLE "effect_sql_migrations" (
   migration_id integer PRIMARY KEY NOT NULL,

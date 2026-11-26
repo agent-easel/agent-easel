@@ -24,6 +24,7 @@ export interface OperationError {
     | "too_large";
   readonly message: string;
   readonly issues: readonly ValidationIssue[];
+  readonly diagnosticAttempts?: readonly string[];
 }
 
 export type Result<A> =

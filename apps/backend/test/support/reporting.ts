@@ -3,6 +3,7 @@ import { isolatedUserHome, writeReportingState } from "./reporting-home.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FactoryOperations } from "@agent-easel/contracts";
+import type { FactoryOptions } from "../../src/index.ts";
 import { loadConfiguration } from "../../src/config.ts";
 import { startServer } from "../../src/server.ts";
 import { factoryHarness } from "./factory.ts";
@@ -47,9 +48,10 @@ export async function installFirstReportingTarget(
 export async function reportingFixture(
   context: TestContext,
   driver: HarnessHomeDriver = "claudeAgent",
+  extraOptions: Omit<FactoryOptions, "databasePath"> = {},
 ) {
   const { harness, state, home, t3 } = await reportingHomes(context, driver);
-  const options = { t3, reportingStateDirectory: state };
+  const options = { t3, reportingStateDirectory: state, ...extraOptions };
   const factory = await harness.open(options);
   assert((await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
   const config = join(home, HARNESS_CONFIG_FILES[driver]);
@@ -66,9 +68,13 @@ export async function driverHomes(
       environment?: readonly { name: string; value: string }[];
     }
   >,
+  {
+    userName,
+    factoryOptions,
+  }: { userName?: string; factoryOptions?: Omit<FactoryOptions, "databasePath"> } = {},
 ) {
-  const userHome = await isolatedUserHome(context);
-  const fixture = await reportingFixture(context);
+  const userHome = await isolatedUserHome(context, userName);
+  const fixture = await reportingFixture(context, "claudeAgent", factoryOptions);
   await writeFile(
     join(fixture.state, "settings.json"),
     JSON.stringify({

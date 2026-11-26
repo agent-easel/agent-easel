@@ -1,8 +1,11 @@
 import { MutationGate } from "@/client-gate";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@agent-easel/contracts";
+import { useConnectionState } from "../connection-state.tsx";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
+import { DiagnosticLogViewer, DiagnosticRetryAction } from "../components/diagnostic-log-view.tsx";
+import { useDiagnosticRetry, type DiagnosticRetry } from "../diagnostic-log.ts";
 import { ProblemCard } from "../components/problem-card.tsx";
 import { ReportingTargetProblem } from "../components/reporting-target-problem.tsx";
 import { TechnicalDetails } from "../components/technical-details.tsx";
@@ -16,15 +19,40 @@ import {
   useReportingState,
 } from "../reporting-state.tsx";
 
-export function RuntimeSettings() {
-  const { targets, refresh, error, readDetails, running, failures, install } = useReportingState();
+function useReportingCheck(refreshFor: (key: string | null) => Promise<void>) {
+  const { connection, presentation } = useConnectionState();
+  const scope = JSON.stringify([presentation, connection?.endpoint, connection?.readyGeneration]);
   const [checking, setChecking] = useState(true);
+  useLayoutEffect(() => {
+    let active = true;
+    void refreshFor(scope).then(() => {
+      if (active) setChecking(false);
+    });
+    return () => {
+      active = false;
+      void refreshFor(null);
+    };
+  }, [refreshFor, scope]);
+  return { checking, setChecking };
+}
+
+export function RuntimeSettings() {
+  const {
+    targets,
+    refreshFor,
+    error,
+    readDetails,
+    running,
+    failures,
+    install,
+    recheck,
+    retryTarget,
+  } = useReportingState();
+  const retry = useDiagnosticRetry();
+  const { checking, setChecking } = useReportingCheck(refreshFor);
   const [instanceNames, setInstanceNames] = useState<ReadonlyMap<string, string | null>>(new Map());
   useEffect(() => {
     let active = true;
-    void refresh().then(() => {
-      if (active) setChecking(false);
-    });
     void api.getAgentCapabilities().then(
       (value) => {
         if (active && value.state === "ready")
@@ -42,26 +70,28 @@ export function RuntimeSettings() {
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, []);
 
   const group = targets ?? [];
   const pending = group.filter(installable);
   const needsAction = group.filter(
     (target) => targetNeedsAttention(target) || failures[target.id],
   ).length;
-  const busy = checking || running !== null;
+  const busy = checking || running !== null || retry.busy;
   return (
     <SettingsPage
       title="Agent reporting"
       badge={!checking && needsAction > 0 && <ReportingCount count={needsAction} />}
       action={
         <MutationGate>
+          <RetryViewer retry={retry} />
           <Button
             variant={pending.length || (!error && !needsAction) ? "outline" : "default"}
             disabled={busy}
             onClick={() => {
               setChecking(true);
-              void refresh().then(() => setChecking(false));
+              const done = () => setChecking(false);
+              void recheck().then(done, done);
             }}
           >
             Check again
@@ -75,10 +105,16 @@ export function RuntimeSettings() {
       }
     >
       {error && !checking && (
-        <ProblemCard tone="error" title="Couldn’t check Agent reporting" details={readDetails}>
+        <ProblemCard
+          tone="error"
+          title="Couldn’t check Agent reporting"
+          details={readDetails}
+          action={<DiagnosticRetryAction retry={retry} disabled={busy} recover={recheck} />}
+        >
           Check again in a moment. Runs already started aren’t affected.
         </ProblemCard>
       )}
+      <RetryError retry={retry} />
       {checking && !targets ? (
         <SettingsGroup label="Harnesses">
           <SettingsRow
@@ -98,9 +134,25 @@ export function RuntimeSettings() {
           secondary={pending.length > 0}
           instanceNames={instanceNames}
           install={install}
+          retryTarget={retryTarget}
+          retry={retry}
         />
       )}
     </SettingsPage>
+  );
+}
+
+function RetryViewer({ retry }: { retry: DiagnosticRetry }) {
+  return retry.attempts && <DiagnosticLogViewer attempts={retry.attempts} />;
+}
+
+function RetryError({ retry }: { retry: DiagnosticRetry }) {
+  return (
+    retry.error && (
+      <ProblemCard tone="error" title="Couldn’t record the diagnostic log">
+        {retry.error}
+      </ProblemCard>
+    )
   );
 }
 
@@ -112,6 +164,8 @@ function ReportingResults({
   secondary,
   instanceNames,
   install,
+  retryTarget,
+  retry,
 }: {
   targets: readonly ReportingInstallation[];
   failures: Readonly<Record<string, string>>;
@@ -119,7 +173,9 @@ function ReportingResults({
   busy: boolean;
   secondary: boolean;
   instanceNames: ReadonlyMap<string, string | null>;
-  install: (targets: readonly ReportingInstallation[]) => Promise<void>;
+  install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
+  retryTarget: (target: ReportingInstallation, signal: AbortSignal) => Promise<readonly string[]>;
+  retry: DiagnosticRetry;
 }) {
   if (!targets.length) return null;
   const homes = new Map<string, number>();
@@ -141,7 +197,20 @@ function ReportingResults({
         ))}
       </SettingsGroup>
       {targets.map((target) => (
-        <ReportingTargetProblem key={target.id} target={target} failure={failures[target.id]} />
+        <ReportingTargetProblem
+          key={target.id}
+          target={target}
+          failure={failures[target.id]}
+          action={
+            retry.offer && (
+              <DiagnosticRetryAction
+                retry={retry}
+                disabled={busy}
+                recover={(signal) => retryTarget(target, signal)}
+              />
+            )
+          }
+        />
       ))}
     </>
   );

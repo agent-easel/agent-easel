@@ -2,17 +2,21 @@ import { completedStartIssues, type StartIssue } from "./start-issues.ts";
 import { entryMessagesTooLong } from "./runner-block-workers.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
+import { diagnosticStartReasons } from "@agent-easel/contracts";
 import type {
   AgentDefinition,
   CapturedAgent,
+  DiagnosticStartReason,
   FactoryOperations,
   FactoryProject,
   FlowDraft,
+  OperationError,
   ProjectCatalog,
   Result,
   RunDetail,
   RunDefinitions,
   RunImage,
+  StartReadinessRejection,
   StartRunInput,
   T3Connection,
   ValidationIssue,
@@ -31,6 +35,7 @@ import {
   validateStartPrompt,
   type StartPrompt,
 } from "@agent-easel/domain-validation";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { GitHubAdapter } from "../adapters/github.ts";
 import type { GitAdapter } from "../adapters/git.ts";
@@ -51,6 +56,59 @@ import { isLocalEndpoint } from "../endpoint-local.ts";
 import { now } from "../time.ts";
 import { workerPromptText, type RunImages } from "../run-images.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
+import {
+  noDiagnosticAttempt,
+  type DiagnosticAttemptHandle,
+  type DiagnosticLog,
+} from "../diagnostic-log.ts";
+
+const startReasons: ReadonlySet<string> = new Set(diagnosticStartReasons);
+
+function readinessReasons(error: OperationError): readonly DiagnosticStartReason[] {
+  if (error.issues.length === 0) {
+    if (error.code === "not_found") return ["flow_unavailable"];
+    if (error.code === "conflict") return ["subflow_revision_unavailable"];
+    return ["readiness_blocked"];
+  }
+  return [
+    ...new Set(
+      error.issues.map(({ code, path }): DiagnosticStartReason => {
+        if (startReasons.has(code)) return code as DiagnosticStartReason;
+        return path.startsWith("graph.") ? "flow_not_ready" : "readiness_blocked";
+      }),
+    ),
+  ];
+}
+
+function guardReadiness<A, E>(attempt: DiagnosticAttemptHandle, check: Effect.Effect<A, E>) {
+  return attempt
+    .guard("start_preconditions", check)
+    .pipe(
+      Effect.onError((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : attempt.finish("failed"),
+      ),
+    );
+}
+
+function recordReadiness<R extends Result<unknown>, E>(
+  attempt: DiagnosticAttemptHandle,
+  check: Effect.Effect<R, E>,
+) {
+  if (attempt === noDiagnosticAttempt) return check;
+  return guardReadiness(attempt, check).pipe(
+    Effect.tap((result) =>
+      Effect.gen(function* () {
+        if (result.ok) {
+          yield* attempt.record({ type: "start_preconditions", outcome: "ok", reason: "ready" });
+        } else {
+          for (const reason of readinessReasons(result.error))
+            yield* attempt.record({ type: "start_preconditions", outcome: "failed", reason });
+        }
+        yield* attempt.finish(result.ok ? "ok" : "failed");
+      }),
+    ),
+  );
+}
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
   readonly triggerIssue?: StartIssue;
@@ -261,6 +319,7 @@ export function openRunnerStart(
   planTitleGeneration: RunnerTitleGeneration["planTitleGeneration"],
   followTitleGeneration: (runId: string) => Effect.Effect<void, unknown>,
   images: RunImages,
+  diagnosticAttempt: DiagnosticLog["attempt"],
 ) {
   const { isClosed, drive, getRun } = lifecycle;
   function start(
@@ -307,7 +366,10 @@ export function openRunnerStart(
               },
             ]);
       const [checked, titleGeneration] = yield* startChecks(input, prompt.value);
-      if (!checked.ok) return checked;
+      if (!checked.ok) {
+        const error: StartReadinessRejection = { ...checked.error, startReadinessRejected: true };
+        return { ok: false, error };
+      }
       const { project, context, definitions, closureStamp, retryScope, workspace } = checked.value;
       const ready = prepareStartWork(definitions, prompt.value);
       if (!ready.ok) return ready;
@@ -457,10 +519,11 @@ export function openRunnerStart(
     prompt: StartPrompt,
   ) {
     return Effect.gen(function* () {
-      const snapshot = yield* freshSnapshot();
+      const attempt = yield* diagnosticAttempt("start");
+      const snapshot = yield* guardReadiness(attempt, Effect.suspend(freshSnapshot));
       return yield* Effect.all(
         [
-          startPreconditions(input, prompt.images.length, snapshot),
+          recordReadiness(attempt, startPreconditions(input, prompt.images.length, snapshot)),
           planTitleGeneration({ titleProvenance: input.titleProvenance, prompt }, snapshot),
         ],
         { concurrency: "unbounded" },
@@ -484,14 +547,20 @@ export function openRunnerStart(
    * attempting a Start.
    */
   function startBlockers(projectId: string, flowId: string) {
-    return Effect.gen(function* () {
-      const checked = yield* launchPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
-      return checked.ok ? { ok: true as const, value: undefined } : checked;
-    });
+    return checkPreflight(projectId, flowId, launchPreconditions);
   }
   function startPreflight(projectId: string, flowId: string) {
+    return checkPreflight(projectId, flowId, startPreconditions);
+  }
+  function checkPreflight(projectId: string, flowId: string, check: typeof launchPreconditions) {
     return Effect.gen(function* () {
-      const checked = yield* startPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
+      const attempt = yield* diagnosticAttempt("start_preflight");
+      const checked = yield* recordReadiness(
+        attempt,
+        Effect.gen(function* () {
+          return yield* check({ projectId, flowId }, 0, yield* freshSnapshot());
+        }),
+      );
       return checked.ok ? { ok: true as const, value: undefined } : checked;
     });
   }

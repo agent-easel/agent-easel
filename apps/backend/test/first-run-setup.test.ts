@@ -40,7 +40,7 @@ it("a running T3 Code's runtime file proposes its MCP address and version, and u
   const factory = await open();
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   expect(setup).toStrictEqual({
@@ -60,7 +60,7 @@ it("a runtime file without a server version still proposes the address, with no 
   const factory = await open();
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   assert(setup.ok);
@@ -86,7 +86,7 @@ it.for([
   const factory = await open();
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   expect(setup).toStrictEqual({
@@ -116,7 +116,7 @@ it("a runtime file in the overridden T3 Code state directory is the one detectio
   });
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   assert(setup.ok);
@@ -143,7 +143,7 @@ it("installable harnesses T3 Code keeps off are named, by T3 Code's enablement r
   const factory = await open();
 
   // Act
-  const setup = await factory.getFirstRunSetup();
+  const setup = await factory.getFirstRunSetup("");
 
   // Assert
   assert(setup.ok);
@@ -155,7 +155,7 @@ it("enabling and removing a project override for an omitted built-in driver chan
   const { state, open } = await freshHome(c);
   await writeFile(join(state, "settings.json"), JSON.stringify({ providerInstances: {} }));
   const factory = await open();
-  const initial = await factory.getFirstRunSetup();
+  const initial = await factory.getFirstRunSetup("");
   assert(initial.ok);
   await writeFile(
     join(state, "settings.json"),
@@ -168,7 +168,7 @@ it("enabling and removing a project override for an omitted built-in driver chan
   );
 
   // Act
-  const overridden = await factory.getFirstRunSetup();
+  const overridden = await factory.getFirstRunSetup("");
 
   // Assert
   assert(overridden.ok);
@@ -187,7 +187,7 @@ it("recorded completion persists across a backend restart", async (c) => {
   const second = await open();
 
   // Assert
-  expect(await second.getFirstRunSetup()).toStrictEqual({
+  expect(await second.getFirstRunSetup("")).toStrictEqual({
     ok: true,
     value: {
       completed: true,
@@ -239,7 +239,7 @@ it("an approved client cannot record completion, and setup stays incomplete", as
   expect(complete.status).toBe(403);
   assert(!complete.body.ok);
   expect(complete.body.error.code).toBe("host_only");
-  const after = await server.factory.getFirstRunSetup();
+  const after = await server.factory.getFirstRunSetup("");
   assert(after.ok);
   expect(after.value.completed).toBe(false);
 });

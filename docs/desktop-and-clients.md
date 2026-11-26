@@ -441,7 +441,8 @@ likewise an approved-client product operation: bodies carry typed Trigger fields
 flags, paths or environment, and every check runs the host's `gh` with AgentEasel's fixed arguments. AgentEasel MCP (`/mcp`), endpoint changes
 (`PUT /api/connection`), host reauthorization (`POST /api/connection/authorize`, which
 retires the current context), changing **Generate Run titles**
-(`PUT /api/settings/run-titles`) and every [Chat control](chat-control.md) operation, reads
+(`PUT /api/settings/run-titles`), turning the [Diagnostic log](t3-integration.md#diagnostic-log) on or off and
+deleting it (`PUT` and `DELETE /api/settings/diagnostics`, whose reads approved clients may call), and every [Chat control](chat-control.md) operation, reads
 included (`/api/chat-control/*`), remain `hostOnly`: report ingress
 therefore cannot become a bypass into general APIs, and the T3 Code grant never leaves the
 host. `POST /api/connection/authorization/open` is the one connection mutation an
@@ -485,7 +486,13 @@ on the OS trust store, so they need the AgentEasel CA installed or a provided ce
 
 ## Protocol compatibility
 
-The current protocol is **27**. The server and the Desktop and browser clients require protocol **27**.
+The current protocol is **28**. The server accepts clients from protocol **27**; the Desktop and browser clients require a protocol **28** server.
+
+Protocol 28 adds the [Diagnostic log](t3-integration.md#diagnostic-log) routes under
+`/api/settings/diagnostics`. Approved clients read its status, attempts and export; turning recording
+on or off and Delete are host-only. As with other additive routes, a protocol 27 client keeps working
+against a protocol 28 server because it never calls them, and a protocol 28 client shows the server
+update gate for a protocol 27 server. Existing approvals, credentials and stored data carry forward.
 
 Protocol 27 adds three fields to each Run navigation row: the Settled-cycle id (the sequence of the
 Run's latest `run-settled` event, which changes when a Run returns to Active and settles again), the

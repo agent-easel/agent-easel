@@ -6,20 +6,37 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { AuthorizationContext, Result, T3Connection } from "@agent-easel/contracts";
+import type {
+  AuthorizationContext,
+  DiagnosticConnectionReason,
+  DiagnosticHost,
+  DiagnosticOperation,
+  Result,
+  T3Connection,
+  T3ConnectionRecovery,
+} from "@agent-easel/contracts";
+import { diagnosticHost, diagnosticVersion } from "@agent-easel/domain-validation";
 import {
   isApprovalPending,
+  T3Failure,
   type T3Authorization,
   type T3ConnectionReason,
+  type T3FailureKind,
 } from "./t3/connection.ts";
 import {
   NO_T3_SUPPORT,
   type T3ContractReader,
+  type T3Inspection,
   type T3ContractSnapshot,
   type T3Support,
 } from "./t3/contract.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
+import {
+  noDiagnosticAttempt,
+  type DiagnosticAttemptHandle,
+  type DiagnosticLog,
+} from "./diagnostic-log.ts";
 
 type ContextRow = {
   id: string;
@@ -55,6 +72,13 @@ const explanations: Record<T3ConnectionReason, string> = {
 
 /** Bounds how often anyone may open the host browser through `openConnectionAuthorization`. */
 const AUTHORIZATION_OPEN_COOLDOWN_MS = 5_000;
+
+const connectionFailures: Record<T3FailureKind, DiagnosticConnectionReason> = {
+  unavailable: "t3_unavailable",
+  "authorization-required": "t3_authorization_required",
+  refused: "t3_refused",
+  "invalid-response": "t3_invalid_response",
+};
 
 const missingEndpoint = (message: string) => ({
   ok: false as const,
@@ -109,9 +133,13 @@ export const makeConnection = (
     /** The support answers of the check that set `status`. */
     let support: T3Support = NO_T3_SUPPORT;
     let closed = false;
+    let diagnostics: DiagnosticLog | undefined;
     /** When `openConnectionAuthorization` last asked the host browser; bounds repeated opens. */
     let lastOpenedAt: number | undefined;
-    const value = (): Result<T3Connection> => ({ ok: true, value: status });
+    const value = (ids: readonly string[] = []): Result<T3ConnectionRecovery> => ({
+      ok: true,
+      value: ids.length ? { ...status, diagnosticAttemptIds: ids } : status,
+    });
     /** A snapshot offers support answers only together with a ready authorization context. */
     const snapshot = (): T3ContractSnapshot => {
       const contextId = status.state === "ready" ? (status.authorizationContext?.id ?? null) : null;
@@ -130,131 +158,229 @@ export const makeConnection = (
         changes.connectionChecked();
       else changes.connectionChanged();
     };
-    const check = Effect.fn("Connection.check")(function* () {
-      if (!saved || closed) return value();
-      const endpoint = saved.endpoint;
-      const before = status;
-      return yield* Effect.gen(function* () {
-        const observation = yield* Effect.tryPromise(() => contract.inspect({ endpoint }));
-        const environment = observation.contract?.environmentId;
+    const begin = Effect.fn(function* (operation: DiagnosticOperation, ids: string[]) {
+      const attempt = yield* diagnostics?.attempt(operation) ?? Effect.succeed(noDiagnosticAttempt);
+      if (attempt.id !== null) ids.push(attempt.id);
+      return attempt;
+    });
+    const bindAuthorizationContext = Effect.fn(function* (
+      savedRow: NonNullable<typeof saved>,
+      observation: T3Inspection,
+    ) {
+      const environment = observation.contract?.environmentId;
+      if (
+        observation.authorizationIdentity &&
+        environment &&
+        ["ready", "incompatible"].includes(observation.state)
+      ) {
         if (
-          observation.authorizationIdentity &&
-          environment &&
-          ["ready", "incompatible"].includes(observation.state)
+          !current ||
+          current.authorization_identity !== observation.authorizationIdentity ||
+          current.environment_id !== environment
         ) {
-          if (
-            !current ||
-            current.authorization_identity !== observation.authorizationIdentity ||
-            current.environment_id !== environment
-          ) {
-            const row: ContextRow = {
-              id: yield* newId,
-              endpoint,
-              authorization_identity: observation.authorizationIdentity,
-              environment_id: environment,
-              created_at: yield* now,
-            };
-            yield* sql.withTransaction(
-              Effect.gen(function* () {
-                yield* sql`INSERT INTO t3_authorization_contexts (id, endpoint, authorization_identity, environment_id, created_at)
+          const row: ContextRow = {
+            id: yield* newId,
+            endpoint: savedRow.endpoint,
+            authorization_identity: observation.authorizationIdentity,
+            environment_id: environment,
+            created_at: yield* now,
+          };
+          yield* sql.withTransaction(
+            Effect.gen(function* () {
+              yield* sql`INSERT INTO t3_authorization_contexts (id, endpoint, authorization_identity, environment_id, created_at)
               VALUES (${row.id}, ${row.endpoint}, ${row.authorization_identity}, ${row.environment_id}, ${row.created_at})`;
-                yield* sql`UPDATE t3_connection SET context_id = ${row.id} WHERE singleton = 1`;
-              }),
-            );
-            current = row;
-            saved!.context_id = row.id;
-          }
+              yield* sql`UPDATE t3_connection SET context_id = ${row.id} WHERE singleton = 1`;
+            }),
+          );
+          current = row;
+          savedRow.context_id = row.id;
         }
-        support = observation.support;
-        // Kept while the connection stays ready for the same authorization context.
-        const sameReady =
-          before.readyGeneration !== null && before.authorizationContext?.id === current?.id;
-        let readyGeneration: string | null = null;
-        if (observation.state === "ready")
-          readyGeneration = sameReady ? before.readyGeneration : yield* newId;
+      }
+    });
+    const recordInspection = Effect.fn(function* (
+      attempt: DiagnosticAttemptHandle,
+      host: DiagnosticHost,
+      observation: T3Inspection,
+      invalidReady: boolean,
+    ) {
+      const environment = observation.contract?.environmentId;
+      const contextMissing = !observation.authorizationIdentity || !environment;
+      yield* attempt.record({
+        type: "t3_connection",
+        outcome: status.state === "ready" ? "ok" : "failed",
+        host,
+        reason: invalidReady ? "authorization_context_missing" : observation.reason,
+      });
+      if (!observation.contract) return;
+      yield* attempt.record({
+        type: "t3_connection_contract",
+        outcome: observation.reason === "contract-missing" ? "failed" : "ok",
+        t3Version: diagnosticVersion(observation.contract.serverVersion),
+        reason: observation.reason === "contract-missing" ? "contract-missing" : null,
+      });
+      const grant = observation.authorizationIdentity;
+      yield* attempt.record({
+        type: "t3_connection_identity",
+        outcome: contextMissing ? "failed" : "ok",
+        environment: environment ? attempt.hash(environment) : null,
+        grant: grant ? attempt.hash(grant) : null,
+        reason: contextMissing ? "authorization_context_missing" : null,
+      });
+    });
+    const check = Effect.fn("Connection.check")(function* ({
+      ids = [],
+      record = "always",
+    }: { ids?: string[]; record?: "always" | "changes" | "never" } = {}) {
+      if (!saved || closed) return value(ids);
+      const savedRow = saved;
+      const endpoint = savedRow.endpoint;
+      const before = status;
+      const attempt =
+        record === "always"
+          ? yield* begin("t3_connection", ids)
+          : record === "changes" && diagnostics
+            ? yield* diagnostics.changeAttempt("t3_connection")
+            : noDiagnosticAttempt;
+      const unavailable = Effect.gen(function* () {
+        support = NO_T3_SUPPORT;
         status = {
-          endpoint,
-          state: observation.state,
-          explanation: explanations[observation.reason],
+          ...status,
+          state: "unavailable",
           checkedAt: yield* now,
-          authorizationContext: current ? contextValue(current) : null,
-          // The pending attempt owns both, so a resumed attempt reports them as before.
-          authorizationPending: isApprovalPending(observation.reason),
-          authorizationOpenFailed: observation.reason === "approval-reopen-failed",
-          readyGeneration,
-          contract: observation.contract ?? null,
+          authorizationPending: false,
+          authorizationOpenFailed: false,
+          readyGeneration: null,
+          contract: null,
+          explanation:
+            "T3 Code is unavailable. Start T3 Code or check the endpoint and network. AgentEasel will reconnect automatically.",
         };
         publishCheck(before);
-        if (status.state === "ready" && (!observation.authorizationIdentity || !environment)) {
-          status = {
-            ...status,
-            state: "incompatible",
-            readyGeneration: null,
-            explanation:
-              "T3 Code did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
-          };
-          publishCheck(before);
-        }
-        return value();
-      }).pipe(
-        Effect.catch(() =>
+      });
+      yield* attempt
+        .guard(
+          "t3_connection",
           Effect.gen(function* () {
-            support = NO_T3_SUPPORT;
+            const host = diagnosticHost(new URL(endpoint).hostname);
+            const observation = yield* Effect.tryPromise({
+              try: () => contract.inspect({ endpoint }, attempt),
+              catch: (cause) => cause,
+            }).pipe(
+              Effect.catchIf(
+                (cause) => cause instanceof T3Failure,
+                (failure) =>
+                  attempt
+                    .record({
+                      type: "t3_connection",
+                      outcome: "failed",
+                      host,
+                      reason: connectionFailures[failure.kind],
+                    })
+                    .pipe(Effect.as(null)),
+              ),
+            );
+            if (!observation) return yield* unavailable;
+            const environment = observation.contract?.environmentId;
+            yield* bindAuthorizationContext(savedRow, observation);
+            support = observation.support;
+            // Kept while the connection stays ready for the same authorization context.
+            const sameReady =
+              before.readyGeneration !== null && before.authorizationContext?.id === current?.id;
+            let readyGeneration: string | null = null;
+            if (observation.state === "ready")
+              readyGeneration = sameReady ? before.readyGeneration : yield* newId;
+            status = {
+              endpoint,
+              state: observation.state,
+              explanation: explanations[observation.reason],
+              checkedAt: yield* now,
+              authorizationContext: current ? contextValue(current) : null,
+              // The pending attempt owns both, so a resumed attempt reports them as before.
+              authorizationPending: isApprovalPending(observation.reason),
+              authorizationOpenFailed: observation.reason === "approval-reopen-failed",
+              readyGeneration,
+              contract: observation.contract ?? null,
+            };
+            publishCheck(before);
+            const contextMissing = !observation.authorizationIdentity || !environment;
+            const invalidReady = status.state === "ready" && contextMissing;
+            if (invalidReady) {
+              status = {
+                ...status,
+                state: "incompatible",
+                readyGeneration: null,
+                explanation:
+                  "T3 Code did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
+              };
+              publishCheck(before);
+            }
+            yield* recordInspection(attempt, host, observation, invalidReady);
+          }),
+        )
+        .pipe(Effect.catch(() => unavailable));
+      yield* attempt.finish(status.state === "ready" ? "ok" : "failed");
+      return value(ids);
+    });
+    /** Retires the current context and starts a new approval attempt; callers hold the mutex. */
+    const startAuthorization = Effect.fn("Connection.startAuthorization")(function* (
+      endpoint: { endpoint: string; context_id: string | null },
+      ids: string[] = [],
+    ) {
+      const attempt = yield* begin("t3_oauth_open", ids);
+      return yield* attempt
+        .guard(
+          "t3_oauth_open",
+          Effect.gen(function* () {
+            yield* sql`UPDATE t3_connection SET context_id = NULL WHERE singleton = 1`;
+            endpoint.context_id = null;
+            current = undefined;
             status = {
               ...status,
-              state: "unavailable",
-              checkedAt: yield* now,
+              authorizationContext: null,
               authorizationPending: false,
               authorizationOpenFailed: false,
               readyGeneration: null,
               contract: null,
-              explanation:
-                "T3 Code is unavailable. Start T3 Code or check the endpoint and network. AgentEasel will reconnect automatically.",
+              state: "authorization-required",
             };
-            publishCheck(before);
-            return value();
-          }),
-        ),
-      );
-    });
-    /** Retires the current context and starts a new approval attempt; callers hold the mutex. */
-    const startAuthorization = Effect.fn("Connection.startAuthorization")(function* (endpoint: {
-      endpoint: string;
-      context_id: string | null;
-    }) {
-      yield* sql`UPDATE t3_connection SET context_id = NULL WHERE singleton = 1`;
-      endpoint.context_id = null;
-      current = undefined;
-      status = {
-        ...status,
-        authorizationContext: null,
-        authorizationPending: false,
-        authorizationOpenFailed: false,
-        readyGeneration: null,
-        contract: null,
-        state: "authorization-required",
-      };
-      changes.connectionChanged();
-      return yield* Effect.tryPromise(() =>
-        authorization.authorize({ endpoint: endpoint.endpoint }),
-      ).pipe(
-        Effect.matchEffect({
-          onFailure: () =>
-            Effect.sync(() => {
+            changes.connectionChanged();
+            const started = yield* attempt
+              .guard(
+                "t3_oauth_open",
+                Effect.tryPromise({
+                  try: () => authorization.authorize({ endpoint: endpoint.endpoint }, attempt),
+                  catch: (cause) => cause,
+                }).pipe(
+                  Effect.as(true),
+                  Effect.catchIf(
+                    (cause) => cause instanceof T3Failure,
+                    () => Effect.succeed(false),
+                  ),
+                ),
+              )
+              .pipe(Effect.orElseSucceed(() => false));
+            if (started) yield* check({ ids });
+            else {
               status = {
                 ...status,
                 explanation:
                   "Authorization could not start. Check T3 Code, backend-host browser and loopback callback port 43827, then authorize again.",
               };
               changes.connectionChanged();
-              return value();
-            }),
-          onSuccess: () => check(),
-        }),
-      );
+            }
+            const opened = started && (status.authorizationPending || status.state === "ready");
+            yield* attempt.record({
+              type: "t3_oauth",
+              step: "t3_oauth_open",
+              outcome: opened ? "ok" : "failed",
+              reason: opened ? null : started ? "approval_not_started" : "oauth_request_failed",
+            });
+            yield* attempt.finish(opened ? "ok" : "failed");
+            return value(ids);
+          }),
+        )
+        .pipe(Effect.onError(() => attempt.finish("failed")));
     });
-    yield* check();
-    const stopWorker = yield* periodicWorker(intervalMs, serial(check()), serial(Effect.void));
+    let stopWorker = Effect.void;
     const close = Effect.gen(function* () {
       if (closed) return;
       closed = true;
@@ -263,10 +389,25 @@ export const makeConnection = (
     });
     yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
     return {
-      getConnection: () => Effect.sync(value),
+      start: (log: DiagnosticLog) =>
+        Effect.gen(function* () {
+          diagnostics = log;
+          authorization.setOAuthDiagnostics?.(
+            log.attempt,
+            Effect.runPromiseWith(yield* Effect.context()),
+          );
+          yield* check({ record: "changes" });
+          stopWorker = yield* periodicWorker(
+            intervalMs,
+            serial(check({ record: "changes" })),
+            serial(Effect.void),
+          );
+        }),
+      getConnection: () => Effect.sync(() => value()),
       recheckConnection: () => serial(check()),
+      observeConnection: () => serial(check({ record: "changes" })),
       snapshots: {
-        fresh: () => serial(Effect.map(check(), snapshot)),
+        fresh: () => serial(Effect.map(check({ record: "never" }), snapshot)),
         latest: () => Effect.sync(snapshot),
       } satisfies ContractSnapshots,
       configureConnection: (input: unknown) =>
@@ -309,18 +450,50 @@ export const makeConnection = (
               );
             const endpoint = saved;
             // Fresh evidence first: an approval that just completed is never replaced.
-            yield* check();
-            if (status.state !== "authorization-required") return value();
+            const ids: string[] = [];
+            yield* check({ ids });
+            if (status.state !== "authorization-required") return value(ids);
             const at = yield* Clock.currentTimeMillis;
             if (lastOpenedAt !== undefined && at - lastOpenedAt < AUTHORIZATION_OPEN_COOLDOWN_MS)
-              return value();
+              return value(ids);
             lastOpenedAt = at;
-            const resumed = yield* Effect.tryPromise(() =>
-              authorization.resumeAuthorization({ endpoint: endpoint.endpoint }),
-            ).pipe(Effect.option);
+            const attempt = yield* begin("t3_oauth_resume", ids);
+            const resumed = yield* attempt
+              .guard(
+                "t3_oauth_resume",
+                Effect.tryPromise({
+                  try: () =>
+                    authorization.resumeAuthorization({ endpoint: endpoint.endpoint }, attempt),
+                  catch: (cause) => cause,
+                }).pipe(
+                  Effect.catchIf(
+                    (cause) => cause instanceof T3Failure,
+                    () => Effect.succeed("failed" as const),
+                  ),
+                ),
+              )
+              .pipe(Effect.orElseSucceed(() => "failed" as const));
+            const outcome =
+              resumed === "reopened" ? "ok" : resumed === "failed" ? "failed" : "skipped";
+            yield* attempt.record({
+              type: "t3_oauth",
+              step: "t3_oauth_resume",
+              outcome,
+              reason: {
+                reopened: null,
+                failed: "oauth_request_failed",
+                none: "approval_not_pending",
+                completing: "approval_completing",
+              }[resumed] as
+                | "oauth_request_failed"
+                | "approval_not_pending"
+                | "approval_completing"
+                | null,
+            });
+            yield* attempt.finish(outcome === "failed" ? "failed" : "ok");
             // A failed open is recorded on the pending attempt, which the check reports.
-            if (resumed._tag === "None" || resumed.value !== "none") return yield* check();
-            return yield* startAuthorization(endpoint);
+            if (resumed !== "none") return yield* check({ ids });
+            return yield* startAuthorization(endpoint, ids);
           }),
         ),
       close,

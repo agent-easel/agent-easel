@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import {
   Monitor,
   BotMessageSquare,
+  History,
   ImageIcon,
   Keyboard,
   Lock,
@@ -23,6 +24,7 @@ import { AppearanceSettings } from "./appearance-settings.tsx";
 import { DesktopAppSettings } from "./desktop-app-settings.tsx";
 import { RunImageSettings } from "./run-image-settings.tsx";
 import { RunTitleSettings } from "./run-title-settings.tsx";
+import { DiagnosticLogSettings } from "./diagnostic-log-settings.tsx";
 import { ChatModelSettings } from "./chat-model-settings.tsx";
 import { ChatDiscordSettings } from "./chat-discord-settings.tsx";
 import { useChatModelAttention, useDiscordAttention } from "../chat-control-attention.ts";
@@ -109,6 +111,15 @@ const settingsSections: readonly SettingsSection[] = [
     group: "factory",
     visibility: "host",
     content: () => <AccessSettings />,
+  },
+  {
+    tab: "diagnostics",
+    rowLabels: ["Recording", "Record diagnostic log", "Log"],
+    label: "Diagnostic log",
+    icon: History,
+    group: "factory",
+    managedOnHost: true,
+    content: () => <DiagnosticLogSettings />,
   },
   {
     tab: "chat-model",

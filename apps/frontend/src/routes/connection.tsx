@@ -1,15 +1,18 @@
 import { MutationGate } from "@/client-gate";
-import { useState } from "react";
-import type { T3Connection } from "@agent-easel/contracts";
+import { useState, useSyncExternalStore } from "react";
+import type { T3Connection, T3ConnectionRecovery } from "@agent-easel/contracts";
 import { KeyRound, LoaderCircle, Unplug } from "lucide-react";
 import { useClientScope } from "../client-scope.ts";
 import { Button } from "@/components/ui/button";
+import { TextLink } from "@/components/ui/text-link";
+import { DiagnosticLogViewer } from "@/components/diagnostic-log-view";
 import { ProblemCard } from "@/components/problem-card";
 import { TechnicalDetails } from "@/components/technical-details";
 import { SettingsDetailRow, SettingsGroup, SettingsPage } from "@/components/settings-page";
 import { StatusBadge } from "@/components/status-badge";
 import { dayAndTime } from "../time-format.ts";
 import { api } from "../api.ts";
+import { createDiagnosticRetry, useDiagnosticLogStatus } from "../diagnostic-log.ts";
 import {
   ConnectionStateBadge,
   useConnectionState,
@@ -18,30 +21,27 @@ import {
 } from "../connection-state.tsx";
 import { allowedAddress, T3AddressForm, T3AddressHelp } from "../components/t3-address.tsx";
 
-export function ConnectionSettingsPanel() {
-  const { connection, loadError, presentation: status, setConnection } = useConnectionState();
-  const presentation = settingsConnectionPresentation(connection, status);
-  const host = useClientScope() === "host";
+function useConnectionRecovery(setConnection: (value: T3Connection) => void) {
   const [busy, setBusy] = useState<"checking" | "changing" | null>(null);
   const [operationError, setOperationError] = useState("");
-  const disabled = busy !== null || presentation === "loading";
-  const primary =
-    presentation === "unavailable" ||
-    presentation === "incompatible" ||
-    presentation === "load-error";
-  const pending = presentation === "authorization-required" && connection?.authorizationPending;
+  const [retry] = useState(createDiagnosticRetry);
+  const attempts = useSyncExternalStore(retry.subscribe, retry.getSnapshot);
+  const diagnosticStatus = useDiagnosticLogStatus(attempts);
   const act = async (
-    operation: () => Promise<T3Connection>,
+    operation: () => Promise<T3ConnectionRecovery>,
     phase: "checking" | "changing" = "changing",
+    record = false,
   ) => {
     setBusy(phase);
     setOperationError("");
-    return await operation()
+    const recover = async () => {
+      const result = await operation();
+      setConnection(result);
+      return result.diagnosticAttemptIds ?? [];
+    };
+    return await (record ? retry.retry(recover) : recover())
       .then(
-        (value) => {
-          setConnection(value);
-          return true;
-        },
+        () => true,
         (cause: unknown) => {
           setOperationError(String(cause));
           return false;
@@ -49,37 +49,60 @@ export function ConnectionSettingsPanel() {
       )
       .finally(() => setBusy(null));
   };
+  return { act, attempts, busy, diagnosticStatus, operationError };
+}
+
+export function ConnectionSettingsPanel() {
+  const { connection, loadError, presentation: status, setConnection } = useConnectionState();
+  const presentation = settingsConnectionPresentation(connection, status);
+  const host = useClientScope() === "host";
+  const { act, attempts, busy, diagnosticStatus, operationError } =
+    useConnectionRecovery(setConnection);
+  const disabled = busy !== null || presentation === "loading";
+  const pending = presentation === "authorization-required" && connection?.authorizationPending;
+  const authorize = host && !pending ? api.authorizeConnection : api.openConnectionAuthorization;
+  const authorizing = presentation === "authorization-required";
+  const recordedRetry = host && diagnosticStatus?.enabled === false && (
+    <MutationGate>
+      <TextLink
+        disabled={disabled}
+        onClick={() =>
+          void act(
+            authorizing ? authorize : api.recheckConnection,
+            authorizing ? "changing" : "checking",
+            true,
+          )
+        }
+      >
+        Record diagnostic log and try again
+      </TextLink>
+    </MutationGate>
+  );
   return (
     <SettingsPage
       title="T3 Code connection"
       badge={<ConnectionStateBadge presentation={busy === "checking" ? "loading" : presentation} />}
       hostManaged={!host}
       action={
-        <MutationGate>
-          <Button
-            variant={primary ? "default" : "outline"}
-            disabled={disabled || presentation === "not-set-up"}
-            onClick={() => void act(api.recheckConnection, "checking")}
-          >
-            Check again
-          </Button>
-        </MutationGate>
+        <ConnectionHeaderActions
+          attempts={attempts}
+          disabled={disabled}
+          presentation={presentation}
+          onCheck={() => void act(api.recheckConnection, "checking")}
+        />
       }
     >
       <ConnectionProblem
         connection={connection}
         presentation={presentation}
         error={loadError}
+        retry={recordedRetry}
         action={
           <MutationGate>
             <Button
               variant={pending ? "outline" : "default"}
               disabled={disabled}
-              onClick={() =>
-                void act(
-                  host && !pending ? api.authorizeConnection : api.openConnectionAuthorization,
-                )
-              }
+              onClick={() => void act(authorize)}
             >
               {pending ? "Open the page again" : "Authorize"}
             </Button>
@@ -106,6 +129,37 @@ export function ConnectionSettingsPanel() {
         <TechnicalDetails details={contractDetails(connection)} />
       )}
     </SettingsPage>
+  );
+}
+
+function ConnectionHeaderActions({
+  attempts,
+  disabled,
+  presentation,
+  onCheck,
+}: {
+  attempts: readonly string[] | null;
+  disabled: boolean;
+  presentation: SettingsConnectionPresentation;
+  onCheck: () => void;
+}) {
+  const primary =
+    presentation === "unavailable" ||
+    presentation === "incompatible" ||
+    presentation === "load-error";
+  return (
+    <>
+      {attempts !== null && <DiagnosticLogViewer attempts={attempts} />}
+      <MutationGate>
+        <Button
+          variant={primary ? "default" : "outline"}
+          disabled={disabled || presentation === "not-set-up"}
+          onClick={onCheck}
+        >
+          Check again
+        </Button>
+      </MutationGate>
+    </>
   );
 }
 
@@ -265,11 +319,13 @@ function ConnectionProblem({
   presentation,
   error,
   action,
+  retry,
 }: {
   connection: T3Connection | null;
   presentation: SettingsConnectionPresentation;
   error: string;
   action: React.ReactNode;
+  retry: React.ReactNode;
 }) {
   if (presentation === "unavailable")
     return (
@@ -277,6 +333,7 @@ function ConnectionProblem({
         tone="error"
         icon={Unplug}
         title="AgentEasel can’t reach T3 Code"
+        action={retry}
         details={connection?.explanation}
       >
         Start T3 Code on the AgentEasel host, then check again. Runs keep going in T3 Code.
@@ -288,24 +345,48 @@ function ConnectionProblem({
         tone="attention"
         icon={LoaderCircle}
         title="Approve in the browser on the AgentEasel host"
-        action={action}
+        action={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {action}
+            {retry}
+          </div>
+        }
       >
         This page updates by itself.
       </ProblemCard>
     ) : (
-      <ProblemCard tone="attention" title="Authorize AgentEasel in T3 Code" action={action}>
+      <ProblemCard
+        tone="attention"
+        title="Authorize AgentEasel in T3 Code"
+        action={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {action}
+            {retry}
+          </div>
+        }
+      >
         T3 Code’s approval page opens in a browser on the AgentEasel host.
       </ProblemCard>
     );
   if (presentation === "incompatible" && connection)
     return (
-      <ProblemCard tone="attention" title="Update T3 Code" details={contractDetails(connection)}>
+      <ProblemCard
+        tone="attention"
+        title="Update T3 Code"
+        details={contractDetails(connection)}
+        action={retry}
+      >
         This T3 Code version is incompatible. Existing Runs keep their history.
       </ProblemCard>
     );
   if (presentation === "load-error")
     return (
-      <ProblemCard tone="error" title="Couldn’t read the connection status" details={error}>
+      <ProblemCard
+        tone="error"
+        title="Couldn’t read the connection status"
+        details={error}
+        action={retry}
+      >
         Check that AgentEasel is running, then check again.
       </ProblemCard>
     );

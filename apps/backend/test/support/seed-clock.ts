@@ -9,15 +9,21 @@ const live = Effect.runSync(Clock.Clock);
 const millis = () => live.currentTimeMillisUnsafe() - (age.getStore() ?? 0);
 const nanos = () => live.currentTimeNanosUnsafe() - BigInt(age.getStore() ?? 0) * 1_000_000n;
 
-export const seedClock: Clock.Clock = {
-  sleep: (duration) => live.sleep(duration),
-  monotonicTimeNanos: live.monotonicTimeNanos,
-  monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
-  currentTimeMillisUnsafe: millis,
-  currentTimeMillis: Effect.sync(millis),
-  currentTimeNanosUnsafe: nanos,
-  currentTimeNanos: Effect.sync(nanos),
-};
+export function shiftedClock(offsetMs: () => number): Clock.Clock {
+  const shiftedMillis = () => live.currentTimeMillisUnsafe() + offsetMs();
+  const shiftedNanos = () => live.currentTimeNanosUnsafe() + BigInt(offsetMs()) * 1_000_000n;
+  return {
+    sleep: (duration) => live.sleep(duration),
+    monotonicTimeNanos: live.monotonicTimeNanos,
+    monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+    currentTimeMillisUnsafe: shiftedMillis,
+    currentTimeMillis: Effect.sync(shiftedMillis),
+    currentTimeNanosUnsafe: shiftedNanos,
+    currentTimeNanos: Effect.sync(shiftedNanos),
+  };
+}
+
+export const seedClock = shiftedClock(() => -(age.getStore() ?? 0));
 
 export const threeHoursAgo = <T>(work: () => Promise<T>) => age.run(3 * 60 * 60 * 1000, work);
 

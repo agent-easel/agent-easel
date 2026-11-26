@@ -77,6 +77,23 @@ it("focusing the window reads at once without waiting for the interval", () => {
   expect(pending).toHaveLength(2);
 });
 
+it("polling resumes on the first interval after a slow read completes", async () => {
+  // Arrange
+  const { schedule, pending, applied } = controlledReads();
+  schedule.watch(1000, fakePage().page, undefined, true);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(pending).toHaveLength(1);
+  pending[0]!.resolve("complete");
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Act
+  await vi.advanceTimersByTimeAsync(1000);
+
+  // Assert
+  expect(applied).toStrictEqual(["complete"]);
+  expect(pending).toHaveLength(2);
+});
+
 it("a slower earlier read never replaces the answer of a later read", async () => {
   // Arrange
   const { schedule, pending, applied } = controlledReads();
@@ -192,4 +209,61 @@ it("a failed read is no longer pending", async () => {
 
   // Assert
   expect(outstanding).toStrictEqual([true, false]);
+});
+
+it("an invalidated scope cannot give its stale error to the recovery caller", async () => {
+  // Arrange
+  const { schedule, pending, failures } = controlledReads();
+  const cause = new Error("old connection");
+  let scope = "original";
+  const explicit = schedule.refreshWith(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    () => scope === "original",
+  );
+  scope = "replacement";
+  void schedule.refresh();
+
+  // Act
+  pending[0]!.reject(cause);
+  const result = await explicit;
+
+  // Assert
+  expect(result).toBeUndefined();
+  expect(failures).toStrictEqual([]);
+});
+
+it("the recovery caller receives its own failure after a same-scope refresh", async () => {
+  // Arrange
+  const { schedule, pending } = controlledReads();
+  const cause = new Error("current connection");
+  const explicit = schedule.refreshWith(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    () => true,
+  );
+  void schedule.refresh();
+
+  // Act
+  pending[0]!.reject(cause);
+
+  // Assert
+  await expect(explicit).rejects.toBe(cause);
+});
+
+it("a recovery waiting for a slow read gets its answer despite repeated polls and focus", async () => {
+  // Arrange
+  const { schedule, pending } = controlledReads();
+  const page = fakePage();
+  schedule.watch(1000, page.page);
+  const recover = vi.fn(async (answer) => answer);
+  void schedule.withLatest(recover);
+  page.focus();
+  await vi.advanceTimersByTimeAsync(3000);
+  page.focus();
+
+  // Act
+  pending[0]!.resolve("eligible");
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Assert
+  expect(recover).toHaveBeenCalledExactlyOnceWith("eligible");
 });

@@ -15,6 +15,7 @@ import type { FacadeOperations } from "./operation.ts";
 import type { Result } from "./result.ts";
 import { serverUpdateOperations } from "./update.ts";
 import { triggerOperations } from "./trigger.ts";
+import { diagnosticOperations } from "./diagnostics.ts";
 
 /** Every HTTP operation, including those answered by the server around the facade. */
 export const httpOperations = {
@@ -27,6 +28,7 @@ export const httpOperations = {
   ...runOperations,
   ...chatControlOperations,
   ...triggerOperations,
+  ...diagnosticOperations,
   ...clientAccessOperations,
   ...clientAccessServerOperations,
   ...serverUpdateOperations,
@@ -42,6 +44,7 @@ export interface FactoryOperations extends FacadeOperations<
     typeof runOperations &
     typeof chatControlOperations &
     typeof triggerOperations &
+    typeof diagnosticOperations &
     typeof clientAccessOperations
 > {
   reconcileRuns(): Promise<Result<void>>;

@@ -50,6 +50,12 @@ body:
     validations:
       required: true
   - type: textarea
+    id: diagnostic-log
+    attributes:
+      label: Diagnostic log excerpt
+      description: Optional. Paste the output of Copy in Settings → AgentEasel → Diagnostic log after repeating the failed step. Review it before posting.
+      render: markdown
+  - type: textarea
     id: diagnostics
     attributes:
       label: Redacted diagnostics

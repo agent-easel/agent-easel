@@ -28,6 +28,33 @@ async function approvePendingOAuth(
   expect((await recheckConnection(factory)).state).toBe("ready");
 }
 
+it("reopening OAuth returns its diagnostic attempts and consent exports a separate redacted callback", async (context) => {
+  // Arrange
+  const { factory, external, getAuthorizationUrl } = await openOAuthFactory(context);
+  assert((await factory.setDiagnosticRecording({ enabled: true })).ok);
+  assert((await factory.authorizeConnection()).ok);
+  const reopened = await factory.openConnectionAuthorization();
+  assert(reopened.ok);
+  const authorizationUrl = new URL(getAuthorizationUrl());
+  const callback = new URL(external.approvalUrl(authorizationUrl.href));
+
+  // Act
+  const approval = await fetch(callback);
+
+  // Assert
+  expect(approval.status).toBe(200);
+  expect(reopened.value.diagnosticAttemptIds).toHaveLength(3);
+  const exported = await factory.exportDiagnosticLog();
+  assert(exported.ok);
+  expect(exported.value).toContain("Open T3 Code approval");
+  expect(exported.value).toContain("Reopen T3 Code approval");
+  expect(exported.value).toContain("Complete T3 Code approval");
+  expect(exported.value).toContain("Exchange OAuth authorization code");
+  expect(exported.value).not.toContain(authorizationUrl.origin);
+  expect(exported.value).not.toContain(authorizationUrl.searchParams.get("state")!);
+  expect(exported.value).not.toContain(callback.searchParams.get("code")!);
+});
+
 it("OAuth callback rejects a mismatched state parameter", async (context) => {
   // Arrange
   const { factory, external, getAuthorizationUrl } = await openOAuthFactory(context);
@@ -45,6 +72,7 @@ it("OAuth callback rejects a mismatched state parameter", async (context) => {
 it("OAuth approval completes after backend restart on the pending callback", async (context) => {
   // Arrange
   const { harness, external, factory, getAuthorizationUrl } = await openOAuthFactory(context);
+  assert((await factory.setDiagnosticRecording({ enabled: true })).ok);
   await factory.authorizeConnection();
   const callback = external.approvalUrl(getAuthorizationUrl());
   await factory.close();
@@ -59,6 +87,11 @@ it("OAuth approval completes after backend restart on the pending callback", asy
   // Assert
   expect(approval.status).toBe(200);
   expect((await recheckConnection(reopened)).state).toBe("ready");
+  const exported = await reopened.exportDiagnosticLog();
+  assert(exported.ok);
+  expect(exported.value).toMatch(/### Check T3 Code connection[^#]*Listen for OAuth callback/);
+  expect(exported.value).toMatch(/environment [a-f0-9]{8} · grant [a-f0-9]{8}/);
+  expect(exported.value).not.toContain("fixture-environment");
 });
 
 it("a failed reopen of the pending approval is still reported after a backend restart", async (context) => {

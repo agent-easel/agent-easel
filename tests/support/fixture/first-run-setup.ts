@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
@@ -128,6 +128,13 @@ async function startFreshHost({
       on.codex = true;
       return writeSettings();
     },
+    codexEntryConflicts: () =>
+      writeFile(join(codex, "config.toml"), '[mcp_servers.factory-runtime]\ncommand = "other"\n'),
+    async codexInstallBlocked() {
+      const skill = join(codex, "skills", "factory-block");
+      await mkdir(skill, { recursive: true });
+      await symlink(join(codex, "missing-skill"), join(skill, "SKILL.md"));
+    },
     /** The owner turns Grok on in T3's settings; its home exists with nothing installed. */
     grokTurnedOn: () => {
       on.grok = true;
@@ -180,6 +187,8 @@ export function firstRunSetupFixture(
       /** T3 starts on this computer and writes its runtime file. */
       t3Starts: () => running().t3Starts(),
       codexTurnedOn: () => running().codexTurnedOn(),
+      codexEntryConflicts: () => running().codexEntryConflicts(),
+      codexInstallBlocked: () => running().codexInstallBlocked(),
       grokTurnedOn: () => running().grokTurnedOn(),
       cursorProjectOverride: (enabled: boolean) => running().cursorProjectOverride(enabled),
       /** Browsers' reporting list reads wait, unanswered, until `releaseReportingReads`. */
@@ -230,6 +239,9 @@ export function firstRunSetupFixture(
         await recheck();
       },
       authorizationStarts: () => running().t3.connection.authorizationStarts,
+      async hostRecordsDiagnostics() {
+        requireSuccess(await running().server.factory.setDiagnosticRecording({ enabled: true }));
+      },
     },
     reset: stop,
     /** While reporting reads are held, when a browser's reporting read may go on; else null. */

@@ -1,6 +1,7 @@
 import type * as Clock from "effect/Clock";
 import type { GitAdapter } from "./adapters/git.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
+import type { DiagnosticRecorder } from "./diagnostic-log.ts";
 import type { T3Modules } from "./t3/modules.ts";
 
 /** Everything a caller may choose when opening a Factory; defaults live where each is consumed. */
@@ -18,4 +19,5 @@ export interface FactoryOptions {
   readonly applicationVersion?: string;
   /** Discord's REST API base for Chat control's Gateway connection; tests use a controlled Discord. */
   readonly discordApiUrl?: string;
+  readonly diagnosticRecorder?: DiagnosticRecorder;
 }
