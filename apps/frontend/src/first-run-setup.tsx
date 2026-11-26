@@ -34,8 +34,13 @@ import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
 import { useConnectionState, type ConnectionPresentation } from "./connection-state.tsx";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
-import { createDiagnosticRetry, useDiagnosticLogStatus } from "./diagnostic-log.ts";
-import { DiagnosticLogViewer } from "@/components/diagnostic-log-view";
+import {
+  createDiagnosticRetry,
+  useDiagnosticLogStatus,
+  useDiagnosticRetry,
+  type DiagnosticRetry,
+} from "./diagnostic-log.ts";
+import { DiagnosticLogViewer, DiagnosticRetryAction } from "@/components/diagnostic-log-view";
 import { installable, providerName, targetStatus, useReportingState } from "./reporting-state.tsx";
 
 /** How often a step without a detected T3 looks for one again. */
@@ -144,6 +149,7 @@ function FirstRunSetupScreen({
 }) {
   const { connected, listed, current } = useSetupProgress(setup);
   const ready = installedEverywhere(listed);
+  const retry = useDiagnosticRetry();
   return (
     <GateScreen
       size="wide"
@@ -178,7 +184,13 @@ function FirstRunSetupScreen({
               offInT3={setup.harnessesOffInT3}
               onCheckAgain={onCheckAgain}
               onCompleted={onCompleted}
+              retry={retry}
             />
+          )}
+          {ready && retry.attempts && (
+            <div className="pl-8.5">
+              <DiagnosticLogViewer attempts={retry.attempts} />
+            </div>
           )}
         </li>
       </ol>
@@ -354,6 +366,7 @@ function InstallStep({
   offInT3,
   onCheckAgain,
   onCompleted,
+  retry,
 }: {
   /** Null until a reporting read requested for the ready connection and its caption has applied. */
   listed: readonly ReportingInstallation[] | null;
@@ -362,9 +375,11 @@ function InstallStep({
   offInT3: readonly string[];
   onCheckAgain: () => Promise<void>;
   onCompleted: (setup: FirstRunSetup) => void;
+  retry: DiagnosticRetry;
 }) {
-  const { targets, error, readDetails, refresh } = useReportingState();
+  const { targets, error, readDetails, refresh, recheck } = useReportingState();
   const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
+  const recordedRecheck = <DiagnosticRetryAction retry={retry} recover={recheck} view />;
   // Discovery could not read T3's harnesses: turning one on in T3 would not help.
   const refusal = listed && targets?.find((target) => target.kind === "discovery-refused");
   const caption = !refusal && offInT3.length > 0 && (
@@ -400,7 +415,12 @@ function InstallStep({
           tone="attention"
           density="compact"
           title="Couldn’t check your harnesses"
-          action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+          action={
+            <span className="inline-flex flex-wrap gap-x-3">
+              <TextLink onClick={checkAgain}>Check again</TextLink>
+              {recordedRecheck}
+            </span>
+          }
         >
           {refusal.message} Open AgentEasel to continue without reporting. Once this is fixed,
           install it from Settings → Agent reporting, or{" "}
@@ -416,13 +436,21 @@ function InstallStep({
         density="compact"
         title="Turn on a harness in T3 Code"
         details={targets?.find((target) => target.kind === "none-enabled")?.message}
-        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+        action={
+          <span className="inline-flex flex-wrap gap-x-3">
+            <TextLink onClick={checkAgain}>Check again</TextLink>
+            {recordedRecheck}
+          </span>
+        }
       >
         None of the harnesses AgentEasel installs into is on in T3 Code. Turn one on in T3 Code’s
         settings, then check again.
       </ProblemCard>
     );
-  else content = <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} />;
+  else
+    content = (
+      <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} retry={retry} />
+    );
   return (
     <div className="grid gap-3 pl-8.5">
       {content}
@@ -439,13 +467,18 @@ function HarnessInstall({
   listed,
   current,
   onCompleted,
+  retry,
 }: {
   listed: readonly ReportingInstallation[];
   current: boolean;
   onCompleted: (setup: FirstRunSetup) => void;
+  retry: DiagnosticRetry;
 }) {
-  const { running, failures, install } = useReportingState();
+  const { running, failures, install, recheck } = useReportingState();
   const pending = listed.filter(installable);
+  const cardShown = listed.some(
+    (target) => failures[target.id] || target.status === "needs-attention",
+  );
   return (
     <>
       <HarnessList listed={listed} />
@@ -455,8 +488,20 @@ function HarnessInstall({
           target={target}
           failure={failures[target.id]}
           density="compact"
+          action={
+            (retry.offer || retry.attempts) && (
+              <DiagnosticRetryAction
+                retry={retry}
+                recover={() =>
+                  installable(target) || failures[target.id] ? install([target]) : recheck()
+                }
+                view
+              />
+            )
+          }
         />
       ))}
+      {!cardShown && retry.attempts && <DiagnosticLogViewer attempts={retry.attempts} />}
       <div className="flex items-start gap-3">
         {pending.length > 0 && (
           <MutationGate>

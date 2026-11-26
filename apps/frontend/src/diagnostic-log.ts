@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   diagnosticOperations,
   operationPath,
@@ -7,6 +7,7 @@ import {
 } from "@agent-easel/contracts";
 import { DIAGNOSTIC_ATTEMPT_PAGE_LIMIT } from "@agent-easel/domain-validation";
 import { api, ApiError } from "./api.ts";
+import { useClientScope } from "./client-scope.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
 
 export const diagnosticExportPath = operationPath(diagnosticOperations.exportDiagnosticLog);
@@ -123,3 +124,27 @@ export function createDiagnosticRetry(
     },
   };
 }
+
+export function useDiagnosticRetry() {
+  const [retry] = useState(() => createDiagnosticRetry());
+  const attempts = useSyncExternalStore(retry.subscribe, retry.getSnapshot);
+  const status = useDiagnosticLogStatus();
+  const host = useClientScope() === "host";
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return {
+    attempts: attempts?.length ? attempts : null,
+    offer: host && !busy && status !== null && !status.enabled,
+    error,
+    start(recover: () => Promise<readonly string[]>) {
+      setBusy(true);
+      setError("");
+      retry
+        .retry(recover)
+        .catch((cause: unknown) => setError(diagnosticErrorMessage(cause)))
+        .finally(() => setBusy(false));
+    },
+  };
+}
+
+export type DiagnosticRetry = ReturnType<typeof useDiagnosticRetry>;

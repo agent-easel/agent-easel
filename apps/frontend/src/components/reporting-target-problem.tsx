@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { ReportingInstallation } from "@agent-easel/contracts";
 import { providerName } from "../reporting-state.tsx";
 import { ProblemCard } from "./problem-card.tsx";
@@ -19,9 +19,11 @@ export function ReportingTargetProblem({
   target,
   failure,
   density = "default",
+  action,
 }: {
   target: ReportingInstallation;
   failure?: string | undefined;
+  action?: ReactNode;
   density?: ComponentProps<typeof ProblemCard>["density"];
 }) {
   const name = providerName(target.provider);
@@ -33,6 +35,7 @@ export function ReportingTargetProblem({
         density={density}
         title={`Couldn’t install for ${name}`}
         details={details}
+        action={action}
       >
         Check the configuration permissions, then install again.
       </ProblemCard>
@@ -50,6 +53,7 @@ export function ReportingTargetProblem({
             : `${name}’s reporting configuration needs attention`
         }
         details={profileProblem ? undefined : details}
+        action={action}
       >
         {reportingSetupGuidance(target, missing, profileProblem)}
       </ProblemCard>

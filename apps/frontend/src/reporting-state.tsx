@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { CircleDashed, type LucideIcon } from "lucide-react";
 import type { AgentDefinition, ReportingInstallation } from "@agent-easel/contracts";
 import type { SettingKind } from "./components/status-badge.tsx";
-import { api } from "./api.ts";
+import { api, ApiError } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
 
@@ -71,7 +71,8 @@ type ScopeRequest = { readonly key: string };
 type ReportingInstallState = {
   running: string | null;
   failures: Readonly<Record<string, string>>;
-  install: (targets: readonly ReportingInstallation[]) => Promise<void>;
+  install: (targets: readonly ReportingInstallation[]) => Promise<readonly string[]>;
+  recheck: () => Promise<readonly string[]>;
 };
 
 const ReportingStateContext = createContext<
@@ -137,9 +138,9 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
           "AgentEasel could not check Agent reporting. Check that AgentEasel is running, then check again.",
       }
     : { targets, agents, error: "" };
-  const installHome = async (target: ReportingInstallation) => {
+  const installHome = async (target: ReportingInstallation): Promise<readonly string[]> => {
     setRunning(target.id);
-    await api.installReporting({ targetId: target.id }).then(
+    return api.installReporting({ targetId: target.id }).then(
       (installed) => {
         supersede();
         setTargets(
@@ -151,21 +152,33 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
           delete remaining[target.id];
           return remaining;
         });
+        return installed.diagnosticAttempts ?? [];
       },
-      (cause: unknown) => setFailures((current) => ({ ...current, [target.id]: String(cause) })),
+      (cause: unknown) => {
+        setFailures((current) => ({ ...current, [target.id]: String(cause) }));
+        return cause instanceof ApiError ? (cause.detail.diagnosticAttempts ?? []) : [];
+      },
     );
   };
   const install = async (selection: readonly ReportingInstallation[]) => {
-    if (installing.current || !selection.length) return;
+    if (installing.current || !selection.length) return [];
     installing.current = true;
     const run = async () => {
-      for (const target of selection) await installHome(target);
+      const attempts: string[] = [];
+      for (const target of selection) attempts.push(...(await installHome(target)));
       await refresh();
+      return attempts;
     };
-    await run().finally(() => {
+    return run().finally(() => {
       setRunning(null);
       installing.current = false;
     });
+  };
+  const recheck = async () => {
+    const rechecked = await api.recheckReporting();
+    supersede();
+    setTargets(rechecked.installations);
+    return rechecked.diagnosticAttempts ?? [];
   };
   const readDetails = failure ? String(failure.cause) : "";
   return (
@@ -180,6 +193,7 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
         running,
         failures,
         install,
+        recheck,
       }}
     >
       {children}

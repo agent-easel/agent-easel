@@ -54,6 +54,7 @@ export interface DiagnosticRecorder {
 
 export interface DiagnosticAttemptHandle {
   readonly id: string | null;
+  readonly hash: (value: string) => string;
   readonly record: (entry: DiagnosticEntry) => Effect.Effect<void>;
   readonly finish: (outcome: DiagnosticAttemptOutcome) => Effect.Effect<void>;
   readonly guard: <A, E, R>(
@@ -64,6 +65,7 @@ export interface DiagnosticAttemptHandle {
 
 export const noDiagnosticAttempt: DiagnosticAttemptHandle = {
   id: null,
+  hash: () => "00000000",
   record: () => Effect.void,
   finish: () => Effect.void,
   guard: (_step, work) => work,
@@ -281,6 +283,7 @@ export const makeDiagnosticLog = (
         }, undefined);
       return {
         id: attempt.id,
+        hash,
         record,
         finish: (outcome) => contained(() => recorder.finish(attempt, outcome), undefined),
         guard: (step, work) =>

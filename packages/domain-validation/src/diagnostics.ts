@@ -6,7 +6,9 @@ import type {
   DiagnosticOAuthStep,
   DiagnosticStep,
   DiagnosticStepOutcome,
+  InstallWriteKind,
   Result,
+  T3ReadStage,
 } from "@agent-easel/contracts";
 import { diagnosticStartReasons } from "@agent-easel/contracts";
 
@@ -77,7 +79,67 @@ const steps: readonly DiagnosticStep[] = [
   "t3_connection",
   "start_preconditions",
   ...(Object.keys(oauthSteps) as DiagnosticOAuthStep[]),
+  "reporting_discovery",
+  "reporting_install",
 ];
+
+const harness = oneOf(
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "grok",
+  "antigravity",
+  "mistral-vibe",
+  "unknown",
+);
+const homeSources = [
+  "configured_path",
+  "environment",
+  "default",
+  "fixed",
+  "t3_profile",
+  "vibe_home",
+  "not_evaluated",
+] as const;
+const homeReasons = [
+  "chosen",
+  "candidate_unused",
+  "managed_setup",
+  "custom_launch_args",
+  "shadow_home",
+  "relative_path",
+  "redacted_environment",
+  "environment_override",
+  "not_a_directory",
+  "home_missing",
+  "home_unreadable",
+  "profile_missing",
+  "profile_unsupported",
+] as const;
+const conflictReasons = [
+  "no_entry",
+  "entry_current",
+  "entry_other_address",
+  "entry_conflicting",
+  "entry_edited",
+  "entry_duplicated",
+  "config_unmanageable",
+  "config_invalid",
+  "config_unreadable",
+  "skill_outdated",
+] as const;
+const installWriteReasons = [
+  "written",
+  "unchanged",
+  "permission_denied",
+  "missing_directory",
+  "no_space",
+  "changed_during_install",
+  "unmanageable_file",
+  "verification_failed",
+  "write_failed",
+] as const;
+const installSkills = ["factory-block", "factory-start-run", "setup-factory", "factory-configure"];
 
 const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, FieldCheck> } = {
   start_preconditions: {
@@ -152,6 +214,70 @@ const entryFields: { readonly [T in DiagnosticEntry["type"]]: Record<string, Fie
       ),
     ),
   },
+  t3_state_read: {
+    outcome: stepOutcome,
+    stage: oneOf("connection", "endpoint", "policy", "identity", "settings"),
+    reason: oneOf(
+      "read_ok",
+      "settings_missing",
+      "connection_not_ready",
+      "remote_endpoint",
+      "managed_host",
+      "identity_mismatch",
+      "identity_unreadable",
+      "settings_unreadable",
+      "settings_malformed",
+      "none_enabled",
+    ),
+  },
+  enablement: {
+    outcome: oneOf("ok", "skipped"),
+    instance: shortHash,
+    driver: harness,
+    enabled: oneOf(true, false),
+    rule: oneOf(
+      "instance_disabled",
+      "config_disabled",
+      "instance_enabled",
+      "config_enabled",
+      "project_enabled",
+      "driver_default_off",
+      "driver_default_on",
+    ),
+  },
+  home: {
+    outcome: stepOutcome,
+    instance: shortHash,
+    driver: harness,
+    homeSource: oneOf(...homeSources),
+    reason: oneOf(...homeReasons),
+    path: nullable(placeholderPath),
+  },
+  conflict_check: {
+    outcome: stepOutcome,
+    driver: harness,
+    reason: oneOf(...conflictReasons),
+    file: placeholderPath,
+  },
+  install_target: {
+    outcome: oneOf("ok", "failed"),
+    driver: harness,
+    reason: oneOf("target_found", "target_unavailable"),
+  },
+  install_write: {
+    outcome: stepOutcome,
+    driver: harness,
+    write: oneOf(
+      "config",
+      "block_skill",
+      "canonical_block_skill",
+      "optional_skill",
+      "verification",
+    ),
+    skill: nullable(oneOf(...installSkills)),
+    reason: oneOf(...installWriteReasons),
+    file: placeholderPath,
+  },
   unexpected_error: {
     outcome: oneOf("failed"),
     step: oneOf(...steps),
@@ -191,6 +317,17 @@ const operationNames: Record<DiagnosticOperation, string> = {
   t3_oauth_open: oauthSteps.t3_oauth_open,
   t3_oauth_resume: oauthSteps.t3_oauth_resume,
   t3_oauth_callback: "Complete T3 Code approval",
+  reporting_recheck: "Check Agent reporting",
+  reporting_install: "Install reporting",
+};
+
+const harnessNames: Record<string, string> = {
+  codex: "Codex",
+  claudeAgent: "Claude",
+  cursor: "Cursor",
+  grok: "Grok",
+  antigravity: "Antigravity",
+  "mistral-vibe": "Mistral Vibe",
 };
 
 const stepNames: Record<DiagnosticStep, string> = {
@@ -199,10 +336,37 @@ const stepNames: Record<DiagnosticStep, string> = {
   t3_connection: "T3 Code connection check",
   start_preconditions: "Start readiness checks",
   ...oauthSteps,
+  reporting_discovery: "reporting discovery",
+  reporting_install: "reporting installation",
 };
 
-export const diagnosticOperationName = (operation: DiagnosticOperation) =>
-  operationNames[operation];
+export function diagnosticAttemptName(
+  attempt: Pick<DiagnosticAttempt, "operation" | "entries">,
+): string {
+  if (attempt.operation !== "reporting_install") return operationNames[attempt.operation];
+  const target = attempt.entries.find(({ entry }) => entry.type === "install_target")?.entry;
+  const driver = target?.type === "install_target" ? target.driver : undefined;
+  const name = driver === undefined ? undefined : harnessNames[driver];
+  return name === undefined ? operationNames.reporting_install : `Install in ${name}`;
+}
+
+const harnessNameOf = (driver: string) => harnessNames[driver] ?? "unknown harness";
+
+const t3ReadNames: Record<T3ReadStage, string> = {
+  connection: "Check T3 Code connection",
+  endpoint: "Check T3 Code endpoint",
+  policy: "Check managed host policy",
+  identity: "Read T3 Code identity",
+  settings: "Read T3 Code settings",
+};
+
+const installWriteNames: Record<InstallWriteKind, string> = {
+  config: "Write MCP configuration",
+  block_skill: "Write Block skill",
+  canonical_block_skill: "Write AgentEasel copy of Block skill",
+  optional_skill: "Write optional skill",
+  verification: "Verify installation",
+};
 
 export interface DiagnosticStepLine {
   readonly outcome: DiagnosticStepOutcome;
@@ -244,6 +408,48 @@ export function describeDiagnosticEntry(entry: DiagnosticEntry): DiagnosticStepL
           entry.host,
           entry.t3Version === null ? null : `T3 Code ${entry.t3Version}`,
         ),
+        reason: entry.reason,
+      };
+    case "t3_state_read":
+      return {
+        outcome: entry.outcome,
+        name: t3ReadNames[entry.stage],
+        detail: null,
+        reason: entry.reason,
+      };
+    case "enablement":
+      return {
+        outcome: entry.outcome,
+        name: `Check ${harnessNameOf(entry.driver)} provider ${entry.instance}`,
+        detail: entry.enabled ? "on in T3 Code" : "off in T3 Code",
+        reason: entry.rule,
+      };
+    case "home":
+      return {
+        outcome: entry.outcome,
+        name: `Resolve ${harnessNameOf(entry.driver)} home for ${entry.instance}`,
+        detail: joined(entry.path, entry.homeSource.replaceAll("_", " ")),
+        reason: entry.reason,
+      };
+    case "conflict_check":
+      return {
+        outcome: entry.outcome,
+        name: `Inspect ${harnessNameOf(entry.driver)} MCP entry`,
+        detail: entry.file,
+        reason: entry.reason,
+      };
+    case "install_target":
+      return {
+        outcome: entry.outcome,
+        name: `Find ${harnessNameOf(entry.driver)} install target`,
+        detail: null,
+        reason: entry.reason,
+      };
+    case "install_write":
+      return {
+        outcome: entry.outcome,
+        name: installWriteNames[entry.write],
+        detail: joined(entry.skill, entry.file),
         reason: entry.reason,
       };
     case "unexpected_error":
@@ -309,7 +515,7 @@ const sameEnvironment = (left: DiagnosticEnvironment, right: DiagnosticEnvironme
   JSON.stringify(left) === JSON.stringify(right);
 
 function attemptLines(attempt: DiagnosticAttempt, header: DiagnosticEnvironment): string[] {
-  const title = `### ${operationNames[attempt.operation]} · ${attempt.startedAt.slice(0, 16).replace("T", " ")} UTC · ${attempt.outcome ?? "incomplete"}`;
+  const title = `### ${diagnosticAttemptName(attempt)} · ${attempt.startedAt.slice(0, 16).replace("T", " ")} UTC · ${attempt.outcome ?? "incomplete"}`;
   const steps = attempt.entries.map(({ at, entry }) => {
     const line = describeDiagnosticEntry(entry);
     return [at.slice(11, 23), outcomeMarks[line.outcome], line.name, line.detail, line.reason]

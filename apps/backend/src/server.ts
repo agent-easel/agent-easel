@@ -273,6 +273,7 @@ function connectionRoutes(factory: AgentEasel): RouteEntries<typeof connectionOp
       body: standardBody,
       handle: ({ input }) => answer(() => factory.installReporting(input)),
     },
+    recheckReporting: { handle: () => answer(() => factory.recheckReporting()) },
     recheckRuntime: {
       hostOnly: true,
       body: standardBody,

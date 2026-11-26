@@ -110,6 +110,13 @@ export interface T3ConnectionRecovery extends T3Connection {
 export interface InstallReportingInput {
   readonly targetId: string;
 }
+export interface InstalledReporting extends ReportingInstallation {
+  readonly diagnosticAttempts?: readonly string[];
+}
+export interface ReportingRecheck {
+  readonly installations: readonly ReportingInstallation[];
+  readonly diagnosticAttempts?: readonly string[];
+}
 
 /** T3 connection, reporting installation and runtime readiness operations. */
 export const connectionOperations = {
@@ -117,10 +124,14 @@ export const connectionOperations = {
     method: "GET",
     path: "/api/reporting",
   }),
-  installReporting: operation<InstallReportingInput, ReportingInstallation>()({
+  installReporting: operation<InstallReportingInput, InstalledReporting>()({
     method: "POST",
     path: "/api/reporting/install",
     body: "json",
+  }),
+  recheckReporting: operation<never, ReportingRecheck>()({
+    method: "POST",
+    path: "/api/reporting/recheck",
   }),
   recheckRuntime: operation<RuntimeSelection, RuntimeReadiness>()({
     method: "POST",
